@@ -1,0 +1,118 @@
+name: Aether
+
+options:
+  bundleIdPrefix: cz.zmrhal.aether
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  deploymentTarget:
+    iOS: "26.0"
+    tvOS: "26.0"
+  groupSortPosition: top
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY: YES
+    SWIFT_UPCOMING_FEATURE_BARE_SLASH_REGEX_LITERALS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+
+packages:
+  AetherCore:
+    path: AetherCore
+
+targets:
+  Aether:
+    type: application
+    platform: iOS
+    sources:
+      - path: Aether/Sources
+      - path: Aether/Resources
+        buildPhase: resources
+    dependencies:
+      - package: AetherCore
+        product: AetherCore
+    info:
+      path: Aether/Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+
+  Aether-tvOS:
+    type: application
+    platform: tvOS
+    sources:
+      - path: Aether/Sources
+      - path: Aether/Resources
+        buildPhase: resources
+    dependencies:
+      - package: AetherCore
+        product: AetherCore
+    info:
+      path: Aether/Sources/Info-tvOS.plist
+      properties:
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.tvos
+        TARGETED_DEVICE_FAMILY: "3"
+
+  AetherTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AetherTests
+    dependencies:
+      - target: Aether
+      - package: AetherCore
+        product: AetherCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.tests
+
+schemes:
+  Aether:
+    build:
+      targets:
+        Aether: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AetherTests
+    archive:
+      config: Release
+
+  Aether-tvOS:
+    build:
+      targets:
+        Aether-tvOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release
