@@ -28,3 +28,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   latest position back to `ResumeStore` on dismiss
 - `AetherApp` introduces an `@Observable AppSession` that owns the active
   source and resume store, and seeds the store from the mock fixture
+- `PlaybackSession` is now a real actor that owns the `AVPlayer`,
+  performs all UI-touching calls via `MainActor.run`, seeks to the
+  persisted resume on `prepare`, and writes resume points every 5s while
+  playing (plus on pause and stop)
+- Added `PlayerStateViewModel` (`@MainActor`, `@Observable`) — the bridge
+  between the actor and SwiftUI's `VideoPlayer`. Views observe `state`
+  and read `player`; commands flow through the view model
+- `PlayerView` now drives the shared `PlaybackSession` via the view
+  model instead of owning its own `AVPlayer`
+- `AppSession` now also owns the single `PlaybackSession` instance for
+  the app process

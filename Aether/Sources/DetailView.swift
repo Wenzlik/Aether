@@ -4,6 +4,7 @@ import AetherCore
 struct DetailView: View {
     let item: MediaItem
     let resumeStore: ResumeStore
+    let playbackSession: PlaybackSession
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
@@ -39,8 +40,15 @@ struct DetailView: View {
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
         .task { resume = await resumeStore.point(for: item.id) }
-        .fullScreenCover(isPresented: $isPlayerPresented) {
-            PlayerView(item: item, resumeStore: resumeStore)
+        .fullScreenCover(
+            isPresented: $isPlayerPresented,
+            onDismiss: {
+                // Refresh the resume display after the player closes — the session
+                // wrote the latest position during playback.
+                Task { resume = await resumeStore.point(for: item.id) }
+            }
+        ) {
+            PlayerView(item: item, session: playbackSession)
         }
     }
 

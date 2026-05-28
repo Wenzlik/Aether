@@ -1,14 +1,26 @@
 import Foundation
+import AVFoundation
 
 /// Minimal playback state surfaced to UI.
+///
+/// A `Sendable` snapshot — never mutated by the view. The view reads it; the
+/// view model refreshes it from the session.
 public struct PlaybackState: Sendable, Equatable {
-    public enum Status: Sendable, Equatable { case idle, loading, playing, paused, ended, failed }
+    public enum Status: Sendable, Equatable {
+        case idle, loading, playing, paused, ended, failed
+    }
+
     public var status: Status
     public var item: MediaItem?
     public var position: Duration
     public var duration: Duration?
 
-    public init(status: Status = .idle, item: MediaItem? = nil, position: Duration = .zero, duration: Duration? = nil) {
+    public init(
+        status: Status = .idle,
+        item: MediaItem? = nil,
+        position: Duration = .zero,
+        duration: Duration? = nil
+    ) {
         self.status = status
         self.item = item
         self.position = position
@@ -16,36 +28,155 @@ public struct PlaybackState: Sendable, Equatable {
     }
 }
 
-/// Owns the single AVPlayer instance and the resume-write loop.
+/// Owns the single `AVPlayer` instance and the resume-write loop.
 ///
-/// The real implementation lands in 0.1 Foundation when the AVPlayer prototype is wired up.
-/// This stub keeps the surface area stable so views can be built against it.
+/// Architecture rules (see `docs/architecture/ARCHITECTURE.md` → *Playback*):
+/// - One `PlaybackSession` per app process. Re-used across titles; rebuilt only
+///   when the source type changes.
+/// - `AVPlayer` is `@MainActor` in modern AVKit. The session holds the
+///   reference (the class is `Sendable`) and hops to `MainActor` for every
+///   method call that touches it.
+/// - Resume points are written every ~5s while playing, and on pause/stop.
+///   Local first; the server sync layer plugs in at 0.2.
 public actor PlaybackSession {
     public private(set) var state: PlaybackState
+    private let resumeStore: ResumeStore
+    private let resumeWriteInterval: Duration
 
-    public init() {
+    private var avPlayer: AVPlayer?
+    private var resumeTask: Task<Void, Never>?
+
+    public init(resumeStore: ResumeStore, resumeWriteInterval: Duration = .seconds(5)) {
         self.state = PlaybackState()
+        self.resumeStore = resumeStore
+        self.resumeWriteInterval = resumeWriteInterval
     }
 
+    // MARK: - Commands
+
+    /// Prepare the session for a new item.
+    ///
+    /// Tears down any previous player, builds a new `AVPlayer`, seeks to the
+    /// persisted resume position if one exists, and starts the resume-write
+    /// loop. Does *not* auto-play — call `play()` when the view is ready.
     public func prepare(item: MediaItem) async {
-        state = PlaybackState(status: .loading, item: item)
+        // Tear down previous session before starting a new one.
+        resumeTask?.cancel()
+        resumeTask = nil
+        await teardownPlayer()
+
+        guard let url = item.streamURL else {
+            state = PlaybackState(status: .failed, item: item)
+            return
+        }
+
+        let resumeSeconds = await persistedResumeSeconds(for: item.id)
+        let player = await MainActor.run { () -> AVPlayer in
+            let p = AVPlayer(url: url)
+            if resumeSeconds > 0 {
+                let cmTime = CMTime(seconds: resumeSeconds, preferredTimescale: 600)
+                p.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            }
+            return p
+        }
+
+        self.avPlayer = player
+        self.state = PlaybackState(
+            status: .loading,
+            item: item,
+            position: .seconds(resumeSeconds)
+        )
+        startResumeLoop()
     }
 
     public func play() async {
-        guard state.item != nil else { return }
+        guard let avPlayer, state.item != nil else { return }
+        await MainActor.run { avPlayer.play() }
         state.status = .playing
     }
 
     public func pause() async {
-        guard state.status == .playing else { return }
+        guard let avPlayer, state.status == .playing else { return }
+        await MainActor.run { avPlayer.pause() }
         state.status = .paused
+        await writeResumeNow()
     }
 
     public func seek(to position: Duration) async {
+        guard let avPlayer else { return }
+        let seconds = Self.durationSeconds(position)
+        let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
+        await MainActor.run {
+            avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
         state.position = position
     }
 
     public func stop() async {
+        resumeTask?.cancel()
+        resumeTask = nil
+        await writeResumeNow()
+        await teardownPlayer()
         state = PlaybackState()
+    }
+
+    // MARK: - Player vending
+
+    /// Returns the underlying `AVPlayer` for SwiftUI `VideoPlayer` to render.
+    ///
+    /// Called from a `@MainActor` view model. The `AVPlayer` class is `Sendable`,
+    /// and all of its methods that we care about are `@MainActor` — so passing
+    /// the reference back to MainActor is correct.
+    public func currentAVPlayer() async -> AVPlayer? {
+        avPlayer
+    }
+
+    // MARK: - Internals
+
+    private func startResumeLoop() {
+        resumeTask?.cancel()
+        let interval = resumeWriteInterval
+        resumeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard let self else { return }
+                await self.tickResume()
+            }
+        }
+    }
+
+    private func tickResume() async {
+        guard state.status == .playing else { return }
+        await writeResumeNow()
+    }
+
+    private func writeResumeNow() async {
+        guard let item = state.item, let player = avPlayer else { return }
+        let seconds = await MainActor.run { player.currentTime().seconds }
+        guard seconds.isFinite, !seconds.isNaN else { return }
+        let position = Duration.seconds(seconds)
+        state.position = position
+        await resumeStore.record(.init(mediaID: item.id, position: position))
+    }
+
+    private func persistedResumeSeconds(for id: MediaID) async -> Double {
+        guard let point = await resumeStore.point(for: id) else { return 0 }
+        return Self.durationSeconds(point.position)
+    }
+
+    private func teardownPlayer() async {
+        guard let player = avPlayer else { return }
+        await MainActor.run {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+        }
+        avPlayer = nil
+    }
+
+    // MARK: - Helpers
+
+    static func durationSeconds(_ duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
     }
 }

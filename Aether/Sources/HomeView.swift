@@ -4,6 +4,7 @@ import AetherCore
 struct HomeView: View {
     let source: any MediaSource
     let resumeStore: ResumeStore
+    let playbackSession: PlaybackSession
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -41,7 +42,11 @@ struct HomeView: View {
             }
             .background(AetherDesign.Palette.background.ignoresSafeArea())
             .navigationDestination(for: MediaItem.self) { item in
-                DetailView(item: item, resumeStore: resumeStore)
+                DetailView(
+                    item: item,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession
+                )
             }
         }
         .task { await load() }
