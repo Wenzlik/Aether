@@ -118,7 +118,7 @@ struct HomeView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
-            .focusSection()
+            .aetherFocusSection()
         }
     }
 
@@ -146,7 +146,7 @@ struct HomeView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
-            .focusSection()
+            .aetherFocusSection()
         }
     }
 
@@ -250,5 +250,23 @@ struct HomeView: View {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+}
+
+private extension View {
+    /// Apply `.focusSection()` on tvOS, no-op elsewhere.
+    ///
+    /// SwiftUI's `focusSection()` is tvOS-only — calling it on iOS produces an
+    /// `'focusSection()' is unavailable in iOS` error. The Home rails want it
+    /// on tvOS for predictable D-pad behaviour between rails, but the code
+    /// itself is the same on both platforms, so we hide the platform check in
+    /// this small extension.
+    @ViewBuilder
+    func aetherFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
     }
 }
