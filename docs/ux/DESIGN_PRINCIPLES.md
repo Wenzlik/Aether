@@ -177,6 +177,65 @@ A premium Apple-platform app is accessible by default.
 
 ---
 
+## Concrete tokens
+
+The adjectives above (generous, restrained, soft) map to real numbers in `AetherCore/DesignSystem/Tokens.swift`. Pull from `AetherDesign.*` — never hard-code a value in a view.
+
+### Spacing
+
+| Token | Points | Where it's used |
+|-------|--------|-----------------|
+| `Spacing.xxs` | 4  | tight stacks, inline metadata |
+| `Spacing.xs`  | 8  | card title → artwork gap |
+| `Spacing.s`   | 12 | secondary insets |
+| `Spacing.m`   | 16 | inter-card gaps on posters; outer iOS padding |
+| `Spacing.l`   | 24 | section outer padding, default screen edges |
+| `Spacing.xl`  | 32 | gap between major sections |
+| `Spacing.xxl` | 48 | header → first content row on Home |
+
+### Radii
+
+| Token | Points | Where |
+|-------|--------|-------|
+| `Radius.card`   | 12 | iOS poster / episode cards |
+| `Radius.cardTV` | 16 | tvOS cards (slightly softer for couch distance) |
+| `Radius.sheet`  | 20 | bottom sheets, modal containers |
+
+### Motion (durations)
+
+| Token | Animation | Used for |
+|-------|-----------|----------|
+| `Motion.content` | `easeInOut(0.25)` | tab/content swaps, cache refreshes |
+| `Motion.hero`    | `easeInOut(0.35)` | Library → Detail hero, Detail → Player crossfade |
+| `Motion.focus`   | `spring(response: 0.18, damping: 0.85)` | tvOS card lift on focus |
+| `Motion.card`    | `spring(response: 0.40, damping: 0.85)` | drawer / sheet appearance, list reorders |
+
+All of these collapse to instant cuts when **Reduce Motion** is enabled.
+
+### Color
+
+| Token | Description |
+|-------|-------------|
+| `Palette.background` | `Color.black` — real black, especially on OLED |
+| `Palette.surface` | `Color(white: 0.08)` — for card skeletons, opaque chrome |
+| `Palette.textPrimary` | `Color.white` |
+| `Palette.textSecondary` | `Color.white.opacity(0.65)` — metadata rows |
+| `Palette.textTertiary` | `Color.white.opacity(0.40)` — captions, hints |
+| `Palette.accent` | `Color(red: 0.78, green: 0.78, blue: 0.86)` — focus rings, progress, key CTAs only |
+
+### Typography
+
+| Token | System style + weight | Used for |
+|-------|-----------------------|----------|
+| `Typography.heroTitle` | `.largeTitle` / bold | Detail hero, Home hero |
+| `Typography.sectionTitle` | `.title2` / semibold | Row headings on Home |
+| `Typography.cardTitle` | `.headline` / medium | Card titles below artwork |
+| `Typography.body` | `.body` / regular | Long-form text |
+| `Typography.metadata` | `.subheadline` / medium | Metadata rows, accessory labels |
+| `Typography.caption` | `.caption` / regular | Hints, badges, fine print |
+
+---
+
 ## Anti-patterns to refuse
 
 If you find yourself doing one of these, stop and reconsider.
