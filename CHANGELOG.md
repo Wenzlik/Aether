@@ -14,3 +14,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   softly on tvOS focus, and renders a progress bar overlay
 - Documented concrete token numbers (spacing, radii, motion, color,
   typography) in `docs/ux/DESIGN_PRINCIPLES.md`
+- Added `Aether/Resources/MockLibrary.json` — 10 movies + 1 show with 6
+  episodes, curated featured list, seed resume points
+- Added `MockFixture` Codable DTOs and `MockMediaSource(fixture:)` /
+  `MockMediaSource.loadFromBundle()` for loading the fixture
+- Added `HomeFeed` value type and source-agnostic `HomeFeedBuilder` that
+  produces Featured / Continue Watching / per-library sections
+- Home now renders sectioned rails (Featured, Continue Watching, Movies,
+  Shows) using `SectionHeader` + `CardView`, with skeleton loading state
+- Detail screen now shows the backdrop hero, metadata row, summary, and
+  a Resume / Play button reflecting the persisted resume point
+- Player now seeks to the persisted resume point on open and writes the
+  latest position back to `ResumeStore` on dismiss
+- `AetherApp` introduces an `@Observable AppSession` that owns the active
+  source and resume store, and seeds the store from the mock fixture

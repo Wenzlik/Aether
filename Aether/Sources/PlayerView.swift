@@ -4,6 +4,7 @@ import AetherCore
 
 struct PlayerView: View {
     let item: MediaItem
+    let resumeStore: ResumeStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
@@ -16,7 +17,10 @@ struct PlayerView: View {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
                     .onAppear { player.play() }
-                    .onDisappear { player.pause() }
+                    .onDisappear {
+                        player.pause()
+                        Task { await persistResume(from: player) }
+                    }
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)
@@ -41,10 +45,31 @@ struct PlayerView: View {
             }
             #endif
         }
-        .onAppear {
-            if let url = item.streamURL {
-                player = AVPlayer(url: url)
-            }
+        .task { await prepare() }
+    }
+
+    private func prepare() async {
+        guard let url = item.streamURL else { return }
+        let avPlayer = AVPlayer(url: url)
+
+        if let existing = await resumeStore.point(for: item.id) {
+            let cmTime = CMTime(seconds: durationSeconds(existing.position), preferredTimescale: 600)
+            await avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
+
+        player = avPlayer
+    }
+
+    @MainActor
+    private func persistResume(from player: AVPlayer) async {
+        let cmTime = player.currentTime()
+        guard cmTime.isValid && !cmTime.seconds.isNaN else { return }
+        let position = Duration.seconds(cmTime.seconds)
+        await resumeStore.record(ResumePoint(mediaID: item.id, position: position))
+    }
+
+    private func durationSeconds(_ duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
     }
 }
