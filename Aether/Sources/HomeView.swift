@@ -20,6 +20,8 @@ struct HomeView: View {
                         errorState(loadError)
                     } else if isLoading && feed == .empty {
                         loadingState
+                    } else if feedIsEmpty {
+                        emptyLibraryState
                     } else {
                         if !feed.featured.isEmpty {
                             section(title: "Featured", items: feed.featured, aspect: .poster)
@@ -146,6 +148,52 @@ struct HomeView: View {
             }
             .focusSection()
         }
+    }
+
+    // MARK: - Empty state
+
+    private var feedIsEmpty: Bool {
+        feed.featured.isEmpty
+            && feed.continueWatching.isEmpty
+            && feed.libraries.allSatisfy { $0.items.isEmpty }
+    }
+
+    private var emptyLibraryState: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            // A soft, illustration-light hero. No spinner, no detailed graphic —
+            // just a calm icon, a single sentence, and one CTA.
+            Image(systemName: "film.stack")
+                .font(.system(size: 56, weight: .light))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                .padding(.bottom, AetherDesign.Spacing.s)
+
+            Text("Your library is empty")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+            Text("Connect a Plex or Synology source to start watching.")
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                // TODO(0.2): present the Add Source flow.
+                // Intentionally a no-op in 0.1 — the destination doesn't exist yet,
+                // and a designed empty state shouldn't ship without one to point at.
+            } label: {
+                Text("Add a source")
+                    .font(AetherDesign.Typography.cardTitle)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.vertical, AetherDesign.Spacing.s)
+                    .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, AetherDesign.Spacing.s)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.xxl)
+        .frame(maxWidth: 520, alignment: .leading)
     }
 
     // MARK: - Loading & error states

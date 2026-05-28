@@ -4,12 +4,12 @@ import AetherCore
 
 struct PlayerView: View {
     let item: MediaItem
+    let onDismiss: () -> Void
     @State private var viewModel: PlayerStateViewModel
 
-    @Environment(\.dismiss) private var dismiss
-
-    init(item: MediaItem, session: PlaybackSession) {
+    init(item: MediaItem, session: PlaybackSession, onDismiss: @escaping () -> Void) {
         self.item = item
+        self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
     }
 
@@ -31,8 +31,7 @@ struct PlayerView: View {
             VStack {
                 HStack {
                     Button {
-                        Task { await viewModel.close() }
-                        dismiss()
+                        Task { await dismissPlayer() }
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .semibold))
@@ -47,12 +46,21 @@ struct PlayerView: View {
             }
             #endif
             // tvOS deliberately has no custom close chrome — the Menu button on
-            // the Siri Remote dismisses the fullScreenCover, which triggers
-            // `.onDisappear` → `viewModel.close()`. Adding tap-target close UI
-            // on tvOS would fight the focus model (see AGENTS.md → tvOS rules).
+            // the Siri Remote triggers `.onExitCommand` below, which dismisses
+            // via the same path. Adding tap-target close UI on tvOS would fight
+            // the focus model (see AGENTS.md → tvOS rules).
         }
         .task { await viewModel.open(item) }
         .onDisappear { Task { await viewModel.close() } }
+        #if os(tvOS)
+        .onExitCommand { Task { await dismissPlayer() } }
+        #endif
+    }
+
+    private func dismissPlayer() async {
+        // Pause first so audio stops on the same frame the fade begins.
+        await viewModel.pause()
+        onDismiss()
     }
 
     private var playbackUnavailable: some View {
