@@ -46,6 +46,10 @@ struct PlayerView: View {
                 Spacer()
             }
             #endif
+            // tvOS deliberately has no custom close chrome — the Menu button on
+            // the Siri Remote dismisses the fullScreenCover, which triggers
+            // `.onDisappear` → `viewModel.close()`. Adding tap-target close UI
+            // on tvOS would fight the focus model (see AGENTS.md → tvOS rules).
         }
         .task { await viewModel.open(item) }
         .onDisappear { Task { await viewModel.close() } }

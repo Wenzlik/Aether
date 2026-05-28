@@ -39,3 +39,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   model instead of owning its own `AVPlayer`
 - `AppSession` now also owns the single `PlaybackSession` instance for
   the app process
+- tvOS focus polish: horizontal library rails are now `focusSection()`s
+  so D-pad up/down moves between rails predictably instead of dropping
+  focus wherever the last X-position was
+- tvOS card sizes scaled up for couch distance (poster 160→260,
+  episode 280→440); iOS sizes unchanged
+- Detail screen's Play / Resume button now has a tvOS-tuned focused
+  state (lift + accent strengthen) via a small isolated label view
+- Documented in `PlayerView` that tvOS deliberately has no custom close
+  chrome — Menu button on the Siri Remote is the exit
+- Added `docs/architecture/TOP_SHELF.md` — explicit stub describing what
+  the future Top Shelf extension needs to do and when
