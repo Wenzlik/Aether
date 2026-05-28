@@ -32,11 +32,13 @@ targets:
       - path: Aether/Sources
       - path: Aether/Resources
         buildPhase: resources
+        excludes:
+          - ".gitkeep"
     dependencies:
       - package: AetherCore
         product: AetherCore
     info:
-      path: Aether/Sources/Info.plist
+      path: Aether/SupportingFiles/Info.plist
       properties:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "0.1.0"
@@ -67,11 +69,13 @@ targets:
       - path: Aether/Sources
       - path: Aether/Resources
         buildPhase: resources
+        excludes:
+          - ".gitkeep"
     dependencies:
       - package: AetherCore
         product: AetherCore
     info:
-      path: Aether/Sources/Info-tvOS.plist
+      path: Aether/SupportingFiles/Info-tvOS.plist
       properties:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "0.1.0"
