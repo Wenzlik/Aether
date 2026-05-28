@@ -4,23 +4,24 @@ import AetherCore
 
 struct PlayerView: View {
     let item: MediaItem
-    let resumeStore: ResumeStore
+    @State private var viewModel: PlayerStateViewModel
 
     @Environment(\.dismiss) private var dismiss
-    @State private var player: AVPlayer?
+
+    init(item: MediaItem, session: PlaybackSession) {
+        self.item = item
+        _viewModel = State(initialValue: PlayerStateViewModel(session: session))
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let player {
+            if let player = viewModel.player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
-                    .onAppear { player.play() }
-                    .onDisappear {
-                        player.pause()
-                        Task { await persistResume(from: player) }
-                    }
+            } else if viewModel.state.status == .failed {
+                playbackUnavailable
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)
@@ -30,6 +31,7 @@ struct PlayerView: View {
             VStack {
                 HStack {
                     Button {
+                        Task { await viewModel.close() }
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -45,31 +47,22 @@ struct PlayerView: View {
             }
             #endif
         }
-        .task { await prepare() }
+        .task { await viewModel.open(item) }
+        .onDisappear { Task { await viewModel.close() } }
     }
 
-    private func prepare() async {
-        guard let url = item.streamURL else { return }
-        let avPlayer = AVPlayer(url: url)
-
-        if let existing = await resumeStore.point(for: item.id) {
-            let cmTime = CMTime(seconds: durationSeconds(existing.position), preferredTimescale: 600)
-            await avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+    private var playbackUnavailable: some View {
+        VStack(spacing: AetherDesign.Spacing.s) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 36, weight: .regular))
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+            Text("Playback unavailable")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            Text("This item has no stream URL.")
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
         }
-
-        player = avPlayer
-    }
-
-    @MainActor
-    private func persistResume(from player: AVPlayer) async {
-        let cmTime = player.currentTime()
-        guard cmTime.isValid && !cmTime.seconds.isNaN else { return }
-        let position = Duration.seconds(cmTime.seconds)
-        await resumeStore.record(ResumePoint(mediaID: item.id, position: position))
-    }
-
-    private func durationSeconds(_ duration: Duration) -> Double {
-        let parts = duration.components
-        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+        .padding(AetherDesign.Spacing.xl)
     }
 }

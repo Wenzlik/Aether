@@ -15,7 +15,8 @@ struct AetherApp: App {
     }
 }
 
-/// Owns the long-lived app-wide dependencies: the active media source and the resume store.
+/// Owns the long-lived app-wide dependencies: the active media source, the
+/// resume store, and the single playback session.
 ///
 /// In 0.1 this loads the mock library. In 0.2 it will also wire up Plex and
 /// Synology sources once they exist.
@@ -23,8 +24,15 @@ struct AetherApp: App {
 @Observable
 final class AppSession {
     var source: (any MediaSource)?
-    var resumeStore = ResumeStore()
+    let resumeStore = ResumeStore()
+    let playback: PlaybackSession
     var loadError: String?
+
+    init() {
+        let store = ResumeStore()
+        self.resumeStore = store
+        self.playback = PlaybackSession(resumeStore: store)
+    }
 
     func start() async {
         do {
@@ -35,7 +43,6 @@ final class AppSession {
             }
             source = mock
         } catch {
-            // Fall back to the hardcoded sample source so the app still boots usefully.
             source = MockMediaSource()
             loadError = "Couldn't load MockLibrary.json — using built-in sample. (\(error.localizedDescription))"
         }
@@ -47,9 +54,12 @@ private struct RootView: View {
 
     var body: some View {
         if let source = session.source {
-            HomeView(source: source, resumeStore: session.resumeStore)
+            HomeView(
+                source: source,
+                resumeStore: session.resumeStore,
+                playbackSession: session.playback
+            )
         } else {
-            // Brief, calm boot state — no spinner.
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                 Text("Aether")
                     .font(AetherDesign.Typography.heroTitle)

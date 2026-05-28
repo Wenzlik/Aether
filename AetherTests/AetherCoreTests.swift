@@ -16,32 +16,6 @@ struct AetherCoreFoundationTests {
         #expect(items[0].streamURL != nil)
     }
 
-    @Test("PlaybackSession transitions idle → loading → playing → paused")
-    func playbackTransitions() async throws {
-        let session = PlaybackSession()
-
-        let initial = await session.state
-        #expect(initial.status == .idle)
-
-        let item = MediaItem(
-            id: .init(source: .mock, rawValue: "test"),
-            title: "Test",
-            kind: .movie
-        )
-
-        await session.prepare(item: item)
-        var state = await session.state
-        #expect(state.status == .loading)
-
-        await session.play()
-        state = await session.state
-        #expect(state.status == .playing)
-
-        await session.pause()
-        state = await session.state
-        #expect(state.status == .paused)
-    }
-
     @Test("ResumeStore round-trips a resume point")
     func resumeStoreRoundTrip() async {
         let store = ResumeStore()
@@ -53,10 +27,96 @@ struct AetherCoreFoundationTests {
     }
 }
 
+@Suite("AetherCore — PlaybackSession")
+struct PlaybackSessionTests {
+
+    private static let testURL = URL(string: "https://example.com/sample.m3u8")!
+
+    private static func makeItem(id: String = "test", streamURL: URL? = testURL) -> MediaItem {
+        MediaItem(
+            id: .init(source: .mock, rawValue: id),
+            title: "Test",
+            kind: .movie,
+            streamURL: streamURL
+        )
+    }
+
+    @Test("idle → loading → playing → paused on a valid item")
+    func transitions() async {
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        var state = await session.state
+        #expect(state.status == .idle)
+
+        await session.prepare(item: Self.makeItem())
+        state = await session.state
+        #expect(state.status == .loading)
+        #expect(state.item?.id.rawValue == "test")
+
+        await session.play()
+        state = await session.state
+        #expect(state.status == .playing)
+
+        await session.pause()
+        state = await session.state
+        #expect(state.status == .paused)
+    }
+
+    @Test("Item with no streamURL transitions to .failed")
+    func noStreamFails() async {
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+        let item = Self.makeItem(id: "no-stream", streamURL: nil)
+
+        await session.prepare(item: item)
+        let state = await session.state
+        #expect(state.status == .failed)
+        #expect(state.item?.id == item.id)
+    }
+
+    @Test("pause() writes a resume point to the store")
+    func resumeOnPause() async throws {
+        let store = ResumeStore()
+        let session = PlaybackSession(resumeStore: store, resumeWriteInterval: .seconds(60))
+        let item = Self.makeItem(id: "with-resume")
+
+        await session.prepare(item: item)
+        await session.play()
+        await session.pause()
+
+        let point = await store.point(for: item.id)
+        try #require(point != nil)
+    }
+
+    @Test("stop() resets state to idle and clears the item")
+    func stopResets() async {
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: Self.makeItem())
+        await session.play()
+        await session.stop()
+
+        let state = await session.state
+        #expect(state.status == .idle)
+        #expect(state.item == nil)
+    }
+
+    @Test("prepare() resumes from a previously stored position")
+    func resumesFromStore() async {
+        let store = ResumeStore()
+        let item = Self.makeItem(id: "with-existing-resume")
+        await store.record(.init(mediaID: item.id, position: .seconds(120)))
+
+        let session = PlaybackSession(resumeStore: store, resumeWriteInterval: .seconds(60))
+        await session.prepare(item: item)
+
+        let state = await session.state
+        #expect(state.position == .seconds(120))
+    }
+}
+
 @Suite("AetherCore — MockFixture")
 struct MockFixtureTests {
 
-    /// Decode a JSON literal that mirrors the schema of `Aether/Resources/MockLibrary.json`.
     @Test("MockFixture decodes the canonical schema")
     func fixtureDecodes() throws {
         let json = #"""
@@ -149,7 +209,6 @@ struct HomeFeedBuilderTests {
             featured: await source.featuredItems
         )
 
-        // b should not appear at all; c comes before a (more recent).
         #expect(feed.continueWatching.map(\.item.id.rawValue) == ["c", "a"])
         #expect(feed.featured.map(\.id.rawValue) == ["a"])
     }
