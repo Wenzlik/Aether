@@ -8,8 +8,34 @@ struct DetailView: View {
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        ZStack {
+            scrollContent
+                .opacity(isPlayerPresented ? 0 : 1)
+
+            if isPlayerPresented {
+                PlayerView(
+                    item: item,
+                    session: playbackSession,
+                    onDismiss: dismissPlayer
+                )
+                .transition(.opacity)
+                .zIndex(10)
+                #if os(iOS)
+                .statusBarHidden()
+                #endif
+            }
+        }
+        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .task { resume = await resumeStore.point(for: item.id) }
+        .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
+    }
+
+    // MARK: - Detail content
+
+    private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                 BackdropImage(url: item.backdropURL ?? item.posterURL)
@@ -33,22 +59,10 @@ struct DetailView: View {
                         .padding(.horizontal, AetherDesign.Spacing.l)
                 }
 
-                playButton
+                actionRow
                     .padding(.horizontal, AetherDesign.Spacing.l)
             }
             .padding(.vertical, AetherDesign.Spacing.l)
-        }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
-        .task { resume = await resumeStore.point(for: item.id) }
-        .fullScreenCover(
-            isPresented: $isPlayerPresented,
-            onDismiss: {
-                // Refresh the resume display after the player closes — the session
-                // wrote the latest position during playback.
-                Task { resume = await resumeStore.point(for: item.id) }
-            }
-        ) {
-            PlayerView(item: item, session: playbackSession)
         }
     }
 
@@ -68,15 +82,57 @@ struct DetailView: View {
         .foregroundStyle(AetherDesign.Palette.textSecondary)
     }
 
+    // MARK: - Action row (Play, or unavailable empty state)
+
+    @ViewBuilder
+    private var actionRow: some View {
+        if item.streamURL != nil {
+            playButton
+        } else {
+            unavailableState
+        }
+    }
+
     private var playButton: some View {
         Button {
-            isPlayerPresented = true
+            withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+                isPlayerPresented = true
+            }
         } label: {
             PlayButtonLabel(text: resume.map { "Resume \(formatPosition($0.position))" } ?? "Play")
         }
         .buttonStyle(.plain)
-        .disabled(item.streamURL == nil)
     }
+
+    private var unavailableState: some View {
+        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text("Unavailable")
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("This item doesn't have a stream URL yet.")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+        }
+        .padding(AetherDesign.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+    }
+
+    // MARK: - Player dismiss
+
+    private func dismissPlayer() {
+        withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+            isPlayerPresented = false
+        }
+        Task { resume = await resumeStore.point(for: item.id) }
+    }
+
+    // MARK: - Formatting helpers
 
     private func kindLabel(_ kind: MediaItem.Kind) -> String {
         switch kind {
@@ -109,10 +165,8 @@ struct DetailView: View {
 
 /// The label shown inside the Play / Resume button.
 ///
-/// Pulled out as its own view so it can react to the `isFocused` environment —
-/// on tvOS the focused state should *feel* like the system's lift, but tuned
-/// to our accent. On iOS the focused environment is always `false` (no focus
-/// engine), so the styling collapses to the unfocused branch.
+/// On tvOS, reads `\.isFocused` and lifts on focus. On iOS the focused state
+/// collapses since there's no focus engine.
 private struct PlayButtonLabel: View {
     let text: String
     @Environment(\.isFocused) private var isFocused

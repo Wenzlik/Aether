@@ -50,3 +50,15 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   chrome — Menu button on the Siri Remote is the exit
 - Added `docs/architecture/TOP_SHELF.md` — explicit stub describing what
   the future Top Shelf extension needs to do and when
+- Designed empty state for Home when a source has no content — calm
+  hero icon, single sentence, "Add a source" CTA (no-op in 0.1; flow
+  arrives in 0.2)
+- Designed empty state on Detail when an item has no `streamURL` — the
+  Play button is replaced with a soft "Unavailable" surface explaining
+  why, instead of a disabled grey button
+- Detail → Player is now a real crossfade (`.transition(.opacity)` +
+  `Motion.hero`) via a ZStack overlay instead of `fullScreenCover`;
+  audio pauses on the same frame the fade begins
+- `accessibilityReduceMotion` collapses the crossfade to an instant cut
+- tvOS player exit is wired via `.onExitCommand` so the Menu button
+  triggers the same dismiss path as the iOS close button
