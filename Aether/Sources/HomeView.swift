@@ -80,10 +80,18 @@ struct HomeView: View {
         }
 
         var width: CGFloat {
+            #if os(tvOS)
+            // Couch distance — cards need real estate to read. See DESIGN_PRINCIPLES.md.
+            switch self {
+            case .poster: return 260
+            case .episode: return 440
+            }
+            #else
             switch self {
             case .poster: return 160
             case .episode: return 280
             }
+            #endif
         }
     }
 
@@ -108,6 +116,7 @@ struct HomeView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
+            .focusSection()
         }
     }
 
@@ -135,6 +144,7 @@ struct HomeView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
+            .focusSection()
         }
     }
 

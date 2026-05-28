@@ -72,19 +72,7 @@ struct DetailView: View {
         Button {
             isPlayerPresented = true
         } label: {
-            HStack(spacing: AetherDesign.Spacing.xs) {
-                Image(systemName: "play.fill")
-                if let resume {
-                    Text("Resume \(formatPosition(resume.position))")
-                } else {
-                    Text("Play")
-                }
-            }
-            .font(AetherDesign.Typography.cardTitle)
-            .padding(.horizontal, AetherDesign.Spacing.l)
-            .padding(.vertical, AetherDesign.Spacing.s)
-            .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
-            .foregroundStyle(AetherDesign.Palette.textPrimary)
+            PlayButtonLabel(text: resume.map { "Resume \(formatPosition($0.position))" } ?? "Play")
         }
         .buttonStyle(.plain)
         .disabled(item.streamURL == nil)
@@ -116,5 +104,36 @@ struct DetailView: View {
     private func durationSeconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+}
+
+/// The label shown inside the Play / Resume button.
+///
+/// Pulled out as its own view so it can react to the `isFocused` environment —
+/// on tvOS the focused state should *feel* like the system's lift, but tuned
+/// to our accent. On iOS the focused environment is always `false` (no focus
+/// engine), so the styling collapses to the unfocused branch.
+private struct PlayButtonLabel: View {
+    let text: String
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: "play.fill")
+            Text(text)
+        }
+        .font(AetherDesign.Typography.cardTitle)
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.vertical, AetherDesign.Spacing.s)
+        .background(
+            AetherDesign.Palette.accent.opacity(isFocused ? 0.40 : 0.20),
+            in: Capsule()
+        )
+        .foregroundStyle(AetherDesign.Palette.textPrimary)
+        .shadow(color: .black.opacity(isFocused ? 0.40 : 0.0),
+                radius: isFocused ? 16 : 0,
+                y: isFocused ? 8 : 0)
+        .scaleEffect(isFocused ? 1.05 : 1.0)
+        .animation(AetherDesign.Motion.focus, value: isFocused)
     }
 }
