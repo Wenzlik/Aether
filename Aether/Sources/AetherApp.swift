@@ -24,7 +24,7 @@ struct AetherApp: App {
 @Observable
 final class AppSession {
     var source: (any MediaSource)?
-    let resumeStore = ResumeStore()
+    let resumeStore: ResumeStore
     let playback: PlaybackSession
     var loadError: String?
 
