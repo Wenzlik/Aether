@@ -4,7 +4,27 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-- Initial repository bootstrap
+### 0.2 — Media Sources (in progress)
+
+- Added `AetherCore/Networking/APIClient` — the small protocol every
+  media source goes through to talk to a network. Ships with
+  `URLSessionAPIClient` for production and a recording stub for tests.
+- Added `AetherCore/Storage/KeychainStore` — actor wrapper around
+  `kSecClassGenericPassword` for tokens and other small secrets
+- Added `PlexConfiguration` carrying the `X-Plex-*` headers Plex
+  requires on every request (product, version, client identifier,
+  device name, platform, platform version)
+- Added `PlexAPI` namespace with `Decodable` DTOs (`PIN`, `Resource`,
+  `Resource.Connection`)
+- Added `PlexAuthClient` actor implementing the PIN auth flow:
+  `requestPIN()` → user enters the code at `plex.tv/link` →
+  `pollForToken(pinID:interval:timeout:)` returns the user's token
+- `PlexMediaSource` now takes `baseURL`, `accessToken`, `configuration`,
+  and an `APIClient`. `libraries()` / `items(in:)` remain stubs — they
+  land in the next PR alongside the metadata mapping
+- Added `docs/next-steps/0.2-media-sources.md` planning doc
+
+### 0.1 — Foundation
 - Verified `xcodegen generate` produces a clean project; relocated generated
   `Info.plist` and `Info-tvOS.plist` to `Aether/SupportingFiles/` so they're
   referenced via `INFOPLIST_FILE` only (not bundled as Resources)
