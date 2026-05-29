@@ -23,6 +23,23 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   and an `APIClient`. `libraries()` / `items(in:)` remain stubs — they
   land in the next PR alongside the metadata mapping
 - Added `docs/next-steps/0.2-media-sources.md` planning doc
+- Added `PlexSignInViewModel` (`@MainActor`, `@Observable`) — drives
+  the PIN sign-in state machine (`idle → requesting → awaitingUser →
+  success | failure`) and runs the poll loop in a single owned task
+  with `cancel()` / `retry()`
+- Added `PlexSignInView` — couch-friendly: shows the four-letter PIN
+  in large rounded type, an `Open in Safari` button on iOS, a QR code
+  on both platforms so the user can hand off to another device
+- Added `QRCodeView` (app target) — Core Image QR generator with
+  nearest-neighbour scaling for crisp pixel edges
+- `AppSession` now owns the `KeychainStore`, a shared `URLSessionAPIClient`,
+  the `PlexConfiguration`, and the `PlexAuthClient`; round-trips the
+  per-install Plex `clientIdentifier` (UUID) and the auth token via
+  Keychain so signed-in state survives across launches
+- Home's empty state now branches on `isPlexSignedIn` — pre-sign-in
+  shows the "Add a source" CTA which presents the sheet; post-sign-in
+  acknowledges the connection and tells the user server discovery is
+  coming next
 
 ### 0.1 — Foundation
 - Verified `xcodegen generate` produces a clean project; relocated generated

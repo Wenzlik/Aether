@@ -5,6 +5,8 @@ struct HomeView: View {
     let source: any MediaSource
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
+    let isPlexSignedIn: Bool
+    let onAddSource: () -> Void
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -162,34 +164,34 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             // A soft, illustration-light hero. No spinner, no detailed graphic —
             // just a calm icon, a single sentence, and one CTA.
-            Image(systemName: "film.stack")
+            Image(systemName: isPlexSignedIn ? "checkmark.seal" : "film.stack")
                 .font(.system(size: 56, weight: .light))
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .padding(.bottom, AetherDesign.Spacing.s)
 
-            Text("Your library is empty")
+            Text(isPlexSignedIn ? "Signed in to Plex" : "Your library is empty")
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-            Text("Connect a Plex or Synology source to start watching.")
+            Text(isPlexSignedIn
+                 ? "Server discovery and library browsing arrive in the next update."
+                 : "Connect a Plex or Synology source to start watching.")
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button {
-                // TODO(0.2): present the Add Source flow.
-                // Intentionally a no-op in 0.1 — the destination doesn't exist yet,
-                // and a designed empty state shouldn't ship without one to point at.
-            } label: {
-                Text("Add a source")
-                    .font(AetherDesign.Typography.cardTitle)
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.vertical, AetherDesign.Spacing.s)
-                    .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+            if !isPlexSignedIn {
+                Button(action: onAddSource) {
+                    Text("Add a source")
+                        .font(AetherDesign.Typography.cardTitle)
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                        .padding(.vertical, AetherDesign.Spacing.s)
+                        .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, AetherDesign.Spacing.s)
             }
-            .buttonStyle(.plain)
-            .padding(.top, AetherDesign.Spacing.s)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.xxl)
