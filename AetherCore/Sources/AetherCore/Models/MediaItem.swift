@@ -41,6 +41,13 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         case movie
         case episode
         case show
+        case season
+
+        /// Whether this kind is a container browsed into for children (a show's
+        /// seasons, a season's episodes) rather than played directly.
+        public var isContainer: Bool {
+            self == .show || self == .season
+        }
     }
 }
 

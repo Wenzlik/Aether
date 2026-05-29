@@ -58,6 +58,7 @@ struct HomeView: View {
             .navigationDestination(for: MediaItem.self) { item in
                 DetailView(
                     item: item,
+                    source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession
                 )

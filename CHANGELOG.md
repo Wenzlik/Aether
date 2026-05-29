@@ -4,6 +4,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **TV shows are now browsable.** A show is a container, not a playable item —
+  opening one used to dead-end at "Unavailable." Now Detail drills into the
+  Plex hierarchy: a show lists its **seasons** (poster rail), a season lists
+  its **episodes** (a thumbnail + title + summary list), and an episode plays
+  like a movie. Backed by a new `MediaSource.children(of:)`
+  (`GET /library/metadata/{ratingKey}/children` on Plex) and a `.season`
+  media kind. Navigation recurses within the existing `NavigationStack`.
+
 ### Changed
 
 - **Native video player.** Replaced SwiftUI's prototype `VideoPlayer` with

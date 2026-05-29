@@ -83,6 +83,21 @@ public actor PlexMediaSource: MediaSource {
         return metadata.map { mapMetadataToMediaItem($0, base: base) }
     }
 
+    /// Children of a container: a show's seasons, or a season's episodes.
+    /// `GET /library/metadata/{ratingKey}/children` returns the same
+    /// `MediaContainer.Metadata` shape as a library listing.
+    public func children(of id: MediaID) async throws -> [MediaItem] {
+        let base = try await resolveBaseURL()
+        let request = request(base: base, path: "/library/metadata/\(id.rawValue)/children")
+        let response = try await api.decode(
+            PlexAPI.LibraryItemsResponse.self,
+            from: request,
+            decoder: decoder
+        )
+        let metadata = response.mediaContainer.metadata ?? []
+        return metadata.map { mapMetadataToMediaItem($0, base: base) }
+    }
+
     // MARK: - Connection resolution + failover
 
     /// Return a reachable connection's base URL, probing `/identity` in ranked

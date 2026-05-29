@@ -138,6 +138,7 @@ public enum PlexAPI {
             case "movie":   return .movie
             case "episode": return .episode
             case "show":    return .show
+            case "season":  return .season
             default:        return .movie  // best-effort fallback
             }
         }
