@@ -608,6 +608,188 @@ struct PlexResourceClientTests {
     }
 }
 
+@Suite("Plex — Library response decoding")
+struct PlexLibraryDecodingTests {
+
+    @Test("LibrarySectionsResponse decodes the MediaContainer + Directory shape")
+    func decodesSectionsResponse() throws {
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Directory": [
+              {"key":"1","title":"Movies","type":"movie"},
+              {"key":"2","title":"TV","type":"show"},
+              {"key":"3","title":"Music","type":"artist"}
+            ]
+          }
+        }
+        """#
+        let response = try JSONDecoder().decode(PlexAPI.LibrarySectionsResponse.self, from: Data(json.utf8))
+        let directories = try #require(response.mediaContainer.directory)
+        #expect(directories.count == 3)
+        #expect(directories.map(\.kind) == [.movie, .show, nil])
+    }
+
+    @Test("LibraryItemsResponse decodes the MediaContainer + Metadata shape")
+    func decodesItemsResponse() throws {
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {
+                "ratingKey":"123",
+                "type":"movie",
+                "title":"Blade Runner 2049",
+                "summary":"Thirty years after…",
+                "year":2017,
+                "duration":9780000,
+                "thumb":"/library/metadata/123/thumb/1700000000",
+                "art":"/library/metadata/123/art/1700000000"
+              }
+            ]
+          }
+        }
+        """#
+        let response = try JSONDecoder().decode(PlexAPI.LibraryItemsResponse.self, from: Data(json.utf8))
+        let items = try #require(response.mediaContainer.metadata)
+        #expect(items.count == 1)
+        #expect(items[0].title == "Blade Runner 2049")
+        #expect(items[0].duration == 9780000)   // milliseconds
+    }
+
+    @Test("Empty Metadata array is decoded as nil (Plex omits the key)")
+    func decodesEmptyItemsResponse() throws {
+        let json = #"""
+        { "MediaContainer": {} }
+        """#
+        let response = try JSONDecoder().decode(PlexAPI.LibraryItemsResponse.self, from: Data(json.utf8))
+        #expect(response.mediaContainer.metadata == nil)
+    }
+}
+
+@Suite("Plex — PlexMediaSource library + items + mapping")
+struct PlexMediaSourceLibrariesTests {
+
+    private static let config = PlexConfiguration(
+        product: "Aether", version: "0.2.0", clientIdentifier: "id",
+        deviceName: "iPhone", platform: "iOS", platformVersion: "26.0"
+    )
+    private static let baseURL = URL(string: "https://lan.plex.direct:32400")!
+
+    private func makeSource(api: any APIClient) -> PlexMediaSource {
+        PlexMediaSource(
+            serverID: "test-server",
+            displayName: "Test",
+            baseURL: Self.baseURL,
+            accessToken: "srv-token",
+            configuration: Self.config,
+            api: api
+        )
+    }
+
+    @Test("libraries() filters out non-movie / non-show library sections")
+    func librariesFiltering() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Directory": [
+              {"key":"1","title":"Movies","type":"movie"},
+              {"key":"2","title":"TV","type":"show"},
+              {"key":"3","title":"Music","type":"artist"}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraries = try await source.libraries()
+
+        #expect(libraries.count == 2)
+        #expect(libraries.map(\.title) == ["Movies", "TV"])
+        #expect(libraries.map(\.kind) == [.movie, .show])
+    }
+
+    @Test("items(in:) hits /library/sections/{key}/all and maps Metadata to MediaItem")
+    func itemsEndpointAndMapping() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {
+                "ratingKey":"123",
+                "type":"movie",
+                "title":"Sample Movie",
+                "summary":"A test.",
+                "year":2024,
+                "duration":7200000,
+                "thumb":"/library/metadata/123/thumb/1",
+                "art":"/library/metadata/123/art/1"
+              }
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "7")
+        let items = try await source.items(in: libraryID)
+
+        // Endpoint shape
+        let recorded = await api.requests
+        try #require(recorded.count == 1)
+        let req = recorded[0]
+        #expect(req.url?.path == "/library/sections/7/all")
+        #expect(req.value(forHTTPHeaderField: "X-Plex-Token") == "srv-token")
+
+        // Mapping
+        try #require(items.count == 1)
+        let item = items[0]
+        #expect(item.title == "Sample Movie")
+        #expect(item.kind == .movie)
+        #expect(item.year == 2024)
+        #expect(item.runtime == .seconds(7200))   // 7_200_000ms → 7200s
+        #expect(item.streamURL == nil)            // 0.2: stream URL resolution lands next PR
+
+        // Tokenised poster + backdrop URLs
+        let poster = try #require(item.posterURL)
+        #expect(poster.path == "/library/metadata/123/thumb/1")
+        #expect(poster.query?.contains("X-Plex-Token=srv-token") == true)
+
+        let backdrop = try #require(item.backdropURL)
+        #expect(backdrop.path == "/library/metadata/123/art/1")
+        #expect(backdrop.query?.contains("X-Plex-Token=srv-token") == true)
+    }
+
+    @Test("tokenisedURL handles nil + empty relative paths gracefully")
+    func tokenisedURLEdges() {
+        let api = RecordingAPIClient()
+        let source = makeSource(api: api)
+        #expect(source.tokenisedURL(for: nil) == nil)
+        #expect(source.tokenisedURL(for: "") == nil)
+    }
+
+    @Test("mapMetadataToMediaItem converts milliseconds duration correctly")
+    func runtimeConversion() {
+        let dto = PlexAPI.Metadata(
+            ratingKey: "x",
+            type: "movie",
+            title: "X",
+            summary: nil,
+            year: nil,
+            duration: 1500,    // 1.5s in ms
+            thumb: nil,
+            art: nil
+        )
+        let source = makeSource(api: RecordingAPIClient())
+        let item = source.mapMetadataToMediaItem(dto)
+        #expect(item.runtime == .seconds(1.5))
+    }
+}
+
 @Suite("Plex — PlexMediaSource request shape")
 struct PlexMediaSourceRequestTests {
 

@@ -124,7 +124,7 @@ struct PlexDiscoveryView: View {
                 Text(serverName)
                     .font(AetherDesign.Typography.cardTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("Library browsing arrives in the next update.")
+                Text("Tap Done to start browsing your library.")
                     .font(AetherDesign.Typography.body)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
             }

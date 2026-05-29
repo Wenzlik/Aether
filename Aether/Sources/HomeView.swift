@@ -37,10 +37,15 @@ struct HomeView: View {
                         }
 
                         ForEach(feed.libraries) { librarySection in
+                            // Both movie and show libraries surface posters at
+                            // the top level (a show's top-level artwork is its
+                            // poster, not an episode still). Episode aspect
+                            // (16:9) is for the future show → seasons →
+                            // episodes drill-down.
                             section(
                                 title: librarySection.library.title,
                                 items: librarySection.items,
-                                aspect: librarySection.library.kind == .show ? .episode : .poster
+                                aspect: .poster
                             )
                         }
                     }
@@ -56,7 +61,11 @@ struct HomeView: View {
                 )
             }
         }
-        .task { await load() }
+        // Re-run load() whenever the underlying source changes (e.g. mock →
+        // plexSource after AppSession.start() finishes discovery). Without
+        // the id:, .task fires once on first appear and would leave Home
+        // showing whatever it loaded first.
+        .task(id: source.id) { await load() }
     }
 
     // MARK: - Header
@@ -223,8 +232,10 @@ struct HomeView: View {
     }
 
     private var emptyStateBody: String {
-        if plexServerName != nil {
-            return "Library browsing arrives in the next update."
+        if let plexServerName {
+            // Connected, but the server has no movie or show libraries that
+            // Aether knows how to render (music + photos are skipped in 0.2).
+            return "\(plexServerName) doesn't have any movie or show libraries Aether can read yet. Add one in Plex and pull to refresh."
         }
         if isPlexSignedIn {
             switch plexDiscoveryState {

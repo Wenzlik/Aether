@@ -31,7 +31,14 @@ struct AetherApp: App {
 final class AppSession {
     // MARK: - Mock / Home library
 
+    /// The active source feeding `HomeView`. Starts as the mock fixture and
+    /// gets swapped to `plexSource` when a Plex server is selected.
     var source: (any MediaSource)?
+
+    /// The mock fixture, kept around so sign-out can fall back to it instead
+    /// of leaving Home with no source at all.
+    private var mockSource: (any MediaSource)?
+
     var loadError: String?
 
     // MARK: - Cross-cutting
@@ -93,9 +100,12 @@ final class AppSession {
             for point in await mock.simulatedResumePoints {
                 await resumeStore.record(point)
             }
+            mockSource = mock
             source = mock
         } catch {
-            source = MockMediaSource()
+            let fallback = MockMediaSource()
+            mockSource = fallback
+            source = fallback
             loadError = "Couldn't load MockLibrary.json — using built-in sample. (\(error.localizedDescription))"
         }
 
@@ -162,10 +172,22 @@ final class AppSession {
             plexServer = record
             plexSource = makePlexSource(from: record)
             discoveryState = .completed(serverName: record.name)
+            adoptPlexSourceIfAvailable()
         } catch {
             // Reading a corrupted record shouldn't break launch — just leave
             // the user signed-in-but-no-server, which prompts a re-discovery.
         }
+    }
+
+    /// Swap `source` to the live Plex source when one exists.
+    ///
+    /// The mock fixture stays around as a fallback (loaded earlier in
+    /// `start()`), but as soon as we know which Plex server to talk to, we
+    /// prefer real content over fake. Called from both `restorePlexServer()`
+    /// on launch and `discoverPlexServers()` after a fresh selection.
+    private func adoptPlexSourceIfAvailable() {
+        guard let plexSource else { return }
+        source = plexSource
     }
 
     private func makePlexSource(from record: PlexServerRecord) -> PlexMediaSource? {
@@ -202,6 +224,8 @@ final class AppSession {
         plexSource = nil
         discoveryState = .idle
         isPlexSignedIn = false
+        // Fall back to the mock so Home isn't left pointing at a dead source.
+        source = mockSource
     }
 
     // MARK: - Server discovery
@@ -244,6 +268,7 @@ final class AppSession {
             plexServer = record
             plexSource = makePlexSource(from: record)
             discoveryState = .completed(serverName: record.name)
+            adoptPlexSourceIfAvailable()
         } catch {
             discoveryState = .failed(message: error.localizedDescription)
         }
