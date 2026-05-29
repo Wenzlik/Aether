@@ -75,7 +75,12 @@ public actor PlexMediaSource: MediaSource {
     /// - Poster / backdrop URLs are constructed against the server's base URL
     ///   and tokenised via a query parameter so plain `AsyncImage` works
     ///   without setting headers (see `tokenisedURL(for:)`).
-    /// - `streamURL` is `nil` in 0.2 — playback wires in the next PR.
+    /// - `streamURL` is the **direct-play** URL: the original file's part path
+    ///   tokenised against the server. Present for movies + episodes that
+    ///   carry a Part; `nil` for containers (shows, seasons) which aren't
+    ///   directly playable. Direct play works for containers/codecs AVPlayer
+    ///   supports (MP4/MOV/M4V/HLS); incompatible files (e.g. MKV) need the
+    ///   transcode fallback that lands in the next PR.
     nonisolated func mapMetadataToMediaItem(_ dto: PlexAPI.Metadata) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
@@ -86,7 +91,7 @@ public actor PlexMediaSource: MediaSource {
             summary: dto.summary,
             posterURL: tokenisedURL(for: dto.thumb),
             backdropURL: tokenisedURL(for: dto.art),
-            streamURL: nil
+            streamURL: tokenisedURL(for: dto.firstPartKey)
         )
     }
 

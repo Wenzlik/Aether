@@ -726,7 +726,10 @@ struct PlexMediaSourceLibrariesTests {
                 "year":2024,
                 "duration":7200000,
                 "thumb":"/library/metadata/123/thumb/1",
-                "art":"/library/metadata/123/art/1"
+                "art":"/library/metadata/123/art/1",
+                "Media":[
+                  {"Part":[{"key":"/library/parts/55/1700/file.mp4"}]}
+                ]
               }
             ]
           }
@@ -752,7 +755,6 @@ struct PlexMediaSourceLibrariesTests {
         #expect(item.kind == .movie)
         #expect(item.year == 2024)
         #expect(item.runtime == .seconds(7200))   // 7_200_000ms → 7200s
-        #expect(item.streamURL == nil)            // 0.2: stream URL resolution lands next PR
 
         // Tokenised poster + backdrop URLs
         let poster = try #require(item.posterURL)
@@ -762,6 +764,34 @@ struct PlexMediaSourceLibrariesTests {
         let backdrop = try #require(item.backdropURL)
         #expect(backdrop.path == "/library/metadata/123/art/1")
         #expect(backdrop.query?.contains("X-Plex-Token=srv-token") == true)
+
+        // Direct-play stream URL from the first Part, tokenised.
+        let stream = try #require(item.streamURL)
+        #expect(stream.path == "/library/parts/55/1700/file.mp4")
+        #expect(stream.query?.contains("X-Plex-Token=srv-token") == true)
+    }
+
+    @Test("items without Media (e.g. a show container) get a nil streamURL")
+    func containerHasNoStreamURL() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {"ratingKey":"900","type":"show","title":"A Series","year":2020}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "3")
+        let items = try await source.items(in: libraryID)
+
+        try #require(items.count == 1)
+        #expect(items[0].kind == .show)
+        #expect(items[0].streamURL == nil)   // containers aren't directly playable
     }
 
     @Test("tokenisedURL handles nil + empty relative paths gracefully")

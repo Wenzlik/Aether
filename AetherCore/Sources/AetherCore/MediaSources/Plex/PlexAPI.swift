@@ -129,6 +129,9 @@ public enum PlexAPI {
         public let thumb: String?
         /// Relative path to the backdrop / art.
         public let art: String?
+        /// Playable media. Present on movies + episodes; absent on containers
+        /// like shows and seasons (you play their children, not them).
+        public let media: [Media]?
 
         public var kind: MediaItem.Kind {
             switch type {
@@ -137,6 +140,32 @@ public enum PlexAPI {
             case "show":    return .show
             default:        return .movie  // best-effort fallback
             }
+        }
+
+        /// The first part's relative `key` — the direct-play file path.
+        /// `/library/sections/{key}/all` includes Media + Part inline for
+        /// movies and episodes, so no extra request is needed to resolve it.
+        public var firstPartKey: String? {
+            media?.first?.part?.first?.key
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case ratingKey, type, title, summary, year, duration, thumb, art
+            case media = "Media"
+        }
+
+        public struct Media: Decodable, Sendable, Equatable {
+            public let part: [Part]?
+
+            enum CodingKeys: String, CodingKey {
+                case part = "Part"
+            }
+        }
+
+        public struct Part: Decodable, Sendable, Equatable {
+            /// Relative path to the original file, e.g.
+            /// `/library/parts/12345/1700000000/file.mkv`.
+            public let key: String?
         }
     }
 }
