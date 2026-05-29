@@ -128,8 +128,10 @@ public actor PlexMediaSource: MediaSource {
     /// - Poster / backdrop / stream URLs are built against the resolved base
     ///   URL and tokenised via a query parameter so plain `AsyncImage` /
     ///   `AVPlayer` work without setting headers.
-    /// - `streamURL` is the **direct-play** URL (first Part's path). Present
-    ///   for movies + episodes; `nil` for containers (shows, seasons).
+    /// - `streamURL` resolution (see `streamURL(for:base:)`):
+    ///   - containers (shows, seasons) → `nil` (not directly playable),
+    ///   - AVPlayer-friendly container (mp4/m4v/mov) → the direct-play file URL,
+    ///   - anything else (mkv, avi, ts, …) → the server transcode HLS URL.
     nonisolated func mapMetadataToMediaItem(_ dto: PlexAPI.Metadata, base: URL) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
@@ -140,8 +142,63 @@ public actor PlexMediaSource: MediaSource {
             summary: dto.summary,
             posterURL: tokenisedURL(base: base, path: dto.thumb),
             backdropURL: tokenisedURL(base: base, path: dto.art),
-            streamURL: tokenisedURL(base: base, path: dto.firstPartKey)
+            streamURL: streamURL(for: dto, base: base)
         )
+    }
+
+    // MARK: - Stream URL resolution (direct play vs transcode)
+
+    /// Containers AVPlayer opens natively. Anything outside this set goes
+    /// through the server transcoder, which always yields playable HLS.
+    private static let directPlayContainers: Set<String> = ["mp4", "m4v", "mov"]
+
+    /// Decide the stream URL for an item:
+    /// - no Part → `nil` (a container like a show / season).
+    /// - friendly container → direct-play file URL (pristine, no server load).
+    /// - otherwise → transcode HLS URL (the server remuxes or re-encodes;
+    ///   `directStream=1` means a common MKV/H.264/AAC just gets remuxed, which
+    ///   is fast and lossless).
+    nonisolated func streamURL(for dto: PlexAPI.Metadata, base: URL) -> URL? {
+        guard dto.firstPartKey != nil else { return nil }
+
+        if let container = dto.firstContainer?.lowercased(),
+           Self.directPlayContainers.contains(container) {
+            return tokenisedURL(base: base, path: dto.firstPartKey)
+        }
+        // Unknown or unfriendly container → let the server decide / transcode.
+        return transcodeURL(base: base, ratingKey: dto.ratingKey)
+    }
+
+    /// Build a universal-transcoder HLS URL for an item.
+    ///
+    /// `directStream=1` lets the server remux when only the container is wrong
+    /// (the common, cheap case) and full-transcode only when codecs truly need
+    /// it — i.e. "Aether requests; the server decides." The token rides in the
+    /// query because `AVPlayer` fetches the playlist directly.
+    nonisolated func transcodeURL(base: URL, ratingKey: String) -> URL? {
+        var components = URLComponents(
+            url: base.appendingPathComponent("/video/:/transcode/universal/start.m3u8"),
+            resolvingAgainstBaseURL: false
+        )
+        let session = UUID().uuidString
+        components?.queryItems = [
+            URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
+            URLQueryItem(name: "protocol", value: "hls"),
+            URLQueryItem(name: "directPlay", value: "0"),
+            URLQueryItem(name: "directStream", value: "1"),
+            URLQueryItem(name: "fastSeek", value: "1"),
+            URLQueryItem(name: "mediaIndex", value: "0"),
+            URLQueryItem(name: "partIndex", value: "0"),
+            URLQueryItem(name: "maxVideoBitrate", value: "20000"),
+            URLQueryItem(name: "videoQuality", value: "100"),
+            URLQueryItem(name: "session", value: session),
+            URLQueryItem(name: "X-Plex-Session-Identifier", value: session),
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: configuration.clientIdentifier),
+            URLQueryItem(name: "X-Plex-Product", value: configuration.product),
+            URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
+            URLQueryItem(name: "X-Plex-Token", value: accessToken)
+        ]
+        return components?.url
     }
 
     // MARK: - URL helpers

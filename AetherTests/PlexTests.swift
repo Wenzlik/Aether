@@ -744,7 +744,7 @@ struct PlexMediaSourceLibrariesTests {
                 "thumb":"/library/metadata/123/thumb/1",
                 "art":"/library/metadata/123/art/1",
                 "Media":[
-                  {"Part":[{"key":"/library/parts/55/1700/file.mp4"}]}
+                  {"container":"mp4","Part":[{"key":"/library/parts/55/1700/file.mp4"}]}
                 ]
               }
             ]
@@ -782,7 +782,7 @@ struct PlexMediaSourceLibrariesTests {
         #expect(backdrop.path == "/library/metadata/123/art/1")
         #expect(backdrop.query?.contains("X-Plex-Token=srv-token") == true)
 
-        // Direct-play stream URL from the first Part, tokenised.
+        // mp4 container → direct-play stream URL from the first Part, tokenised.
         let stream = try #require(item.streamURL)
         #expect(stream.path == "/library/parts/55/1700/file.mp4")
         #expect(stream.query?.contains("X-Plex-Token=srv-token") == true)
@@ -810,6 +810,63 @@ struct PlexMediaSourceLibrariesTests {
         try #require(items.count == 1)
         #expect(items[0].kind == .show)
         #expect(items[0].streamURL == nil)   // containers aren't directly playable
+    }
+
+    @Test("streamURL: mp4 → direct file, mkv → transcode, container → nil")
+    func streamURLDecision() {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+
+        let mp4 = PlexAPI.Metadata(
+            ratingKey: "1", type: "movie", title: "A", summary: nil, year: nil,
+            duration: nil, thumb: nil, art: nil,
+            media: [.init(container: "mp4", part: [.init(key: "/library/parts/1/1/a.mp4")])]
+        )
+        #expect(source.streamURL(for: mp4, base: base)?.path == "/library/parts/1/1/a.mp4")
+
+        let mkv = PlexAPI.Metadata(
+            ratingKey: "2", type: "movie", title: "B", summary: nil, year: nil,
+            duration: nil, thumb: nil, art: nil,
+            media: [.init(container: "mkv", part: [.init(key: "/library/parts/2/1/b.mkv")])]
+        )
+        #expect(source.streamURL(for: mkv, base: base)?.path == "/video/:/transcode/universal/start.m3u8")
+
+        // Unknown container also routes to transcode (safe default).
+        let unknown = PlexAPI.Metadata(
+            ratingKey: "3", type: "movie", title: "C", summary: nil, year: nil,
+            duration: nil, thumb: nil, art: nil,
+            media: [.init(container: nil, part: [.init(key: "/library/parts/3/1/c.dat")])]
+        )
+        #expect(unknown.firstPartKey != nil)
+        #expect(source.streamURL(for: unknown, base: base)?.path == "/video/:/transcode/universal/start.m3u8")
+
+        // No Media (a show container) → nil.
+        let show = PlexAPI.Metadata(
+            ratingKey: "4", type: "show", title: "D", summary: nil, year: nil,
+            duration: nil, thumb: nil, art: nil, media: nil
+        )
+        #expect(source.streamURL(for: show, base: base) == nil)
+    }
+
+    @Test("transcodeURL carries the expected universal-transcoder params")
+    func transcodeURLParams() throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+        let url = try #require(source.transcodeURL(base: base, ratingKey: "777"))
+
+        #expect(url.path == "/video/:/transcode/universal/start.m3u8")
+        let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let q = comps.queryItems ?? []
+        func value(_ name: String) -> String? { q.first { $0.name == name }?.value }
+
+        #expect(value("path") == "/library/metadata/777")
+        #expect(value("protocol") == "hls")
+        #expect(value("directPlay") == "0")
+        #expect(value("directStream") == "1")
+        #expect(value("X-Plex-Token") == "srv-token")
+        #expect(value("X-Plex-Client-Identifier") == "id")  // from makeSource's config
+        #expect(q.contains { $0.name == "session" })
+        #expect(q.contains { $0.name == "X-Plex-Session-Identifier" })
     }
 
     @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
