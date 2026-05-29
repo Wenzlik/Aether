@@ -156,7 +156,7 @@ struct PlexAuthClientTests {
         platformVersion: "26.0"
     )
 
-    @Test("requestPIN sends X-Plex headers and decodes the response")
+    @Test("requestPIN sends X-Plex headers, defaults to strong=false, decodes the response")
     func requestPINSendsHeaders() async throws {
         let api = RecordingAPIClient()
         await api.enqueue(.init(
@@ -178,6 +178,12 @@ struct PlexAuthClientTests {
         #expect(request.value(forHTTPHeaderField: "X-Plex-Product") == "Aether")
         #expect(request.value(forHTTPHeaderField: "X-Plex-Client-Identifier") == "test-client")
         #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+
+        // strong=false → the short 4-character code humans can type at
+        // plex.tv/link. strong=true returns a long token-style PIN that's
+        // unusable in a manual sign-in flow.
+        let query = request.url?.query ?? ""
+        #expect(query.contains("strong=false"))
     }
 
     @Test("pollForToken returns the token once it appears")
