@@ -11,9 +11,22 @@ import AVKit
 /// - Picture-in-Picture and AirPlay,
 /// - the subtitle / audio-track picker.
 ///
+/// **Dismiss surface.** On tvOS the "Done" button is wired into the native
+/// chrome via `contextualActions`, so it auto-hides with the rest of the
+/// transport. (`contextualActions` is tvOS-only — iOS / visionOS use
+/// `PlayerView`'s auto-hiding overlay xmark instead.) On tvOS the Menu
+/// button on the Siri Remote remains the primary dismiss; `Done` is a
+/// redundant fall-through.
+///
 /// Used on iOS, tvOS, and visionOS (all have UIKit + AVKit).
 struct SystemVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
+    let onClose: @MainActor () -> Void
+
+    init(player: AVPlayer, onClose: @escaping @MainActor () -> Void = {}) {
+        self.player = player
+        self.onClose = onClose
+    }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         configureAudioSession()
@@ -25,6 +38,17 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         controller.canStartPictureInPictureAutomaticallyFromInline = true
         controller.videoGravity = .resizeAspect
         #endif
+
+        #if os(tvOS)
+        let close = UIAction(
+            title: "Done",
+            image: UIImage(systemName: "xmark")
+        ) { _ in
+            onClose()
+        }
+        controller.contextualActions = [close]
+        #endif
+
         return controller
     }
 

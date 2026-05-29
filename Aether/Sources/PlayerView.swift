@@ -7,6 +7,18 @@ struct PlayerView: View {
     let onDismiss: () -> Void
     @State private var viewModel: PlayerStateViewModel
 
+    /// Chrome auto-hide window. Lines up with `AVPlayerViewController`'s
+    /// native transport bar so the overlay xmark on iOS / visionOS feels
+    /// like part of the system chrome rather than a separate always-visible
+    /// surface.
+    private static let chromeIdleHide: Duration = .seconds(3)
+
+    #if os(iOS) || os(visionOS)
+    @State private var isCloseVisible = true
+    @State private var hideTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
+
     init(item: MediaItem, session: PlaybackSession, onDismiss: @escaping () -> Void) {
         self.item = item
         self.onDismiss = onDismiss
@@ -18,8 +30,10 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
 
             if let player = viewModel.player {
-                SystemVideoPlayer(player: player)
-                    .ignoresSafeArea()
+                SystemVideoPlayer(player: player) {
+                    Task { await dismissPlayer() }
+                }
+                .ignoresSafeArea()
             } else if viewModel.state.status == .failed {
                 playbackUnavailable
             } else {
@@ -28,38 +42,79 @@ struct PlayerView: View {
             }
 
             #if os(iOS) || os(visionOS)
-            // iOS and visionOS both get a tap/pinch close button. visionOS has
-            // no Menu-button equivalent, and while its window chrome can close
-            // the whole scene, an in-content close keeps the dismiss path (and
-            // the resume write) identical across platforms.
-            VStack {
-                HStack {
-                    Button {
-                        Task { await dismissPlayer() }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(AetherDesign.Spacing.s)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .padding(AetherDesign.Spacing.m)
-                    Spacer()
-                }
-                Spacer()
-            }
+            closeButton
+                .opacity(isCloseVisible ? 1 : 0)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.25),
+                    value: isCloseVisible
+                )
+                .allowsHitTesting(isCloseVisible)
             #endif
-            // tvOS deliberately has no custom close chrome — the Menu button on
-            // the Siri Remote triggers `.onExitCommand` below, which dismisses
-            // via the same path. Adding tap-target close UI on tvOS would fight
-            // the focus model (see AGENTS.md → tvOS rules).
+            // tvOS routes dismiss through the native chrome's `Done`
+            // contextual action and the Menu button on the Siri Remote
+            // (`.onExitCommand` below). No SwiftUI overlay there.
         }
-        .task { await viewModel.open(item) }
-        .onDisappear { Task { await viewModel.close() } }
+        #if os(iOS) || os(visionOS)
+        // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome
+        // intact while letting us mirror its visibility on the overlay
+        // xmark. Without the simultaneous variant, our tap would consume
+        // the touch and the native transport bar would stop responding.
+        .simultaneousGesture(
+            TapGesture().onEnded { revealChrome() }
+        )
+        #endif
+        .task {
+            await viewModel.open(item)
+            #if os(iOS) || os(visionOS)
+            scheduleChromeHide()
+            #endif
+        }
+        .onDisappear {
+            Task { await viewModel.close() }
+            #if os(iOS) || os(visionOS)
+            hideTask?.cancel()
+            #endif
+        }
         #if os(tvOS)
         .onExitCommand { Task { await dismissPlayer() } }
         #endif
     }
+
+    #if os(iOS) || os(visionOS)
+    private var closeButton: some View {
+        VStack {
+            HStack {
+                Button {
+                    Task { await dismissPlayer() }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(AetherDesign.Spacing.s)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .padding(AetherDesign.Spacing.m)
+                .accessibilityLabel("Close player")
+                Spacer()
+            }
+            Spacer()
+        }
+    }
+
+    private func revealChrome() {
+        isCloseVisible = true
+        scheduleChromeHide()
+    }
+
+    private func scheduleChromeHide() {
+        hideTask?.cancel()
+        hideTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.chromeIdleHide)
+            guard !Task.isCancelled else { return }
+            isCloseVisible = false
+        }
+    }
+    #endif
 
     private func dismissPlayer() async {
         // Pause first so audio stops on the same frame the fade begins.

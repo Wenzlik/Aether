@@ -34,6 +34,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   Play button replaced with `AetherButton.primary` carrying the
   `play.fill` glyph and "Play" / "Resume 12:34" label. Unavailable state
   reuses `AetherErrorState` instead of a one-off surface.
+- **Player chrome auto-hides.** The overlay `xmark` close button on iOS /
+  visionOS used to stay visible for the entire playback session, fighting
+  the native AVKit transport bar (which auto-hides after ~3 s of no
+  interaction). It now fades out alongside the transport on the same idle
+  timer and reappears when the user taps the player area (via
+  `simultaneousGesture`, so AVKit's own tap-to-reveal still fires). On
+  tvOS the dismiss surface moves into the native chrome itself as a
+  `Done` contextual action — the Menu button remains the primary path.
 
 ### Added
 
