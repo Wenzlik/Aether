@@ -4,6 +4,28 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plex now works off the home network.** Discovery used to persist only the
+  single best connection — almost always the LAN address — so leaving the
+  house left the app stuck on a dead URL (and, while it hung, showing stale
+  mock content). `PlexServerRecord` now persists **all** of a server's
+  connections, ranked best-first, and `PlexMediaSource` resolves a reachable
+  one at runtime by probing `/identity` in order (local → direct remote →
+  relay) with a short 4s timeout. The home screen gained a "Try again" that
+  drops the cached connection and re-probes — useful after switching networks.
+
+### Changed
+
+- **Removed the mock library from the running app.** It was 0.1 scaffolding
+  before real connectors existed; now it only confused things (it appeared as
+  fake content whenever Plex was briefly unreachable). The app shows real Plex
+  content or an honest welcome / empty / error state — never fake data.
+  `MockMediaSource` survives as **test-only** infrastructure;
+  `Aether/Resources/MockLibrary.json` and `MockMediaSource.loadFromBundle` are
+  gone. `AppSession.source` is now `nil` until a Plex server is selected, and
+  `HomeView` renders the welcome/empty state for the `nil` case.
+
 ### Platforms
 
 - Added an early **visionOS** base: a new `Aether-visionOS` app target

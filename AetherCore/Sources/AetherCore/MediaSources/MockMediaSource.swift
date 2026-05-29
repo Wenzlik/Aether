@@ -1,11 +1,15 @@
 import Foundation
 
-/// In-memory media source used during 0.1 Foundation before real connectors land.
+/// In-memory media source for **tests and previews only**.
+///
+/// It bootstrapped Home in 0.1 before real connectors existed; now that Plex is
+/// wired up, the running app never uses it (no mock fallback — Aether shows real
+/// content or honest empty/error states). It survives as test infrastructure:
+/// `HomeFeedBuilder` and the mapping logic are exercised against it.
 ///
 /// Two ways to construct it:
-/// - `MockMediaSource()` — a single hardcoded item, useful for previews and unit tests.
-/// - `MockMediaSource(fixture:)` — loads from a `MockFixture` (typically parsed from
-///   `Aether/Resources/MockLibrary.json`); the path the running app uses.
+/// - `MockMediaSource()` — a single hardcoded item.
+/// - `MockMediaSource(fixture:)` — from an in-memory `MockFixture`.
 public actor MockMediaSource: MediaSource {
     public let id: MediaSourceID = .mock
     public let displayName = "Mock Library"
@@ -107,20 +111,6 @@ public actor MockMediaSource: MediaSource {
         self.seededResumePoints = resumePoints
     }
 
-    // MARK: - Loading from a bundle
-
-    /// Convenience: load `MockLibrary.json` from a bundle.
-    /// - Parameter bundle: the bundle to look in. The app target passes `.main`; tests may pass their own.
-    /// - Parameter name: the JSON file name without extension. Defaults to `MockLibrary`.
-    public static func loadFromBundle(_ bundle: Bundle = .main, named name: String = "MockLibrary") throws -> MockMediaSource {
-        guard let url = bundle.url(forResource: name, withExtension: "json") else {
-            throw MockMediaSourceError.fixtureNotFound(name: name)
-        }
-        let data = try Data(contentsOf: url)
-        let fixture = try JSONDecoder().decode(MockFixture.self, from: data)
-        return MockMediaSource(fixture: fixture)
-    }
-
     // MARK: - MediaSource
 
     public func libraries() async throws -> [Library] { libraryList }
@@ -129,16 +119,10 @@ public actor MockMediaSource: MediaSource {
         itemsByLibrary[libraryID] ?? []
     }
 
-    /// Direct item lookup. Used by `HomeFeedBuilder` and the resume-store seeding step.
+    /// Direct item lookup. Used by `HomeFeedBuilder` and tests.
     public func item(for id: MediaID) async -> MediaItem? {
         itemIndex[id]
     }
-}
-
-// MARK: - Errors
-
-public enum MockMediaSourceError: Error, Sendable {
-    case fixtureNotFound(name: String)
 }
 
 // MARK: - Fixture DTOs

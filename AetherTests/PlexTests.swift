@@ -479,10 +479,13 @@ struct PlexServerSelectorRankingTests {
         #expect(selector.selectBest(from: [onlyPlayer]) == nil)
     }
 
-    @Test("selectBest carries Selection.makeRecord() with the right fields")
+    @Test("selectBest carries Selection.makeRecord() with all connections ranked best-first")
     func selectionMakesUsableRecord() throws {
         let local = PlexAPI.Resource.Connection.make(uri: "https://lan.plex.direct:32400", local: true, relay: false, connectionProtocol: "https")
-        let server = PlexAPI.Resource.make(name: "Tower", clientIdentifier: "pms-uuid", accessToken: "srv-token", connections: [local])
+        let remote = PlexAPI.Resource.Connection.make(uri: "https://wan.plex.direct:32400", local: false, relay: false, connectionProtocol: "https")
+        let relay = PlexAPI.Resource.Connection.make(uri: "https://relay.plex.direct:443", local: false, relay: true, connectionProtocol: "https")
+        // Deliberately out of rank order to prove makeRecord sorts them.
+        let server = PlexAPI.Resource.make(name: "Tower", clientIdentifier: "pms-uuid", accessToken: "srv-token", connections: [relay, remote, local])
 
         let pick = try #require(selector.selectBest(from: [server]))
         let record = pick.makeRecord()
@@ -490,9 +493,15 @@ struct PlexServerSelectorRankingTests {
         #expect(record.clientIdentifier == "pms-uuid")
         #expect(record.name == "Tower")
         #expect(record.accessToken == "srv-token")
-        #expect(record.baseURLString == "https://lan.plex.direct:32400")
-        #expect(record.isLocalConnection == true)
-        #expect(record.isRelayConnection == false)
+        // Ranked: local first, then direct remote, then relay.
+        #expect(record.connections.map(\.uri) == [
+            "https://lan.plex.direct:32400",
+            "https://wan.plex.direct:32400",
+            "https://relay.plex.direct:443"
+        ])
+        #expect(record.connections.first?.isLocal == true)
+        #expect(record.connections.last?.isRelay == true)
+        #expect(record.primaryURL?.absoluteString == "https://lan.plex.direct:32400")
     }
 }
 
@@ -507,17 +516,22 @@ struct PlexServerStoreTests {
         return PlexServerStore(keychain: keychain)
     }
 
-    @Test("write → read returns the same record")
-    func writeReadRoundTrip() async throws {
-        let store = makeStore()
-        let record = PlexServerRecord(
+    private func sampleRecord() -> PlexServerRecord {
+        PlexServerRecord(
             clientIdentifier: "uuid",
             name: "Tower",
             accessToken: "token",
-            baseURLString: "https://lan:32400",
-            isLocalConnection: true,
-            isRelayConnection: false
+            connections: [
+                .init(uri: "https://lan:32400", isLocal: true, isRelay: false),
+                .init(uri: "https://relay:443", isLocal: false, isRelay: true)
+            ]
         )
+    }
+
+    @Test("write → read returns the same record")
+    func writeReadRoundTrip() async throws {
+        let store = makeStore()
+        let record = sampleRecord()
         try await store.write(record)
         let read = try await store.read()
         #expect(read == record)
@@ -533,15 +547,7 @@ struct PlexServerStoreTests {
     @Test("clear removes the persisted record")
     func clearRemoves() async throws {
         let store = makeStore()
-        let record = PlexServerRecord(
-            clientIdentifier: "uuid",
-            name: "Tower",
-            accessToken: "token",
-            baseURLString: "https://lan:32400",
-            isLocalConnection: true,
-            isRelayConnection: false
-        )
-        try await store.write(record)
+        try await store.write(sampleRecord())
         try await store.clear()
         let read = try await store.read()
         #expect(read == nil)
@@ -674,22 +680,31 @@ struct PlexMediaSourceLibrariesTests {
         product: "Aether", version: "0.2.0", clientIdentifier: "id",
         deviceName: "iPhone", platform: "iOS", platformVersion: "26.0"
     )
-    private static let baseURL = URL(string: "https://lan.plex.direct:32400")!
-
-    private func makeSource(api: any APIClient) -> PlexMediaSource {
+    private func makeSource(
+        api: any APIClient,
+        connections: [PlexServerRecord.Connection] = [.init(uri: "https://lan.plex.direct:32400", isLocal: true, isRelay: false)]
+    ) -> PlexMediaSource {
         PlexMediaSource(
             serverID: "test-server",
             displayName: "Test",
-            baseURL: Self.baseURL,
             accessToken: "srv-token",
+            connections: connections,
             configuration: Self.config,
-            api: api
+            api: api,
+            probeTimeout: 1
         )
+    }
+
+    /// Enqueue a successful `/identity` probe — `resolveBaseURL()` hits this
+    /// before the first real request.
+    private func enqueueReachable(_ api: RecordingAPIClient) async {
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
     }
 
     @Test("libraries() filters out non-movie / non-show library sections")
     func librariesFiltering() async throws {
         let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
         let json = #"""
         {
           "MediaContainer": {
@@ -714,6 +729,7 @@ struct PlexMediaSourceLibrariesTests {
     @Test("items(in:) hits /library/sections/{key}/all and maps Metadata to MediaItem")
     func itemsEndpointAndMapping() async throws {
         let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
         let json = #"""
         {
           "MediaContainer": {
@@ -741,10 +757,11 @@ struct PlexMediaSourceLibrariesTests {
         let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "7")
         let items = try await source.items(in: libraryID)
 
-        // Endpoint shape
+        // Endpoint shape — the /all request is the second recorded request
+        // (the /identity probe is first).
         let recorded = await api.requests
-        try #require(recorded.count == 1)
-        let req = recorded[0]
+        try #require(recorded.count == 2)
+        let req = recorded[1]
         #expect(req.url?.path == "/library/sections/7/all")
         #expect(req.value(forHTTPHeaderField: "X-Plex-Token") == "srv-token")
 
@@ -774,6 +791,7 @@ struct PlexMediaSourceLibrariesTests {
     @Test("items without Media (e.g. a show container) get a nil streamURL")
     func containerHasNoStreamURL() async throws {
         let api = RecordingAPIClient()
+        await enqueueReachable(api)
         let json = #"""
         {
           "MediaContainer": {
@@ -794,12 +812,47 @@ struct PlexMediaSourceLibrariesTests {
         #expect(items[0].streamURL == nil)   // containers aren't directly playable
     }
 
+    @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
+    func connectionFailover() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 500, headers: [:]))  // LAN /identity fails
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))  // remote /identity OK
+        await api.enqueue(.init(data: Data(#"{"MediaContainer":{"Directory":[]}}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api, connections: [
+            .init(uri: "https://lan.example:32400", isLocal: true, isRelay: false),
+            .init(uri: "https://remote.example:32400", isLocal: false, isRelay: false)
+        ])
+        _ = try await source.libraries()
+
+        let recorded = await api.requests
+        try #require(recorded.count == 3)
+        #expect(recorded[0].url?.host == "lan.example")       // probed LAN first
+        #expect(recorded[0].url?.path == "/identity")
+        #expect(recorded[1].url?.host == "remote.example")    // failed over to remote
+        #expect(recorded[1].url?.path == "/identity")
+        #expect(recorded[2].url?.host == "remote.example")    // real request uses the reachable one
+        #expect(recorded[2].url?.path == "/library/sections")
+    }
+
+    @Test("Resolution throws when no connection is reachable")
+    func noReachableConnection() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 500, headers: [:]))
+        let source = makeSource(api: api, connections: [
+            .init(uri: "https://lan.example:32400", isLocal: true, isRelay: false)
+        ])
+        await #expect(throws: PlexConnectionError.noReachableConnection) {
+            _ = try await source.libraries()
+        }
+    }
+
     @Test("tokenisedURL handles nil + empty relative paths gracefully")
     func tokenisedURLEdges() {
-        let api = RecordingAPIClient()
-        let source = makeSource(api: api)
-        #expect(source.tokenisedURL(for: nil) == nil)
-        #expect(source.tokenisedURL(for: "") == nil)
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+        #expect(source.tokenisedURL(base: base, path: nil) == nil)
+        #expect(source.tokenisedURL(base: base, path: "") == nil)
     }
 
     @Test("mapMetadataToMediaItem converts milliseconds duration correctly")
@@ -812,10 +865,12 @@ struct PlexMediaSourceLibrariesTests {
             year: nil,
             duration: 1500,    // 1.5s in ms
             thumb: nil,
-            art: nil
+            art: nil,
+            media: nil
         )
         let source = makeSource(api: RecordingAPIClient())
-        let item = source.mapMetadataToMediaItem(dto)
+        let base = URL(string: "https://lan.example:32400")!
+        let item = source.mapMetadataToMediaItem(dto, base: base)
         #expect(item.runtime == .seconds(1.5))
     }
 }
@@ -823,7 +878,7 @@ struct PlexMediaSourceLibrariesTests {
 @Suite("Plex — PlexMediaSource request shape")
 struct PlexMediaSourceRequestTests {
 
-    @Test("request(forPath:) attaches X-Plex-Token and common headers")
+    @Test("request(base:path:) attaches X-Plex-Token and common headers")
     func attachesAuthAndHeaders() {
         let config = PlexConfiguration(
             product: "Aether",
@@ -836,13 +891,14 @@ struct PlexMediaSourceRequestTests {
         let source = PlexMediaSource(
             serverID: "test-server",
             displayName: "Test",
-            baseURL: URL(string: "https://example.plex.direct:32400")!,
             accessToken: "server-token",
+            connections: [.init(uri: "https://example.plex.direct:32400", isLocal: true, isRelay: false)],
             configuration: config,
             api: URLSessionAPIClient()
         )
 
-        let request = source.request(forPath: "/library/sections", queryItems: [URLQueryItem(name: "type", value: "1")])
+        let base = URL(string: "https://example.plex.direct:32400")!
+        let request = source.request(base: base, path: "/library/sections", queryItems: [URLQueryItem(name: "type", value: "1")])
 
         #expect(request.url?.path == "/library/sections")
         #expect(request.url?.query?.contains("type=1") == true)

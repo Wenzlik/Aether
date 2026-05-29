@@ -4,16 +4,18 @@ import Foundation
 ///
 /// Lives in `KeychainStore` because it carries a server access token. Re-read
 /// on every launch by `AppSession.start()`; if present, `AppSession` builds a
-/// live `PlexMediaSource` against it. If the user signs out (or asks Aether
-/// to pick a different server), the record is cleared.
+/// live `PlexMediaSource` against it.
 ///
-/// Deliberately small: we persist *what's needed to talk to the server next
-/// launch* — nothing about libraries or items. Those are queried fresh.
+/// We persist **all** of the server's connections (ranked, best first) — not
+/// just the single best one. The best connection at discovery time is usually
+/// the LAN address, which is unreachable when the user later leaves the house.
+/// Keeping the full ranked list lets `PlexMediaSource` fail over to a remote /
+/// relay connection at runtime instead of being stuck on a dead LAN URL.
 public struct PlexServerRecord: Codable, Sendable, Equatable {
     /// The PMS's own UUID — stable across IP changes, network moves, restarts.
     public let clientIdentifier: String
 
-    /// Human-readable server name (e.g. *"MyTower"*). For UI only.
+    /// Human-readable server name (e.g. *"DS418"*). For UI only.
     public let name: String
 
     /// Per-server access token. Plex issues one per server in the resources
@@ -21,35 +23,41 @@ public struct PlexServerRecord: Codable, Sendable, Equatable {
     /// stays scoped if any one server is later compromised.
     public let accessToken: String
 
-    /// The selected connection's URI as a string (e.g.
-    /// `"https://192-168-1-10.uuid.plex.direct:32400"`).
-    public let baseURLString: String
-
-    /// Whether the selected connection is on the LAN. Stored for diagnostics
-    /// and for the next launch's UI ("Connected locally to MyTower").
-    public let isLocalConnection: Bool
-
-    /// Whether the selected connection routes through Plex's relay. Mostly for
-    /// surfacing in Settings later — "via Plex relay" matters to users.
-    public let isRelayConnection: Bool
+    /// All known connections to this server, **ranked best-first** by
+    /// `PlexServerSelector`. `PlexMediaSource` probes them in this order and
+    /// uses the first that responds.
+    public let connections: [Connection]
 
     public init(
         clientIdentifier: String,
         name: String,
         accessToken: String,
-        baseURLString: String,
-        isLocalConnection: Bool,
-        isRelayConnection: Bool
+        connections: [Connection]
     ) {
         self.clientIdentifier = clientIdentifier
         self.name = name
         self.accessToken = accessToken
-        self.baseURLString = baseURLString
-        self.isLocalConnection = isLocalConnection
-        self.isRelayConnection = isRelayConnection
+        self.connections = connections
     }
 
-    public var baseURL: URL? {
-        URL(string: baseURLString)
+    public struct Connection: Codable, Sendable, Equatable {
+        /// Absolute URI, e.g. `https://192-168-1-10.uuid.plex.direct:32400`.
+        public let uri: String
+        public let isLocal: Bool
+        public let isRelay: Bool
+
+        public init(uri: String, isLocal: Bool, isRelay: Bool) {
+            self.uri = uri
+            self.isLocal = isLocal
+            self.isRelay = isRelay
+        }
+
+        public var url: URL? { URL(string: uri) }
+    }
+
+    /// The preferred (first) connection's URL, if any. Convenience for UI /
+    /// diagnostics; the source itself iterates all of `connections`.
+    public var primaryURL: URL? {
+        connections.first?.url
     }
 }
