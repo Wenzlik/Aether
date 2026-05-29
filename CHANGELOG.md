@@ -82,8 +82,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - Empty state and discovery completed-state copy updated — no longer
   references "library browsing arrives in the next update"; reflects
   reality post-merge
-- `streamURL` on Plex-mapped `MediaItem` is still `nil` — playback /
-  stream URL resolution lands in the next PR
+- `PlexAPI.Metadata` extended with `Media` / `Part` so the list
+  response's inline file info can be read without an extra request
+- `PlexMediaSource` now resolves a **direct-play** `streamURL` from the
+  first Part's `key`, tokenised against the server. Movies and episodes
+  become playable; containers (shows, seasons) keep a `nil` streamURL
+  because they aren't directly playable
+- Plex movies now play end-to-end in the existing `PlayerView` /
+  `PlaybackSession` for codecs AVPlayer supports (MP4/MOV/M4V/HLS).
+  Incompatible containers (e.g. MKV) need the transcode fallback that
+  lands in the next PR
 
 ### 0.1 — Foundation
 - Verified `xcodegen generate` produces a clean project; relocated generated
