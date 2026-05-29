@@ -60,6 +60,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   Aether-tvOS:
     type: application
