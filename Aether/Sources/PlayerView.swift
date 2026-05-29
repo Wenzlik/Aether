@@ -68,17 +68,11 @@ struct PlayerView: View {
     }
 
     private var playbackUnavailable: some View {
-        VStack(spacing: AetherDesign.Spacing.s) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 36, weight: .regular))
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-            Text("Playback unavailable")
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("This item has no stream URL.")
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-        }
+        AetherErrorState(
+            glyph: "play.slash",
+            title: "Playback unavailable",
+            message: "This title isn't streamable yet."
+        )
         .padding(AetherDesign.Spacing.xl)
     }
 }

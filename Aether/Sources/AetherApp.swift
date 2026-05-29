@@ -77,15 +77,19 @@ final class AppSession {
     // MARK: - UI bridging
 
     var isSignInPresented: Bool = false
+    var isSettingsPresented: Bool = false
 
     // MARK: - Init
 
-    init() {
+    init(
+        keychain: KeychainStore = KeychainStore(),
+        api: any APIClient = URLSessionAPIClient()
+    ) {
         let store = ResumeStore()
         self.resumeStore = store
         self.playback = PlaybackSession(resumeStore: store)
-        self.keychain = KeychainStore()
-        self.api = URLSessionAPIClient()
+        self.keychain = keychain
+        self.api = api
     }
 
     // MARK: - Lifecycle
@@ -256,6 +260,10 @@ final class AppSession {
         isSignInPresented = true
     }
 
+    func presentSettings() {
+        isSettingsPresented = true
+    }
+
     // MARK: - Keychain keys
 
     static let plexClientIdentifierKey = "plex.clientIdentifier"
@@ -309,10 +317,14 @@ private struct RootView: View {
             plexServerName: session.plexServer?.name,
             plexDiscoveryState: session.discoveryState,
             onAddSource: { session.presentSignIn() },
-            onRetryDiscovery: { Task { await session.discoverPlexServers() } }
+            onRetryDiscovery: { Task { await session.discoverPlexServers() } },
+            onOpenSettings: { session.presentSettings() }
         )
         .sheet(isPresented: $session.isSignInPresented) {
             PlexOnboardingView(session: session)
+        }
+        .sheet(isPresented: $session.isSettingsPresented) {
+            SettingsView(viewModel: SettingsViewModel(session: session))
         }
     }
 }

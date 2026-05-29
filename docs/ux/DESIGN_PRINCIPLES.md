@@ -128,6 +128,51 @@ Concrete colors are in `DesignSystem/Tokens`. Never hard-code a color in a view.
 
 ---
 
+## Component naming
+
+Every reusable view primitive in `AetherCore/DesignSystem/` shares the `Aether*` prefix:
+
+- **`AetherCard`** + factories `.poster` (2:3) / `.hero` (16:9 with optional subtitle) / `.episode` (16:9 with optional progress overlay)
+- **`AetherSectionHeader`** — title row above every horizontal rail
+- **`AetherButton`** — three roles (`.primary` / `.secondary` / `.destructive`), one shape, one focus motion
+- **`AetherEmptyState`** — designed hero glyph + title + body + optional CTA
+- **`AetherLoadingState`** — skeleton rails (`.rails(count:)`) or inline pulse
+- **`AetherErrorState`** — same shape as empty state, with a required retry
+- **`AetherSettingsRow`** + **`AetherSettingsSection`** — settings list primitives
+
+If a view needs an "ad-hoc" empty / loading / error surface, it's almost certainly missing one of these. Extend the primitive before reaching for a one-off.
+
+---
+
+## Settings language
+
+Settings is calm and factual, not marketing. Phrases:
+
+- **"Plex / Connected as <name>"** — not *"Manage your Plex account"*.
+- **"Sign Out of Plex"** — not *"Disconnect"* and not *"Log out"*. Capitalised, destructive role.
+- **"Coming soon"** — exactly that, not *"Not available yet"* or *"In development"*. Used uniformly for Synology, transcoding, offline downloads, anywhere a row references a future capability.
+- **"Direct Play / Available"** — facts about the current playback path, not a promise.
+
+The sign-out action is the **only destructive surface** in Settings. After tapping it, the user lands back on the Home welcome state — never on an error and never on a stale signed-in shell.
+
+---
+
+## visionOS-first considerations
+
+Even before the visionOS app is feature-complete, every shared screen is designed so spatial-context use feels right:
+
+- **Larger focus targets.** All `AetherButton`s pad to `l`/`s`; tap targets are never smaller than ~44pt.
+- **Comfortable spacing.** Sections breathe with `xl`+ between them; never visually crammed at iPhone density.
+- **Readable type.** Hero titles use Display weight; metadata rows stay at `metadata` (medium subheadline) so type holds at viewing distance.
+- **Reduced density.** Posters and hero cards size up on tvOS — and the same scale will read on Vision Pro. Don't ship iOS density for couch / spatial contexts.
+- **Calm motion.** Springs and crossfades, never slam-cuts. `Motion.focus` is short and gentle on purpose.
+- **Minimal chrome.** Background is real black; surfaces use materials; only the active accent earns color.
+- **Strong artwork hierarchy.** Backdrop is the first thing on Detail; type sits over it, not below it.
+
+A spatial-native experience (ornaments, glass volumes, immersive player) is a separate future milestone. The base above is what every shared SwiftUI surface ships today.
+
+---
+
 ## Empty states
 
 Every empty state is designed. We do not ship "No items."

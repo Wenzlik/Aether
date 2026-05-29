@@ -12,6 +12,7 @@ struct HomeView: View {
     let plexDiscoveryState: AppSession.DiscoveryState
     let onAddSource: () -> Void
     let onRetryDiscovery: () -> Void
+    let onOpenSettings: () -> Void
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -31,7 +32,7 @@ struct HomeView: View {
                         emptyLibraryState
                     } else {
                         if !feed.featured.isEmpty {
-                            section(title: "Featured", items: feed.featured, aspect: .poster)
+                            featuredSection
                         }
 
                         if !feed.continueWatching.isEmpty {
@@ -85,18 +86,25 @@ struct HomeView: View {
 
             Spacer(minLength: AetherDesign.Spacing.m)
 
-            // Always-visible account / source button so the sign-in flow is
-            // reachable even when the mock library has plenty of content (which
-            // hides the empty state CTA). Icon changes based on the current
-            // state: idle plus badge → signed-in person → filled person.
-            Button(action: onAddSource) {
-                AccountBadge(
-                    glyph: accountGlyph,
-                    isActive: plexServerName != nil
-                )
+            HStack(spacing: AetherDesign.Spacing.s) {
+                // Always-visible account / source button so the sign-in flow is
+                // reachable even when the library has plenty of content (which
+                // hides the empty state CTA).
+                Button(action: onAddSource) {
+                    AccountBadge(
+                        glyph: accountGlyph,
+                        isActive: plexServerName != nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accountAccessibilityLabel)
+
+                Button(action: onOpenSettings) {
+                    AccountBadge(glyph: "gearshape", isActive: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accountAccessibilityLabel)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
     }
@@ -130,13 +138,13 @@ struct HomeView: View {
             #if os(tvOS)
             // Couch distance — cards need real estate to read. See DESIGN_PRINCIPLES.md.
             switch self {
-            case .poster: return 260
-            case .episode: return 440
+            case .poster: return 300
+            case .episode: return 480
             }
             #else
             switch self {
-            case .poster: return 160
-            case .episode: return 280
+            case .poster: return 168
+            case .episode: return 296
             }
             #endif
         }
@@ -144,16 +152,15 @@ struct HomeView: View {
 
     private func section(title: String, items: [MediaItem], aspect: CardAspect) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            SectionHeader(title: title)
+            AetherSectionHeader(title: title)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: AetherDesign.Spacing.m) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            CardView(
+                            AetherCard.poster(
                                 title: item.title,
-                                posterURL: item.posterURL,
-                                aspectRatio: aspect.ratio
+                                posterURL: item.posterURL
                             )
                             .frame(width: aspect.width)
                         }
@@ -167,23 +174,57 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - Featured section (hero-sized 16:9 cards)
+
+    private var featuredSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Featured")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(feed.featured) { item in
+                        NavigationLink(value: item) {
+                            AetherCard.hero(
+                                title: item.title,
+                                subtitle: item.year.map(String.init),
+                                posterURL: item.backdropURL ?? item.posterURL
+                            )
+                            .frame(width: featuredCardWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
+    }
+
+    private var featuredCardWidth: CGFloat {
+        #if os(tvOS)
+        560
+        #else
+        320
+        #endif
+    }
+
     // MARK: - Continue Watching section (carries progress overlay)
 
     private var continueWatchingSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            SectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off")
+            AetherSectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off")
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: AetherDesign.Spacing.m) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(feed.continueWatching) { entry in
                         NavigationLink(value: entry.item) {
-                            CardView(
+                            AetherCard.episode(
                                 title: entry.item.title,
-                                posterURL: entry.item.backdropURL ?? entry.item.posterURL,
-                                aspectRatio: 16.0 / 9.0,
+                                thumbURL: entry.item.backdropURL ?? entry.item.posterURL,
                                 progress: entry.progress
                             )
-                            .frame(width: 280)
+                            .frame(width: CardAspect.episode.width)
                         }
                         .buttonStyle(.plain)
                     }
@@ -253,105 +294,40 @@ struct HomeView: View {
     }
 
     private var emptyLibraryState: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            Image(systemName: emptyStateGlyph)
-                .font(.system(size: 56, weight: .light))
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .padding(.bottom, AetherDesign.Spacing.s)
-
-            Text(emptyStateTitle)
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-
-            HStack(spacing: AetherDesign.Spacing.s) {
-                if isDiscoveryInFlight {
-                    ProgressView()
-                        .tint(AetherDesign.Palette.textSecondary)
-                }
-                Text(emptyStateBody)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            emptyStatePrimaryAction
-                .padding(.top, AetherDesign.Spacing.s)
-        }
-        .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.top, AetherDesign.Spacing.xxl)
-        .frame(maxWidth: 520, alignment: .leading)
+        AetherEmptyState(
+            glyph: emptyStateGlyph,
+            title: emptyStateTitle,
+            message: emptyStateBody,
+            action: emptyStateAction
+        )
     }
 
-    @ViewBuilder
-    private var emptyStatePrimaryAction: some View {
+    private var emptyStateAction: AetherEmptyState.Action? {
         if !isPlexSignedIn {
-            primaryActionCapsule(title: "Add a source", action: onAddSource)
-        } else if case .noServersFound = plexDiscoveryState {
-            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
-        } else if case .failed = plexDiscoveryState {
-            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
+            return .init(label: "Add a source", run: onAddSource)
+        }
+        if case .noServersFound = plexDiscoveryState {
+            return .init(label: "Try again", run: onRetryDiscovery)
+        }
+        if case .failed = plexDiscoveryState {
+            return .init(label: "Try again", run: onRetryDiscovery)
         }
         // .discovering / .idle / .completed → no CTA
-    }
-
-    private func primaryActionCapsule(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(AetherDesign.Typography.cardTitle)
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.vertical, AetherDesign.Spacing.s)
-                .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-        }
-        .buttonStyle(.plain)
+        return nil
     }
 
     // MARK: - Loading & error states
 
     private var loadingState: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            ForEach(0..<2, id: \.self) { _ in
-                Rectangle()
-                    .fill(AetherDesign.Palette.surface)
-                    .frame(height: 22)
-                    .frame(maxWidth: 220, alignment: .leading)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                            .fill(AetherDesign.Palette.surface)
-                            .frame(width: 160, height: 240)
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-            }
-        }
-        .redacted(reason: .placeholder)
+        AetherLoadingState(.rails(count: 2))
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .padding(.bottom, AetherDesign.Spacing.xs)
-            Text("Couldn't reach your server")
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text(message)
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            primaryActionCapsule(title: "Try again") {
-                Task { await reconnectAndLoad() }
-            }
-            .padding(.top, AetherDesign.Spacing.s)
-        }
-        .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.top, AetherDesign.Spacing.xxl)
-        .frame(maxWidth: 520, alignment: .leading)
+        AetherErrorState(
+            title: "Couldn't reach your server",
+            message: message,
+            retry: .init { Task { await reconnectAndLoad() } }
+        )
     }
 
     /// Drop any cached connection and reload — so a retry after moving networks

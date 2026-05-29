@@ -4,6 +4,37 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### UI
+
+- **Settings screen + sign out from Plex — no more app reinstall to disconnect.**
+  A new `SettingsView` reachable from a gear icon in the Home header. Four short
+  sections: **Account** (Plex connection state, "Sign Out of Plex" — the only
+  destructive action), **Sources** (Plex live, Synology marked "Coming soon"),
+  **Playback** (Direct Play available, transcoding + downloads marked "Coming
+  soon"), and **About** (app name, version, build, tagline). Sign-out routes
+  through `AppSession.signOutOfPlex()`, which clears the keychain token, drops
+  the persisted server, resets discovery state, and returns Home to its
+  welcome state — no fake mock fallback, no error trap.
+- **Aether Design System v1.** All reusable view primitives now share the
+  `Aether*` prefix and live in `AetherCore/DesignSystem/`. New primitives:
+  `AetherButton` (`.primary` / `.secondary` / `.destructive`, focusable on tvOS),
+  `AetherEmptyState`, `AetherLoadingState` (skeleton rails, no spinners),
+  `AetherErrorState`, `AetherSettingsRow` + `AetherSettingsSection`. Renames:
+  `CardView` → `AetherCard` (with `.poster` / `.hero` / `.episode` factories);
+  `SectionHeader` → `AetherSectionHeader`. Every empty / loading / error state
+  in Home, Detail, and Player now flows through these — no more inline
+  computed-property variants drifting per screen.
+- **Cinematic Home polish.** Featured rail upgraded to hero-sized 16:9 cards
+  via `AetherCard.hero`. Poster rails enlarged for couch-distance on tvOS
+  (300pt vs 260pt) and iOS (168pt vs 160pt); inter-card spacing bumped from
+  `m` to `l`. Section spacing tightened around `xl`.
+- **Cinematic Detail polish.** Backdrop reaches a taller hero on both
+  platforms (420pt iOS / 560pt tvOS); title + metadata sit over the bottom of
+  the backdrop instead of below it, so the page opens with artwork loudest.
+  Play button replaced with `AetherButton.primary` carrying the
+  `play.fill` glyph and "Play" / "Resume 12:34" label. Unavailable state
+  reuses `AetherErrorState` instead of a one-off surface.
+
 ### Added
 
 - **TV shows are now browsable.** A show is a container, not a playable item —

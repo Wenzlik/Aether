@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Title row used above every horizontal rail on Home.
 ///
-/// Sits alone in a row with generous space above and below; never crammed against
-/// content. See `docs/ux/DESIGN_PRINCIPLES.md` → *Spacing* and *Typography*.
-public struct SectionHeader: View {
+/// Sits alone in a row with generous space above and below; never crammed
+/// against content. See `docs/ux/DESIGN_PRINCIPLES.md` → *Spacing* and
+/// *Typography*.
+public struct AetherSectionHeader: View {
     public let title: String
     public let subtitle: String?
     public let accessoryTitle: String?
@@ -51,11 +52,11 @@ public struct SectionHeader: View {
 }
 
 #if DEBUG
-struct SectionHeader_Previews: PreviewProvider {
+struct AetherSectionHeader_Previews: PreviewProvider {
     static var previews: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            SectionHeader(title: "Featured")
-            SectionHeader(
+            AetherSectionHeader(title: "Featured")
+            AetherSectionHeader(
                 title: "Continue Watching",
                 subtitle: "Picked up where you left off",
                 accessoryTitle: "See all",

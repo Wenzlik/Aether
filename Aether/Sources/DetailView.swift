@@ -43,38 +43,50 @@ struct DetailView: View {
 
     private var scrollContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 BackdropImage(url: item.backdropURL ?? item.posterURL)
                     .frame(maxWidth: .infinity)
-                    .frame(maxHeight: 360)
+                    .frame(maxHeight: backdropMaxHeight)
                     .clipped()
                     .overlay(alignment: .bottomLeading) {
-                        Text(item.title)
-                            .font(AetherDesign.Typography.heroTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            .padding(AetherDesign.Spacing.l)
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                            Text(item.title)
+                                .font(AetherDesign.Typography.heroTitle)
+                                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                            metadataRow
+                        }
+                        .padding(AetherDesign.Spacing.l)
+                        .padding(.bottom, AetherDesign.Spacing.s)
                     }
 
-                metadataRow
-                    .padding(.horizontal, AetherDesign.Spacing.l)
+                if !item.kind.isContainer {
+                    actionRow
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                }
 
                 if let summary = item.summary {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                         .padding(.horizontal, AetherDesign.Spacing.l)
+                        .frame(maxWidth: 720, alignment: .leading)
                 }
 
                 if item.kind.isContainer {
                     childrenSection
                         .padding(.horizontal, AetherDesign.Spacing.l)
-                } else {
-                    actionRow
-                        .padding(.horizontal, AetherDesign.Spacing.l)
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.l)
+            .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    private var backdropMaxHeight: CGFloat {
+        #if os(tvOS)
+        560
+        #else
+        420
+        #endif
     }
 
     // MARK: - Children (seasons / episodes)
@@ -87,16 +99,11 @@ struct DetailView: View {
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
             if isLoadingChildren {
-                HStack(spacing: AetherDesign.Spacing.s) {
-                    ProgressView().tint(AetherDesign.Palette.textSecondary)
-                    Text("Loading…")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                }
+                AetherLoadingState(.inline)
             } else if children.isEmpty {
                 Text("Nothing here yet.")
                     .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
             } else if item.kind == .show {
                 seasonsRail
             } else {
@@ -114,7 +121,7 @@ struct DetailView: View {
             LazyHStack(spacing: AetherDesign.Spacing.m) {
                 ForEach(children) { season in
                     NavigationLink(value: season) {
-                        CardView(title: season.title, posterURL: season.posterURL, aspectRatio: 2.0 / 3.0)
+                        AetherCard.poster(title: season.title, posterURL: season.posterURL)
                             .frame(width: 140)
                     }
                     .buttonStyle(.plain)
@@ -201,33 +208,29 @@ struct DetailView: View {
     }
 
     private var playButton: some View {
-        Button {
+        AetherButton(
+            playButtonLabel,
+            systemImage: "play.fill",
+            role: .primary
+        ) {
             withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
                 isPlayerPresented = true
             }
-        } label: {
-            PlayButtonLabel(text: resume.map { "Resume \(formatPosition($0.position))" } ?? "Play")
         }
-        .buttonStyle(.plain)
+    }
+
+    private var playButtonLabel: String {
+        if let resume { return "Resume \(formatPosition(resume.position))" }
+        return "Play"
     }
 
     private var unavailableState: some View {
-        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-            Image(systemName: "wifi.slash")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                Text("Unavailable")
-                    .font(AetherDesign.Typography.cardTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("This item doesn't have a stream URL yet.")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-            }
-        }
-        .padding(AetherDesign.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        AetherErrorState(
+            glyph: "play.slash",
+            title: "Playback unavailable",
+            message: "This title isn't streamable yet. If it's a format Plex can't direct-play, transcode support lands in a future update."
+        )
+        .padding(.top, -AetherDesign.Spacing.xxl)
     }
 
     // MARK: - Player dismiss
@@ -271,31 +274,3 @@ struct DetailView: View {
     }
 }
 
-/// The label shown inside the Play / Resume button.
-///
-/// On tvOS, reads `\.isFocused` and lifts on focus. On iOS the focused state
-/// collapses since there's no focus engine.
-private struct PlayButtonLabel: View {
-    let text: String
-    @Environment(\.isFocused) private var isFocused
-
-    var body: some View {
-        HStack(spacing: AetherDesign.Spacing.xs) {
-            Image(systemName: "play.fill")
-            Text(text)
-        }
-        .font(AetherDesign.Typography.cardTitle)
-        .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.vertical, AetherDesign.Spacing.s)
-        .background(
-            AetherDesign.Palette.accent.opacity(isFocused ? 0.40 : 0.20),
-            in: Capsule()
-        )
-        .foregroundStyle(AetherDesign.Palette.textPrimary)
-        .shadow(color: .black.opacity(isFocused ? 0.40 : 0.0),
-                radius: isFocused ? 16 : 0,
-                y: isFocused ? 8 : 0)
-        .scaleEffect(isFocused ? 1.05 : 1.0)
-        .animation(AetherDesign.Motion.focus, value: isFocused)
-    }
-}

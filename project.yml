@@ -125,6 +125,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.tests
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   Aether:
