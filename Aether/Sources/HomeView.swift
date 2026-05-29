@@ -56,7 +56,11 @@ struct HomeView: View {
                 )
             }
         }
-        .task { await load() }
+        // Re-run load() whenever the underlying source changes (e.g. mock →
+        // plexSource after AppSession.start() finishes discovery). Without
+        // the id:, .task fires once on first appear and would leave Home
+        // showing whatever it loaded first.
+        .task(id: source.id) { await load() }
     }
 
     // MARK: - Header
