@@ -336,6 +336,272 @@ private func waitFor<T>(
     Issue.record("waitFor timed out; last value: \(read())")
 }
 
+// MARK: - Resource fixture helpers
+
+private extension PlexAPI.Resource.Connection {
+    static func make(
+        uri: String = "https://example.plex.direct:32400",
+        address: String = "192.168.1.10",
+        port: Int = 32400,
+        local: Bool = false,
+        relay: Bool = false,
+        connectionProtocol: String = "https"
+    ) -> PlexAPI.Resource.Connection {
+        .init(uri: uri, address: address, port: port, local: local, relay: relay, connectionProtocol: connectionProtocol)
+    }
+}
+
+private extension PlexAPI.Resource {
+    static func make(
+        name: String = "Server",
+        clientIdentifier: String = "id",
+        provides: String = "server",
+        owned: Bool = true,
+        accessToken: String? = "tok",
+        connections: [Connection] = [.make()]
+    ) -> PlexAPI.Resource {
+        .init(
+            name: name,
+            product: "Plex Media Server",
+            clientIdentifier: clientIdentifier,
+            provides: provides,
+            owned: owned,
+            accessToken: accessToken,
+            connections: connections
+        )
+    }
+}
+
+@Suite("Plex — PlexServerSelector filtering")
+struct PlexServerSelectorFilteringTests {
+
+    @Test("Filters out resources that don't provide server")
+    func dropsNonServers() {
+        let resources: [PlexAPI.Resource] = [
+            .make(name: "Server", provides: "server"),
+            .make(name: "Player", provides: "player"),
+            .make(name: "Multi", provides: "client,player")
+        ]
+        let kept = PlexServerSelector().mediaServers(from: resources)
+        #expect(kept.map(\.name) == ["Server"])
+    }
+
+    @Test("Filters out resources without an accessToken")
+    func dropsTokenless() {
+        let resources: [PlexAPI.Resource] = [
+            .make(name: "WithToken", accessToken: "abc"),
+            .make(name: "Tokenless", accessToken: nil),
+            .make(name: "EmptyToken", accessToken: "")
+        ]
+        let kept = PlexServerSelector().mediaServers(from: resources)
+        #expect(kept.map(\.name) == ["WithToken"])
+    }
+
+    @Test("Filters out resources with zero connections")
+    func dropsConnectionless() {
+        let resources: [PlexAPI.Resource] = [
+            .make(name: "Reachable", connections: [.make()]),
+            .make(name: "Unreachable", connections: [])
+        ]
+        let kept = PlexServerSelector().mediaServers(from: resources)
+        #expect(kept.map(\.name) == ["Reachable"])
+    }
+
+    @Test("Recognises 'server' inside a comma-separated provides field")
+    func acceptsMultiProvider() {
+        let resources: [PlexAPI.Resource] = [
+            .make(name: "Combo", provides: "server,client")
+        ]
+        let kept = PlexServerSelector().mediaServers(from: resources)
+        #expect(kept.map(\.name) == ["Combo"])
+    }
+}
+
+@Suite("Plex — PlexServerSelector ranking")
+struct PlexServerSelectorRankingTests {
+
+    private let selector = PlexServerSelector()
+
+    @Test("Local + non-relay + HTTPS beats remote + relay + HTTPS")
+    func localBeatsRemote() {
+        let local = PlexAPI.Resource.Connection.make(local: true, relay: false, connectionProtocol: "https")
+        let remote = PlexAPI.Resource.Connection.make(local: false, relay: true, connectionProtocol: "https")
+        let server = PlexAPI.Resource.make()
+
+        #expect(selector.score(server: server, connection: local) > selector.score(server: server, connection: remote))
+    }
+
+    @Test("Direct (non-relay) beats relay even when both are remote")
+    func directBeatsRelay() {
+        let direct = PlexAPI.Resource.Connection.make(local: false, relay: false, connectionProtocol: "https")
+        let relay = PlexAPI.Resource.Connection.make(local: false, relay: true, connectionProtocol: "https")
+        let server = PlexAPI.Resource.make()
+        #expect(selector.score(server: server, connection: direct) > selector.score(server: server, connection: relay))
+    }
+
+    @Test("HTTPS beats HTTP at the same locality + relay tier")
+    func httpsTiebreak() {
+        let https = PlexAPI.Resource.Connection.make(local: false, relay: false, connectionProtocol: "https")
+        let http  = PlexAPI.Resource.Connection.make(local: false, relay: false, connectionProtocol: "http")
+        let server = PlexAPI.Resource.make()
+        #expect(selector.score(server: server, connection: https) > selector.score(server: server, connection: http))
+    }
+
+    @Test("Owned server is preferred over shared at the same connection tier")
+    func ownedTiebreak() {
+        let conn = PlexAPI.Resource.Connection.make(local: true, relay: false, connectionProtocol: "https")
+        let owned = PlexAPI.Resource.make(name: "MyTower", owned: true)
+        let friend = PlexAPI.Resource.make(name: "Friend", owned: false)
+        #expect(selector.score(server: owned, connection: conn) > selector.score(server: friend, connection: conn))
+    }
+
+    @Test("selectBest picks the local+direct+https connection from a mixed pool")
+    func selectBestPicksLocalDirect() throws {
+        let localDirect = PlexAPI.Resource.Connection.make(uri: "https://local", local: true, relay: false, connectionProtocol: "https")
+        let remoteDirect = PlexAPI.Resource.Connection.make(uri: "https://remote", local: false, relay: false, connectionProtocol: "https")
+        let relay = PlexAPI.Resource.Connection.make(uri: "https://relay", local: false, relay: true, connectionProtocol: "https")
+
+        let server = PlexAPI.Resource.make(name: "Tower", connections: [relay, remoteDirect, localDirect])
+        let pick = try #require(selector.selectBest(from: [server]))
+        #expect(pick.connection.uri == "https://local")
+        #expect(pick.server.name == "Tower")
+    }
+
+    @Test("selectBest returns nil when no resources qualify")
+    func selectBestReturnsNilWhenEmpty() {
+        let onlyPlayer = PlexAPI.Resource.make(provides: "player")
+        #expect(selector.selectBest(from: [onlyPlayer]) == nil)
+    }
+
+    @Test("selectBest carries Selection.makeRecord() with the right fields")
+    func selectionMakesUsableRecord() throws {
+        let local = PlexAPI.Resource.Connection.make(uri: "https://lan.plex.direct:32400", local: true, relay: false, connectionProtocol: "https")
+        let server = PlexAPI.Resource.make(name: "Tower", clientIdentifier: "pms-uuid", accessToken: "srv-token", connections: [local])
+
+        let pick = try #require(selector.selectBest(from: [server]))
+        let record = pick.makeRecord()
+
+        #expect(record.clientIdentifier == "pms-uuid")
+        #expect(record.name == "Tower")
+        #expect(record.accessToken == "srv-token")
+        #expect(record.baseURLString == "https://lan.plex.direct:32400")
+        #expect(record.isLocalConnection == true)
+        #expect(record.isRelayConnection == false)
+    }
+}
+
+@Suite("Plex — PlexServerStore round-trip")
+struct PlexServerStoreTests {
+
+    /// In-memory `KeychainStore` substitute would be cleaner, but writing the
+    /// real Keychain from a test bundle works as long as the bundle has its
+    /// own service namespace. Each test uses a unique service to stay isolated.
+    private func makeStore(suffix: String = UUID().uuidString) -> PlexServerStore {
+        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)")
+        return PlexServerStore(keychain: keychain)
+    }
+
+    @Test("write → read returns the same record")
+    func writeReadRoundTrip() async throws {
+        let store = makeStore()
+        let record = PlexServerRecord(
+            clientIdentifier: "uuid",
+            name: "Tower",
+            accessToken: "token",
+            baseURLString: "https://lan:32400",
+            isLocalConnection: true,
+            isRelayConnection: false
+        )
+        try await store.write(record)
+        let read = try await store.read()
+        #expect(read == record)
+    }
+
+    @Test("read returns nil when nothing has been written")
+    func readEmpty() async throws {
+        let store = makeStore()
+        let read = try await store.read()
+        #expect(read == nil)
+    }
+
+    @Test("clear removes the persisted record")
+    func clearRemoves() async throws {
+        let store = makeStore()
+        let record = PlexServerRecord(
+            clientIdentifier: "uuid",
+            name: "Tower",
+            accessToken: "token",
+            baseURLString: "https://lan:32400",
+            isLocalConnection: true,
+            isRelayConnection: false
+        )
+        try await store.write(record)
+        try await store.clear()
+        let read = try await store.read()
+        #expect(read == nil)
+    }
+}
+
+@Suite("Plex — PlexResourceClient")
+struct PlexResourceClientTests {
+
+    private static let config = PlexConfiguration(
+        product: "Aether", version: "0.2.0", clientIdentifier: "id",
+        deviceName: "iPhone", platform: "iOS", platformVersion: "26.0"
+    )
+
+    @Test("resources(token:) hits /api/v2/resources with X-Plex-Token + includeHttps/includeRelay")
+    func sendsExpectedRequest() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(
+            data: Data("[]".utf8),
+            statusCode: 200,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let client = PlexResourceClient(api: api, configuration: Self.config)
+        _ = try await client.resources(token: "the-token")
+
+        let recorded = await api.requests
+        try #require(recorded.count == 1)
+        let request = recorded[0]
+        #expect(request.url?.path == "/api/v2/resources")
+        let query = request.url?.query ?? ""
+        #expect(query.contains("includeHttps=1"))
+        #expect(query.contains("includeRelay=1"))
+        #expect(request.value(forHTTPHeaderField: "X-Plex-Token") == "the-token")
+        #expect(request.value(forHTTPHeaderField: "X-Plex-Product") == "Aether")
+    }
+
+    @Test("resources(token:) decodes the array shape correctly")
+    func decodesArray() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        [
+          {
+            "name": "Tower",
+            "product": "Plex Media Server",
+            "clientIdentifier": "pms-uuid",
+            "provides": "server",
+            "owned": true,
+            "accessToken": "srv-token",
+            "connections": [
+              {"protocol":"https","address":"192.168.1.10","port":32400,"uri":"https://lan:32400","local":true,"relay":false}
+            ]
+          }
+        ]
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let client = PlexResourceClient(api: api, configuration: Self.config)
+        let resources = try await client.resources(token: "t")
+
+        try #require(resources.count == 1)
+        #expect(resources[0].name == "Tower")
+        #expect(resources[0].connections.first?.local == true)
+    }
+}
+
 @Suite("Plex — PlexMediaSource request shape")
 struct PlexMediaSourceRequestTests {
 

@@ -6,6 +6,7 @@ struct HomeView: View {
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let isPlexSignedIn: Bool
+    let plexServerName: String?
     let onAddSource: () -> Void
 
     @State private var feed: HomeFeed = .empty
@@ -160,6 +161,19 @@ struct HomeView: View {
             && feed.libraries.allSatisfy { $0.items.isEmpty }
     }
 
+    private var emptyStateTitle: String {
+        if let plexServerName { return "Connected to \(plexServerName)" }
+        if isPlexSignedIn     { return "Signed in to Plex" }
+        return "Your library is empty"
+    }
+
+    private var emptyStateBody: String {
+        if plexServerName != nil || isPlexSignedIn {
+            return "Library browsing arrives in the next update."
+        }
+        return "Connect a Plex or Synology source to start watching."
+    }
+
     private var emptyLibraryState: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             // A soft, illustration-light hero. No spinner, no detailed graphic —
@@ -169,13 +183,11 @@ struct HomeView: View {
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .padding(.bottom, AetherDesign.Spacing.s)
 
-            Text(isPlexSignedIn ? "Signed in to Plex" : "Your library is empty")
+            Text(emptyStateTitle)
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-            Text(isPlexSignedIn
-                 ? "Server discovery and library browsing arrive in the next update."
-                 : "Connect a Plex or Synology source to start watching.")
+            Text(emptyStateBody)
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

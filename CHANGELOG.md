@@ -40,6 +40,32 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   shows the "Add a source" CTA which presents the sheet; post-sign-in
   acknowledges the connection and tells the user server discovery is
   coming next
+- Added `PlexResourceClient` actor — fetches `/api/v2/resources` with
+  the user's Plex token, with `includeHttps` / `includeRelay` query
+  flags
+- Added `PlexServerSelector` — pure, deterministic filtering and
+  ranking of resources into "the server we should talk to next."
+  Static ranking only: local > non-relay > HTTPS, with owned-server
+  tiebreaker. RTT-based ranking is a documented follow-up
+- Added `PlexServerRecord` — the persisted shape of a selected server
+  (client identifier, name, per-server access token, base URL,
+  locality + relay flags)
+- Added `PlexServerStore` actor — round-trips `PlexServerRecord` as
+  JSON through `KeychainStore`
+- `AppSession` now owns `PlexResourceClient` + `PlexServerStore`, runs
+  discovery automatically after sign-in, restores the persisted server
+  on launch, and exposes a `DiscoveryState` enum (`idle`, `discovering`,
+  `noServersFound`, `failed(message:)`, `completed(serverName:)`)
+- `AppSession.plexSource` now exists — the live `PlexMediaSource`
+  built from the persisted record. Library browsing wires up in the
+  next PR; for now `source` stays as the mock fixture
+- Added `PlexDiscoveryView` — designed states for discovering / no
+  servers / failed / completed; `Try again` and `Done` actions
+- `PlexOnboardingView` switches between sign-in and discovery views
+  based on `AppSession.isPlexSignedIn`, so the sheet flows directly
+  from PIN → discovery → done without surprise dismissals
+- Home's empty state now reads *"Connected to \<serverName\>"* once a
+  server has been selected, honest about the next step
 
 ### 0.1 — Foundation
 - Verified `xcodegen generate` produces a clean project; relocated generated
