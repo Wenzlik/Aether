@@ -10,11 +10,12 @@ It plays your own media from your own infrastructure — a Synology NAS on the l
 
 ## Supported platforms
 
-| Platform   | Minimum |
-|------------|---------|
-| iOS        | 26      |
-| iPadOS     | 26      |
-| tvOS       | 26      |
+| Platform   | Minimum | Status |
+|------------|---------|--------|
+| iOS        | 26      | primary |
+| iPadOS     | 26      | primary |
+| tvOS       | 26      | primary |
+| visionOS   | 26      | early base — runs in a window, shares all UI; spatial-native experience TBD |
 
 Aether is built top-to-bottom on the modern Apple stack. SwiftUI for every surface, Swift 6 with full concurrency, AVKit for playback, and a shared `AetherCore` package for everything that isn't view code.
 

@@ -71,11 +71,11 @@ Aether is **not** trying to match feature-for-feature. It is trying to be the *n
 | iPhone     | iOS 26  | Primary mobile surface |
 | iPad       | iPadOS 26 | Adapted layout, multi-column, PiP |
 | Apple TV   | tvOS 26 | First-class focus engine |
+| Vision Pro | visionOS 26 | Early base — the app target exists and runs in a window, sharing all UI with iOS. A spatial-native experience (ornaments, glass, an immersive player) is a future milestone, not part of this base. |
 
 Not planned:
 
 - macOS — possible later if it falls out of SwiftUI naturally
-- visionOS — possible later; aesthetic already aligned
 - Android, Windows, Web — explicit non-goals
 
 ---

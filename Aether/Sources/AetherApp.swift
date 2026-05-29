@@ -288,6 +288,8 @@ final class AppSession {
     private var currentDeviceName: String {
         #if os(tvOS)
         return "Apple TV"
+        #elseif os(visionOS)
+        return "Apple Vision Pro"
         #elseif os(iOS)
         return UIDevice.current.name
         #else
@@ -298,6 +300,8 @@ final class AppSession {
     private var currentPlatform: String {
         #if os(tvOS)
         return "tvOS"
+        #elseif os(visionOS)
+        return "visionOS"
         #elseif os(iOS)
         return "iOS"
         #else

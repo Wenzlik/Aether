@@ -4,6 +4,20 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Platforms
+
+- Added an early **visionOS** base: a new `Aether-visionOS` app target
+  (`project.yml`) and `.visionOS(.v26)` in the `AetherCore` package.
+  It shares every view with iOS and runs in a window. Platform-
+  conditional branches were taught about visionOS — the player's
+  close button and the sign-in "Open in Safari" button now show on
+  visionOS too; `AppSession` reports the right platform identity to
+  Plex. A spatial-native experience (ornaments, glass, immersive
+  player) is a separate future milestone, not part of this base.
+  > Note: the visionOS app-target build hasn't been verified by the
+  > author (needs Xcode + visionOS SDK); `swift build` of `AetherCore`
+  > passes with the new platform.
+
 ### Chores
 
 - Added a temporary app icon — a glowing rounded play triangle on a deep
