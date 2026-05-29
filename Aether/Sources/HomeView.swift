@@ -37,10 +37,15 @@ struct HomeView: View {
                         }
 
                         ForEach(feed.libraries) { librarySection in
+                            // Both movie and show libraries surface posters at
+                            // the top level (a show's top-level artwork is its
+                            // poster, not an episode still). Episode aspect
+                            // (16:9) is for the future show → seasons →
+                            // episodes drill-down.
                             section(
                                 title: librarySection.library.title,
                                 items: librarySection.items,
-                                aspect: librarySection.library.kind == .show ? .episode : .poster
+                                aspect: .poster
                             )
                         }
                     }

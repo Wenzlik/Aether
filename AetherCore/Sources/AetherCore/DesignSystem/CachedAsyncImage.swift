@@ -8,6 +8,16 @@ import SwiftUI
 ///
 /// > Never use raw `AsyncImage` in shipping code. Go through `CachedAsyncImage`
 /// > so every image goes through the same future cache + decode pipeline.
+///
+/// ## Sizing
+///
+/// When `aspectRatio` is provided, the view shapes itself to that ratio using
+/// the canonical `Color.clear → overlay → clipped` pattern. The container
+/// reaches the ratio *first*; the image is then drawn into it via `.scaledToFill`
+/// and clipped to the bounds. Without this pattern, `AsyncImage`'s success
+/// case takes the image's *natural* aspect ratio and the outer modifier can
+/// fail to constrain it — which manifests as cards growing far beyond the
+/// `.frame(width:)` the parent expected.
 public struct CachedAsyncImage: View {
     public let url: URL?
     public let aspectRatio: CGFloat?
@@ -18,44 +28,40 @@ public struct CachedAsyncImage: View {
     }
 
     public var body: some View {
-        Group {
-            if let url {
-                AsyncImage(url: url, transaction: Transaction(animation: AetherDesign.Motion.content)) { phase in
-                    switch phase {
-                    case .empty:
-                        skeleton
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        skeleton
-                    @unknown default:
-                        skeleton
-                    }
-                }
-            } else {
-                skeleton
-            }
+        if let aspectRatio {
+            Color.clear
+                .aspectRatio(aspectRatio, contentMode: .fit)
+                .overlay { imageContent }
+                .clipped()
+        } else {
+            imageContent
         }
-        .modifier(AspectModifier(ratio: aspectRatio))
-        .clipped()
+    }
+
+    @ViewBuilder
+    private var imageContent: some View {
+        if let url {
+            AsyncImage(url: url, transaction: Transaction(animation: AetherDesign.Motion.content)) { phase in
+                switch phase {
+                case .empty:
+                    skeleton
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    skeleton
+                @unknown default:
+                    skeleton
+                }
+            }
+        } else {
+            skeleton
+        }
     }
 
     private var skeleton: some View {
         AetherDesign.Palette.surface
-    }
-}
-
-private struct AspectModifier: ViewModifier {
-    let ratio: CGFloat?
-
-    func body(content: Content) -> some View {
-        if let ratio {
-            content.aspectRatio(ratio, contentMode: .fill)
-        } else {
-            content
-        }
     }
 }
 
