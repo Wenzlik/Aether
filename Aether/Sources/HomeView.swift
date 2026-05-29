@@ -7,7 +7,9 @@ struct HomeView: View {
     let playbackSession: PlaybackSession
     let isPlexSignedIn: Bool
     let plexServerName: String?
+    let plexDiscoveryState: AppSession.DiscoveryState
     let onAddSource: () -> Void
+    let onRetryDiscovery: () -> Void
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -161,24 +163,56 @@ struct HomeView: View {
             && feed.libraries.allSatisfy { $0.items.isEmpty }
     }
 
+    private var isDiscoveryInFlight: Bool {
+        if case .discovering = plexDiscoveryState { return true }
+        if case .idle = plexDiscoveryState, isPlexSignedIn, plexServerName == nil { return true }
+        return false
+    }
+
+    private var emptyStateGlyph: String {
+        if plexServerName != nil { return "checkmark.seal" }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound:        return "magnifyingglass"
+            case .failed:                return "exclamationmark.triangle"
+            case .idle, .discovering, .completed: return "antenna.radiowaves.left.and.right"
+            }
+        }
+        return "film.stack"
+    }
+
     private var emptyStateTitle: String {
         if let plexServerName { return "Connected to \(plexServerName)" }
-        if isPlexSignedIn     { return "Signed in to Plex" }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound: return "No servers found"
+            case .failed:         return "Couldn't reach Plex"
+            case .idle, .discovering, .completed: return "Looking for your servers"
+            }
+        }
         return "Your library is empty"
     }
 
     private var emptyStateBody: String {
-        if plexServerName != nil || isPlexSignedIn {
+        if plexServerName != nil {
             return "Library browsing arrives in the next update."
+        }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound:
+                return "Your Plex account isn't connected to any reachable servers right now. Check that your server is powered on and signed in to the same account."
+            case let .failed(message):
+                return message
+            case .idle, .discovering, .completed:
+                return "Asking Plex which servers your account can reach…"
+            }
         }
         return "Connect a Plex or Synology source to start watching."
     }
 
     private var emptyLibraryState: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            // A soft, illustration-light hero. No spinner, no detailed graphic —
-            // just a calm icon, a single sentence, and one CTA.
-            Image(systemName: isPlexSignedIn ? "checkmark.seal" : "film.stack")
+            Image(systemName: emptyStateGlyph)
                 .font(.system(size: 56, weight: .light))
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .padding(.bottom, AetherDesign.Spacing.s)
@@ -187,27 +221,47 @@ struct HomeView: View {
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-            Text(emptyStateBody)
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !isPlexSignedIn {
-                Button(action: onAddSource) {
-                    Text("Add a source")
-                        .font(AetherDesign.Typography.cardTitle)
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .padding(.vertical, AetherDesign.Spacing.s)
-                        .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+            HStack(spacing: AetherDesign.Spacing.s) {
+                if isDiscoveryInFlight {
+                    ProgressView()
+                        .tint(AetherDesign.Palette.textSecondary)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, AetherDesign.Spacing.s)
+                Text(emptyStateBody)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            emptyStatePrimaryAction
+                .padding(.top, AetherDesign.Spacing.s)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.xxl)
         .frame(maxWidth: 520, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var emptyStatePrimaryAction: some View {
+        if !isPlexSignedIn {
+            primaryActionCapsule(title: "Add a source", action: onAddSource)
+        } else if case .noServersFound = plexDiscoveryState {
+            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
+        } else if case .failed = plexDiscoveryState {
+            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
+        }
+        // .discovering / .idle / .completed → no CTA
+    }
+
+    private func primaryActionCapsule(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(AetherDesign.Typography.cardTitle)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.s)
+                .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Loading & error states

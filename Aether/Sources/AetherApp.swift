@@ -104,6 +104,14 @@ final class AppSession {
 
         // 3. Restore the persisted Plex server if we have one.
         await restorePlexServer()
+
+        // 4. If the user is already signed in but no server is on file
+        //    (e.g. upgraded from a build where sign-in happened but discovery
+        //    didn't exist yet), kick off discovery now so the Home empty
+        //    state doesn't sit at "Signed in to Plex" forever.
+        if isPlexSignedIn && plexServer == nil {
+            await discoverPlexServers()
+        }
     }
 
     // MARK: - Plex auth setup
@@ -291,7 +299,9 @@ private struct RootView: View {
                     playbackSession: session.playback,
                     isPlexSignedIn: session.isPlexSignedIn,
                     plexServerName: session.plexServer?.name,
-                    onAddSource: { session.presentSignIn() }
+                    plexDiscoveryState: session.discoveryState,
+                    onAddSource: { session.presentSignIn() },
+                    onRetryDiscovery: { Task { await session.discoverPlexServers() } }
                 )
             } else {
                 // Brief, calm boot state — no spinner.
