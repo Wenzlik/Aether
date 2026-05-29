@@ -149,15 +149,25 @@ public enum PlexAPI {
             media?.first?.part?.first?.key
         }
 
+        /// The first media's container (e.g. `"mp4"`, `"mkv"`). Used to decide
+        /// whether AVPlayer can direct-play the file or whether we route it
+        /// through the server's transcoder.
+        public var firstContainer: String? {
+            media?.first?.container
+        }
+
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case media = "Media"
         }
 
         public struct Media: Decodable, Sendable, Equatable {
+            /// File container, e.g. `"mp4"`, `"mkv"`, `"avi"`.
+            public let container: String?
             public let part: [Part]?
 
             enum CodingKeys: String, CodingKey {
+                case container
                 case part = "Part"
             }
         }

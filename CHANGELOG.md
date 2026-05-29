@@ -4,6 +4,18 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Transcode fallback so incompatible files play.** Direct play only works
+  for containers AVPlayer opens natively (mp4 / m4v / mov). Anything else —
+  MKV, AVI, TS, … — now routes through Plex's universal transcoder
+  (`/video/:/transcode/universal/start.m3u8`, `protocol=hls`,
+  `directStream=1`), which AVPlayer always understands. The common
+  MKV/H.264/AAC case gets a cheap, lossless remux rather than a full
+  re-encode. The choice is made per item from the Plex `Media.container`:
+  friendly container → pristine direct file, otherwise → transcode. mp4
+  titles keep playing exactly as before.
+
 ### Fixed
 
 - **Plex now works off the home network.** Discovery used to persist only the
