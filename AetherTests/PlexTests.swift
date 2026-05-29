@@ -234,6 +234,108 @@ struct PlexAuthClientTests {
     }
 }
 
+@Suite("Plex — PlexSignInViewModel")
+@MainActor
+struct PlexSignInViewModelTests {
+
+    private static let config = PlexConfiguration(
+        product: "Aether",
+        version: "0.2.0",
+        clientIdentifier: "vm-test",
+        deviceName: "TestDevice",
+        platform: "iOS",
+        platformVersion: "26.0"
+    )
+
+    @Test("start() → requesting → awaitingUser → success")
+    func happyPath() async throws {
+        let api = RecordingAPIClient()
+        // requestPIN
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
+        // first poll: token present
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":"the-token","expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
+
+        let auth = PlexAuthClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
+
+        vm.start()
+        try await waitFor({ vm.state }) { state in
+            if case .success(token: "the-token") = state { return true }
+            return false
+        }
+    }
+
+    @Test("Expired PIN flips to .failure(.expired)")
+    func expiredFlow() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2000-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2000-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
+
+        let auth = PlexAuthClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
+
+        vm.start()
+        try await waitFor({ vm.state }) { state in
+            if case .failure(reason: .expired) = state { return true }
+            return false
+        }
+    }
+
+    @Test("cancel() resets to .idle and interrupts the polling task")
+    func cancellation() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
+        // Note: we do NOT enqueue more responses — if the poll loop survives
+        // cancellation, it will throw .unexpectedStatus on the next iteration
+        // and the test will catch that as a wrong terminal state.
+
+        let auth = PlexAuthClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(50), pollTimeout: .seconds(2))
+
+        vm.start()
+        try await waitFor({ vm.state }) { state in
+            if case .awaitingUser = state { return true }
+            return false
+        }
+
+        vm.cancel()
+        try await Task.sleep(for: .milliseconds(100))
+        if case .idle = vm.state { } else {
+            Issue.record("Expected .idle after cancel, got \(vm.state)")
+        }
+    }
+}
+
+/// Poll `read()` every 10ms until `match` returns true, or fail after `timeout`.
+@MainActor
+private func waitFor<T>(
+    _ read: () -> T,
+    timeout: Duration = .seconds(2),
+    matches match: (T) -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if match(read()) { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    Issue.record("waitFor timed out; last value: \(read())")
+}
+
 @Suite("Plex — PlexMediaSource request shape")
 struct PlexMediaSourceRequestTests {
 
