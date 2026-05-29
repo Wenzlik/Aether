@@ -62,15 +62,44 @@ struct HomeView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Aether")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Personal media, beautifully played.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text("Aether")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Personal media, beautifully played.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+
+            Spacer(minLength: AetherDesign.Spacing.m)
+
+            // Always-visible account / source button so the sign-in flow is
+            // reachable even when the mock library has plenty of content (which
+            // hides the empty state CTA). Icon changes based on the current
+            // state: idle plus badge → signed-in person → filled person.
+            Button(action: onAddSource) {
+                AccountBadge(
+                    glyph: accountGlyph,
+                    isActive: plexServerName != nil
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accountAccessibilityLabel)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    private var accountGlyph: String {
+        if plexServerName != nil { return "person.crop.circle.fill" }
+        if isPlexSignedIn        { return "person.crop.circle" }
+        return "person.crop.circle.badge.plus"
+    }
+
+    private var accountAccessibilityLabel: String {
+        if let name = plexServerName { return "Connected to \(name). Account details." }
+        if isPlexSignedIn            { return "Signed in to Plex. Account details." }
+        return "Add a source"
     }
 
     // MARK: - Section (generic horizontal rail)
@@ -318,6 +347,35 @@ struct HomeView: View {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+}
+
+/// Account / source button glyph used in the Home header.
+///
+/// Pulled out so it can react to the tvOS focus environment without complicating
+/// the parent layout. On iOS `\.isFocused` is always false, so the focused
+/// branch collapses to the base styling.
+private struct AccountBadge: View {
+    let glyph: String
+    let isActive: Bool
+
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        Image(systemName: glyph)
+            #if os(tvOS)
+            .font(.system(size: 36, weight: .regular))
+            #else
+            .font(.system(size: 28, weight: .regular))
+            #endif
+            .foregroundStyle(isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
+            .padding(AetherDesign.Spacing.s)
+            .background(.ultraThinMaterial, in: Circle())
+            .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
+                    radius: isFocused ? 14 : 0,
+                    y: isFocused ? 8 : 0)
+            .scaleEffect(isFocused ? 1.10 : 1.0)
+            .animation(AetherDesign.Motion.focus, value: isFocused)
     }
 }
 
