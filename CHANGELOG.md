@@ -4,6 +4,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **Native video player.** Replaced SwiftUI's prototype `VideoPlayer` with
+  `AVPlayerViewController` (wrapped as `SystemVideoPlayer`). This brings device
+  rotation + full-screen, the system transport bar (scrub / skip / time),
+  Picture-in-Picture, AirPlay, and the subtitle / audio-track picker — none of
+  which the SwiftUI player offered. Fixes "the video doesn't rotate."
+- Audio now uses the `.playback` session category, so video has sound even with
+  the ring/silent switch on, and continues for PiP / background. Added the
+  `audio` background mode to the iOS Info.plist.
+
 ### Added
 
 - **Transcode fallback so incompatible files play.** Direct play only works

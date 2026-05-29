@@ -18,7 +18,7 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
 
             if let player = viewModel.player {
-                VideoPlayer(player: player)
+                SystemVideoPlayer(player: player)
                     .ignoresSafeArea()
             } else if viewModel.state.status == .failed {
                 playbackUnavailable
