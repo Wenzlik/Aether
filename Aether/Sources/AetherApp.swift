@@ -1,6 +1,10 @@
 import SwiftUI
 import AetherCore
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 @main
 struct AetherApp: App {
     @State private var session = AppSession()
@@ -16,31 +20,61 @@ struct AetherApp: App {
 }
 
 /// Owns the long-lived app-wide dependencies: the active media source, the
-/// resume store, the single playback session, and the Plex auth seam.
+/// resume store, the playback session, the Plex auth seam, and the Plex
+/// server discovery state.
 ///
-/// In 0.1 this loaded the mock library. As of 0.2 it also owns the
-/// `PlexAuthClient` and the persisted Plex sign-in state. Server discovery
-/// and a `PlexMediaSource` instance arrive in the next PR.
+/// As of this PR `AppSession` also handles server discovery — read the
+/// persisted server on launch, run discovery after sign-in, build a live
+/// `PlexMediaSource` from the result. Library browsing arrives in the next PR.
 @MainActor
 @Observable
 final class AppSession {
-    // Mock / production library
+    // MARK: - Mock / Home library
+
     var source: (any MediaSource)?
     var loadError: String?
 
-    // Cross-cutting
+    // MARK: - Cross-cutting
+
     let resumeStore: ResumeStore
     let playback: PlaybackSession
     let keychain: KeychainStore
     let api: any APIClient
 
-    // Plex
+    // MARK: - Plex — auth
+
     private(set) var plexConfiguration: PlexConfiguration?
     private(set) var plexAuthClient: PlexAuthClient?
     var isPlexSignedIn: Bool = false
 
-    // UI bridging
+    // MARK: - Plex — server discovery
+
+    private(set) var plexResourceClient: PlexResourceClient?
+    private(set) var plexServerStore: PlexServerStore?
+
+    /// The currently-selected server (loaded on launch or set on discovery).
+    var plexServer: PlexServerRecord?
+
+    /// The live `PlexMediaSource` built from `plexServer`. `nil` until either
+    /// the persisted server is loaded on launch or discovery completes.
+    private(set) var plexSource: PlexMediaSource?
+
+    /// User-visible discovery state. Drives `PlexDiscoveryView`.
+    var discoveryState: DiscoveryState = .idle
+
+    enum DiscoveryState: Sendable, Equatable {
+        case idle
+        case discovering
+        case noServersFound
+        case failed(message: String)
+        case completed(serverName: String)
+    }
+
+    // MARK: - UI bridging
+
     var isSignInPresented: Bool = false
+
+    // MARK: - Init
 
     init() {
         let store = ResumeStore()
@@ -53,7 +87,7 @@ final class AppSession {
     // MARK: - Lifecycle
 
     func start() async {
-        // 1. Load the mock library so 0.1 functionality still works.
+        // 1. Mock library so 0.1 functionality still works.
         do {
             let mock = try MockMediaSource.loadFromBundle()
             for point in await mock.simulatedResumePoints {
@@ -65,11 +99,22 @@ final class AppSession {
             loadError = "Couldn't load MockLibrary.json — using built-in sample. (\(error.localizedDescription))"
         }
 
-        // 2. Set up the Plex seam (auth client + signed-in flag).
+        // 2. Plex auth seam.
         await setUpPlex()
+
+        // 3. Restore the persisted Plex server if we have one.
+        await restorePlexServer()
+
+        // 4. If the user is already signed in but no server is on file
+        //    (e.g. upgraded from a build where sign-in happened but discovery
+        //    didn't exist yet), kick off discovery now so the Home empty
+        //    state doesn't sit at "Signed in to Plex" forever.
+        if isPlexSignedIn && plexServer == nil {
+            await discoverPlexServers()
+        }
     }
 
-    // MARK: - Plex
+    // MARK: - Plex auth setup
 
     private func setUpPlex() async {
         let identifier = await ensurePlexClientIdentifier()
@@ -83,20 +128,18 @@ final class AppSession {
         )
         plexConfiguration = config
         plexAuthClient = PlexAuthClient(api: api, configuration: config)
+        plexResourceClient = PlexResourceClient(api: api, configuration: config)
+        plexServerStore = PlexServerStore(keychain: keychain)
 
-        // If we've already stored a token, mark signed-in. (Server discovery is
-        // a follow-up PR — the flag here is what the empty state reads.)
         do {
             if let token = try await keychain.string(for: Self.plexTokenKey), !token.isEmpty {
                 isPlexSignedIn = true
             }
         } catch {
-            // Keychain failure is non-fatal: user can re-sign-in.
+            // Keychain unavailable — user can re-sign-in.
         }
     }
 
-    /// Read the per-install Plex client identifier from Keychain, or generate
-    /// and persist a fresh one the first time.
     private func ensurePlexClientIdentifier() async -> String {
         do {
             if let existing = try await keychain.string(for: Self.plexClientIdentifierKey), !existing.isEmpty {
@@ -106,27 +149,104 @@ final class AppSession {
             try await keychain.setString(new, for: Self.plexClientIdentifierKey)
             return new
         } catch {
-            // Keychain unavailable (unlikely on Apple platforms) — fall back to
-            // a UUID per run. Plex still functions; resume scoping just won't
-            // stick across launches.
             return UUID().uuidString
         }
     }
 
-    /// Called by the sign-in view after a successful PIN exchange.
+    // MARK: - Server persistence + restore
+
+    private func restorePlexServer() async {
+        guard let store = plexServerStore else { return }
+        do {
+            guard let record = try await store.read() else { return }
+            plexServer = record
+            plexSource = makePlexSource(from: record)
+            discoveryState = .completed(serverName: record.name)
+        } catch {
+            // Reading a corrupted record shouldn't break launch — just leave
+            // the user signed-in-but-no-server, which prompts a re-discovery.
+        }
+    }
+
+    private func makePlexSource(from record: PlexServerRecord) -> PlexMediaSource? {
+        guard let baseURL = record.baseURL, let config = plexConfiguration else { return nil }
+        return PlexMediaSource(
+            serverID: record.clientIdentifier,
+            displayName: record.name,
+            baseURL: baseURL,
+            accessToken: record.accessToken,
+            configuration: config,
+            api: api
+        )
+    }
+
+    // MARK: - Sign-in completion
+
+    /// Called by `PlexSignInView` after a successful PIN exchange.
+    ///
+    /// Persists the auth token, flips `isPlexSignedIn`, then kicks off server
+    /// discovery so the onboarding flow moves directly into the next step
+    /// without the user having to tap a separate "Discover servers" button.
     func completePlexSignIn(token: String) async {
         do {
             try await keychain.setString(token, for: Self.plexTokenKey)
-        } catch {
-            // Persistence failed — user can re-sign in next time.
-        }
+        } catch { }
         isPlexSignedIn = true
-        isSignInPresented = false
+        await discoverPlexServers()
     }
 
     func signOutOfPlex() async {
         do { try await keychain.removeValue(for: Self.plexTokenKey) } catch { }
+        do { try await plexServerStore?.clear() } catch { }
+        plexServer = nil
+        plexSource = nil
+        discoveryState = .idle
         isPlexSignedIn = false
+    }
+
+    // MARK: - Server discovery
+
+    /// Fetch resources, pick the best server, persist, build the source.
+    /// Safe to call repeatedly (e.g. on `Try again`); it always re-fetches.
+    func discoverPlexServers() async {
+        guard
+            let resourceClient = plexResourceClient,
+            let store = plexServerStore
+        else {
+            discoveryState = .failed(message: "Plex isn't set up yet.")
+            return
+        }
+
+        let token: String
+        do {
+            guard let stored = try await keychain.string(for: Self.plexTokenKey), !stored.isEmpty else {
+                discoveryState = .failed(message: "No Plex token on file. Sign in first.")
+                return
+            }
+            token = stored
+        } catch {
+            discoveryState = .failed(message: "Couldn't read your Plex credentials.")
+            return
+        }
+
+        discoveryState = .discovering
+
+        do {
+            let resources = try await resourceClient.resources(token: token)
+            let selector = PlexServerSelector()
+            guard let pick = selector.selectBest(from: resources) else {
+                discoveryState = .noServersFound
+                return
+            }
+
+            let record = pick.makeRecord()
+            try await store.write(record)
+            plexServer = record
+            plexSource = makePlexSource(from: record)
+            discoveryState = .completed(serverName: record.name)
+        } catch {
+            discoveryState = .failed(message: error.localizedDescription)
+        }
     }
 
     func presentSignIn() {
@@ -165,10 +285,6 @@ final class AppSession {
     }
 }
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
 // MARK: - Root
 
 private struct RootView: View {
@@ -182,7 +298,10 @@ private struct RootView: View {
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     isPlexSignedIn: session.isPlexSignedIn,
-                    onAddSource: { session.presentSignIn() }
+                    plexServerName: session.plexServer?.name,
+                    plexDiscoveryState: session.discoveryState,
+                    onAddSource: { session.presentSignIn() },
+                    onRetryDiscovery: { Task { await session.discoverPlexServers() } }
                 )
             } else {
                 // Brief, calm boot state — no spinner.
@@ -197,17 +316,31 @@ private struct RootView: View {
             }
         }
         .sheet(isPresented: $session.isSignInPresented) {
-            if let authClient = session.plexAuthClient {
-                PlexSignInView(
-                    authClient: authClient,
-                    onSuccess: { token in
-                        Task { await session.completePlexSignIn(token: token) }
-                    },
-                    onCancel: {
-                        session.isSignInPresented = false
-                    }
-                )
-            }
+            PlexOnboardingView(session: session)
+        }
+    }
+}
+
+/// Switches between the sign-in step and the discovery step based on
+/// `AppSession` state. Lives here (not its own file) because it's pure glue.
+private struct PlexOnboardingView: View {
+    @Bindable var session: AppSession
+
+    var body: some View {
+        if session.isPlexSignedIn {
+            PlexDiscoveryView(
+                state: session.discoveryState,
+                onRetry: { Task { await session.discoverPlexServers() } },
+                onClose: { session.isSignInPresented = false }
+            )
+        } else if let authClient = session.plexAuthClient {
+            PlexSignInView(
+                authClient: authClient,
+                onSuccess: { token in
+                    Task { await session.completePlexSignIn(token: token) }
+                },
+                onCancel: { session.isSignInPresented = false }
+            )
         }
     }
 }

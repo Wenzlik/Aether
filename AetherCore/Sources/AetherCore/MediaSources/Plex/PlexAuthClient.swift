@@ -34,7 +34,14 @@ public actor PlexAuthClient {
 
     // MARK: - Step 1 — request a PIN
 
-    public func requestPIN(strong: Bool = true) async throws -> PlexAPI.PIN {
+    /// Request a new PIN from plex.tv.
+    ///
+    /// - Parameter strong: `false` (default) returns the short 4-character code
+    ///   meant to be typed by a human at `plex.tv/link`. `true` returns a
+    ///   longer token-style PIN useful for headless / server-to-server flows
+    ///   where the code never needs to be typed. The user-facing sign-in flow
+    ///   should always leave this at the default.
+    public func requestPIN(strong: Bool = false) async throws -> PlexAPI.PIN {
         var components = URLComponents(url: baseURL.appendingPathComponent("/api/v2/pins"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "strong", value: strong ? "true" : "false")]
 

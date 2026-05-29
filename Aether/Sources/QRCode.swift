@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import AetherCore
 
 /// SwiftUI view that renders an arbitrary string as a QR code.
 ///

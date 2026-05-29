@@ -6,7 +6,10 @@ struct HomeView: View {
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let isPlexSignedIn: Bool
+    let plexServerName: String?
+    let plexDiscoveryState: AppSession.DiscoveryState
     let onAddSource: () -> Void
+    let onRetryDiscovery: () -> Void
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -59,15 +62,44 @@ struct HomeView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Aether")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Personal media, beautifully played.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text("Aether")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Personal media, beautifully played.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+
+            Spacer(minLength: AetherDesign.Spacing.m)
+
+            // Always-visible account / source button so the sign-in flow is
+            // reachable even when the mock library has plenty of content (which
+            // hides the empty state CTA). Icon changes based on the current
+            // state: idle plus badge → signed-in person → filled person.
+            Button(action: onAddSource) {
+                AccountBadge(
+                    glyph: accountGlyph,
+                    isActive: plexServerName != nil
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accountAccessibilityLabel)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    private var accountGlyph: String {
+        if plexServerName != nil { return "person.crop.circle.fill" }
+        if isPlexSignedIn        { return "person.crop.circle" }
+        return "person.crop.circle.badge.plus"
+    }
+
+    private var accountAccessibilityLabel: String {
+        if let name = plexServerName { return "Connected to \(name). Account details." }
+        if isPlexSignedIn            { return "Signed in to Plex. Account details." }
+        return "Add a source"
     }
 
     // MARK: - Section (generic horizontal rail)
@@ -160,42 +192,105 @@ struct HomeView: View {
             && feed.libraries.allSatisfy { $0.items.isEmpty }
     }
 
+    private var isDiscoveryInFlight: Bool {
+        if case .discovering = plexDiscoveryState { return true }
+        if case .idle = plexDiscoveryState, isPlexSignedIn, plexServerName == nil { return true }
+        return false
+    }
+
+    private var emptyStateGlyph: String {
+        if plexServerName != nil { return "checkmark.seal" }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound:        return "magnifyingglass"
+            case .failed:                return "exclamationmark.triangle"
+            case .idle, .discovering, .completed: return "antenna.radiowaves.left.and.right"
+            }
+        }
+        return "film.stack"
+    }
+
+    private var emptyStateTitle: String {
+        if let plexServerName { return "Connected to \(plexServerName)" }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound: return "No servers found"
+            case .failed:         return "Couldn't reach Plex"
+            case .idle, .discovering, .completed: return "Looking for your servers"
+            }
+        }
+        return "Your library is empty"
+    }
+
+    private var emptyStateBody: String {
+        if plexServerName != nil {
+            return "Library browsing arrives in the next update."
+        }
+        if isPlexSignedIn {
+            switch plexDiscoveryState {
+            case .noServersFound:
+                return "Your Plex account isn't connected to any reachable servers right now. Check that your server is powered on and signed in to the same account."
+            case let .failed(message):
+                return message
+            case .idle, .discovering, .completed:
+                return "Asking Plex which servers your account can reach…"
+            }
+        }
+        return "Connect a Plex or Synology source to start watching."
+    }
+
     private var emptyLibraryState: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            // A soft, illustration-light hero. No spinner, no detailed graphic —
-            // just a calm icon, a single sentence, and one CTA.
-            Image(systemName: isPlexSignedIn ? "checkmark.seal" : "film.stack")
+            Image(systemName: emptyStateGlyph)
                 .font(.system(size: 56, weight: .light))
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .padding(.bottom, AetherDesign.Spacing.s)
 
-            Text(isPlexSignedIn ? "Signed in to Plex" : "Your library is empty")
+            Text(emptyStateTitle)
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-            Text(isPlexSignedIn
-                 ? "Server discovery and library browsing arrive in the next update."
-                 : "Connect a Plex or Synology source to start watching.")
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !isPlexSignedIn {
-                Button(action: onAddSource) {
-                    Text("Add a source")
-                        .font(AetherDesign.Typography.cardTitle)
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .padding(.vertical, AetherDesign.Spacing.s)
-                        .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+            HStack(spacing: AetherDesign.Spacing.s) {
+                if isDiscoveryInFlight {
+                    ProgressView()
+                        .tint(AetherDesign.Palette.textSecondary)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, AetherDesign.Spacing.s)
+                Text(emptyStateBody)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            emptyStatePrimaryAction
+                .padding(.top, AetherDesign.Spacing.s)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.xxl)
         .frame(maxWidth: 520, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var emptyStatePrimaryAction: some View {
+        if !isPlexSignedIn {
+            primaryActionCapsule(title: "Add a source", action: onAddSource)
+        } else if case .noServersFound = plexDiscoveryState {
+            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
+        } else if case .failed = plexDiscoveryState {
+            primaryActionCapsule(title: "Try again", action: onRetryDiscovery)
+        }
+        // .discovering / .idle / .completed → no CTA
+    }
+
+    private func primaryActionCapsule(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(AetherDesign.Typography.cardTitle)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.s)
+                .background(AetherDesign.Palette.accent.opacity(0.20), in: Capsule())
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Loading & error states
@@ -252,6 +347,35 @@ struct HomeView: View {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+}
+
+/// Account / source button glyph used in the Home header.
+///
+/// Pulled out so it can react to the tvOS focus environment without complicating
+/// the parent layout. On iOS `\.isFocused` is always false, so the focused
+/// branch collapses to the base styling.
+private struct AccountBadge: View {
+    let glyph: String
+    let isActive: Bool
+
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        Image(systemName: glyph)
+            #if os(tvOS)
+            .font(.system(size: 36, weight: .regular))
+            #else
+            .font(.system(size: 28, weight: .regular))
+            #endif
+            .foregroundStyle(isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
+            .padding(AetherDesign.Spacing.s)
+            .background(.ultraThinMaterial, in: Circle())
+            .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
+                    radius: isFocused ? 14 : 0,
+                    y: isFocused ? 8 : 0)
+            .scaleEffect(isFocused ? 1.10 : 1.0)
+            .animation(AetherDesign.Motion.focus, value: isFocused)
     }
 }
 
