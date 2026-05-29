@@ -60,4 +60,83 @@ public enum PlexAPI {
             }
         }
     }
+
+    // MARK: - Library shapes (PMS-side, returned by /library/...)
+
+    /// Response wrapper for any PMS endpoint — Plex wraps every payload in
+    /// `{ "MediaContainer": { ... } }`. We only model the keys we read.
+    public struct LibrarySectionsResponse: Decodable, Sendable {
+        public let mediaContainer: Container
+
+        public struct Container: Decodable, Sendable {
+            /// Plex omits `Directory` entirely when there are no libraries.
+            public let directory: [LibrarySection]?
+
+            enum CodingKeys: String, CodingKey {
+                case directory = "Directory"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaContainer = "MediaContainer"
+        }
+    }
+
+    /// One library section as returned by `GET /library/sections`.
+    public struct LibrarySection: Decodable, Sendable, Equatable {
+        public let key: String
+        public let title: String
+        /// `"movie"`, `"show"`, `"artist"`, `"photo"`, …
+        public let type: String
+
+        public var kind: MediaItem.Kind? {
+            switch type {
+            case "movie": return .movie
+            case "show":  return .show
+            default:      return nil   // unsupported in 0.2 (music, photos)
+            }
+        }
+    }
+
+    /// Response wrapper for `GET /library/sections/{key}/all`.
+    public struct LibraryItemsResponse: Decodable, Sendable {
+        public let mediaContainer: Container
+
+        public struct Container: Decodable, Sendable {
+            public let metadata: [Metadata]?
+
+            enum CodingKeys: String, CodingKey {
+                case metadata = "Metadata"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaContainer = "MediaContainer"
+        }
+    }
+
+    /// One metadata item — a movie, show, episode, season, album, etc.
+    /// We only model the fields the player needs in 0.2.
+    public struct Metadata: Decodable, Sendable, Equatable {
+        public let ratingKey: String
+        public let type: String           // "movie", "show", "episode", "season", …
+        public let title: String
+        public let summary: String?
+        public let year: Int?
+        /// Runtime in **milliseconds** — Plex's wire convention.
+        public let duration: Int?
+        /// Relative path to the poster — needs the server base URL and a token.
+        public let thumb: String?
+        /// Relative path to the backdrop / art.
+        public let art: String?
+
+        public var kind: MediaItem.Kind {
+            switch type {
+            case "movie":   return .movie
+            case "episode": return .episode
+            case "show":    return .show
+            default:        return .movie  // best-effort fallback
+            }
+        }
+    }
 }

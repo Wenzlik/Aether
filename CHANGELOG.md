@@ -66,6 +66,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   from PIN → discovery → done without surprise dismissals
 - Home's empty state now reads *"Connected to \<serverName\>"* once a
   server has been selected, honest about the next step
+- `PlexAPI` extended with `LibrarySection`, `Metadata`, and matching
+  `MediaContainer` response wrappers
+- `PlexMediaSource.libraries()` now hits `GET /library/sections` and
+  filters to movie + show sections (music + photos skipped in 0.2)
+- `PlexMediaSource.items(in:)` now hits `GET /library/sections/{key}/all`
+  and maps Plex `Metadata` → Aether `MediaItem`
+- Artwork URLs (poster + backdrop) are constructed against the server
+  base URL with `X-Plex-Token` carried as a query parameter, so
+  `CachedAsyncImage` / `AsyncImage` can fetch them without setting
+  headers
+- `AppSession` now swaps `source` to the live `PlexMediaSource` when
+  one is available (on launch via restore, after discovery completes,
+  reverted to the mock fixture on sign-out)
+- Empty state and discovery completed-state copy updated — no longer
+  references "library browsing arrives in the next update"; reflects
+  reality post-merge
+- `streamURL` on Plex-mapped `MediaItem` is still `nil` — playback /
+  stream URL resolution lands in the next PR
 
 ### 0.1 — Foundation
 - Verified `xcodegen generate` produces a clean project; relocated generated

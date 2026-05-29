@@ -168,7 +168,7 @@ struct PlexSignInView: View {
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
             }
-            Text("Server discovery and library browsing arrive in the next update.")
+            Text("Looking for your servers next.")
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
         }

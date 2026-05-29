@@ -223,8 +223,10 @@ struct HomeView: View {
     }
 
     private var emptyStateBody: String {
-        if plexServerName != nil {
-            return "Library browsing arrives in the next update."
+        if let plexServerName {
+            // Connected, but the server has no movie or show libraries that
+            // Aether knows how to render (music + photos are skipped in 0.2).
+            return "\(plexServerName) doesn't have any movie or show libraries Aether can read yet. Add one in Plex and pull to refresh."
         }
         if isPlexSignedIn {
             switch plexDiscoveryState {
