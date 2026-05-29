@@ -29,15 +29,12 @@ struct AetherApp: App {
 @MainActor
 @Observable
 final class AppSession {
-    // MARK: - Mock / Home library
+    // MARK: - Home library
 
-    /// The active source feeding `HomeView`. Starts as the mock fixture and
-    /// gets swapped to `plexSource` when a Plex server is selected.
+    /// The active source feeding `HomeView`. `nil` until a Plex server is
+    /// selected; `HomeView` shows its welcome / empty state in that case.
+    /// There is no mock fallback — Aether shows real content or honest states.
     var source: (any MediaSource)?
-
-    /// The mock fixture, kept around so sign-out can fall back to it instead
-    /// of leaving Home with no source at all.
-    private var mockSource: (any MediaSource)?
 
     var loadError: String?
 
@@ -94,31 +91,15 @@ final class AppSession {
     // MARK: - Lifecycle
 
     func start() async {
-        // 1. Mock library so 0.1 functionality still works.
-        do {
-            let mock = try MockMediaSource.loadFromBundle()
-            for point in await mock.simulatedResumePoints {
-                await resumeStore.record(point)
-            }
-            mockSource = mock
-            source = mock
-        } catch {
-            let fallback = MockMediaSource()
-            mockSource = fallback
-            source = fallback
-            loadError = "Couldn't load MockLibrary.json — using built-in sample. (\(error.localizedDescription))"
-        }
-
-        // 2. Plex auth seam.
+        // 1. Plex auth seam.
         await setUpPlex()
 
-        // 3. Restore the persisted Plex server if we have one.
+        // 2. Restore the persisted Plex server if we have one — this builds the
+        //    live source and is what Home renders. No mock fallback.
         await restorePlexServer()
 
-        // 4. If the user is already signed in but no server is on file
-        //    (e.g. upgraded from a build where sign-in happened but discovery
-        //    didn't exist yet), kick off discovery now so the Home empty
-        //    state doesn't sit at "Signed in to Plex" forever.
+        // 3. If the user is signed in but no server is on file, run discovery
+        //    so Home doesn't sit at the empty state forever.
         if isPlexSignedIn && plexServer == nil {
             await discoverPlexServers()
         }
@@ -179,24 +160,21 @@ final class AppSession {
         }
     }
 
-    /// Swap `source` to the live Plex source when one exists.
-    ///
-    /// The mock fixture stays around as a fallback (loaded earlier in
-    /// `start()`), but as soon as we know which Plex server to talk to, we
-    /// prefer real content over fake. Called from both `restorePlexServer()`
-    /// on launch and `discoverPlexServers()` after a fresh selection.
+    /// Point `source` at the live Plex source once we know which server to
+    /// talk to. Called from `restorePlexServer()` on launch and
+    /// `discoverPlexServers()` after a fresh selection.
     private func adoptPlexSourceIfAvailable() {
         guard let plexSource else { return }
         source = plexSource
     }
 
     private func makePlexSource(from record: PlexServerRecord) -> PlexMediaSource? {
-        guard let baseURL = record.baseURL, let config = plexConfiguration else { return nil }
+        guard let config = plexConfiguration, !record.connections.isEmpty else { return nil }
         return PlexMediaSource(
             serverID: record.clientIdentifier,
             displayName: record.name,
-            baseURL: baseURL,
             accessToken: record.accessToken,
+            connections: record.connections,
             configuration: config,
             api: api
         )
@@ -224,8 +202,8 @@ final class AppSession {
         plexSource = nil
         discoveryState = .idle
         isPlexSignedIn = false
-        // Fall back to the mock so Home isn't left pointing at a dead source.
-        source = mockSource
+        // No mock fallback — Home returns to its "Add a source" welcome state.
+        source = nil
     }
 
     // MARK: - Server discovery
@@ -320,30 +298,19 @@ private struct RootView: View {
     @Bindable var session: AppSession
 
     var body: some View {
-        Group {
-            if let source = session.source {
-                HomeView(
-                    source: source,
-                    resumeStore: session.resumeStore,
-                    playbackSession: session.playback,
-                    isPlexSignedIn: session.isPlexSignedIn,
-                    plexServerName: session.plexServer?.name,
-                    plexDiscoveryState: session.discoveryState,
-                    onAddSource: { session.presentSignIn() },
-                    onRetryDiscovery: { Task { await session.discoverPlexServers() } }
-                )
-            } else {
-                // Brief, calm boot state — no spinner.
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                    Text("Aether")
-                        .font(AetherDesign.Typography.heroTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                }
-                .padding(AetherDesign.Spacing.l)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(AetherDesign.Palette.background.ignoresSafeArea())
-            }
-        }
+        // HomeView handles a nil source itself (it renders the welcome / empty
+        // state with the right discovery-aware copy), so there's a single
+        // surface instead of a separate boot screen.
+        HomeView(
+            source: session.source,
+            resumeStore: session.resumeStore,
+            playbackSession: session.playback,
+            isPlexSignedIn: session.isPlexSignedIn,
+            plexServerName: session.plexServer?.name,
+            plexDiscoveryState: session.discoveryState,
+            onAddSource: { session.presentSignIn() },
+            onRetryDiscovery: { Task { await session.discoverPlexServers() } }
+        )
         .sheet(isPresented: $session.isSignInPresented) {
             PlexOnboardingView(session: session)
         }

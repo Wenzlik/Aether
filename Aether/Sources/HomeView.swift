@@ -2,7 +2,9 @@ import SwiftUI
 import AetherCore
 
 struct HomeView: View {
-    let source: any MediaSource
+    /// `nil` when no source is configured yet — Home shows its welcome / empty
+    /// state in that case (no mock fallback).
+    let source: (any MediaSource)?
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let isPlexSignedIn: Bool
@@ -13,7 +15,7 @@ struct HomeView: View {
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
-    @State private var isLoading = true
+    @State private var isLoading = false
 
     var body: some View {
         NavigationStack {
@@ -61,11 +63,10 @@ struct HomeView: View {
                 )
             }
         }
-        // Re-run load() whenever the underlying source changes (e.g. mock →
-        // plexSource after AppSession.start() finishes discovery). Without
-        // the id:, .task fires once on first appear and would leave Home
-        // showing whatever it loaded first.
-        .task(id: source.id) { await load() }
+        // Re-run load() whenever the underlying source changes (nil → Plex
+        // after AppSession.start() finishes discovery, or Plex → nil on
+        // sign-out). Without the id:, .task fires once on first appear.
+        .task(id: source?.id) { await load() }
     }
 
     // MARK: - Header
@@ -331,31 +332,57 @@ struct HomeView: View {
 
     private func errorState(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-            Text("Couldn't load library")
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                .padding(.bottom, AetherDesign.Spacing.xs)
+            Text("Couldn't reach your server")
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
             Text(message)
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            primaryActionCapsule(title: "Try again") {
+                Task { await reconnectAndLoad() }
+            }
+            .padding(.top, AetherDesign.Spacing.s)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.xxl)
+        .frame(maxWidth: 520, alignment: .leading)
+    }
+
+    /// Drop any cached connection and reload — so a retry after moving networks
+    /// (LAN → cellular) re-probes instead of reusing a now-dead connection.
+    private func reconnectAndLoad() async {
+        if let plex = source as? PlexMediaSource {
+            await plex.invalidateConnection()
+        }
+        await load()
     }
 
     // MARK: - Loading
 
     private func load() async {
+        loadError = nil
+
+        // No source yet (not signed in, or discovery in flight): clear the feed
+        // and let the welcome / empty state render. Don't show the skeleton.
+        guard let source else {
+            feed = .empty
+            isLoading = false
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
 
         do {
             let builder = HomeFeedBuilder()
-            let curatedFeatured = await (source as? MockMediaSource)?.featuredItems
-            feed = try await builder.build(
-                source: source,
-                resumeStore: resumeStore,
-                featured: curatedFeatured
-            )
+            feed = try await builder.build(source: source, resumeStore: resumeStore)
         } catch {
+            feed = .empty
             loadError = error.localizedDescription
         }
     }

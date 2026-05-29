@@ -103,17 +103,26 @@ public struct PlexServerSelector: Sendable {
         }
 
         /// Build a `PlexServerRecord` ready for persistence.
+        ///
+        /// Persists **all** of the chosen server's connections, ranked best-first
+        /// by the same scoring used to pick the server. The runtime source
+        /// (`PlexMediaSource`) probes them in this order, so leaving the LAN
+        /// just means falling through to the first reachable remote / relay
+        /// connection instead of being stuck on a dead local address.
         public func makeRecord() -> PlexServerRecord {
-            PlexServerRecord(
+            let selector = PlexServerSelector()
+            let ranked = server.connections
+                .sorted { selector.score(server: server, connection: $0) > selector.score(server: server, connection: $1) }
+                .map { PlexServerRecord.Connection(uri: $0.uri, isLocal: $0.local, isRelay: $0.relay) }
+
+            return PlexServerRecord(
                 clientIdentifier: server.clientIdentifier,
                 name: server.name,
                 // The server access token is required for filtering, so this
                 // force-unwrap is safe in practice. We fall back to "" just to
                 // avoid ever crashing in a release build if upstream changes.
                 accessToken: server.accessToken ?? "",
-                baseURLString: connection.uri,
-                isLocalConnection: connection.local,
-                isRelayConnection: connection.relay
+                connections: ranked
             )
         }
     }
