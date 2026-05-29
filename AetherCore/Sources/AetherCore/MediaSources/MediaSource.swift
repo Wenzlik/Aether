@@ -12,6 +12,16 @@ public protocol MediaSource: Sendable {
 
     /// Items in a given library, paginated by the source as it sees fit.
     func items(in library: Library.ID) async throws -> [MediaItem]
+
+    /// Children of a container item — a show's seasons, a season's episodes.
+    /// Returns `[]` for leaf items (movies, episodes) and for sources that
+    /// don't model a hierarchy.
+    func children(of id: MediaID) async throws -> [MediaItem]
+}
+
+public extension MediaSource {
+    /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
+    func children(of id: MediaID) async throws -> [MediaItem] { [] }
 }
 
 public struct Library: Identifiable, Hashable, Sendable {

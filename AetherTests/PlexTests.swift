@@ -788,6 +788,38 @@ struct PlexMediaSourceLibrariesTests {
         #expect(stream.query?.contains("X-Plex-Token=srv-token") == true)
     }
 
+    @Test("children(of:) hits /library/metadata/{key}/children and maps seasons")
+    func childrenEndpointAndMapping() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {"ratingKey":"201","type":"season","title":"Season 1",
+               "thumb":"/library/metadata/201/thumb/1"},
+              {"ratingKey":"202","type":"season","title":"Season 2"}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let showID = MediaID(source: .plex(serverID: "test-server"), rawValue: "200")
+        let seasons = try await source.children(of: showID)
+
+        let recorded = await api.requests
+        try #require(recorded.count == 2)            // probe + children
+        #expect(recorded[1].url?.path == "/library/metadata/200/children")
+
+        #expect(seasons.count == 2)
+        #expect(seasons.map(\.kind) == [.season, .season])
+        #expect(seasons.map(\.title) == ["Season 1", "Season 2"])
+        // Seasons are containers — no stream URL.
+        #expect(seasons.allSatisfy { $0.streamURL == nil })
+    }
+
     @Test("items without Media (e.g. a show container) get a nil streamURL")
     func containerHasNoStreamURL() async throws {
         let api = RecordingAPIClient()

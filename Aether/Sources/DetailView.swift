@@ -3,11 +3,14 @@ import AetherCore
 
 struct DetailView: View {
     let item: MediaItem
+    let source: (any MediaSource)?
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
+    @State private var children: [MediaItem] = []
+    @State private var isLoadingChildren = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -29,7 +32,10 @@ struct DetailView: View {
             }
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
-        .task { resume = await resumeStore.point(for: item.id) }
+        .task {
+            resume = await resumeStore.point(for: item.id)
+            await loadChildrenIfNeeded()
+        }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
     }
 
@@ -59,10 +65,111 @@ struct DetailView: View {
                         .padding(.horizontal, AetherDesign.Spacing.l)
                 }
 
-                actionRow
-                    .padding(.horizontal, AetherDesign.Spacing.l)
+                if item.kind.isContainer {
+                    childrenSection
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                } else {
+                    actionRow
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                }
             }
             .padding(.vertical, AetherDesign.Spacing.l)
+        }
+    }
+
+    // MARK: - Children (seasons / episodes)
+
+    @ViewBuilder
+    private var childrenSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            Text(childrenTitle)
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+            if isLoadingChildren {
+                HStack(spacing: AetherDesign.Spacing.s) {
+                    ProgressView().tint(AetherDesign.Palette.textSecondary)
+                    Text("Loading…")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                }
+            } else if children.isEmpty {
+                Text("Nothing here yet.")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            } else if item.kind == .show {
+                seasonsRail
+            } else {
+                episodesList
+            }
+        }
+    }
+
+    private var childrenTitle: String {
+        item.kind == .show ? "Seasons" : "Episodes"
+    }
+
+    private var seasonsRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: AetherDesign.Spacing.m) {
+                ForEach(children) { season in
+                    NavigationLink(value: season) {
+                        CardView(title: season.title, posterURL: season.posterURL, aspectRatio: 2.0 / 3.0)
+                            .frame(width: 140)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xs)
+        }
+    }
+
+    private var episodesList: some View {
+        LazyVStack(spacing: AetherDesign.Spacing.m) {
+            ForEach(children) { episode in
+                NavigationLink(value: episode) {
+                    episodeRow(episode)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func episodeRow(_ episode: MediaItem) -> some View {
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+            CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
+                .frame(width: 150)
+                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text(episode.title)
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(2)
+                if let runtime = episode.runtime {
+                    Text(formatRuntime(runtime))
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+                if let summary = episode.summary {
+                    Text(summary)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(3)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func loadChildrenIfNeeded() async {
+        guard item.kind.isContainer, let source, children.isEmpty else { return }
+        isLoadingChildren = true
+        defer { isLoadingChildren = false }
+        do {
+            children = try await source.children(of: item.id)
+        } catch {
+            children = []
         }
     }
 
@@ -139,6 +246,7 @@ struct DetailView: View {
         case .movie: return "Movie"
         case .episode: return "Episode"
         case .show: return "Series"
+        case .season: return "Season"
         }
     }
 
