@@ -121,7 +121,9 @@ struct PlexSignInView: View {
                         .font(AetherDesign.Typography.cardTitle)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-                    #if os(iOS)
+                    // iOS and visionOS can open Safari directly. tvOS has no
+                    // browser, so it relies on the QR code beside this column.
+                    #if os(iOS) || os(visionOS)
                     Button {
                         openURL(url)
                     } label: {

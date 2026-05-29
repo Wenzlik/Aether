@@ -27,7 +27,11 @@ struct PlayerView: View {
                     .tint(AetherDesign.Palette.textPrimary)
             }
 
-            #if os(iOS)
+            #if os(iOS) || os(visionOS)
+            // iOS and visionOS both get a tap/pinch close button. visionOS has
+            // no Menu-button equivalent, and while its window chrome can close
+            // the whole scene, an in-content close keeps the dismiss path (and
+            // the resume write) identical across platforms.
             VStack {
                 HStack {
                     Button {

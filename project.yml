@@ -7,6 +7,7 @@ options:
   deploymentTarget:
     iOS: "26.0"
     tvOS: "26.0"
+    visionOS: "26.0"
   groupSortPosition: top
   xcodeVersion: "16.0"
 
@@ -85,6 +86,31 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.tvos
         TARGETED_DEVICE_FAMILY: "3"
 
+  Aether-visionOS:
+    type: application
+    platform: visionOS
+    sources:
+      - path: Aether/Sources
+      - path: Aether/Resources
+        buildPhase: resources
+        excludes:
+          - ".gitkeep"
+    dependencies:
+      - package: AetherCore
+        product: AetherCore
+    info:
+      path: Aether/SupportingFiles/Info-visionOS.plist
+      properties:
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.visionos
+        TARGETED_DEVICE_FAMILY: "7"
+
   AetherTests:
     type: bundle.unit-test
     platform: iOS
@@ -116,6 +142,15 @@ schemes:
     build:
       targets:
         Aether-tvOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  Aether-visionOS:
+    build:
+      targets:
+        Aether-visionOS: all
     run:
       config: Debug
     archive:
