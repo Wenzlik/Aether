@@ -32,6 +32,13 @@ struct DetailView: View {
             }
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
+        #if os(iOS) || os(visionOS)
+        // The player overlays this view *inside* the NavigationStack, so the
+        // navigation bar's back button would otherwise stay visible behind /
+        // above the video. Hide it for the duration of playback; the player
+        // owns its own dismiss surface.
+        .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
+        #endif
         .task {
             resume = await resumeStore.point(for: item.id)
             await loadChildrenIfNeeded()
