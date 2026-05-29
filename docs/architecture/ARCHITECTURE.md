@@ -38,12 +38,17 @@ This document describes how the pieces fit together, what lives where, and the r
 │      KeychainStore, MediaCache, ImageCache, ResumeStore      │
 │                                                              │
 │   DesignSystem                                               │
-│      Tokens (color/type/space), components, motion           │
+│      AetherDesign.* tokens, Aether* primitives (Card,        │
+│      SectionHeader, Button, EmptyState, LoadingState,        │
+│      ErrorState, SettingsRow), BackdropImage,                │
+│      CachedAsyncImage                                        │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 The shape on disk mirrors the diagram. If it doesn't, that's a bug.
+
+> See [`../../AGENTS.md`](../../AGENTS.md) → *Design system* for the inventory of `Aether*` primitives and when to extend each.
 
 ---
 
@@ -52,7 +57,7 @@ The shape on disk mirrors the diagram. If it doesn't, that's a bug.
 1. **`Aether/` is thin.** SwiftUI views, navigation, platform-specific glue (`#if os(iOS)` / `#if os(tvOS)`). No networking, no parsing, no playback logic.
 2. **`AetherCore/` is the brain.** Everything else.
 3. **One module per concern.** New folders need a clear, naming-pass justification.
-4. **Cross-platform first.** `AetherCore` must compile for iOS and tvOS.
+4. **Cross-platform first.** `AetherCore` must compile for iOS, tvOS, **and visionOS**. Platform-specific code goes in the app target behind `#if os(...)`.
 5. **No back-edge from `AetherCore` to `Aether/`.** The package never imports the app target.
 
 ---
