@@ -2,12 +2,14 @@
 # Xcode Cloud pre-xcodebuild — runs after dependencies have resolved but
 # before `xcodebuild` itself.
 #
-# Aether's `CFBundleVersion` is `"1"` in `project.yml`, which is fine for
-# local builds but breaks repeated TestFlight uploads (Apple rejects a
-# duplicate `CFBundleShortVersionString` + `CFBundleVersion` pair). Apple's
-# Xcode Cloud sets `CI_BUILD_NUMBER` per-build; we use it here to overwrite
-# the generated Info.plist files so every cloud archive ships a unique
-# build number. Marketing version (`CFBundleShortVersionString`) stays in
+# Aether's Info.plist sets `CFBundleVersion` to `$(CURRENT_PROJECT_VERSION)`,
+# which is `"1"` locally (from `project.yml`). That's fine for local builds
+# but breaks repeated TestFlight uploads — App Store Connect rejects a
+# duplicate `CFBundleShortVersionString` + `CFBundleVersion` pair.
+#
+# Xcode Cloud sets `CI_BUILD_NUMBER` per-build. We rewrite the single Info.plist
+# with PlistBuddy to that number so every cloud archive ships a unique build
+# number. Marketing version (`CFBundleShortVersionString`) stays in
 # `project.yml` and is bumped manually between trains.
 #
 # References:
@@ -17,25 +19,20 @@
 set -eu
 
 if [ -z "${CI_BUILD_NUMBER:-}" ]; then
-  echo "ci_pre_xcodebuild: CI_BUILD_NUMBER is unset; leaving Info.plist files alone (local run?)."
+  echo "ci_pre_xcodebuild: CI_BUILD_NUMBER is unset; leaving Info.plist alone (local run?)."
   exit 0
 fi
 
 PLISTBUDDY="/usr/libexec/PlistBuddy"
 WORKSPACE="${CI_PRIMARY_REPOSITORY_PATH:-${CI_WORKSPACE:-$PWD}}"
+PLIST="$WORKSPACE/Aether/SupportingFiles/Info.plist"
 
-for plist in \
-  "$WORKSPACE/Aether/SupportingFiles/Info.plist" \
-  "$WORKSPACE/Aether/SupportingFiles/Info-tvOS.plist" \
-  "$WORKSPACE/Aether/SupportingFiles/Info-visionOS.plist"; do
-  if [ -f "$plist" ]; then
-    echo "ci_pre_xcodebuild: setting CFBundleVersion=$CI_BUILD_NUMBER in $plist"
-    "$PLISTBUDDY" -c "Set :CFBundleVersion $CI_BUILD_NUMBER" "$plist"
-  else
-    # Don't hard-fail: an Info.plist for a platform we don't archive yet
-    # (e.g. tvOS before its first cloud workflow) is allowed to be missing.
-    echo "ci_pre_xcodebuild: warning — $plist not found (xcodegen didn't produce it?)"
-  fi
-done
+if [ ! -f "$PLIST" ]; then
+  echo "ci_pre_xcodebuild: ERROR — $PLIST not found (did ci_post_clone run xcodegen?)"
+  exit 1
+fi
+
+echo "ci_pre_xcodebuild: setting CFBundleVersion=$CI_BUILD_NUMBER in $PLIST"
+"$PLISTBUDDY" -c "Set :CFBundleVersion $CI_BUILD_NUMBER" "$PLIST"
 
 echo "ci_pre_xcodebuild: done"

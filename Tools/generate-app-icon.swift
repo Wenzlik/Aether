@@ -8,7 +8,7 @@
 //   - iOS:     `Assets.xcassets/AppIcon.appiconset/icon-1024.png` (1024×1024)
 //   - visionOS: `Assets.xcassets/AppIcon.solidimagestack/`
 //              Back / Middle / Front layers (1024×1024 each)
-//   - tvOS:    `Assets.xcassets/App Icon.brandassets/`
+//   - tvOS:    `Assets.xcassets/AppIcon.brandassets/`
 //              App Icon - App Store (1280×768, 3 layers)
 //              App Icon - Home Screen (400×240, 3 layers)
 //              Top Shelf Image (1920×720, single image)
@@ -258,7 +258,7 @@ func renderVisionOS() {
 // MARK: tvOS — Brand Asset
 
 func renderTVOS() {
-    let root = "\(assetCatalog)/App Icon.brandassets"
+    let root = "\(assetCatalog)/AppIcon.brandassets"
 
     // App Icon - App Store: 1280×768, 3 layers
     renderTVOSAppIconStack(
