@@ -4,6 +4,13 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Documentation
+
+- Added the 0.5 distribution plan for internal TestFlight using Xcode Cloud:
+  Apple account prerequisites, internal tester setup, the first cloud workflow,
+  XcodeGen handling in `ci_scripts/ci_post_clone.sh`, build-number decisions,
+  and the first internal smoke-test checklist.
+
 ### UI
 
 - **Settings screen + sign out from Plex — no more app reinstall to disconnect.**

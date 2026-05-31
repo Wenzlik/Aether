@@ -119,6 +119,9 @@ The repository is intentionally checked in **without** `Aether.xcodeproj` — th
 | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Module layout, data flow, actors, caching |
 | [docs/ux/DESIGN_PRINCIPLES.md](docs/ux/DESIGN_PRINCIPLES.md) | Visual language, motion, focus behavior |
 | [docs/next-steps/0.1-foundation.md](docs/next-steps/0.1-foundation.md) | Implementation plan for the current milestone |
+| [docs/next-steps/0.2-media-sources.md](docs/next-steps/0.2-media-sources.md) | Plex/Synology source plan and remaining connector work |
+| [docs/next-steps/0.3-offline.md](docs/next-steps/0.3-offline.md) | Offline downloads, storage, and resume-sync plan |
+| [docs/next-steps/0.5-distribution.md](docs/next-steps/0.5-distribution.md) | Internal TestFlight and Xcode Cloud setup checklist |
 | [AGENTS.md](AGENTS.md) | Conventions for AI coding agents (Claude Code, Codex, Gemini, Copilot, Cursor) |
 
 ---

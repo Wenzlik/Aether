@@ -75,12 +75,14 @@ The polish milestone. This is where Aether earns the "premium" label.
 
 Get it into people's hands without embarrassment.
 
-- TestFlight build pipeline (manual is fine to start; automate later)
+- Xcode Cloud-backed internal TestFlight pipeline
 - Localization scaffolding (`Localizable.xcstrings`) and at least English + Czech
 - Accessibility: VoiceOver labels, Dynamic Type on iOS, sufficient contrast, focus reachability on tvOS
 - App Store preparation: privacy manifest, screenshots, store copy, support URL
 
 **Definition of done:** a TestFlight invite link works on iPhone, iPad, and Apple TV; accessibility audit passes; the App Store listing is reviewable.
+
+Notes: [`docs/next-steps/0.5-distribution.md`](docs/next-steps/0.5-distribution.md).
 
 ---
 
