@@ -106,6 +106,7 @@ public final class PlexSignInViewModel {
         } catch PlexAuthError.timedOut {
             state = .failure(reason: .timedOut)
         } catch {
+            guard !Task.isCancelled else { return }
             state = .failure(reason: .network(message: error.localizedDescription))
         }
     }

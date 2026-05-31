@@ -306,12 +306,16 @@ struct PlexSignInViewModelTests {
             data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
             statusCode: 200, headers: [:]
         ))
-        // Note: we do NOT enqueue more responses — if the poll loop survives
-        // cancellation, it will throw .unexpectedStatus on the next iteration
-        // and the test will catch that as a wrong terminal state.
+        // First poll: still waiting. The view model should stay in
+        // `.awaitingUser` until either a token arrives, the PIN expires, or the
+        // user cancels.
+        await api.enqueue(.init(
+            data: Data(#"{"id":1,"code":"AAAA","authToken":null,"expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
 
         let auth = PlexAuthClient(api: api, configuration: Self.config)
-        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(50), pollTimeout: .seconds(2))
+        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .seconds(5), pollTimeout: .seconds(10))
 
         vm.start()
         try await waitFor({ vm.state }) { state in
