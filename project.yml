@@ -20,15 +20,32 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
     CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+    # Marketing version + build number live in build settings (not Info.plist
+    # literally) so Xcode's General → Identity panel reads them. The Info.plist
+    # references them via $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION).
+    # CURRENT_PROJECT_VERSION is overwritten by ci_pre_xcodebuild.sh in Xcode
+    # Cloud with $CI_BUILD_NUMBER so every distributed archive has a unique
+    # build number.
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
 
 packages:
   AetherCore:
     path: AetherCore
 
 targets:
+  # Single multiplatform target. One bundle ID
+  # (`cz.zmrhal.aether`), one App Store Connect record, one TestFlight invite
+  # that works across every Apple destination. Xcode picks the right asset
+  # catalog variant (AppIcon.appiconset / AppIcon.brandassets /
+  # AppIcon.solidimagestack) per destination at archive time.
   Aether:
     type: application
     platform: iOS
+    supportedDestinations:
+      - iOS
+      - tvOS
+      - visionOS
     sources:
       - path: Aether/Sources
       - path: Aether/Resources
@@ -42,13 +59,16 @@ targets:
       path: Aether/SupportingFiles/Info.plist
       properties:
         CFBundleDisplayName: Aether
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        ITSAppUsesNonExemptEncryption: false
+        # iOS / iPadOS / visionOS read the launch screen + scene manifest;
+        # tvOS ignores them harmlessly.
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio
         UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
+          UIApplicationSupportsMultipleScenes: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -61,57 +81,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether
-        TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
+        # AppIcon is the canonical name; Xcode's asset compiler resolves
+        # AppIcon.appiconset for iOS / iPadOS, AppIcon.brandassets for tvOS,
+        # and AppIcon.solidimagestack for visionOS automatically.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-
-  Aether-tvOS:
-    type: application
-    platform: tvOS
-    sources:
-      - path: Aether/Sources
-      - path: Aether/Resources
-        buildPhase: resources
-        excludes:
-          - ".gitkeep"
-    dependencies:
-      - package: AetherCore
-        product: AetherCore
-    info:
-      path: Aether/SupportingFiles/Info-tvOS.plist
-      properties:
-        CFBundleDisplayName: Aether
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.tvos
-        TARGETED_DEVICE_FAMILY: "3"
-
-  Aether-visionOS:
-    type: application
-    platform: visionOS
-    sources:
-      - path: Aether/Sources
-      - path: Aether/Resources
-        buildPhase: resources
-        excludes:
-          - ".gitkeep"
-    dependencies:
-      - package: AetherCore
-        product: AetherCore
-    info:
-      path: Aether/SupportingFiles/Info-visionOS.plist
-      properties:
-        CFBundleDisplayName: Aether
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
-        UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: true
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.visionos
-        TARGETED_DEVICE_FAMILY: "7"
+        # Surfaces "Aether" in Xcode's Identity → Display Name field. Also
+        # generated into the per-destination Info.plist by Xcode.
+        INFOPLIST_KEY_CFBundleDisplayName: Aether
 
   AetherTests:
     type: bundle.unit-test
@@ -138,23 +115,5 @@ schemes:
       config: Debug
       targets:
         - AetherTests
-    archive:
-      config: Release
-
-  Aether-tvOS:
-    build:
-      targets:
-        Aether-tvOS: all
-    run:
-      config: Debug
-    archive:
-      config: Release
-
-  Aether-visionOS:
-    build:
-      targets:
-        Aether-visionOS: all
-    run:
-      config: Debug
     archive:
       config: Release
