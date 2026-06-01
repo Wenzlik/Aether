@@ -4,6 +4,22 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Library detail view with sort + pagination.** Tapping the "See all"
+  accessory on any library section on Home now pushes a full-grid
+  `LibraryView` for that library. Sort options in the toolbar menu —
+  Title A→Z / Z→A, Year newest / oldest, Recently added, Top rated,
+  Random — with the user's choice persisted per-library via a new
+  `LibraryPreferencesStore`. Items are fetched in pages of 100 (Plex's
+  `X-Plex-Container-Start` / `Size` query items) and the next page loads
+  when an invisible sentinel scrolls into view at the end of the grid.
+  Selecting an item still pushes `DetailView` through the same
+  navigationDestination chain. Mock and any future flat source default to
+  unsorted full fetches; Plex implements the parametric variant via
+  `sort=<field>:<direction>` query items mapped from a new `LibrarySort`
+  enum in `AetherCore/Models`.
+
 ### Distribution
 
 - **Single multiplatform target — one app, every Apple destination.** The

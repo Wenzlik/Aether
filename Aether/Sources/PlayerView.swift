@@ -32,10 +32,8 @@ struct PlayerView: View {
             if viewModel.state.status == .failed {
                 playbackUnavailable
             } else if let player = viewModel.player {
-                SystemVideoPlayer(player: player) {
-                    Task { await dismissPlayer() }
-                }
-                .ignoresSafeArea()
+                SystemVideoPlayer(player: player)
+                    .ignoresSafeArea()
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)

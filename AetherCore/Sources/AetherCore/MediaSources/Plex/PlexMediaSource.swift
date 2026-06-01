@@ -72,8 +72,38 @@ public actor PlexMediaSource: MediaSource {
     }
 
     public func items(in libraryID: Library.ID) async throws -> [MediaItem] {
+        try await items(in: libraryID, sortedBy: .default, limit: nil, offset: nil)
+    }
+
+    /// Sorted + paginated variant. Plex's `/library/sections/{key}/all` accepts:
+    /// - `sort=<field>:<direction>` (see `LibrarySort.plexParameter`)
+    /// - `X-Plex-Container-Start=<offset>`  (zero-based)
+    /// - `X-Plex-Container-Size=<limit>`
+    ///
+    /// All three are query items here; Plex also accepts the `X-Plex-Container-*`
+    /// values as HTTP headers, but using query items keeps the request shape
+    /// uniform and easy to inspect in tests.
+    public func items(
+        in libraryID: Library.ID,
+        sortedBy sort: LibrarySort,
+        limit: Int?,
+        offset: Int?
+    ) async throws -> [MediaItem] {
         let base = try await resolveBaseURL()
-        let request = request(base: base, path: "/library/sections/\(libraryID.rawValue)/all")
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "sort", value: sort.plexParameter)
+        ]
+        if let offset {
+            queryItems.append(URLQueryItem(name: "X-Plex-Container-Start", value: String(offset)))
+        }
+        if let limit {
+            queryItems.append(URLQueryItem(name: "X-Plex-Container-Size", value: String(limit)))
+        }
+        let request = request(
+            base: base,
+            path: "/library/sections/\(libraryID.rawValue)/all",
+            queryItems: queryItems
+        )
         let response = try await api.decode(
             PlexAPI.LibraryItemsResponse.self,
             from: request,
