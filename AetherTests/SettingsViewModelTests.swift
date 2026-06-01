@@ -8,7 +8,7 @@ import Foundation
 struct SettingsViewModelTests {
 
     private func makeSession() -> AppSession {
-        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(UUID().uuidString)")
+        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(UUID().uuidString)", backing: .memory)
         return AppSession(keychain: keychain)
     }
 

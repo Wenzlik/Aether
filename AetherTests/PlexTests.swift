@@ -516,7 +516,7 @@ struct PlexServerStoreTests {
     /// real Keychain from a test bundle works as long as the bundle has its
     /// own service namespace. Each test uses a unique service to stay isolated.
     private func makeStore(suffix: String = UUID().uuidString) -> PlexServerStore {
-        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)")
+        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)", backing: .memory)
         return PlexServerStore(keychain: keychain)
     }
 

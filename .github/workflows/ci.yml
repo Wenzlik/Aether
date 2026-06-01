@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aethercore:
+    name: AetherCore build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -switch "$LATEST"; fi
+          swift --version
+      - name: swift build (AetherCore)
+        working-directory: AetherCore
+        run: swift build
+
+  app-tests:
+    name: App build + AetherTests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -switch "$LATEST"; fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Environment (debug)
+        run: |
+          xcodebuild -showsdks | grep -i ios || true
+          xcrun simctl list devices available | grep -i iphone || true
+
+      - name: Build & test (iOS Simulator)
+        run: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone [0-9][0-9A-Za-z ]*' | head -1 | sed 's/[[:space:]]*$//')
+          DEVICE=${DEVICE:-iPhone 16}
+          echo "Using simulator: $DEVICE"
+          xcodebuild test \
+            -project Aether.xcodeproj \
+            -scheme Aether \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
