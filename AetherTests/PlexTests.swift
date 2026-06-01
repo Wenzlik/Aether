@@ -1018,6 +1018,128 @@ struct PlexMediaSourceLibrariesTests {
         #expect(switchedComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "12")
     }
 
+    @Test("Plex subtitle streams map to selectable tracks and subtitleStreamID")
+    func subtitleTrackMapping() throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+        let dto = PlexAPI.Metadata(
+            ratingKey: "43",
+            type: "movie",
+            title: "Subtitled MKV",
+            summary: nil,
+            year: nil,
+            duration: nil,
+            thumb: nil,
+            art: nil,
+            media: [
+                .init(
+                    container: "mkv",
+                    part: [
+                        .init(
+                            key: "/library/parts/43/1/file.mkv",
+                            stream: [
+                                .init(id: "10", streamType: 1, codec: "h264"),
+                                .init(id: "11", streamType: 2, selected: true, codec: "aac", channels: 6),
+                                .init(
+                                    id: "20",
+                                    streamType: 3,
+                                    selected: false,
+                                    codec: "srt",
+                                    language: "English",
+                                    languageCode: "eng",
+                                    title: "English"
+                                ),
+                                .init(
+                                    id: "21",
+                                    streamType: 3,
+                                    selected: true,
+                                    codec: "srt",
+                                    language: "Czech",
+                                    languageCode: "ces",
+                                    title: "Czech (Forced)"
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let item = source.mapMetadataToMediaItem(dto, base: base)
+        #expect(item.subtitleTracks.map(\.id) == ["20", "21"])
+        #expect(item.selectedSubtitleTrackID == "21")
+        // Forced status inferred from the title.
+        #expect(item.subtitleTracks.last?.isForced == true)
+        #expect(item.subtitleTracks.first?.isForced == false)
+
+        // Switching to the English track writes its id.
+        let english = try #require(item.subtitleTracks.first)
+        let switched = item.selectingSubtitleTrack(english)
+        let switchedURL = try #require(switched.streamURL)
+        let switchedComponents = try #require(URLComponents(url: switchedURL, resolvingAgainstBaseURL: false))
+        #expect(switched.selectedSubtitleTrackID == "20")
+        #expect(switchedComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "20")
+
+        // Turning subtitles off writes subtitleStreamID=0 and clears selection.
+        let off = item.selectingSubtitleTrack(nil)
+        let offURL = try #require(off.streamURL)
+        let offComponents = try #require(URLComponents(url: offURL, resolvingAgainstBaseURL: false))
+        #expect(off.selectedSubtitleTrackID == nil)
+        #expect(offComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "0")
+    }
+
+    @Test("resolvePlayback mints a fresh transcode session and carries streams + offset")
+    func resolvePlaybackTranscodeIsFresh() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe (resolveBaseURL caches after)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            audioStreamID: "11",
+            subtitleStreamID: "20",
+            startTime: .seconds(90)
+        )
+
+        let first = try await source.resolvePlayback(request)
+        let second = try await source.resolvePlayback(request)
+
+        #expect(first.isServerTranscode)
+        #expect(first.baseOffsetSeconds == 90)
+
+        let c1 = try #require(URLComponents(url: first.url, resolvingAgainstBaseURL: false))
+        #expect(c1.queryItems?.first { $0.name == "audioStreamID" }?.value == "11")
+        #expect(c1.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "20")
+        #expect(c1.queryItems?.first { $0.name == "offset" }?.value == "90")
+        #expect(c1.path == "/video/:/transcode/universal/start.m3u8")
+
+        // The whole point of the fix: a brand-new session id each resolve, so a
+        // reaped Plex session can't be replayed into a -1008.
+        let s1 = c1.queryItems?.first { $0.name == "session" }?.value
+        let c2 = try #require(URLComponents(url: second.url, resolvingAgainstBaseURL: false))
+        let s2 = c2.queryItems?.first { $0.name == "session" }?.value
+        #expect(s1 != nil)
+        #expect(s2 != nil)
+        #expect(s1 != s2)
+    }
+
+    @Test("resolvePlayback direct play returns the stable URL untouched")
+    func resolvePlaybackDirectPlay() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let fileURL = URL(string: "https://lan.plex.direct:32400/library/parts/7/1/file.mp4?X-Plex-Token=t")!
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "7"),
+            mode: .directPlay,
+            directPlayURL: fileURL
+        )
+
+        let resolved = try await source.resolvePlayback(request)
+        #expect(resolved.url == fileURL)
+        #expect(resolved.isServerTranscode == false)
+        #expect(resolved.baseOffsetSeconds == 0)
+    }
+
     @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
     func connectionFailover() async throws {
         let api = RecordingAPIClient()

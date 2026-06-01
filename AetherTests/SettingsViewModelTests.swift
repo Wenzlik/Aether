@@ -23,56 +23,58 @@ struct SettingsViewModelTests {
         )
     }
 
-    @Test("plexAccountLabel reflects 'Connected as <name>' when a server is selected")
-    func accountLabelWithServer() {
+    @Test("plexAccountStatus is Connected + server detail when a server is selected")
+    func accountStatusWithServer() {
         let session = makeSession()
         session.isPlexSignedIn = true
         session.plexServer = sampleServer(name: "Living Room")
 
         let viewModel = SettingsViewModel(session: session)
-        #expect(viewModel.plexAccountLabel == "Connected as Living Room")
+        #expect(viewModel.plexAccountStatus == .connected)
         #expect(viewModel.connectedServerName == "Living Room")
+        #expect(viewModel.connectedServerDetail == "Server: Living Room")
     }
 
-    @Test("plexAccountLabel reads 'Signed in' when signed in but no server picked yet")
-    func accountLabelSignedInOnly() {
+    @Test("plexAccountStatus reads 'Signed in' when signed in but no server picked yet")
+    func accountStatusSignedInOnly() {
         let session = makeSession()
         session.isPlexSignedIn = true
         session.plexServer = nil
 
         let viewModel = SettingsViewModel(session: session)
-        #expect(viewModel.plexAccountLabel == "Signed in")
+        #expect(viewModel.plexAccountStatus == .positive("Signed in"))
+        #expect(viewModel.connectedServerDetail == nil)
     }
 
-    @Test("plexAccountLabel reads 'Not connected' when no session at all")
-    func accountLabelSignedOut() {
+    @Test("plexAccountStatus reads 'Not connected' when no session at all")
+    func accountStatusSignedOut() {
         let session = makeSession()
         session.isPlexSignedIn = false
 
         let viewModel = SettingsViewModel(session: session)
-        #expect(viewModel.plexAccountLabel == "Not connected")
+        #expect(viewModel.plexAccountStatus == .notConnected)
         #expect(viewModel.connectedServerName == nil)
     }
 
-    @Test("plexSourceLabel mirrors session.isPlexSignedIn")
-    func sourceLabel() {
+    @Test("plexSourceStatus mirrors session.isPlexSignedIn")
+    func sourceStatus() {
         let session = makeSession()
         let viewModel = SettingsViewModel(session: session)
 
         session.isPlexSignedIn = false
-        #expect(viewModel.plexSourceLabel == "Not connected")
+        #expect(viewModel.plexSourceStatus == .notConnected)
 
         session.isPlexSignedIn = true
-        #expect(viewModel.plexSourceLabel == "Connected")
+        #expect(viewModel.plexSourceStatus == .connected)
     }
 
-    @Test("Coming-soon labels are constant strings")
-    func comingSoonLabels() {
+    @Test("Coming-soon / available statuses are constant")
+    func staticStatuses() {
         let viewModel = SettingsViewModel(session: makeSession())
-        #expect(viewModel.synologySourceLabel == "Coming soon")
-        #expect(viewModel.transcodingLabel == "Coming soon")
-        #expect(viewModel.offlineDownloadsLabel == "Coming soon")
-        #expect(viewModel.directPlayLabel == "Available")
+        #expect(viewModel.synologyStatus == .comingSoon)
+        #expect(viewModel.transcodingStatus == .comingSoon)
+        #expect(viewModel.offlineDownloadsStatus == .comingSoon)
+        #expect(viewModel.directPlayStatus == .available)
     }
 
     @Test("versionString reads CFBundleShortVersionString from Bundle.main and is non-empty")
@@ -85,18 +87,17 @@ struct SettingsViewModelTests {
         #expect(!viewModel.buildString.isEmpty)
     }
 
-    @Test("signOut() routes through AppSession.signOutOfPlex and dismisses the sheet")
-    func signOutDelegatesAndDismisses() async {
+    @Test("signOut() routes through AppSession.signOutOfPlex and resets state")
+    func signOutDelegatesAndResets() async {
         let session = makeSession()
         session.isPlexSignedIn = true
         session.plexServer = sampleServer()
-        session.isSettingsPresented = true
 
         let viewModel = SettingsViewModel(session: session)
         await viewModel.signOut()
 
         #expect(session.isPlexSignedIn == false)
         #expect(session.plexServer == nil)
-        #expect(session.isSettingsPresented == false)
+        #expect(session.source == nil)
     }
 }

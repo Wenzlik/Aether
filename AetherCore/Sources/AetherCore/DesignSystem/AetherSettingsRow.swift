@@ -14,6 +14,7 @@ import SwiftUI
 public struct AetherSettingsRow: View {
     public enum Style: Sendable {
         case value(String?)
+        case status(AetherStatus)
         case action(role: ActionRole)
     }
 
@@ -23,33 +24,52 @@ public struct AetherSettingsRow: View {
     }
 
     public let label: String
+    public let systemImage: String?
     public let style: Style
     public let action: (() -> Void)?
 
     public init(
         label: String,
+        systemImage: String? = nil,
         value: String?,
         action: (() -> Void)? = nil
     ) {
         self.label = label
+        self.systemImage = systemImage
         self.style = .value(value)
         self.action = action
     }
 
     public init(
         label: String,
+        systemImage: String? = nil,
+        status: AetherStatus,
+        action: (() -> Void)? = nil
+    ) {
+        self.label = label
+        self.systemImage = systemImage
+        self.style = .status(status)
+        self.action = action
+    }
+
+    public init(
+        label: String,
+        systemImage: String? = nil,
         actionRole: ActionRole,
         action: @escaping () -> Void
     ) {
         self.label = label
+        self.systemImage = systemImage
         self.style = .action(role: actionRole)
         self.action = action
     }
 
     public var body: some View {
         if let action {
-            Button(action: action) { content }
-                .buttonStyle(.plain)
+            Button(action: action) {
+                content.aetherFocusRow()
+            }
+            .buttonStyle(.plain)
         } else {
             content
         }
@@ -58,6 +78,13 @@ public struct AetherSettingsRow: View {
     @ViewBuilder
     private var content: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .frame(width: 28)
+            }
+
             Text(label)
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(labelColor)
@@ -71,23 +98,28 @@ public struct AetherSettingsRow: View {
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                 }
-                if action != nil {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                }
+            case let .status(status):
+                Text(status.text)
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(status.color)
             case .action:
                 EmptyView()
             }
+
+            if action != nil, case .value = style {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
         }
-        .padding(.vertical, AetherDesign.Spacing.s)
+        .padding(.vertical, AetherDesign.Spacing.m)
         .padding(.horizontal, AetherDesign.Spacing.m)
         .contentShape(Rectangle())
     }
 
     private var labelColor: Color {
         switch style {
-        case .value:
+        case .value, .status:
             return AetherDesign.Palette.textPrimary
         case let .action(role):
             switch role {

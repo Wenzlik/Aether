@@ -94,10 +94,10 @@ Tokens (spacing, radii, motion, palette, typography) live in `DesignSystem/Token
 
 ## Settings + sign out
 
-The Settings surface is reachable from the gear icon in `HomeView`'s header. On every platform it presents as a `.sheet` (full-screen modal on tvOS / visionOS — acceptable here because it's a single-purpose destination with a clear dismiss).
+Settings is a **top-navigation tab** (`RootTabView`), a full-screen destination — not a modal. (It used to be a `.sheet`; the tvOS-26 redesign moved it into the tab bar alongside Home / Library / Search.)
 
-- `SettingsView` is composed entirely from `AetherSettingsSection` + `AetherSettingsRow`. Adding a new section is a copy-paste of an existing one with new content.
-- `SettingsViewModel` is `@Observable @MainActor` and derives its state from `AppSession`. The only behavior it owns is `signOut()`, which delegates to `session.signOutOfPlex()` and then flips `session.isSettingsPresented = false`.
+- `SettingsView` is composed from `AetherSettingsSection` + `AetherSettingsRow`. Rows use the `status:` style for colour-coded state (`AetherStatus` → `Available` green / `Not connected` red / `Coming soon` grey); actionable rows are focusable (tvOS focus lift). Adding a new section is a copy-paste of an existing one.
+- `SettingsViewModel` is `@Observable @MainActor` and derives its state from `AppSession`. It owns `signOut()` (delegates to `session.signOutOfPlex()`) and `connect()` (delegates to `session.presentSignIn()`). There's no sheet to dismiss anymore — `isSettingsPresented` / `presentSettings()` were removed.
 - **Sign Out of Plex is the only destructive action in the app today.** It clears the keychain token, drops the persisted server, resets discovery state, and points `source` back to `nil` (Home renders its welcome state without a mock fallback). Adding another destructive action is a design discussion — open an issue with the `ux` label first.
 
 The version + build strings come from `Bundle.main.infoDictionary["CFBundleShortVersionString"]` and `"CFBundleVersion"`. The source of truth is `project.yml` — bump them there.
@@ -106,9 +106,13 @@ The version + build strings come from `Bundle.main.infoDictionary["CFBundleShort
 
 ## Player chrome behavior
 
-The player wraps `AVPlayerViewController` (`SystemVideoPlayer`). Its native transport bar auto-hides after ~3 s of no interaction; the overlay `xmark` close button on iOS / visionOS mirrors that behavior on the same idle window via a `simultaneousGesture` so the SwiftUI tap doesn't consume AVKit's tap-to-reveal-chrome. `accessibilityReduceMotion` collapses the fade.
+The player wraps `AVPlayerViewController` (`SystemVideoPlayer`) and is deliberately bare: AVKit's native transport owns Play/Pause, Seek, and the Audio/Subtitle media-options picker (HLS renditions on transcode titles), so Aether adds only what the system doesn't. **Primary audio/subtitle selection happens on Detail, before the player opens** — there is no custom in-player track menu anymore.
 
-On tvOS the dismiss surface is a `Done` `contextualAction` inside the native chrome (tvOS-only API) plus `.onExitCommand` for the Menu button. There is no SwiftUI overlay on tvOS — adding one would fight the focus model.
+- **iOS** is the only platform with a SwiftUI overlay: a single `xmark` Back button. It mirrors AVKit's transport bar via a `simultaneousGesture` (so the SwiftUI tap doesn't consume AVKit's tap-to-reveal-chrome) and auto-hides ~2.5 s after the last interaction. `accessibilityReduceMotion` collapses the fade. Nothing is left behind when hidden.
+- **visionOS** dismisses through AVKit's native `Back` contextual action — no SwiftUI overlay.
+- **tvOS** dismisses through the native `Done` contextual action plus `.onExitCommand` (Menu button). No SwiftUI overlay — one would fight the focus model.
+
+Playback failure never dead-ends: `state.status == .failed` shows a **Retry + Close** state with human-readable copy, not a black screen.
 
 When `PlayerView` is overlaid on `DetailView`, the host `NavigationStack`'s back button is hidden via `.toolbar(.hidden, for: .navigationBar)` so it doesn't compete with the transport.
 

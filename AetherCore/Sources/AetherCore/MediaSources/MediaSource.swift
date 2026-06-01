@@ -36,12 +36,32 @@ public protocol MediaSource: Sendable {
     /// Player entry points use this to hydrate details that list endpoints may
     /// omit, like Plex audio streams.
     func item(for id: MediaID) async throws -> MediaItem?
+
+    /// Resolve a **fresh, ready-to-play** URL for a playback request.
+    ///
+    /// Implementations MUST build a new URL on every call — a new transcode
+    /// session, the currently-reachable connection + token, and the requested
+    /// audio / subtitle streams + start offset. They must never hand back or
+    /// string-mutate a previously issued URL. Reusing a stale Plex transcode
+    /// session is exactly what surfaces as `NSURLErrorDomain -1008` on audio
+    /// switch and on resume-after-a-delay. See `PlaybackRequest`.
+    func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback
 }
 
 public extension MediaSource {
     /// Default: no detail endpoint. Callers should fall back to the item they
     /// already have.
     func item(for id: MediaID) async throws -> MediaItem? { nil }
+
+    /// Default: sources without a server transcoder (mock, Synology direct
+    /// play) just play the stable direct-play URL; the player seeks
+    /// client-side. Plex overrides this to mint a fresh transcode session.
+    func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
+        guard let url = request.directPlayURL else {
+            throw PlaybackResolveError.noPlayableStream
+        }
+        return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0)
+    }
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }
@@ -79,4 +99,88 @@ public struct Library: Identifiable, Hashable, Sendable {
             self.rawValue = rawValue
         }
     }
+}
+
+// MARK: - Playback resolution
+
+/// How a title is delivered: a stable file the client seeks itself, or a
+/// server-side transcode whose HLS timeline starts at a baked-in offset.
+public enum PlaybackMode: Sendable, Equatable {
+    case directPlay
+    case transcode
+}
+
+/// A request for a fresh playback URL. Built from a `MediaItem` plus the user's
+/// current choices, then resolved by the *source* layer — the player never
+/// constructs or mutates Plex URLs itself. Carrying the choices (rather than a
+/// pre-built URL) is what lets the resolver mint a brand-new transcode session
+/// each time, which is the fix for stale-session `-1008` failures.
+public struct PlaybackRequest: Sendable, Equatable {
+    public let itemID: MediaID
+    public let mode: PlaybackMode
+    /// The stable direct-play file URL, when `mode == .directPlay`. Transcode
+    /// requests ignore it — the source rebuilds the HLS URL from `itemID`.
+    public let directPlayURL: URL?
+    public let audioStreamID: String?
+    /// `"0"` turns subtitles off (Plex); `nil` leaves the server default.
+    public let subtitleStreamID: String?
+    public let startTime: Duration?
+
+    public init(
+        itemID: MediaID,
+        mode: PlaybackMode,
+        directPlayURL: URL? = nil,
+        audioStreamID: String? = nil,
+        subtitleStreamID: String? = nil,
+        startTime: Duration? = nil
+    ) {
+        self.itemID = itemID
+        self.mode = mode
+        self.directPlayURL = directPlayURL
+        self.audioStreamID = audioStreamID
+        self.subtitleStreamID = subtitleStreamID
+        self.startTime = startTime
+    }
+
+    /// Build a request from an item and a start position, reading the item's
+    /// current audio / subtitle selection. Mode is derived from the item's
+    /// stream kind so the player doesn't have to know about transcoding.
+    public init(item: MediaItem, startTime: Duration?) {
+        let transcode = item.isServerTranscode
+        self.init(
+            itemID: item.id,
+            mode: transcode ? .transcode : .directPlay,
+            directPlayURL: transcode ? nil : item.streamURL,
+            audioStreamID: item.selectedAudioTrackID,
+            subtitleStreamID: item.selectedSubtitleTrackID,
+            startTime: startTime
+        )
+    }
+}
+
+/// The result of resolving a `PlaybackRequest`: a ready-to-play URL plus the
+/// timeline facts the session needs to seek and record resume correctly.
+public struct ResolvedPlayback: Sendable, Equatable {
+    public let url: URL
+    /// `true` when the server emits an HLS timeline that already starts at the
+    /// requested offset (Plex transcode). The player must **not** seek in that
+    /// case — the offset is baked into the stream. Direct play is `false`: the
+    /// player seeks client-side.
+    public let isServerTranscode: Bool
+    /// Content seconds at the stream's `t = 0` — the baked-in transcode offset,
+    /// or `0` for direct play. The session adds this back when recording
+    /// resume points so saved positions stay absolute.
+    public let baseOffsetSeconds: Double
+
+    public init(url: URL, isServerTranscode: Bool, baseOffsetSeconds: Double = 0) {
+        self.url = url
+        self.isServerTranscode = isServerTranscode
+        self.baseOffsetSeconds = baseOffsetSeconds
+    }
+}
+
+public enum PlaybackResolveError: Error, Sendable, Equatable {
+    /// The source couldn't produce a playable URL (no Part / no reachable
+    /// connection / unsupported item).
+    case noPlayableStream
 }

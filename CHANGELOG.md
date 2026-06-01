@@ -4,7 +4,67 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **Playback `-1008` on audio switch and resume-after-a-delay.** Transcode
+  playback URLs were built once (with a `session` id minted at fetch time) and
+  then string-mutated / replayed — so a Plex transcode session reaped
+  server-side after inactivity resurfaced as `NSURLErrorDomain -1008`
+  ("resource unavailable") on resume, and audio switching reused fragile
+  hand-rewritten URLs. Playback URL construction now lives entirely in the
+  source layer behind a `PlaybackRequest` → `MediaSource.resolvePlayback(_:)`
+  resolver: `PlaybackSession` asks for a **fresh** URL (new transcode session,
+  current connection + token, requested audio/subtitle streams, baked-in
+  offset) every time playback context changes — initial play, audio/subtitle
+  switch, and resume. The player no longer owns any Plex URL mutation. Audio
+  switching captures and restores the current position; a resolve failure
+  surfaces the controlled Retry/Close state instead of a black screen. The
+  player's failure message is now calm (no raw host / `NSURLErrorDomain`); the
+  technical detail sits behind a **Details** disclosure.
+
+### Changed
+
+- **tvOS 26 redesign — native top navigation, cinematic Home, calmer player.**
+  A UX/product pass to make Aether feel native on tvOS 26 (and ready for a
+  Vision Pro TestFlight) rather than "an iPad app on Apple TV." No new backend.
+  - **Navigation.** The single surface-switching `HomeView` (tvOS top-capsule /
+    iOS bottom dock) is replaced by a native SwiftUI `TabView` (`RootTabView`)
+    that renders as the tvOS top tab bar and the bottom bar / ornament
+    elsewhere — one structure, no per-platform layouts, no sidebar. Tabs:
+    **Home / Library / Search / Settings**, each its own `NavigationStack`.
+  - **Settings is now a full-screen tab, not a modal sheet.** Rebuilt as grouped
+    **focusable cards** (Account / Sources / Playback / About) with colour-coded
+    status values (`Available` green, `Not connected` red, `Coming soon` grey)
+    via a new `AetherStatus`. `AppSession.isSettingsPresented` /
+    `presentSettings()` removed.
+  - **Home is content-first.** No page chrome — opens straight into Featured,
+    Continue Watching, then a rail per library. Signed-out shows a cinematic
+    **Welcome** hero ("Connect a Plex or Synology source…") instead of a utility
+    dashboard.
+  - **Movie Detail is the decision screen.** Audio and subtitle tracks are now
+    selected **before** playback, always visible, with Source + Quality shown.
+    Resume splits into **Continue Watching** (with `Resume from HH:MM:SS`) and
+    **Play From Beginning**. The configured item (with the chosen tracks baked
+    in) is what launches.
+  - **Player simplified.** The in-player custom audio menu is gone — AVKit's
+    native transport owns Play/Pause, Seek, and the Audio/Subtitle picker; Aether
+    adds only an iOS Back affordance. Chrome auto-hides ~2.5s with nothing left
+    behind. Playback failure now shows a proper **Retry + Close** state instead
+    of a dead-end black screen.
+  - **New reusable design-system primitives:** `AetherStatus`, a tvOS focus-row
+    treatment (`aetherFocusRow`), and `AetherSelectionRow` (the shared audio /
+    subtitle picker row). Settings rows gained focus + status styles.
+
 ### Added
+
+- **Subtitle track model + selection.** `MediaItem` now carries
+  `subtitleTracks` / `selectedSubtitleTrackID` and a `selectingSubtitleTrack(_:)`
+  transform that mirrors audio: it writes Plex's `subtitleStreamID`
+  (`0` = off) and mints a fresh transcode session. Subtitle streams
+  (`streamType == 3`) are parsed from the same Plex response audio comes from —
+  no new endpoint. Direct-play subtitles fall back to AVKit's native picker.
+- **Search tab.** Client-side title search across the source's libraries via
+  `.searchable` — no new backend.
 
 - **Library detail view with sort + pagination.** Tapping the "See all"
   accessory on any library section on Home now pushes a full-grid

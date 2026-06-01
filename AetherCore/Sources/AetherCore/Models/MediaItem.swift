@@ -16,6 +16,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public let streamURL: URL?
     public let audioTracks: [MediaAudioTrack]
     public let selectedAudioTrackID: String?
+    public let subtitleTracks: [MediaSubtitleTrack]
+    /// The selected subtitle stream id. `nil` means subtitles are **off** —
+    /// the user-facing "Off" row in the picker. A non-nil id matches one of
+    /// `subtitleTracks`.
+    public let selectedSubtitleTrackID: String?
 
     public init(
         id: MediaID,
@@ -28,7 +33,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         backdropURL: URL? = nil,
         streamURL: URL? = nil,
         audioTracks: [MediaAudioTrack] = [],
-        selectedAudioTrackID: String? = nil
+        selectedAudioTrackID: String? = nil,
+        subtitleTracks: [MediaSubtitleTrack] = [],
+        selectedSubtitleTrackID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -41,11 +48,45 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.streamURL = streamURL
         self.audioTracks = audioTracks
         self.selectedAudioTrackID = selectedAudioTrackID ?? audioTracks.first(where: \.isSelected)?.id
+        self.subtitleTracks = subtitleTracks
+        self.selectedSubtitleTrackID = selectedSubtitleTrackID ?? subtitleTracks.first(where: \.isSelected)?.id
     }
 
     public var selectedAudioTrack: MediaAudioTrack? {
         guard let selectedAudioTrackID else { return nil }
         return audioTracks.first { $0.id == selectedAudioTrackID }
+    }
+
+    public var selectedSubtitleTrack: MediaSubtitleTrack? {
+        guard let selectedSubtitleTrackID else { return nil }
+        return subtitleTracks.first { $0.id == selectedSubtitleTrackID }
+    }
+
+    /// Copy preserving every field except those explicitly overridden. Keeps
+    /// the track-selection / stream-URL transforms below from drifting as new
+    /// fields are added.
+    private func copy(
+        streamURL: URL?? = nil,
+        audioTracks: [MediaAudioTrack]? = nil,
+        selectedAudioTrackID: String?? = nil,
+        subtitleTracks: [MediaSubtitleTrack]? = nil,
+        selectedSubtitleTrackID: String?? = nil
+    ) -> MediaItem {
+        MediaItem(
+            id: id,
+            title: title,
+            kind: kind,
+            year: year,
+            runtime: runtime,
+            summary: summary,
+            posterURL: posterURL,
+            backdropURL: backdropURL,
+            streamURL: streamURL ?? self.streamURL,
+            audioTracks: audioTracks ?? self.audioTracks,
+            selectedAudioTrackID: selectedAudioTrackID ?? self.selectedAudioTrackID,
+            subtitleTracks: subtitleTracks ?? self.subtitleTracks,
+            selectedSubtitleTrackID: selectedSubtitleTrackID ?? self.selectedSubtitleTrackID
+        )
     }
 
     /// Whether playback start/seek is handled by the server (Plex universal
@@ -73,15 +114,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
     public func selectingAudioTrack(_ track: MediaAudioTrack) -> MediaItem {
         let nextTracks = audioTracks.map { $0.withSelection($0.id == track.id) }
-        return MediaItem(
-            id: id,
-            title: title,
-            kind: kind,
-            year: year,
-            runtime: runtime,
-            summary: summary,
-            posterURL: posterURL,
-            backdropURL: backdropURL,
+        return copy(
             // Set the new track *and* mint a fresh Plex transcode session.
             // Plex keys a running transcode by its `session` id: re-requesting
             // `start.m3u8` with the same session but a different `audioStreamID`
@@ -96,21 +129,29 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         )
     }
 
+    /// Return a copy with `track` selected as the burned-in / muxed subtitle,
+    /// or subtitles turned **off** when `track` is `nil`.
+    ///
+    /// Mirrors `selectingAudioTrack`: for a Plex transcode it writes
+    /// `subtitleStreamID` (`0` disables subtitles, per Plex) and mints a fresh
+    /// transcode session so the server honours the change instead of resuming
+    /// the running stream. Direct-play is a no-op on the URL — AVKit's own
+    /// subtitle picker handles those, and `selectedSubtitleTrackID` still
+    /// records the user's intent for the Detail UI.
+    public func selectingSubtitleTrack(_ track: MediaSubtitleTrack?) -> MediaItem {
+        let nextTracks = subtitleTracks.map { $0.withSelection($0.id == track?.id) }
+        return copy(
+            streamURL: streamURL?
+                .replacingQueryItem(name: "subtitleStreamID", value: track?.id ?? "0")
+                .regeneratingPlexTranscodeSession(),
+            subtitleTracks: nextTracks,
+            selectedSubtitleTrackID: .some(track?.id)
+        )
+    }
+
     /// Copy with a different stream URL, preserving every other field.
     private func replacingStreamURL(_ url: URL?) -> MediaItem {
-        MediaItem(
-            id: id,
-            title: title,
-            kind: kind,
-            year: year,
-            runtime: runtime,
-            summary: summary,
-            posterURL: posterURL,
-            backdropURL: backdropURL,
-            streamURL: url,
-            audioTracks: audioTracks,
-            selectedAudioTrackID: selectedAudioTrackID
-        )
+        copy(streamURL: .some(url))
     }
 
     public enum Kind: String, Sendable, Hashable {
@@ -177,6 +218,60 @@ public struct MediaAudioTrack: Identifiable, Hashable, Sendable {
             languageCode: languageCode,
             codec: codec,
             channels: channels,
+            isSelected: selected
+        )
+    }
+}
+
+public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let languageCode: String?
+    public let codec: String?
+    /// Forced subtitles (signs/foreign dialogue only). Surfaced as a "Forced"
+    /// suffix so the user can tell a forced track from a full one.
+    public let isForced: Bool
+    public let isSelected: Bool
+
+    public init(
+        id: String,
+        title: String,
+        languageCode: String? = nil,
+        codec: String? = nil,
+        isForced: Bool = false,
+        isSelected: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.languageCode = languageCode
+        self.codec = codec
+        self.isForced = isForced
+        self.isSelected = isSelected
+    }
+
+    public var displayTitle: String {
+        var label: String
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanedTitle.isEmpty {
+            label = cleanedTitle
+        } else if let languageCode, !languageCode.isEmpty {
+            label = languageCode.uppercased()
+        } else {
+            label = "Subtitle"
+        }
+        if isForced, !label.localizedCaseInsensitiveContains("forced") {
+            label += " (Forced)"
+        }
+        return label
+    }
+
+    public func withSelection(_ selected: Bool) -> MediaSubtitleTrack {
+        MediaSubtitleTrack(
+            id: id,
+            title: title,
+            languageCode: languageCode,
+            codec: codec,
+            isForced: isForced,
             isSelected: selected
         )
     }

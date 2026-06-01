@@ -40,13 +40,15 @@ This document describes how the pieces fit together, what lives where, and the r
 │   DesignSystem                                               │
 │      AetherDesign.* tokens, Aether* primitives (Card,        │
 │      SectionHeader, Button, EmptyState, LoadingState,        │
-│      ErrorState, SettingsRow), BackdropImage,                │
-│      CachedAsyncImage                                        │
+│      ErrorState, SettingsRow, SelectionRow, Status,          │
+│      aetherFocusRow), BackdropImage, CachedAsyncImage        │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 The shape on disk mirrors the diagram. If it doesn't, that's a bug.
+
+**App-target navigation.** `RootTabView` is the root: a native SwiftUI `TabView` (Home / Library / Search / Settings) that renders as the tvOS top tab bar, the iOS bottom bar, and the visionOS ornament — one structure, no sidebar, no per-platform navigation code. Each content tab owns a `NavigationStack`; the `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` destinations so every stack pushes the same screens. Settings is a full-screen tab (not a sheet); only sign-in remains modal.
 
 > See [`../../AGENTS.md`](../../AGENTS.md) → *Design system* for the inventory of `Aether*` primitives and when to extend each.
 
@@ -150,6 +152,8 @@ PlaybackSession (actor)
 - `AVPlayer` itself is `@MainActor` in modern AVKit. The actor owns the *reference* but performs `@MainActor` calls explicitly when needed.
 - Resume points are written every ~5s while playing, and on pause/stop. They are written **before** the network call to update the server (offline-first).
 - AirPlay/PiP are configured by the view; the session is agnostic.
+- **Track selection is a pre-playback Detail concern.** `MediaItem` carries `audioTracks` + `subtitleTracks` (parsed from the Plex `Stream` list — `streamType == 2` / `3`) and the `selectingAudioTrack` / `selectingSubtitleTrack` transforms that record the chosen `audioStreamID` / `subtitleStreamID` (`0` = subtitles off). `DetailView` hydrates the item, lets the user choose, and hands the **configured** item to the player — so playback plays exactly what Detail showed. Tracks populate only for the transcode path; direct-play uses AVKit's native picker for in-player switching.
+- **Playback URLs are resolved in the source layer, never mutated in the player.** `PlaybackSession` builds a `PlaybackRequest` (item id, mode, selected streams, start offset) and calls `MediaSource.resolvePlayback(_:) -> ResolvedPlayback` for a **fresh** URL every time playback context changes — initial play, audio/subtitle switch, resume. Plex mints a brand-new transcode `session` per resolve against the currently-reachable connection; nothing reuses or string-rewrites a prior URL. This is what prevents a reaped Plex transcode session from surfacing as `NSURLErrorDomain -1008`. Non-transcoding sources fall back to the stable direct-play URL via the protocol's default implementation.
 
 ---
 

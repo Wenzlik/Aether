@@ -11,12 +11,21 @@ struct DetailView: View {
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
-    /// point ("Resume"); `0` forces playback from the start ("Play from start").
+    /// point ("Continue Watching"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
+    /// The item with full metadata (audio + subtitle streams) once hydrated,
+    /// carrying the user's audio/subtitle choices. Playback decisions happen
+    /// here on Detail, before the player opens — the configured item is what
+    /// launches. `nil` until the detail endpoint resolves; `current` falls back
+    /// to the list `item` so direct-play titles still play.
+    @State private var configuredItem: MediaItem?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The item reflecting hydration + the user's track selections.
+    private var current: MediaItem { configuredItem ?? item }
 
     var body: some View {
         ZStack {
@@ -26,6 +35,7 @@ struct DetailView: View {
             if isPlayerPresented {
                 PlayerView(
                     item: playbackItem ?? item,
+                    source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
                     onDismiss: dismissPlayer
@@ -59,6 +69,7 @@ struct DetailView: View {
         #endif
         .task {
             resume = await resumeStore.point(for: item.id)
+            await hydrateForPlayback()
             await loadChildrenIfNeeded()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
@@ -93,6 +104,12 @@ struct DetailView: View {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                        .frame(maxWidth: 720, alignment: .leading)
+                }
+
+                if !item.kind.isContainer, current.streamURL != nil {
+                    playbackOptions
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -221,11 +238,11 @@ struct DetailView: View {
         .foregroundStyle(AetherDesign.Palette.textSecondary)
     }
 
-    // MARK: - Action row (Play, or unavailable empty state)
+    // MARK: - Action row (Continue Watching / Play, or unavailable state)
 
     @ViewBuilder
     private var actionRow: some View {
-        if item.streamURL != nil {
+        if current.streamURL != nil {
             if resume != nil {
                 resumeButtons
             } else {
@@ -239,7 +256,7 @@ struct DetailView: View {
     /// Single "Play" button — shown when there's no saved resume point.
     private var playButton: some View {
         AetherButton(
-            isPreparingPlayback ? "Preparing..." : "Play",
+            isPreparingPlayback ? "Preparing…" : "Play",
             systemImage: "play.fill",
             role: .primary
         ) {
@@ -248,29 +265,35 @@ struct DetailView: View {
         .disabled(isPreparingPlayback)
     }
 
-    /// Two buttons when a resume point exists: continue where the user left
-    /// off (primary), or start over from the beginning (secondary).
-    @ViewBuilder
+    /// Resume exists: Continue Watching (primary, with a resume-from caption)
+    /// plus Play From Beginning (secondary).
     private var resumeButtons: some View {
-        AetherButton(
-            isPreparingPlayback
-                ? "Preparing..."
-                : "Resume \(formatPosition(resume?.position ?? .zero))",
-            systemImage: "play.fill",
-            role: .primary
-        ) {
-            Task { await presentPlayer(fromStart: false) }
-        }
-        .disabled(isPreparingPlayback)
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                AetherButton(
+                    isPreparingPlayback ? "Preparing…" : "Continue Watching",
+                    systemImage: "play.fill",
+                    role: .primary
+                ) {
+                    Task { await presentPlayer(fromStart: false) }
+                }
+                .disabled(isPreparingPlayback)
 
-        AetherButton(
-            "Play from start",
-            systemImage: "backward.end.fill",
-            role: .secondary
-        ) {
-            Task { await presentPlayer(fromStart: true) }
+                Text("Resume from \(formatPosition(resume?.position ?? .zero))")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .padding(.leading, AetherDesign.Spacing.xs)
+            }
+
+            AetherButton(
+                "Play From Beginning",
+                systemImage: "backward.end.fill",
+                role: .secondary
+            ) {
+                Task { await presentPlayer(fromStart: true) }
+            }
+            .disabled(isPreparingPlayback)
         }
-        .disabled(isPreparingPlayback)
     }
 
     private var unavailableState: some View {
@@ -282,6 +305,68 @@ struct DetailView: View {
         .padding(.top, -AetherDesign.Spacing.xxl)
     }
 
+    // MARK: - Playback options (audio / subtitles / source / quality)
+
+    /// Everything the user can see and change *before* pressing Play. The
+    /// selected audio + subtitle tracks are always visible, so it's clear what
+    /// will play. Source + quality are informational (display only). Track
+    /// lists appear only for transcode titles, which is where Aether can act on
+    /// the selection — direct-play falls back to AVKit's own picker in-player.
+    @ViewBuilder
+    private var playbackOptions: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            if !current.audioTracks.isEmpty {
+                AetherSettingsSection("Audio") {
+                    ForEach(current.audioTracks) { track in
+                        AetherSelectionRow(
+                            title: track.displayTitle,
+                            isSelected: track.id == current.selectedAudioTrackID
+                        ) {
+                            configuredItem = current.selectingAudioTrack(track)
+                        }
+                    }
+                }
+            }
+
+            if !current.subtitleTracks.isEmpty {
+                AetherSettingsSection("Subtitles") {
+                    AetherSelectionRow(
+                        title: "Off",
+                        isSelected: current.selectedSubtitleTrackID == nil
+                    ) {
+                        configuredItem = current.selectingSubtitleTrack(nil)
+                    }
+                    ForEach(current.subtitleTracks) { track in
+                        AetherSelectionRow(
+                            title: track.displayTitle,
+                            isSelected: track.id == current.selectedSubtitleTrackID
+                        ) {
+                            configuredItem = current.selectingSubtitleTrack(track)
+                        }
+                    }
+                }
+            }
+
+            AetherSettingsSection("Playback") {
+                if let source {
+                    AetherSettingsRow(label: "Source", value: source.displayName)
+                }
+                AetherSettingsRow(label: "Quality", status: qualityStatus)
+            }
+        }
+    }
+
+    private var qualityStatus: AetherStatus {
+        current.isServerTranscode ? .muted("Transcoding") : .positive("Direct Play")
+    }
+
+    private func hydrateForPlayback() async {
+        guard !item.kind.isContainer, let source else { return }
+        if let hydrated = try? await source.item(for: item.id) {
+            configuredItem = hydrated
+        }
+    }
+
     // MARK: - Player dismiss
 
     private func presentPlayer(fromStart: Bool) async {
@@ -289,11 +374,14 @@ struct DetailView: View {
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
 
-        if let source, let hydrated = try? await source.item(for: item.id) {
-            playbackItem = hydrated
-        } else {
-            playbackItem = item
+        // `current` is already hydrated (on appear) and carries the user's
+        // audio + subtitle choices, so the player launches exactly what the
+        // Detail screen showed. Fall back to a fresh hydrate if it somehow
+        // hasn't resolved yet.
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+            configuredItem = hydrated
         }
+        playbackItem = current
 
         // `0` forces a restart; `nil` lets the session resume from the
         // persisted point.
@@ -333,9 +421,13 @@ struct DetailView: View {
 
     private func formatPosition(_ duration: Duration) -> String {
         let total = Int(durationSeconds(duration))
-        let minutes = total / 60
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
         let seconds = total % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func durationSeconds(_ duration: Duration) -> Double {

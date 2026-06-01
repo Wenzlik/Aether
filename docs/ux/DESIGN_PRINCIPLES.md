@@ -130,24 +130,22 @@ Concrete colors are in `DesignSystem/Tokens`. Never hard-code a color in a view.
 
 ## Navigation pattern
 
-Home is a three-surface shell, not a single screen. The same `HomeView` switches between **Home** (the library), **Files** (sources), and **Search** with a `HomeSurface` enum. Each surface keeps its own content; the chrome around them stays put.
+Aether uses **native top navigation** (`RootTabView` → SwiftUI `TabView`), not a custom shell. The system renders it as the **tvOS 26 top tab bar**, the **bottom bar on iOS / iPadOS**, and the **ornament on visionOS** — one structure, no per-platform layout code, no sidebar. This is the Apple-native pattern (Apple TV / Music / Photos on tvOS).
 
-How the user switches surfaces is platform-specific:
+Four tabs, in order: **Home / Library / Search / Settings**.
 
-- **iOS / iPadOS / visionOS** — a **glass bottom dock**: three larger icons in an ultra-thin-material capsule (Home / Files / Settings), with **Search** broken out as a separate circle to its right. The dock floats above content via `.safeAreaInset(edge: .bottom)`, casts a soft shadow, and never overlaps interactive content (it pads its own bottom inset). One-handed reachable on iPhone, finger-friendly on iPad, comfortable for Vision Pro pinch.
-- **tvOS** — a **top segmented capsule** in the header chrome, plus a compact **gear icon** alongside the source and refresh icons. tvOS does not get a bottom dock — focus engine treats top chrome as expected; a dock would fight the system focus model.
+- **Home** — cinematic, content-first. No page chrome (the tab bar already says "Home"): it opens straight into artwork — Featured, Continue Watching, then a rail per library. Signed-out, it shows the **Welcome** hero, not a dashboard.
+- **Library** — pick a library (focusable tiles), drill into the full `LibraryView` grid.
+- **Search** — `.searchable` client-side title search across the source's libraries.
+- **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet).
 
-Common chrome (every platform):
-
-- **Compact source/refresh capsule** in the header — the account badge (source icon, lit accent when a server is selected) sits next to a refresh button (only shown when signed in). Both in a single material capsule with a 1pt `separator` stroke.
-- **Header subtitle** updates per surface: *Home* surfaces the server name or sign-in status; *Files* says *"Sources, servers, and local media"*; *Search* says *"Find titles across your library."*
+Each content tab (Home / Library / Search) owns its own `NavigationStack`; the shared `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` pushes once so the three stacks stay identical.
 
 Rules that follow from this:
 
-- **The gear icon** lives in the dock (iOS / visionOS) or in the top chrome (tvOS) — never in both, never elsewhere.
-- **Settings always opens as a sheet**, regardless of which surface the user is on. (See *Overlays*.)
-- **Adding a fourth surface** is a deliberate design discussion — three is the budget. Pick the right surface to retire first.
-- **`SourceTile`** in the Files surface is the canonical shape for any "source" entry (Plex / Synology / Offline). Tile-style with a glyph, title, and one subtitle line — never a list row.
+- **No custom navigation chrome.** No bottom dock, no top capsule, no header account/gear icons — the system tab bar and the Settings tab own all of it. Account status surfaces inside Settings.
+- **Focus is native.** Pressing up from the top of content reaches the tab bar via the system focus engine — no `.defaultFocus` hacks, no pinned headers fighting scroll.
+- **Adding a fifth tab** is a deliberate design discussion — four is the budget.
 
 ---
 
@@ -161,9 +159,16 @@ Every reusable view primitive in `AetherCore/DesignSystem/` shares the `Aether*`
 - **`AetherEmptyState`** — designed hero glyph + title + body + optional CTA
 - **`AetherLoadingState`** — skeleton rails (`.rails(count:)`) or inline pulse
 - **`AetherErrorState`** — same shape as empty state, with a required retry
-- **`AetherSettingsRow`** + **`AetherSettingsSection`** — settings list primitives
+- **`AetherSettingsRow`** + **`AetherSettingsSection`** — settings list primitives; rows take a `value:`, an `actionRole:`, or a colour-coded `status:`
+- **`AetherStatus`** — the colour-coded status value (`Available` green / `Not connected` red / `Coming soon` grey) shown on the trailing edge of settings + source rows
+- **`AetherSelectionRow`** — focusable single-choice row (leading checkmark) shared by the Detail audio + subtitle pickers
+- **`aetherFocusRow()`** — the standard tvOS focus lift (elevated fill + small scale + soft shadow) for list-style rows; native focus only, no borders
 
-If a view needs an "ad-hoc" empty / loading / error surface, it's almost certainly missing one of these. Extend the primitive before reaching for a one-off.
+If a view needs an "ad-hoc" empty / loading / error / selection surface, it's almost certainly missing one of these. Extend the primitive before reaching for a one-off.
+
+### Track selection
+
+Audio and subtitle selection live on **Detail**, before playback — the user should know exactly what will play before pressing Play. Both lists use `AetherSelectionRow` so they can't drift apart. Subtitles always include an **Off** row. The player itself carries no custom track menu; in-player switching is AVKit's native picker.
 
 ---
 
