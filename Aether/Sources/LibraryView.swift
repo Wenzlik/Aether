@@ -24,6 +24,16 @@ struct LibraryView: View {
     @State private var loadError: String?
     @State private var hasMore = true
     @State private var didInitialLoad = false
+    /// Items in *this* library that have a resume point in `ResumeStore`,
+    /// surfaced as a horizontal rail above the grid. Refreshed every time a
+    /// page lands; the set grows as the user scrolls deeper.
+    @State private var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
+    /// tvOS sort picker presentation. iOS / iPadOS / visionOS use the
+    /// toolbar Menu — `.primaryAction` placement isn't honoured on tvOS, and
+    /// `Menu` doesn't render its options in a usable way there either, so
+    /// tvOS gets a focusable inline button that flips this and presents a
+    /// sheet of options.
+    @State private var isSortSheetPresented = false
 
     /// Items per fetch. Big enough that most libraries finish in 1–2 pages,
     /// small enough that a slow connection still feels responsive.
@@ -40,7 +50,15 @@ struct LibraryView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
         #endif
+        #if !os(tvOS)
+        // iOS / iPadOS / visionOS: native toolbar Menu pattern. tvOS
+        // doesn't honour `.primaryAction` placement and won't render the
+        // Menu's options usefully, so it uses the inline trigger inside
+        // `content` instead (see `tvOSSortTrigger`).
         .toolbar { sortToolbarItem }
+        #else
+        .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
+        #endif
         .task {
             guard !didInitialLoad else { return }
             didInitialLoad = true
@@ -68,8 +86,135 @@ struct LibraryView: View {
                 message: "\(library.title) doesn't have any items Aether can show yet."
             )
         } else {
-            grid
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                #if os(tvOS)
+                tvOSSortTrigger
+                #endif
+                if !continueWatching.isEmpty {
+                    continueWatchingSection
+                }
+                grid
+            }
         }
+    }
+
+    // MARK: - tvOS sort trigger + sheet
+
+    #if os(tvOS)
+    /// Focusable button at the top of the library content that opens the
+    /// sort picker as a sheet. Lives here because tvOS doesn't honour the
+    /// toolbar `Menu` pattern the way iOS does.
+    private var tvOSSortTrigger: some View {
+        Button {
+            isSortSheetPresented = true
+        } label: {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Image(systemName: sort.systemImage)
+                Text("Sort: \(sort.displayName)")
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
+            .font(AetherDesign.Typography.cardTitle)
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sort library")
+        .accessibilityValue(sort.displayName)
+    }
+
+    private var tvOSSortSheet: some View {
+        NavigationStack {
+            List(LibrarySort.allCases, id: \.self) { option in
+                Button {
+                    selectSort(option)
+                    isSortSheetPresented = false
+                } label: {
+                    HStack {
+                        Label(option.displayName, systemImage: option.systemImage)
+                        Spacer()
+                        if option == sort {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(AetherDesign.Palette.accent)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("Sort by")
+        }
+    }
+    #endif
+
+    /// Apply a new sort if different, persist preference, reload first page.
+    /// Centralised so the iOS Menu and the tvOS sheet share the same code path.
+    private func selectSort(_ option: LibrarySort) {
+        guard option != sort else { return }
+        sort = option
+        Task {
+            await libraryPreferences.setSort(option, for: library.id)
+            await loadFirstPage()
+        }
+    }
+
+    // MARK: - Continue Watching
+
+    /// Horizontal rail above the grid, mirrors `HomeView.continueWatchingSection`
+    /// but scoped to *this* library's currently-loaded items. Hidden when
+    /// `continueWatching` is empty — `content` checks before calling.
+    private var continueWatchingSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(
+                title: "Continue Watching",
+                subtitle: "Pick up where you left off"
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(continueWatching) { entry in
+                        NavigationLink(value: entry.item) {
+                            AetherCard.episode(
+                                title: entry.item.title,
+                                thumbURL: entry.item.backdropURL ?? entry.item.posterURL,
+                                progress: entry.progress
+                            )
+                            .frame(width: continueCardWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            #if os(tvOS)
+            .focusSection()
+            #endif
+        }
+    }
+
+    private var continueCardWidth: CGFloat {
+        #if os(tvOS)
+        return 480
+        #else
+        return 296
+        #endif
+    }
+
+    /// Walk the currently-loaded `items`, ask `ResumeStore` for each, build a
+    /// list of `ContinueWatchingEntry` sorted by most recently watched first.
+    /// Cheap: it's a dictionary lookup per item against an in-memory store.
+    private func refreshContinueWatching() async {
+        var entries: [HomeFeed.ContinueWatchingEntry] = []
+        for item in items {
+            if let point = await resumeStore.point(for: item.id) {
+                entries.append(.init(item: item, resume: point))
+            }
+        }
+        continueWatching = entries.sorted { $0.resume.updatedAt > $1.resume.updatedAt }
     }
 
     private var grid: some View {
@@ -113,13 +258,7 @@ struct LibraryView: View {
             Menu {
                 ForEach(LibrarySort.allCases, id: \.self) { option in
                     Button {
-                        if option != sort {
-                            sort = option
-                            Task {
-                                await libraryPreferences.setSort(option, for: library.id)
-                                await loadFirstPage()
-                            }
-                        }
+                        selectSort(option)
                     } label: {
                         if option == sort {
                             Label(option.displayName, systemImage: "checkmark")
@@ -176,6 +315,7 @@ struct LibraryView: View {
             if page.count < Self.pageSize {
                 hasMore = false
             }
+            await refreshContinueWatching()
         } catch {
             loadError = error.localizedDescription
             hasMore = false
