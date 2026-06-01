@@ -1088,6 +1088,58 @@ struct PlexMediaSourceLibrariesTests {
         #expect(offComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "0")
     }
 
+    @Test("resolvePlayback mints a fresh transcode session and carries streams + offset")
+    func resolvePlaybackTranscodeIsFresh() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe (resolveBaseURL caches after)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            audioStreamID: "11",
+            subtitleStreamID: "20",
+            startTime: .seconds(90)
+        )
+
+        let first = try await source.resolvePlayback(request)
+        let second = try await source.resolvePlayback(request)
+
+        #expect(first.isServerTranscode)
+        #expect(first.baseOffsetSeconds == 90)
+
+        let c1 = try #require(URLComponents(url: first.url, resolvingAgainstBaseURL: false))
+        #expect(c1.queryItems?.first { $0.name == "audioStreamID" }?.value == "11")
+        #expect(c1.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "20")
+        #expect(c1.queryItems?.first { $0.name == "offset" }?.value == "90")
+        #expect(c1.path == "/video/:/transcode/universal/start.m3u8")
+
+        // The whole point of the fix: a brand-new session id each resolve, so a
+        // reaped Plex session can't be replayed into a -1008.
+        let s1 = c1.queryItems?.first { $0.name == "session" }?.value
+        let c2 = try #require(URLComponents(url: second.url, resolvingAgainstBaseURL: false))
+        let s2 = c2.queryItems?.first { $0.name == "session" }?.value
+        #expect(s1 != nil)
+        #expect(s2 != nil)
+        #expect(s1 != s2)
+    }
+
+    @Test("resolvePlayback direct play returns the stable URL untouched")
+    func resolvePlaybackDirectPlay() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let fileURL = URL(string: "https://lan.plex.direct:32400/library/parts/7/1/file.mp4?X-Plex-Token=t")!
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "7"),
+            mode: .directPlay,
+            directPlayURL: fileURL
+        )
+
+        let resolved = try await source.resolvePlayback(request)
+        #expect(resolved.url == fileURL)
+        #expect(resolved.isServerTranscode == false)
+        #expect(resolved.baseOffsetSeconds == 0)
+    }
+
     @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
     func connectionFailover() async throws {
         let api = RecordingAPIClient()

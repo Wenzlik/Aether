@@ -27,10 +27,12 @@ public final class PlayerStateViewModel {
 
     /// Open an item and start playback. Idempotent for the same item.
     ///
-    /// `startAt` is forwarded to the session: `nil` resumes from the persisted
-    /// point, an explicit value (e.g. `0`) starts there regardless.
-    public func open(_ item: MediaItem, startAt: Double? = nil) async {
-        await session.prepare(item: item, startAt: startAt)
+    /// `source` resolves a fresh playback URL (Plex mints a new transcode
+    /// session); pass the source the item came from. `startAt` is forwarded to
+    /// the session: `nil` resumes from the persisted point, an explicit value
+    /// (e.g. `0`) starts there regardless.
+    public func open(_ item: MediaItem, source: (any MediaSource)? = nil, startAt: Double? = nil) async {
+        await session.prepare(item: item, source: source, startAt: startAt)
         await refresh()
         startRefreshing()
         await session.play()
@@ -54,6 +56,11 @@ public final class PlayerStateViewModel {
 
     public func selectAudioTrack(_ track: MediaAudioTrack) async {
         await session.selectAudioTrack(track)
+        await refresh()
+    }
+
+    public func selectSubtitleTrack(_ track: MediaSubtitleTrack?) async {
+        await session.selectSubtitleTrack(track)
         await refresh()
     }
 

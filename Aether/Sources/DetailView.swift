@@ -35,6 +35,7 @@ struct DetailView: View {
             if isPlayerPresented {
                 PlayerView(
                     item: playbackItem ?? item,
+                    source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
                     onDismiss: dismissPlayer

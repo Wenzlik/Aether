@@ -144,6 +144,49 @@ public actor PlexMediaSource: MediaSource {
         return response.mediaContainer.metadata?.first.map { mapMetadataToMediaItem($0, base: base) }
     }
 
+    /// Build a fresh playback URL for the request.
+    ///
+    /// This is the single place Plex playback URLs are constructed for the
+    /// player — `PlaybackSession` hands us a `PlaybackRequest` and gets back a
+    /// brand-new URL every time (new transcode session, current connection +
+    /// token, requested audio / subtitle streams, baked-in offset). Nothing
+    /// reuses or string-mutates a prior URL, so a reaped transcode session
+    /// can't resurface as `-1008` on audio switch / resume.
+    public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
+        switch request.mode {
+        case .directPlay:
+            // Direct-play files are stable (path + token, no session); the
+            // player seeks client-side, so there's nothing to rebuild.
+            guard let url = request.directPlayURL else {
+                throw PlaybackResolveError.noPlayableStream
+            }
+            return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0)
+
+        case .transcode:
+            let base = try await resolveBaseURL()
+            let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
+            guard let url = transcodeURL(
+                base: base,
+                ratingKey: request.itemID.rawValue,
+                audioStreamID: request.audioStreamID,
+                subtitleStreamID: request.subtitleStreamID,
+                offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
+            ) else {
+                throw PlaybackResolveError.noPlayableStream
+            }
+            return ResolvedPlayback(
+                url: url,
+                isServerTranscode: true,
+                baseOffsetSeconds: offsetSeconds
+            )
+        }
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
     // MARK: - Connection resolution + failover
 
     /// Return a reachable connection's base URL, probing `/identity` in ranked
@@ -255,12 +298,18 @@ public actor PlexMediaSource: MediaSource {
     nonisolated func transcodeURL(
         base: URL,
         ratingKey: String,
-        audioStreamID: String? = nil
+        audioStreamID: String? = nil,
+        subtitleStreamID: String? = nil,
+        offsetSeconds: Double? = nil
     ) -> URL? {
         var components = URLComponents(
             url: base.appendingPathComponent("/video/:/transcode/universal/start.m3u8"),
             resolvingAgainstBaseURL: false
         )
+        // A brand-new session id every call. Plex keys a running transcode by
+        // its session; reusing one that the server has already reaped (after
+        // pause/idle) returns segments that 404 → NSURLError -1008. A fresh id
+        // forces a new transcode the server can actually serve.
         let session = UUID().uuidString
         var queryItems = [
             URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
@@ -289,6 +338,16 @@ public actor PlexMediaSource: MediaSource {
         ]
         if let audioStreamID {
             queryItems.append(URLQueryItem(name: "audioStreamID", value: audioStreamID))
+        }
+        if let subtitleStreamID {
+            // `subtitleStreamID=0` disables subtitles (Plex convention).
+            queryItems.append(URLQueryItem(name: "subtitleStreamID", value: subtitleStreamID))
+        }
+        if let offsetSeconds, offsetSeconds > 0 {
+            // Start the transcode at the resume point so the server actually
+            // produces segments there — seeking a from-zero transcode asks for
+            // segments it never made → -1008.
+            queryItems.append(URLQueryItem(name: "offset", value: String(Int(offsetSeconds.rounded()))))
         }
         components?.queryItems = queryItems
         return components?.url

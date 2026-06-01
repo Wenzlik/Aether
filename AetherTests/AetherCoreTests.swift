@@ -131,6 +131,132 @@ struct PlaybackSessionTests {
     }
 }
 
+/// Records the `PlaybackRequest`s a session sends and returns canned, distinct
+/// `ResolvedPlayback`s — so tests can assert the session resolves a *fresh* URL
+/// per call instead of replaying a stale one.
+private actor SpyPlaybackSource: MediaSource {
+    let id: MediaSourceID = .mock
+    let displayName = "Spy"
+    private(set) var requests: [PlaybackRequest] = []
+    private var callCount = 0
+    private let shouldFail: Bool
+
+    init(shouldFail: Bool = false) { self.shouldFail = shouldFail }
+
+    func libraries() async throws -> [Library] { [] }
+    func items(in library: Library.ID) async throws -> [MediaItem] { [] }
+
+    func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
+        requests.append(request)
+        if shouldFail { throw PlaybackResolveError.noPlayableStream }
+        callCount += 1
+        let offset = request.startTime.map { Double($0.components.seconds) } ?? 0
+        return ResolvedPlayback(
+            url: URL(string: "https://resolved.example/\(callCount).m3u8")!,
+            isServerTranscode: request.mode == .transcode,
+            baseOffsetSeconds: request.mode == .transcode ? offset : 0
+        )
+    }
+}
+
+@Suite("AetherCore — Playback URL lifecycle")
+struct PlaybackURLLifecycleTests {
+
+    private static func transcodeItem(
+        id: String = "42",
+        audioID: String? = "11",
+        subtitleID: String? = nil
+    ) -> MediaItem {
+        let url = URL(string: "https://lan.example/video/:/transcode/universal/start.m3u8?session=old")!
+        return MediaItem(
+            id: .init(source: .mock, rawValue: id),
+            title: "T",
+            kind: .movie,
+            streamURL: url,
+            audioTracks: [
+                MediaAudioTrack(id: "11", title: "English", isSelected: audioID == "11"),
+                MediaAudioTrack(id: "12", title: "Czech", isSelected: audioID == "12")
+            ],
+            selectedAudioTrackID: audioID,
+            subtitleTracks: subtitleID.map { [MediaSubtitleTrack(id: $0, title: "Subs", isSelected: true)] } ?? [],
+            selectedSubtitleTrackID: subtitleID
+        )
+    }
+
+    @Test("PlaybackRequest(item:) carries mode + selected streams for a transcode item")
+    func requestFromTranscodeItem() {
+        let item = Self.transcodeItem(audioID: "11", subtitleID: "20")
+        let request = PlaybackRequest(item: item, startTime: .seconds(30))
+        #expect(request.mode == .transcode)
+        #expect(request.audioStreamID == "11")
+        #expect(request.subtitleStreamID == "20")
+        #expect(request.directPlayURL == nil)
+        #expect(request.startTime == .seconds(30))
+    }
+
+    @Test("PlaybackRequest(item:) carries the stable direct-play URL for a direct item")
+    func requestFromDirectItem() {
+        let url = URL(string: "https://lan.example/library/parts/7/1/file.mp4")!
+        let item = MediaItem(id: .init(source: .mock, rawValue: "7"), title: "D", kind: .movie, streamURL: url)
+        let request = PlaybackRequest(item: item, startTime: nil)
+        #expect(request.mode == .directPlay)
+        #expect(request.directPlayURL == url)
+    }
+
+    @Test("prepare(source:) resolves a fresh URL via the source with the selected audio + resume offset")
+    func prepareResolvesViaSource() async {
+        let spy = SpyPlaybackSource()
+        let item = Self.transcodeItem(audioID: "11")
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: item, source: spy, startAt: 120)
+
+        let requests = await spy.requests
+        #expect(requests.count == 1)
+        #expect(requests.first?.itemID == item.id)
+        #expect(requests.first?.mode == .transcode)
+        #expect(requests.first?.audioStreamID == "11")
+        #expect(requests.first?.startTime == .seconds(120))
+
+        let state = await session.state
+        #expect(state.status == .loading)
+    }
+
+    @Test("selectAudioTrack resolves again with the new track, preserving position")
+    func selectAudioTrackResolvesFreshAndKeepsPosition() async {
+        let spy = SpyPlaybackSource()
+        let item = Self.transcodeItem(audioID: "11")
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        // Start at 120s → transcode base offset is 120 (the stream's t=0).
+        await session.prepare(item: item, source: spy, startAt: 120)
+        await session.selectAudioTrack(MediaAudioTrack(id: "12", title: "Czech"))
+
+        let requests = await spy.requests
+        #expect(requests.count == 2)                       // a second, fresh resolve
+        #expect(requests.last?.audioStreamID == "12")      // with the new track
+        #expect(requests.last?.startTime == .seconds(120)) // position preserved
+
+        let state = await session.state
+        #expect(state.item?.selectedAudioTrackID == "12")
+    }
+
+    @Test("a resolve failure surfaces a controlled .failed state, never a black screen")
+    func resolveFailureIsControlled() async {
+        let spy = SpyPlaybackSource(shouldFail: true)
+        let item = Self.transcodeItem()
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: item, source: spy, startAt: 0)
+
+        let state = await session.state
+        #expect(state.status == .failed)
+        #expect(state.item?.id == item.id)
+        #expect(state.error != nil)
+        #expect(await session.currentAVPlayer() == nil)
+    }
+}
+
 @Suite("AetherCore — MockFixture")
 struct MockFixtureTests {
 
