@@ -17,7 +17,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             content
-                .background(AetherDesign.Palette.background.ignoresSafeArea())
+                .background(AetherDesign.Gradients.background.ignoresSafeArea())
                 .searchable(text: $query, prompt: "Search your library")
                 .mediaNavigationDestinations(
                     source: source,

@@ -109,12 +109,15 @@ The player is where Aether spends the most polish budget.
 
 ## Color
 
-- **Black backgrounds**, especially on OLED. No off-black.
-- **One accent**, used sparingly. A soft, slightly desaturated tone (current draft: a warm steel). The accent appears on focus rings, progress, key CTAs — nowhere else.
-- **Type uses grayscale**, with high contrast for primary text and ~60–70% white for secondary.
-- **Status colors** (error red, success green) are used only when status is the message. Never decorative.
+Aether's identity is **personal cinema**: a violet brand over near-black surfaces. Calm and atmospheric, never neon — and explicitly *not* Plex orange / Netflix red.
 
-Concrete colors are in `DesignSystem/Tokens`. Never hard-code a color in a view.
+- **Near-black backgrounds** (`#09090B`), OLED-friendly, with a faint violet wash at the top of primary screens (`AetherDesign.Gradients.background`). Surfaces are zinc (`#18181B` / elevated `#27272A`).
+- **Aether Violet** `#8B5CF6` is the primary accent — focus, selection, primary action. **Aether Indigo** `#6366F1` and **Aether Aurora** `#A855F7` are its gradient partners (`Gradients.aurora` on the hero CTA + progress). Accent appears on focus glow, progress, selected tracks, key CTAs — nowhere decorative.
+- **Type uses grayscale** — primary `#FAFAFA`, secondary `#A1A1AA`, tertiary `#71717A`.
+- **Status colors** — success `#22C55E`, warning `#F59E0B`, error `#EF4444` — used only when status *is* the message (the colour-coded settings/source values), never decorative.
+- **Focus** uses scale + depth + brightness + a soft violet glow. **Never thick white borders.**
+
+Concrete colors, gradients, and materials are in `DesignSystem/Tokens` (`AetherDesign.Palette` / `.Gradients` / `.Materials`, authored from hex via `Color(hex:)`). Never hard-code a color in a view.
 
 ---
 
@@ -287,14 +290,22 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 
 ### Color
 
-| Token | Description |
-|-------|-------------|
-| `Palette.background` | `Color.black` — real black, especially on OLED |
-| `Palette.surface` | `Color(white: 0.08)` — for card skeletons, opaque chrome |
-| `Palette.textPrimary` | `Color.white` |
-| `Palette.textSecondary` | `Color.white.opacity(0.65)` — metadata rows |
-| `Palette.textTertiary` | `Color.white.opacity(0.40)` — captions, hints |
-| `Palette.accent` | `Color(red: 0.78, green: 0.78, blue: 0.86)` — focus rings, progress, key CTAs only |
+| Token | Value | Description |
+|-------|-------|-------------|
+| `Palette.accent` | `#8B5CF6` | **Aether Violet** — focus glow, selection, primary action |
+| `Palette.accentIndigo` | `#6366F1` | secondary accent / gradient partner |
+| `Palette.accentAurora` | `#A855F7` | hero accent (brightest brand tone) |
+| `Palette.background` | `#09090B` | near-black base (OLED) |
+| `Palette.surface` | `#18181B` | cards, chrome |
+| `Palette.surfaceElevated` | `#27272A` | focused rows, raised surfaces |
+| `Palette.textPrimary` | `#FAFAFA` | primary text |
+| `Palette.textSecondary` | `#A1A1AA` | metadata rows |
+| `Palette.textTertiary` | `#71717A` | captions, hints |
+| `Palette.success` | `#22C55E` | "Available" / "Connected" status |
+| `Palette.warning` | `#F59E0B` | warnings |
+| `Palette.error` | `#EF4444` | "Not connected" status, destructive |
+
+Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
 
 ### Typography
 

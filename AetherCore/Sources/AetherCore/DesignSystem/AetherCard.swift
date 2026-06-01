@@ -37,8 +37,14 @@ public struct AetherCard: View {
             artwork
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 .overlay(alignment: .bottom) { progressBar }
-                .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
-                        radius: isFocused ? 18 : 0,
+                // Violet brand glow when focused — a soft bloom, not a hard
+                // white border.
+                .overlay {
+                    RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous)
+                        .strokeBorder(AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0.0), lineWidth: 2)
+                }
+                .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.55 : 0.0),
+                        radius: isFocused ? 24 : 0,
                         y: isFocused ? 12 : 0)
                 .scaleEffect(isFocused ? 1.06 : 1.0)
                 .animation(AetherDesign.Motion.focus, value: isFocused)
@@ -71,7 +77,7 @@ public struct AetherCard: View {
                     Rectangle()
                         .fill(.black.opacity(0.45))
                     Rectangle()
-                        .fill(AetherDesign.Palette.accent)
+                        .fill(AetherDesign.Gradients.progress)
                         .frame(width: geo.size.width * max(0, min(progress, 1)))
                 }
             }
