@@ -152,12 +152,13 @@ struct PlayerView: View {
     }
 
     /// Surface the underlying reason so we can tell, in TestFlight on a real
-    /// device, whether the item lacks a stream URL, has an unexpected kind, or
-    /// the URL host hints at a transcoder / direct-play / relay issue. Should
-    /// be tightened to a one-liner copy once playback is reliable on every
-    /// platform; until then, *visibility is worth a slightly noisy string*.
+    /// device, *why* playback failed: missing stream URL, AVPlayer network /
+    /// codec / TLS failure (with domain + code), or something stranger.
+    /// Intentionally noisy until playback is reliable on every platform —
+    /// tighten to a single sentence once visionOS is stable.
     private var failureDiagnostic: String {
-        guard let item = viewModel.state.item else {
+        let state = viewModel.state
+        guard let item = state.item else {
             return "No item — the player opened without a title attached."
         }
         var parts: [String] = []
@@ -166,7 +167,10 @@ struct PlayerView: View {
             parts.append("URL host: \(url.host ?? "?")")
             parts.append("scheme: \(url.scheme ?? "?")")
         } else {
-            parts.append("Stream URL is missing — Plex didn't return a playable Part for this title.")
+            parts.append("Stream URL is missing.")
+        }
+        if let error = state.error {
+            parts.append(error)
         }
         return parts.joined(separator: " · ")
     }

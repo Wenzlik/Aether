@@ -14,17 +14,23 @@ public struct PlaybackState: Sendable, Equatable {
     public var item: MediaItem?
     public var position: Duration
     public var duration: Duration?
+    /// When `status == .failed`, a short user-readable hint describing why.
+    /// Filled either by `prepare()` (no stream URL) or by `markFailed(...)`
+    /// after the view-model observes `AVPlayerItem.status == .failed`.
+    public var error: String?
 
     public init(
         status: Status = .idle,
         item: MediaItem? = nil,
         position: Duration = .zero,
-        duration: Duration? = nil
+        duration: Duration? = nil,
+        error: String? = nil
     ) {
         self.status = status
         self.item = item
         self.position = position
         self.duration = duration
+        self.error = error
     }
 }
 
@@ -66,7 +72,11 @@ public actor PlaybackSession {
         await teardownPlayer()
 
         guard let url = item.streamURL else {
-            state = PlaybackState(status: .failed, item: item)
+            state = PlaybackState(
+                status: .failed,
+                item: item,
+                error: "Stream URL is missing — Plex didn't return a playable Part."
+            )
             return
         }
 
@@ -118,6 +128,23 @@ public actor PlaybackSession {
         await writeResumeNow()
         await teardownPlayer()
         state = PlaybackState()
+    }
+
+    /// Called by the view model when it observes that the underlying
+    /// `AVPlayerItem` has flipped to `.failed`. Without this, an AVPlayer
+    /// network/codec/TLS failure would leave the session sitting at
+    /// `.loading` or `.playing` forever — and the UI would show a spinner or
+    /// a black screen with no indication of what went wrong.
+    public func markFailed(message: String) async {
+        resumeTask?.cancel()
+        resumeTask = nil
+        state = PlaybackState(
+            status: .failed,
+            item: state.item,
+            position: state.position,
+            duration: state.duration,
+            error: message
+        )
     }
 
     // MARK: - Player vending
