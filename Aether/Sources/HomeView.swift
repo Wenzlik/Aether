@@ -30,6 +30,37 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
+            #if os(tvOS)
+            // tvOS: keep the header outside the ScrollView so the top-tab
+            // capsule never scrolls offscreen. `.defaultFocus` alone wasn't
+            // enough — the focus engine still landed on a card buried in the
+            // featured rail on cold launch, scrolled the page to make it
+            // visible, and the chrome went out of view. Pinning the header
+            // above the scroll content prevents that scroll from hiding it.
+            VStack(spacing: 0) {
+                header
+                    .padding(.vertical, AetherDesign.Spacing.l)
+                scrollableContent
+            }
+            .background(AetherDesign.Palette.background.ignoresSafeArea())
+            .navigationDestination(for: MediaItem.self) { item in
+                DetailView(
+                    item: item,
+                    source: source,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession
+                )
+            }
+            // Belt-and-suspenders for the focus engine: explicitly send
+            // focus to the Home top tab on first appear. `.defaultFocus` is
+            // declarative and can lose the race against initial layout; this
+            // imperative assignment is the safety net.
+            .task {
+                if focusedTopTab == nil {
+                    focusedTopTab = .home
+                }
+            }
+            #else
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                     header
@@ -48,12 +79,28 @@ struct HomeView: View {
                     playbackSession: playbackSession
                 )
             }
+            #endif
         }
         // Re-run load() whenever the underlying source changes (nil → Plex
         // after AppSession.start() finishes discovery, or Plex → nil on
         // sign-out). Without the id:, .task fires once on first appear.
         .task(id: source?.id) { await load() }
     }
+
+    /// The scrollable body — used by the tvOS branch where the header lives
+    /// outside the ScrollView. iOS / iPadOS / visionOS still render the
+    /// header inside the same scrollable LazyVStack above (it scrolls away
+    /// with content, which is the standard mobile pattern).
+    #if os(tvOS)
+    private var scrollableContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                selectedContent
+            }
+            .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+    #endif
 
     // MARK: - Header
 
