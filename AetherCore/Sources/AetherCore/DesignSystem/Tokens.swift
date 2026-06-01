@@ -40,6 +40,8 @@ public enum AetherDesign {
     public enum Palette {
         public static let background = Color.black
         public static let surface = Color(white: 0.08)
+        public static let surfaceElevated = Color(white: 0.16)
+        public static let separator = Color.white.opacity(0.10)
         public static let textPrimary = Color.white
         public static let textSecondary = Color.white.opacity(0.65)
         public static let textTertiary = Color.white.opacity(0.40)

@@ -17,45 +17,20 @@ struct HomeView: View {
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
     @State private var isLoading = false
+    @State private var selectedSurface: HomeSurface = .home
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                     header
-
-                    if let loadError {
-                        errorState(loadError)
-                    } else if isLoading && feed == .empty {
-                        loadingState
-                    } else if feedIsEmpty {
-                        emptyLibraryState
-                    } else {
-                        if !feed.featured.isEmpty {
-                            featuredSection
-                        }
-
-                        if !feed.continueWatching.isEmpty {
-                            continueWatchingSection
-                        }
-
-                        ForEach(feed.libraries) { librarySection in
-                            // Both movie and show libraries surface posters at
-                            // the top level (a show's top-level artwork is its
-                            // poster, not an episode still). Episode aspect
-                            // (16:9) is for the future show → seasons →
-                            // episodes drill-down.
-                            section(
-                                title: librarySection.library.title,
-                                items: librarySection.items,
-                                aspect: .poster
-                            )
-                        }
-                    }
+                    selectedContent
                 }
                 .padding(.vertical, AetherDesign.Spacing.l)
+                .padding(.bottom, bottomContentInset)
             }
             .background(AetherDesign.Palette.background.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) { bottomDock }
             .navigationDestination(for: MediaItem.self) { item in
                 DetailView(
                     item: item,
@@ -76,22 +51,61 @@ struct HomeView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text("Aether")
+                Text(selectedSurface.title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("Personal media, beautifully played.")
+                Text(headerSubtitle)
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
 
             Spacer(minLength: AetherDesign.Spacing.m)
 
-            HStack(spacing: AetherDesign.Spacing.s) {
-                // Always-visible account / source button so the sign-in flow is
-                // reachable even when the library has plenty of content (which
-                // hides the empty state CTA).
+            topChrome
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    private var headerSubtitle: String {
+        switch selectedSurface {
+        case .home:
+            if let plexServerName { return "Aether on \(plexServerName)" }
+            if isDiscoveryInFlight { return "Finding your Plex servers..." }
+            if isPlexSignedIn { return "Ready to connect your library." }
+            return "Personal media, beautifully played."
+        case .files:
+            return "Sources, servers, and local media."
+        case .search:
+            return "Find titles across your library."
+        }
+    }
+
+    private var topChrome: some View {
+        HStack(spacing: AetherDesign.Spacing.s) {
+            #if os(tvOS)
+            HStack(spacing: AetherDesign.Spacing.xs) {
+                TopTabButton(surface: .home, isSelected: selectedSurface == .home) {
+                    selectedSurface = .home
+                }
+                TopTabButton(surface: .files, isSelected: selectedSurface == .files) {
+                    selectedSurface = .files
+                }
+                TopTabButton(surface: .search, isSelected: selectedSurface == .search) {
+                    selectedSurface = .search
+                }
+            }
+            .padding(AetherDesign.Spacing.xxs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
+            }
+            #endif
+
+            HStack(spacing: AetherDesign.Spacing.xxs) {
+                // Always-visible source button so sign-in remains reachable
+                // even when Home is full of content.
                 Button(action: onAddSource) {
-                    AccountBadge(
+                    HeaderIcon(
                         glyph: accountGlyph,
                         isActive: plexServerName != nil
                     )
@@ -99,14 +113,28 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(accountAccessibilityLabel)
 
+                if isPlexSignedIn {
+                    Button(action: onRetryDiscovery) {
+                        HeaderIcon(glyph: "arrow.clockwise", isActive: false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Refresh sources")
+                }
+
+                #if os(tvOS)
                 Button(action: onOpenSettings) {
-                    AccountBadge(glyph: "gearshape", isActive: false)
+                    HeaderIcon(glyph: "gearshape", isActive: false)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Settings")
+                #endif
+            }
+            .padding(AetherDesign.Spacing.xxs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
             }
         }
-        .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     private var accountGlyph: String {
@@ -119,6 +147,132 @@ struct HomeView: View {
         if let name = plexServerName { return "Connected to \(name). Account details." }
         if isPlexSignedIn            { return "Signed in to Plex. Account details." }
         return "Add a source"
+    }
+
+    // MARK: - Surfaces
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        switch selectedSurface {
+        case .home:
+            homeContent
+        case .files:
+            filesContent
+        case .search:
+            searchContent
+        }
+    }
+
+    @ViewBuilder
+    private var homeContent: some View {
+        if let loadError {
+            errorState(loadError)
+        } else if isLoading && feed == .empty {
+            loadingState
+        } else if feedIsEmpty {
+            emptyLibraryState
+        } else {
+            if !feed.featured.isEmpty {
+                featuredSection
+            }
+
+            if !feed.continueWatching.isEmpty {
+                continueWatchingSection
+            }
+
+            ForEach(feed.libraries) { librarySection in
+                // Both movie and show libraries surface posters at the top
+                // level. Episode aspect (16:9) is for the show -> seasons ->
+                // episodes drill-down.
+                section(
+                    title: librarySection.library.title,
+                    items: librarySection.items,
+                    aspect: .poster
+                )
+            }
+        }
+    }
+
+    private var filesContent: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(
+                title: "Sources",
+                subtitle: "Your connected media locations"
+            )
+
+            LazyVGrid(columns: sourceColumns, spacing: AetherDesign.Spacing.m) {
+                SourceTile(
+                    title: "Plex",
+                    subtitle: plexSourceSubtitle,
+                    glyph: "play.rectangle",
+                    isActive: plexServerName != nil,
+                    action: onAddSource
+                )
+
+                SourceTile(
+                    title: "Synology",
+                    subtitle: "Coming soon",
+                    glyph: "server.rack",
+                    isActive: false,
+                    action: nil
+                )
+
+                SourceTile(
+                    title: "Offline",
+                    subtitle: "Coming soon",
+                    glyph: "arrow.down.circle",
+                    isActive: false,
+                    action: nil
+                )
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+        }
+    }
+
+    private var searchContent: some View {
+        AetherEmptyState(
+            glyph: "magnifyingglass",
+            title: "Search",
+            message: "Search will become useful once local indexing lands."
+        )
+    }
+
+    private var plexSourceSubtitle: String {
+        if let plexServerName { return plexServerName }
+        if isDiscoveryInFlight { return "Finding servers" }
+        if isPlexSignedIn { return "Signed in" }
+        return "Not connected"
+    }
+
+    private var sourceColumns: [GridItem] {
+        #if os(tvOS)
+        [GridItem(.adaptive(minimum: 320, maximum: 420), spacing: AetherDesign.Spacing.l)]
+        #else
+        [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: AetherDesign.Spacing.m)]
+        #endif
+    }
+
+    private var bottomContentInset: CGFloat {
+        #if os(tvOS)
+        0
+        #else
+        104
+        #endif
+    }
+
+    @ViewBuilder
+    private var bottomDock: some View {
+        #if os(tvOS)
+        EmptyView()
+        #else
+        HomeBottomDock(
+            selectedSurface: selectedSurface,
+            onSelect: { selectedSurface = $0 },
+            onOpenSettings: onOpenSettings
+        )
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.bottom, AetherDesign.Spacing.s)
+        #endif
     }
 
     // MARK: - Section (generic horizontal rail)
@@ -365,12 +519,22 @@ struct HomeView: View {
     }
 }
 
-/// Account / source button glyph used in the Home header.
-///
-/// Pulled out so it can react to the tvOS focus environment without complicating
-/// the parent layout. On iOS `\.isFocused` is always false, so the focused
-/// branch collapses to the base styling.
-private struct AccountBadge: View {
+private enum HomeSurface {
+    case home
+    case files
+    case search
+
+    var title: String {
+        switch self {
+        case .home: return "Home"
+        case .files: return "Files"
+        case .search: return "Search"
+        }
+    }
+}
+
+/// Header icon used in the compact source/refresh chrome.
+private struct HeaderIcon: View {
     let glyph: String
     let isActive: Bool
 
@@ -381,16 +545,174 @@ private struct AccountBadge: View {
             #if os(tvOS)
             .font(.system(size: 36, weight: .regular))
             #else
-            .font(.system(size: 28, weight: .regular))
+            .font(.system(size: 22, weight: .regular))
             #endif
             .foregroundStyle(isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
-            .padding(AetherDesign.Spacing.s)
-            .background(.ultraThinMaterial, in: Circle())
+            .frame(width: 48, height: 48)
             .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
                     radius: isFocused ? 14 : 0,
                     y: isFocused ? 8 : 0)
             .scaleEffect(isFocused ? 1.10 : 1.0)
             .animation(AetherDesign.Motion.focus, value: isFocused)
+    }
+}
+
+private struct TopTabButton: View {
+    let surface: HomeSurface
+    let isSelected: Bool
+    let action: () -> Void
+
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        Button(action: action) {
+            Text(surface.title)
+                .font(AetherDesign.Typography.cardTitle)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.s)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? AetherDesign.Palette.accent.opacity(isFocused ? 0.45 : 0.22) : AetherDesign.Palette.surface.opacity(isFocused ? 1.0 : 0.0))
+                )
+                .foregroundStyle(isSelected ? AetherDesign.Palette.textPrimary : AetherDesign.Palette.textSecondary)
+                .scaleEffect(isFocused ? 1.05 : 1.0)
+                .animation(AetherDesign.Motion.focus, value: isFocused)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct HomeBottomDock: View {
+    let selectedSurface: HomeSurface
+    let onSelect: (HomeSurface) -> Void
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        HStack(spacing: AetherDesign.Spacing.s) {
+            HStack(spacing: AetherDesign.Spacing.xxs) {
+                dockButton(surface: .home, glyph: "play")
+                dockButton(surface: .files, glyph: "folder")
+                Button(action: onOpenSettings) {
+                    dockIcon(glyph: "gearshape", isSelected: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
+            }
+            .padding(AetherDesign.Spacing.xxs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
+
+            Button {
+                onSelect(.search)
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(selectedSurface == .search ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
+                    .frame(width: 62, height: 62)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay {
+                        Circle().stroke(AetherDesign.Palette.separator, lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Search")
+        }
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func dockButton(surface: HomeSurface, glyph: String) -> some View {
+        Button {
+            onSelect(surface)
+        } label: {
+            dockIcon(glyph: glyph, isSelected: selectedSurface == surface)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(surface.title)
+    }
+
+    private func dockIcon(glyph: String, isSelected: Bool) -> some View {
+        Image(systemName: glyph)
+            .font(.system(size: 26, weight: .medium))
+            .foregroundStyle(isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(AetherDesign.Palette.surfaceElevated.opacity(0.92))
+                }
+            }
+            .contentShape(Capsule())
+    }
+}
+
+private struct SourceTile: View {
+    let title: String
+    let subtitle: String
+    let glyph: String
+    let isActive: Bool
+    let action: (() -> Void)?
+
+    var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { content }
+                    .buttonStyle(.plain)
+            } else {
+                content
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            ZStack {
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .fill(tileFill)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                            .stroke(AetherDesign.Palette.separator, lineWidth: 1)
+                    }
+
+                Image(systemName: glyph)
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.textTertiary)
+            }
+            .aspectRatio(1, contentMode: .fit)
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text(title)
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var tileFill: some ShapeStyle {
+        if isActive {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        AetherDesign.Palette.accent.opacity(0.28),
+                        AetherDesign.Palette.surfaceElevated
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        return AnyShapeStyle(AetherDesign.Palette.surface)
     }
 }
 

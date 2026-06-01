@@ -22,6 +22,8 @@ public struct CachedAsyncImage: View {
     public let url: URL?
     public let aspectRatio: CGFloat?
 
+    @State private var isAnimating = false
+
     public init(url: URL?, aspectRatio: CGFloat? = nil) {
         self.url = url
         self.aspectRatio = aspectRatio
@@ -61,7 +63,29 @@ public struct CachedAsyncImage: View {
     }
 
     private var skeleton: some View {
-        AetherDesign.Palette.surface
+        ZStack {
+            LinearGradient(
+                colors: [
+                    AetherDesign.Palette.surfaceElevated,
+                    AetherDesign.Palette.surface
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Image(systemName: "play.rectangle")
+                .font(.system(size: 34, weight: .regular))
+                .foregroundStyle(AetherDesign.Palette.accent.opacity(0.65))
+        }
+        .opacity(isAnimating ? 0.35 : 0.75)
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 1.2)
+                .repeatForever(autoreverses: true)
+            ) {
+                isAnimating = true
+            }
+        }
     }
 }
 
