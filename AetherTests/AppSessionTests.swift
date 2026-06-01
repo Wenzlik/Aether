@@ -10,7 +10,7 @@ struct AppSessionSignOutTests {
     /// Each test runs against its own keychain service so the user's real
     /// `cz.zmrhal.aether` items aren't touched.
     private func makeSession(suffix: String = UUID().uuidString) -> AppSession {
-        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)")
+        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)", backing: .memory)
         return AppSession(keychain: keychain)
     }
 
@@ -70,7 +70,7 @@ struct AppSessionSignOutTests {
     @Test("signOutOfPlex clears the persisted Plex token from the keychain")
     func clearsKeychainToken() async throws {
         let suffix = UUID().uuidString
-        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)")
+        let keychain = KeychainStore(service: "cz.zmrhal.aether.tests.\(suffix)", backing: .memory)
         try await keychain.setString("the-token", for: AppSession.plexTokenKey)
         try #require(await keychain.string(for: AppSession.plexTokenKey) == "the-token")
 
