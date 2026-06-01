@@ -1448,6 +1448,41 @@ struct PlexResolveWarmUpTests {
         #expect(c.queryItems?.contains { $0.name == "offset" } == false)
     }
 
+    @Test("Selecting an audio track sends directStreamAudio=0 so the choice is honoured")
+    func audioSelectionTranscodesChosenTrack() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode, audioStreamID: "3"
+        )
+        let resolved = try await source.resolvePlayback(request)
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.first { $0.name == "audioStreamID" }?.value == "3")
+        // The fix: a chosen track transcodes only that stream, instead of
+        // keeping all renditions (which made AVPlayer ignore the selection).
+        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "0")
+    }
+
+    @Test("With no audio choice, all tracks are kept (directStreamAudio=1)")
+    func noAudioChoiceKeepsAllTracks() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode
+        )
+        let resolved = try await source.resolvePlayback(request)
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "1")
+    }
+
     @Test("Warm-up failure maps to .notReady with token-free diagnostics")
     func warmUpFailureMapsToNotReady() async {
         let api = RecordingAPIClient()
