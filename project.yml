@@ -78,6 +78,13 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # tvOS Top Shelf: point at the Brand Asset's imageset names. Without
+        # this key the App Store Connect upload fails with code 90513
+        # (Missing Info.plist Key TVTopShelfImage.TVTopShelfPrimaryImageWide).
+        # Harmless on iOS / iPadOS / visionOS — those platforms ignore it.
+        TVTopShelfImage:
+          TVTopShelfPrimaryImage: Top Shelf Image
+          TVTopShelfPrimaryImageWide: Top Shelf Image Wide
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether

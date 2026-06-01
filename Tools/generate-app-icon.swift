@@ -257,43 +257,46 @@ func renderVisionOS() {
 
 // MARK: tvOS — Brand Asset
 
+/// Apple's required tvOS asset sizes:
+/// - App Icon - App Store: 1280×768 @ 1x only
+/// - App Icon - Home Screen: 400×240 @ 1x AND 800×480 @ 2x
+/// - Top Shelf Image (primary): 1920×720 @ 1x
+/// - Top Shelf Image Wide: 2320×720 @ 1x (required for "Wide" Top Shelf row;
+///   App Store Connect rejects the upload if it's missing).
 func renderTVOS() {
     let root = "\(assetCatalog)/AppIcon.brandassets"
 
-    // App Icon - App Store: 1280×768, 3 layers
+    // App Icon - App Store: 1280×768 @ 1x only.
     renderTVOSAppIconStack(
         at: "\(root)/App Icon - App Store.imagestack",
-        width: 1280,
-        height: 768
+        scales: [(suffix: "", width: 1280, height: 768, scale: "1x")]
     )
 
-    // App Icon - Home Screen: 400×240, 3 layers
+    // App Icon - Home Screen: 400×240 @ 1x + 800×480 @ 2x.
     renderTVOSAppIconStack(
         at: "\(root)/App Icon - Home Screen.imagestack",
-        width: 400,
-        height: 240
+        scales: [
+            (suffix: "",    width: 400, height: 240, scale: "1x"),
+            (suffix: "@2x", width: 800, height: 480, scale: "2x")
+        ]
     )
 
-    // Top Shelf Image: 1920×720, single layer
-    do {
-        let w = 1920, h = 720
-        let ctx = makeContext(width: w, height: h)
-        drawBackgroundGradient(into: ctx, width: w, height: h)
-        drawPlayTriangle(into: ctx, width: w, height: h, withGlow: true)
-        guard let img = ctx.makeImage() else { fatalError("Top Shelf render failed") }
-        writePNG(img, to: "\(root)/Top Shelf Image.imageset/Top.png")
+    // Top Shelf Image (primary): 1920×720 @ 1x.
+    renderTVOSTopShelf(
+        at: "\(root)/Top Shelf Image.imageset",
+        width: 1920,
+        height: 720,
+        filename: "Top.png"
+    )
 
-        writeJSON([
-            "info": standardInfo,
-            "images": [
-                [
-                    "filename": "Top.png",
-                    "idiom": "tv",
-                    "scale": "1x"
-                ]
-            ]
-        ] as [String: Any], to: "\(root)/Top Shelf Image.imageset/Contents.json")
-    }
+    // Top Shelf Image Wide: 2320×720 @ 1x. Without this, ASC rejects with
+    // "Missing Info.plist Key … TVTopShelfPrimaryImageWide".
+    renderTVOSTopShelf(
+        at: "\(root)/Top Shelf Image Wide.imageset",
+        width: 2320,
+        height: 720,
+        filename: "TopWide.png"
+    )
 
     // Brand asset root metadata
     writeJSON([
@@ -316,31 +319,57 @@ func renderTVOS() {
                 "idiom": "tv",
                 "role": "top-shelf-image",
                 "size": "1920x720"
+            ],
+            [
+                "filename": "Top Shelf Image Wide.imageset",
+                "idiom": "tv",
+                "role": "top-shelf-image-wide",
+                "size": "2320x720"
             ]
         ]
     ] as [String: Any], to: "\(root)/Contents.json")
 }
 
-func renderTVOSAppIconStack(at root: String, width: Int, height: Int) {
-    // Back: gradient
-    do {
-        let ctx = makeContext(width: width, height: height)
-        drawBackgroundGradient(into: ctx, width: width, height: height)
-        guard let img = ctx.makeImage() else { fatalError("tvOS back failed at \(width)×\(height)") }
-        writePNG(img, to: "\(root)/Back.imagestacklayer/Content.imageset/Back.png")
-    }
-    // Middle: transparent
-    do {
-        let ctx = makeContext(width: width, height: height)
-        guard let img = ctx.makeImage() else { fatalError("tvOS middle failed at \(width)×\(height)") }
-        writePNG(img, to: "\(root)/Middle.imagestacklayer/Content.imageset/Middle.png")
-    }
-    // Front: triangle, no bg
-    do {
-        let ctx = makeContext(width: width, height: height)
-        drawPlayTriangle(into: ctx, width: width, height: height, withGlow: true)
-        guard let img = ctx.makeImage() else { fatalError("tvOS front failed at \(width)×\(height)") }
-        writePNG(img, to: "\(root)/Front.imagestacklayer/Content.imageset/Front.png")
+typealias TVScaleSpec = (suffix: String, width: Int, height: Int, scale: String)
+
+func renderTVOSAppIconStack(at root: String, scales: [TVScaleSpec]) {
+    for layer in ["Back", "Middle", "Front"] {
+        var imageEntries: [[String: String]] = []
+
+        for spec in scales {
+            let ctx = makeContext(width: spec.width, height: spec.height)
+            switch layer {
+            case "Back":
+                drawBackgroundGradient(into: ctx, width: spec.width, height: spec.height)
+            case "Middle":
+                break  // transparent
+            case "Front":
+                drawPlayTriangle(into: ctx, width: spec.width, height: spec.height, withGlow: true)
+            default:
+                break
+            }
+
+            guard let img = ctx.makeImage() else {
+                fatalError("tvOS \(layer) failed at \(spec.width)×\(spec.height)")
+            }
+            let filename = "\(layer)\(spec.suffix).png"
+            writePNG(img, to: "\(root)/\(layer).imagestacklayer/Content.imageset/\(filename)")
+            imageEntries.append([
+                "filename": filename,
+                "idiom": "tv",
+                "scale": spec.scale
+            ])
+        }
+
+        // Per-layer metadata
+        writeJSON([
+            "info": standardInfo
+        ] as [String: Any], to: "\(root)/\(layer).imagestacklayer/Contents.json")
+
+        writeJSON([
+            "info": standardInfo,
+            "images": imageEntries
+        ] as [String: Any], to: "\(root)/\(layer).imagestacklayer/Content.imageset/Contents.json")
     }
 
     // Stack metadata
@@ -352,23 +381,25 @@ func renderTVOSAppIconStack(at root: String, width: Int, height: Int) {
             ["filename": "Back.imagestacklayer"]
         ]
     ] as [String: Any], to: "\(root)/Contents.json")
+}
 
-    for layer in ["Back", "Middle", "Front"] {
-        writeJSON([
-            "info": standardInfo
-        ] as [String: Any], to: "\(root)/\(layer).imagestacklayer/Contents.json")
+func renderTVOSTopShelf(at root: String, width: Int, height: Int, filename: String) {
+    let ctx = makeContext(width: width, height: height)
+    drawBackgroundGradient(into: ctx, width: width, height: height)
+    drawPlayTriangle(into: ctx, width: width, height: height, withGlow: true)
+    guard let img = ctx.makeImage() else { fatalError("Top Shelf \(width)×\(height) failed") }
+    writePNG(img, to: "\(root)/\(filename)")
 
-        writeJSON([
-            "info": standardInfo,
-            "images": [
-                [
-                    "filename": "\(layer).png",
-                    "idiom": "tv",
-                    "scale": "1x"
-                ]
+    writeJSON([
+        "info": standardInfo,
+        "images": [
+            [
+                "filename": filename,
+                "idiom": "tv",
+                "scale": "1x"
             ]
-        ] as [String: Any], to: "\(root)/\(layer).imagestacklayer/Content.imageset/Contents.json")
-    }
+        ]
+    ] as [String: Any], to: "\(root)/Contents.json")
 }
 
 // MARK: - Drive
