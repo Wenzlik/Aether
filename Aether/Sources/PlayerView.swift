@@ -43,12 +43,12 @@ struct PlayerView: View {
 
             #if os(iOS) || os(visionOS)
             closeButton
-                .opacity(isCloseVisible ? 1 : 0)
+                .opacity(effectiveCloseVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
-                    value: isCloseVisible
+                    value: effectiveCloseVisibility
                 )
-                .allowsHitTesting(isCloseVisible)
+                .allowsHitTesting(effectiveCloseVisibility)
             #endif
             // tvOS routes dismiss through the native chrome's `Done`
             // contextual action and the Menu button on the Siri Remote
@@ -66,7 +66,15 @@ struct PlayerView: View {
         .task {
             await viewModel.open(item)
             #if os(iOS) || os(visionOS)
-            scheduleChromeHide()
+            // Schedule the auto-hide only if we actually have an active
+            // player to hide chrome over. Loading / failed states keep the
+            // close button up via `effectiveCloseVisibility` so the user
+            // is never stranded without a dismiss path — the visionOS
+            // window has no system back gesture wired to a ZStack overlay,
+            // so this is the only way out.
+            if viewModel.player != nil {
+                scheduleChromeHide()
+            }
             #endif
         }
         .onDisappear {
@@ -79,6 +87,18 @@ struct PlayerView: View {
         .onExitCommand { Task { await dismissPlayer() } }
         #endif
     }
+
+    #if os(iOS) || os(visionOS)
+    /// Chrome visibility that respects the auto-hide timer **only** while
+    /// playback is actually live. With no `player` (loading, failed, or any
+    /// non-playing state) the close button stays on screen forever so the
+    /// user can always exit — particularly important on visionOS, where a
+    /// ZStack overlay has no system back gesture to fall back on.
+    private var effectiveCloseVisibility: Bool {
+        guard viewModel.player != nil else { return true }
+        return isCloseVisible
+    }
+    #endif
 
     #if os(iOS) || os(visionOS)
     private var closeButton: some View {
@@ -126,8 +146,28 @@ struct PlayerView: View {
         AetherErrorState(
             glyph: "play.slash",
             title: "Playback unavailable",
-            message: "This title isn't streamable yet."
+            message: failureDiagnostic
         )
         .padding(AetherDesign.Spacing.xl)
+    }
+
+    /// Surface the underlying reason so we can tell, in TestFlight on a real
+    /// device, whether the item lacks a stream URL, has an unexpected kind, or
+    /// the URL host hints at a transcoder / direct-play / relay issue. Should
+    /// be tightened to a one-liner copy once playback is reliable on every
+    /// platform; until then, *visibility is worth a slightly noisy string*.
+    private var failureDiagnostic: String {
+        guard let item = viewModel.state.item else {
+            return "No item — the player opened without a title attached."
+        }
+        var parts: [String] = []
+        parts.append("\(item.title) (\(item.kind))")
+        if let url = item.streamURL {
+            parts.append("URL host: \(url.host ?? "?")")
+            parts.append("scheme: \(url.scheme ?? "?")")
+        } else {
+            parts.append("Stream URL is missing — Plex didn't return a playable Part for this title.")
+        }
+        return parts.joined(separator: " · ")
     }
 }
