@@ -287,7 +287,15 @@ final class AppSession {
         #if os(tvOS)
         return "tvOS"
         #elseif os(visionOS)
-        return "visionOS"
+        // Identify as **iOS** to Plex. Plex's universal transcoder selects a
+        // per-platform profile from `X-Plex-Platform`; "visionOS" isn't in
+        // its known set and the server returns 404 →
+        // `NSURLErrorResourceUnavailable` (-1008) on AVPlayer. visionOS's
+        // playback stack is functionally iOS (AVKit, HLS, H.264 / HEVC), so
+        // the lie is safe and unblocks playback. `currentDeviceName` still
+        // reports "Apple Vision Pro", so Plex's session / device list shows
+        // the real hardware.
+        return "iOS"
         #elseif os(iOS)
         return "iOS"
         #else
