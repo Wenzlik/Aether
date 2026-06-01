@@ -12,7 +12,7 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            AetherDesign.Palette.background.ignoresSafeArea()
+            AetherDesign.Gradients.background.ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
