@@ -10,6 +10,9 @@ struct DetailView: View {
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
+    /// Where the presented player should begin. `nil` resumes from the saved
+    /// point ("Resume"); `0` forces playback from the start ("Play from start").
+    @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
@@ -24,6 +27,7 @@ struct DetailView: View {
                 PlayerView(
                     item: playbackItem ?? item,
                     session: playbackSession,
+                    startAt: playbackStartAt,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)
@@ -222,27 +226,51 @@ struct DetailView: View {
     @ViewBuilder
     private var actionRow: some View {
         if item.streamURL != nil {
-            playButton
+            if resume != nil {
+                resumeButtons
+            } else {
+                playButton
+            }
         } else {
             unavailableState
         }
     }
 
+    /// Single "Play" button — shown when there's no saved resume point.
     private var playButton: some View {
         AetherButton(
-            playButtonLabel,
+            isPreparingPlayback ? "Preparing..." : "Play",
             systemImage: "play.fill",
             role: .primary
         ) {
-            Task { await presentPlayer() }
+            Task { await presentPlayer(fromStart: true) }
         }
         .disabled(isPreparingPlayback)
     }
 
-    private var playButtonLabel: String {
-        if isPreparingPlayback { return "Preparing..." }
-        if let resume { return "Resume \(formatPosition(resume.position))" }
-        return "Play"
+    /// Two buttons when a resume point exists: continue where the user left
+    /// off (primary), or start over from the beginning (secondary).
+    @ViewBuilder
+    private var resumeButtons: some View {
+        AetherButton(
+            isPreparingPlayback
+                ? "Preparing..."
+                : "Resume \(formatPosition(resume?.position ?? .zero))",
+            systemImage: "play.fill",
+            role: .primary
+        ) {
+            Task { await presentPlayer(fromStart: false) }
+        }
+        .disabled(isPreparingPlayback)
+
+        AetherButton(
+            "Play from start",
+            systemImage: "backward.end.fill",
+            role: .secondary
+        ) {
+            Task { await presentPlayer(fromStart: true) }
+        }
+        .disabled(isPreparingPlayback)
     }
 
     private var unavailableState: some View {
@@ -256,7 +284,7 @@ struct DetailView: View {
 
     // MARK: - Player dismiss
 
-    private func presentPlayer() async {
+    private func presentPlayer(fromStart: Bool) async {
         guard !isPreparingPlayback else { return }
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
@@ -266,6 +294,10 @@ struct DetailView: View {
         } else {
             playbackItem = item
         }
+
+        // `0` forces a restart; `nil` lets the session resume from the
+        // persisted point.
+        playbackStartAt = fromStart ? 0 : nil
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true

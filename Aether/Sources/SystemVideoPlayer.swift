@@ -13,9 +13,10 @@ import AVKit
 ///
 /// **Dismiss surface.** Every platform routes back through app-owned chrome:
 /// - iOS / iPadOS: the auto-hiding overlay xmark.
-/// - visionOS: the overlay chevron plus a native AVKit `Back` contextual
-///   action. The native action is the reliable escape hatch when
-///   `AVPlayerViewController` owns gaze / pinch routing.
+/// - visionOS: a single native AVKit `Back` contextual action. It's the
+///   reliable escape hatch when `AVPlayerViewController` owns gaze / pinch
+///   routing — a SwiftUI overlay chevron there only duplicated both this
+///   action and the system window ornament, so we don't draw one.
 /// - tvOS: the Menu button on the Siri Remote (`.onExitCommand`).
 /// We don't attach a `Done` `contextualAction` to `AVPlayerViewController`
 /// on tvOS — earlier attempts pinned it to the lower-right of the transport

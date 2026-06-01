@@ -26,8 +26,11 @@ public final class PlayerStateViewModel {
     }
 
     /// Open an item and start playback. Idempotent for the same item.
-    public func open(_ item: MediaItem) async {
-        await session.prepare(item: item)
+    ///
+    /// `startAt` is forwarded to the session: `nil` resumes from the persisted
+    /// point, an explicit value (e.g. `0`) starts there regardless.
+    public func open(_ item: MediaItem, startAt: Double? = nil) async {
+        await session.prepare(item: item, startAt: startAt)
         await refresh()
         startRefreshing()
         await session.play()
