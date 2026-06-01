@@ -50,6 +50,8 @@ The shape on disk mirrors the diagram. If it doesn't, that's a bug.
 
 **App-target navigation.** `RootTabView` is the root: a native SwiftUI `TabView` (Home / Library / Search / Settings) that renders as the tvOS top tab bar, the iOS bottom bar, and the visionOS ornament — one structure, no sidebar, no per-platform navigation code. Each content tab owns a `NavigationStack`; the `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` destinations so every stack pushes the same screens. Settings is a full-screen tab (not a sheet); only sign-in remains modal.
 
+**Multiple sources, one active.** Two connectors implement `MediaSource` today — Plex and Jellyfin — and the app is source-agnostic above the protocol (everything reads a single `source: (any MediaSource)?`). The user can connect both; `AppSession` keeps an `activeSourceKind` (persisted) and points `source` at the active connector. Switching happens in Settings → Sources. There is no merged multi-source feed yet — it can be layered on later without changing the protocol. Jellyfin differs from Plex only in its connector internals (one typed server URL + Quick Connect auth, vs plex.tv discovery + ranked connections); both produce `MediaItem`s and answer `resolvePlayback`, so Detail, the player, resume, and the URL resolver are identical for both.
+
 > See [`../../AGENTS.md`](../../AGENTS.md) → *Design system* for the inventory of `Aether*` primitives and when to extend each.
 
 ---

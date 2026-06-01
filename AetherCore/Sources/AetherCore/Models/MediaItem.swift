@@ -97,7 +97,12 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// URL (`offset`) instead of seeking. Direct-play files seek client-side.
     public var isServerTranscode: Bool {
         guard let streamURL else { return false }
-        return streamURL.path.contains("/transcode/universal/start")
+        // An HLS playlist (.m3u8) means the server is transcoding / remuxing —
+        // true for both Plex (`…/start.m3u8`) and Jellyfin (`…/master.m3u8`).
+        // Direct-play URLs are real files (.mkv/.mp4) or Jellyfin's `…/stream`,
+        // none of which are .m3u8.
+        return streamURL.pathExtension.lowercased() == "m3u8"
+            || streamURL.path.contains("/transcode/universal/start")
     }
 
     /// Return a copy whose stream begins at `seconds`.
@@ -292,6 +297,7 @@ public struct MediaID: Hashable, Sendable {
 public enum MediaSourceID: Hashable, Sendable {
     case mock
     case plex(serverID: String)
+    case jellyfin(serverID: String)
     case synology(host: String)
 
     /// A stable, run-to-run identical string for this source. Suitable as a
@@ -305,6 +311,8 @@ public enum MediaSourceID: Hashable, Sendable {
             return "mock"
         case .plex(let serverID):
             return "plex.\(serverID)"
+        case .jellyfin(let serverID):
+            return "jellyfin.\(serverID)"
         case .synology(let host):
             return "synology.\(host)"
         }

@@ -75,9 +75,32 @@ final class AppSession {
         case completed(serverName: String)
     }
 
+    // MARK: - Jellyfin
+
+    private(set) var jellyfinConfiguration: JellyfinConfiguration?
+    private(set) var jellyfinAuthClient: JellyfinAuthClient?
+    private(set) var jellyfinServerStore: JellyfinServerStore?
+    var jellyfinServer: JellyfinServerRecord?
+    private(set) var jellyfinSource: JellyfinMediaSource?
+    var isJellyfinSignedIn: Bool = false
+
+    // MARK: - Active source
+
+    /// Which connected source is being browsed. The user can connect both Plex
+    /// and Jellyfin; exactly one is active at a time, and the choice persists.
+    /// (A merged multi-source feed can be layered on later.)
+    enum SourceKind: String, Sendable, CaseIterable {
+        case plex
+        case jellyfin
+    }
+
+    var activeSourceKind: SourceKind?
+
     // MARK: - UI bridging
 
     var isSignInPresented: Bool = false
+    /// Which onboarding the sign-in sheet should show.
+    var signInTarget: SourceKind = .plex
 
     // MARK: - Init
 
@@ -110,15 +133,20 @@ final class AppSession {
         await resumeStore.loadFromDisk()
         await resumeStore.observeICloudChanges()
 
-        // 1. Plex auth seam.
+        // 1. Auth seams for both sources.
         await setUpPlex()
+        await setUpJellyfin()
 
-        // 2. Restore the persisted Plex server if we have one — this builds the
-        //    live source and is what Home renders. No mock fallback.
+        // 2. Restore persisted servers — these build the live sources.
         await restorePlexServer()
+        await restoreJellyfinServer()
 
-        // 3. If the user is signed in but no server is on file, run discovery
-        //    so Home doesn't sit at the empty state forever.
+        // 3. Pick the active source (persisted choice, else whatever connected).
+        activeSourceKind = await loadActiveSourceKind()
+        refreshActiveSource()
+
+        // 4. If Plex is signed in but no server is on file, run discovery so
+        //    Home doesn't sit at the empty state forever.
         if isPlexSignedIn && plexServer == nil {
             await discoverPlexServers()
         }
@@ -172,19 +200,43 @@ final class AppSession {
             plexServer = record
             plexSource = makePlexSource(from: record)
             discoveryState = .completed(serverName: record.name)
-            adoptPlexSourceIfAvailable()
+            refreshActiveSource()
         } catch {
             // Reading a corrupted record shouldn't break launch — just leave
             // the user signed-in-but-no-server, which prompts a re-discovery.
         }
     }
 
-    /// Point `source` at the live Plex source once we know which server to
-    /// talk to. Called from `restorePlexServer()` on launch and
-    /// `discoverPlexServers()` after a fresh selection.
-    private func adoptPlexSourceIfAvailable() {
-        guard let plexSource else { return }
-        source = plexSource
+    /// Re-point `source` at the active connected source (Plex or Jellyfin),
+    /// falling back to whichever is available. Called after any source's
+    /// availability or the active choice changes.
+    private func refreshActiveSource() {
+        switch activeSourceKind {
+        case .jellyfin:
+            source = jellyfinSource ?? plexSource
+        case .plex:
+            source = plexSource ?? jellyfinSource
+        case nil:
+            source = plexSource ?? jellyfinSource
+        }
+    }
+
+    /// Make `kind` the active source (persisted) and re-point `source`.
+    func setActiveSource(_ kind: SourceKind) {
+        activeSourceKind = kind
+        Task { try? await keychain.setString(kind.rawValue, for: Self.activeSourceKey) }
+        refreshActiveSource()
+    }
+
+    private func loadActiveSourceKind() async -> SourceKind? {
+        if let raw = try? await keychain.string(for: Self.activeSourceKey),
+           let kind = SourceKind(rawValue: raw) {
+            return kind
+        }
+        // No stored choice: default to whatever is connected (Plex wins ties).
+        if isPlexSignedIn { return .plex }
+        if isJellyfinSignedIn { return .jellyfin }
+        return nil
     }
 
     private func makePlexSource(from record: PlexServerRecord) -> PlexMediaSource? {
@@ -212,6 +264,8 @@ final class AppSession {
         } catch { }
         isPlexSignedIn = true
         await discoverPlexServers()
+        // A fresh Plex sign-in becomes the active source.
+        if plexSource != nil { setActiveSource(.plex) }
     }
 
     func signOutOfPlex() async {
@@ -221,8 +275,12 @@ final class AppSession {
         plexSource = nil
         discoveryState = .idle
         isPlexSignedIn = false
-        // No mock fallback — Home returns to its "Add a source" welcome state.
-        source = nil
+        // Fall back to Jellyfin if it's connected, otherwise the welcome state.
+        if activeSourceKind == .plex {
+            setActiveSource(isJellyfinSignedIn ? .jellyfin : .plex)
+        } else {
+            refreshActiveSource()
+        }
     }
 
     // MARK: - Server discovery
@@ -265,13 +323,90 @@ final class AppSession {
             plexServer = record
             plexSource = makePlexSource(from: record)
             discoveryState = .completed(serverName: record.name)
-            adoptPlexSourceIfAvailable()
+            refreshActiveSource()
         } catch {
             discoveryState = .failed(message: error.localizedDescription)
         }
     }
 
-    func presentSignIn() {
+    // MARK: - Jellyfin setup + lifecycle
+
+    private func setUpJellyfin() async {
+        let deviceID = await ensureJellyfinDeviceID()
+        let config = JellyfinConfiguration(
+            client: "Aether",
+            version: "0.2.0",
+            deviceName: currentDeviceName,
+            deviceID: deviceID
+        )
+        jellyfinConfiguration = config
+        jellyfinAuthClient = JellyfinAuthClient(api: api, configuration: config)
+        jellyfinServerStore = JellyfinServerStore(keychain: keychain)
+    }
+
+    private func ensureJellyfinDeviceID() async -> String {
+        do {
+            if let existing = try await keychain.string(for: Self.jellyfinDeviceIDKey), !existing.isEmpty {
+                return existing
+            }
+            let new = UUID().uuidString
+            try await keychain.setString(new, for: Self.jellyfinDeviceIDKey)
+            return new
+        } catch {
+            return UUID().uuidString
+        }
+    }
+
+    private func restoreJellyfinServer() async {
+        guard let store = jellyfinServerStore else { return }
+        do {
+            guard let record = try await store.read() else { return }
+            jellyfinServer = record
+            jellyfinSource = makeJellyfinSource(from: record)
+            isJellyfinSignedIn = jellyfinSource != nil
+            refreshActiveSource()
+        } catch {
+            // Corrupted record shouldn't break launch — leave Jellyfin disconnected.
+        }
+    }
+
+    private func makeJellyfinSource(from record: JellyfinServerRecord) -> JellyfinMediaSource? {
+        guard let config = jellyfinConfiguration, let base = record.baseURL else { return nil }
+        return JellyfinMediaSource(
+            serverID: record.baseURLString,
+            displayName: record.serverName,
+            baseURL: base,
+            accessToken: record.accessToken,
+            userID: record.userID,
+            configuration: config,
+            api: api
+        )
+    }
+
+    /// Called by `JellyfinSignInView` after a successful Quick Connect exchange.
+    func completeJellyfinSignIn(record: JellyfinServerRecord) async {
+        do { try await jellyfinServerStore?.write(record) } catch { }
+        jellyfinServer = record
+        jellyfinSource = makeJellyfinSource(from: record)
+        isJellyfinSignedIn = jellyfinSource != nil
+        if jellyfinSource != nil { setActiveSource(.jellyfin) }
+        isSignInPresented = false
+    }
+
+    func signOutOfJellyfin() async {
+        do { try await jellyfinServerStore?.clear() } catch { }
+        jellyfinServer = nil
+        jellyfinSource = nil
+        isJellyfinSignedIn = false
+        if activeSourceKind == .jellyfin {
+            setActiveSource(isPlexSignedIn ? .plex : .jellyfin)
+        } else {
+            refreshActiveSource()
+        }
+    }
+
+    func presentSignIn(_ target: SourceKind = .plex) {
+        signInTarget = target
         isSignInPresented = true
     }
 
@@ -279,6 +414,8 @@ final class AppSession {
 
     static let plexClientIdentifierKey = "plex.clientIdentifier"
     static let plexTokenKey = "plex.authToken"
+    static let jellyfinDeviceIDKey = "jellyfin.deviceID"
+    static let activeSourceKey = "active.source"
 
     // MARK: - Platform identity
 

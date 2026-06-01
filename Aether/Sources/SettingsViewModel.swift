@@ -40,7 +40,32 @@ final class SettingsViewModel {
         isPlexSignedIn ? .connected : .notConnected
     }
 
+    var isJellyfinSignedIn: Bool { session.isJellyfinSignedIn }
+
+    var jellyfinServerName: String? { session.jellyfinServer?.serverName }
+
+    var jellyfinSourceStatus: AetherStatus {
+        isJellyfinSignedIn ? .connected : .notConnected
+    }
+
     let synologyStatus: AetherStatus = .comingSoon
+
+    // MARK: - Active source
+
+    /// Whether the given source is the one currently being browsed. Only
+    /// meaningful when more than one source is connected.
+    func isActiveSource(_ kind: AppSession.SourceKind) -> Bool {
+        session.activeSourceKind == kind
+    }
+
+    /// True when both sources are connected, so the UI offers a switch.
+    var canSwitchSources: Bool {
+        isPlexSignedIn && isJellyfinSignedIn
+    }
+
+    func setActive(_ kind: AppSession.SourceKind) {
+        session.setActiveSource(kind)
+    }
 
     // MARK: - Playback
 
@@ -72,12 +97,22 @@ final class SettingsViewModel {
 
     /// Open the Plex sign-in / discovery flow.
     func connect() {
-        session.presentSignIn()
+        session.presentSignIn(.plex)
+    }
+
+    /// Open the Jellyfin sign-in flow (server URL + Quick Connect).
+    func connectJellyfin() {
+        session.presentSignIn(.jellyfin)
     }
 
     /// Clear the Plex token + selected server and reset app state. Home returns
     /// to its welcome state; no app delete required.
     func signOut() async {
         await session.signOutOfPlex()
+    }
+
+    /// Disconnect Jellyfin; falls back to Plex if it's still connected.
+    func signOutOfJellyfin() async {
+        await session.signOutOfJellyfin()
     }
 }
