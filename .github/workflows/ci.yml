@@ -28,7 +28,8 @@ jobs:
 
       - name: Select latest Xcode
         run: |
-          sudo xcode-select -switch "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -switch "$LATEST"; fi
           xcodebuild -version
 
       - name: Install XcodeGen
@@ -45,11 +46,8 @@ jobs:
       - name: Build & test (iOS Simulator)
         run: |
           set -o pipefail
-          DEVICE=$(xcrun simctl list devices available --json \
-            | python3 -c "import sys,json;d=json.load(sys.stdin)['devices'];import re;
-ios=[k for k in d if 'iOS' in k];
-cands=[x['name'] for k in ios for x in d[k] if x.get('isAvailable') and 'iPhone' in x['name']];
-print(cands[-1] if cands else 'iPhone 16')")
+          DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone [0-9][0-9A-Za-z ]*' | head -1 | sed 's/[[:space:]]*$//')
+          DEVICE=${DEVICE:-iPhone 16}
           echo "Using simulator: $DEVICE"
           xcodebuild test \
             -project Aether.xcodeproj \
