@@ -67,6 +67,10 @@ struct DetailView: View {
         // a functional native back gesture.
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
+        // Hide the TabView's bar (the top nav "menu" on tvOS, bottom bar / ornament
+        // elsewhere) for the duration of playback — otherwise it stays drawn over
+        // the video. Applied on all platforms; the player is a full-screen surface.
+        .toolbar(isPlayerPresented ? .hidden : .automatic, for: .tabBar)
         .task {
             resume = await resumeStore.point(for: item.id)
             await hydrateForPlayback()
