@@ -81,6 +81,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 8PW5FWH7P2
         SUPPORTS_MACCATALYST: NO
         # AppIcon is the canonical name; Xcode's asset compiler resolves
         # AppIcon.appiconset for iOS / iPadOS, AppIcon.brandassets for tvOS,
