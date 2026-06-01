@@ -9,6 +9,7 @@ import AetherCore
 struct SettingsView: View {
     @State var viewModel: SettingsViewModel
     @State private var isSigningOut = false
+    @State private var isSigningOutJellyfin = false
 
     var body: some View {
         ZStack {
@@ -69,19 +70,77 @@ struct SettingsView: View {
                 }
                 .disabled(isSigningOut)
             }
+
+            if viewModel.isJellyfinSignedIn {
+                AetherSettingsRow(
+                    label: "Jellyfin",
+                    systemImage: "rectangle.stack.badge.play.fill",
+                    status: .connected
+                )
+                if let name = viewModel.jellyfinServerName {
+                    AetherSettingsRow(label: "Server: \(name)", systemImage: "server.rack", value: nil)
+                }
+                AetherSettingsRow(
+                    label: isSigningOutJellyfin ? "Signing out…" : "Sign Out of Jellyfin",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    actionRole: .destructive
+                ) {
+                    Task { await performSignOutJellyfin() }
+                }
+                .disabled(isSigningOutJellyfin)
+            }
         }
     }
 
     private var sourcesSection: some View {
         AetherSettingsSection("Sources") {
-            AetherSettingsRow(
+            sourceRow(
+                kind: .plex,
                 label: "Plex",
-                systemImage: "play.circle.fill",
-                status: viewModel.plexSourceStatus,
-                action: viewModel.isPlexSignedIn ? nil : { viewModel.connect() }
+                glyph: "play.circle.fill",
+                connected: viewModel.isPlexSignedIn,
+                connect: { viewModel.connect() }
+            )
+            sourceRow(
+                kind: .jellyfin,
+                label: "Jellyfin",
+                glyph: "rectangle.stack.badge.play.fill",
+                connected: viewModel.isJellyfinSignedIn,
+                connect: { viewModel.connectJellyfin() }
             )
             AetherSettingsRow(label: "Synology", systemImage: "externaldrive.fill", status: viewModel.synologyStatus)
         }
+    }
+
+    /// One source row: tap to connect when disconnected, or — when both sources
+    /// are connected — tap to make this the active (browsed) source. The active
+    /// one reads "Active".
+    private func sourceRow(
+        kind: AppSession.SourceKind,
+        label: String,
+        glyph: String,
+        connected: Bool,
+        connect: @escaping () -> Void
+    ) -> AetherSettingsRow {
+        let status: AetherStatus
+        if !connected {
+            status = .notConnected
+        } else if viewModel.canSwitchSources {
+            status = viewModel.isActiveSource(kind) ? .positive("Active") : .connected
+        } else {
+            status = .connected
+        }
+
+        let action: (() -> Void)?
+        if !connected {
+            action = connect
+        } else if viewModel.canSwitchSources && !viewModel.isActiveSource(kind) {
+            action = { viewModel.setActive(kind) }
+        } else {
+            action = nil
+        }
+
+        return AetherSettingsRow(label: label, systemImage: glyph, status: status, action: action)
     }
 
     private var playbackSection: some View {
@@ -114,5 +173,11 @@ struct SettingsView: View {
         isSigningOut = true
         await viewModel.signOut()
         isSigningOut = false
+    }
+
+    private func performSignOutJellyfin() async {
+        isSigningOutJellyfin = true
+        await viewModel.signOutOfJellyfin()
+        isSigningOutJellyfin = false
     }
 }

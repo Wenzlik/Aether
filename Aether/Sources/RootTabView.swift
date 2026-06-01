@@ -52,7 +52,12 @@ struct RootTabView: View {
             }
         }
         .sheet(isPresented: $session.isSignInPresented) {
-            PlexOnboardingView(session: session)
+            switch session.signInTarget {
+            case .plex:
+                PlexOnboardingView(session: session)
+            case .jellyfin:
+                JellyfinSignInView(session: session)
+            }
         }
     }
 }

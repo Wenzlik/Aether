@@ -6,6 +6,26 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Jellyfin — a second media source.** Aether is no longer Plex-only. Connect a
+  Jellyfin server by typing its URL and approving a **Quick Connect** code
+  (ideal for the Apple TV remote — no password typing). New connector in
+  `AetherCore/MediaSources/Jellyfin/` mirrors the Plex stack: `JellyfinConfiguration`
+  (the `MediaBrowser` Authorization header), `JellyfinAuthClient` (validate
+  server → Quick Connect initiate/poll/authenticate), `JellyfinAPI` DTOs,
+  `JellyfinServerStore`/`Record`, and `JellyfinMediaSource` (libraries, items,
+  seasons/episodes, hydrate, and `resolvePlayback` — direct-play for friendly
+  containers, HLS transcode with a fresh `PlaySessionId`, audio/subtitle stream
+  indexes + `startTimeTicks` offset). Images + media URLs carry the token as
+  `api_key` (AVPlayer/AsyncImage can't set headers), exactly like Plex
+  tokenises its URLs. Audio + subtitle track selection on Detail and the
+  `-1008`-safe playback resolver work for Jellyfin unchanged — they were built
+  on the source-agnostic `MediaSource` / `PlaybackRequest` abstraction.
+- **Single active source, switchable.** You can connect both Plex and Jellyfin;
+  exactly one is active at a time (Home / Library / Search render it), chosen in
+  **Settings → Sources** and remembered across launches. Sign out of one and the
+  app falls back to the other or to the welcome state. (`AppSession` gained the
+  parallel Jellyfin lifecycle + an `activeSourceKind`.)
+
 - **Aether visual identity — the violet "personal cinema" brand.** Aether's
   first real visual identity, replacing the grayscale developer look. A reusable
   brand token system in `DesignSystem/Tokens`: `AetherDesign.Palette` (Aether
