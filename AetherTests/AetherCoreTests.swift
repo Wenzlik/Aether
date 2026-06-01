@@ -287,6 +287,46 @@ struct PlaybackURLLifecycleTests {
         #expect(state.error != nil)
         #expect(await session.currentAVPlayer() == nil)
     }
+
+    @Test("recoverOrFail auto-re-prepares once, then fails on a second consecutive failure")
+    func autoRecoversOnceThenFails() async {
+        let spy = SpyPlaybackSource()
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: Self.transcodeItem(), source: spy, startAt: 0)
+        await session.play()
+        let initialResolves = await spy.requests.count   // 1
+
+        // First failure → one automatic recovery (a fresh resolve), not failed.
+        await session.recoverOrFail(message: "boom")
+        #expect(await spy.requests.count == initialResolves + 1)
+        #expect(await session.state.status != .failed)
+
+        // Second consecutive failure (no healthy playback between) → give up.
+        await session.recoverOrFail(message: "boom again")
+        #expect(await session.state.status == .failed)
+        #expect(await spy.requests.count == initialResolves + 1)  // no further resolve
+    }
+
+    @Test("a fresh user open re-arms auto-recovery")
+    func freshOpenReArmsRecovery() async {
+        let spy = SpyPlaybackSource()
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: Self.transcodeItem(), source: spy, startAt: 0)
+        await session.play()
+        await session.recoverOrFail(message: "boom")        // uses the budget
+        await session.recoverOrFail(message: "boom again")  // exhausted → failed
+        #expect(await session.state.status == .failed)
+
+        // A new user-initiated open resets the budget…
+        await session.prepare(item: Self.transcodeItem(), source: spy, startAt: 0)
+        await session.play()
+        let before = await spy.requests.count
+        await session.recoverOrFail(message: "boom")        // …so recovery works again
+        #expect(await spy.requests.count == before + 1)
+        #expect(await session.state.status != .failed)
+    }
 }
 
 @Suite("AetherCore — MockFixture")

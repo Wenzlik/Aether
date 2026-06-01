@@ -89,13 +89,16 @@ public final class PlayerStateViewModel {
         let snapshot = await session.state
         let avPlayer = await session.currentAVPlayer()
 
-        // Surface AVPlayer failures into the session state. The session itself
-        // doesn't KVO the player (it lives on its own actor); we do the check
-        // here on @MainActor where the AVPlayer/AVPlayerItem are safe to
-        // touch, and tell the session to flip its status if needed.
-        if snapshot.status != .failed,
+        // Surface AVPlayer failures into the session. The session itself doesn't
+        // KVO the player (it lives on its own actor); we check here on
+        // @MainActor where the AVPlayer/AVPlayerItem are safe to touch and hand
+        // the failure to the session, which tries **one** automatic recovery
+        // (re-resolve a fresh, warmed URL at the last position) before failing.
+        // Skip while `.loading` so we don't poke a recovery/open already in
+        // flight (its player may briefly still be the old, failed one).
+        if snapshot.status != .failed, snapshot.status != .loading,
            let message = avplayerFailureMessage(player: avPlayer) {
-            await session.markFailed(message: message)
+            await session.recoverOrFail(message: message)
             self.state = await session.state
             self.player = await session.currentAVPlayer()
             return

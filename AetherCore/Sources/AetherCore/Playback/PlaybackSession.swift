@@ -74,6 +74,14 @@ public actor PlaybackSession {
     /// Monotonic "Playback Attempt #N" counter for the current process.
     private var attempt = 0
 
+    /// Auto-recovery budget for a mid-stream failure (e.g. the server reaped a
+    /// paused / idle transcode session). One automatic retry per user-initiated
+    /// open: a recovery that immediately fails again gives up (rather than
+    /// looping) and surfaces the error, where the user's Retry re-opens and
+    /// re-arms the budget.
+    private var recoveryAttempts = 0
+    private static let maxRecoveryAttempts = 1
+
     /// djb2 hash of a string — stable within a run, one-way (token-safe).
     nonisolated static func urlHash(_ url: URL?) -> String {
         guard let url else { return "nil" }
@@ -117,8 +125,12 @@ public actor PlaybackSession {
     public func prepare(
         item: MediaItem,
         source: (any MediaSource)? = nil,
-        startAt explicitStart: Double? = nil
+        startAt explicitStart: Double? = nil,
+        isRecovery: Bool = false
     ) async {
+        // A user-initiated open re-arms the recovery budget; a recovery re-prepare
+        // must not, or it could loop on a permanently broken stream.
+        if !isRecovery { recoveryAttempts = 0 }
         attempt += 1
         let startLabel = explicitStart.map { String($0) } ?? "resume"
         Self.log.notice("prepare #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) source=\(item.id.source.stableKey, privacy: .public) startAt=\(startLabel, privacy: .public)")
@@ -309,6 +321,29 @@ public actor PlaybackSession {
     /// network/codec/TLS failure would leave the session sitting at
     /// `.loading` or `.playing` forever — and the UI would show a spinner or
     /// a black screen with no indication of what went wrong.
+    /// Called by the view model when it observes an `AVPlayerItem` failure.
+    /// Attempts **one** automatic recovery — re-resolve a fresh, warmed URL at
+    /// the last position and resume — before surfacing the error. This is what
+    /// recovers from a paused/idle stream whose server-side transcode session
+    /// was reaped (the cross-source "pause → wait → fail" case): the native
+    /// transport drives `AVPlayer` directly, so without this there's no hook to
+    /// rebuild the stream on resume.
+    public func recoverOrFail(message: String) async {
+        // A load / recovery is already in flight — let it settle.
+        if state.status == .loading { return }
+        guard let source, let item = state.item, recoveryAttempts < Self.maxRecoveryAttempts else {
+            await markFailed(message: message)
+            return
+        }
+        recoveryAttempts += 1
+        let position = Self.durationSeconds(state.position)
+        Self.log.notice("auto-recover #\(self.attempt, privacy: .public) (try \(self.recoveryAttempts, privacy: .public)) at \(position, privacy: .public)s after: \(message, privacy: .public)")
+        await prepare(item: item, source: source, startAt: position, isRecovery: true)
+        if state.status != .failed {
+            await play()
+        }
+    }
+
     public func markFailed(message: String) async {
         Self.log.error("playback FAILED #\(self.attempt, privacy: .public) status=\(String(describing: self.state.status), privacy: .public) pos=\(Self.durationSeconds(self.state.position), privacy: .public)s reason=\(message, privacy: .public)")
         let failedState = PlaybackState(
