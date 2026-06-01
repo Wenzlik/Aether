@@ -138,6 +138,7 @@ private actor SpyPlaybackSource: MediaSource {
     let id: MediaSourceID = .mock
     let displayName = "Spy"
     private(set) var requests: [PlaybackRequest] = []
+    private(set) var stoppedSessions: [String] = []
     private var callCount = 0
     private let shouldFail: Bool
 
@@ -151,11 +152,17 @@ private actor SpyPlaybackSource: MediaSource {
         if shouldFail { throw PlaybackResolveError.noPlayableStream }
         callCount += 1
         let offset = request.startTime.map { Double($0.components.seconds) } ?? 0
+        let transcode = request.mode == .transcode
         return ResolvedPlayback(
             url: URL(string: "https://resolved.example/\(callCount).m3u8")!,
-            isServerTranscode: request.mode == .transcode,
-            baseOffsetSeconds: request.mode == .transcode ? offset : 0
+            isServerTranscode: transcode,
+            baseOffsetSeconds: transcode ? offset : 0,
+            transcodeSessionID: transcode ? "session-\(callCount)" : nil
         )
+    }
+
+    func stopTranscode(sessionID: String) async {
+        stoppedSessions.append(sessionID)
     }
 }
 
@@ -239,6 +246,31 @@ struct PlaybackURLLifecycleTests {
 
         let state = await session.state
         #expect(state.item?.selectedAudioTrackID == "12")
+    }
+
+    @Test("switching audio stops the previous transcode session after the new one is live")
+    func audioSwitchStopsOldSession() async {
+        let spy = SpyPlaybackSource()
+        let item = Self.transcodeItem(audioID: "11")
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: item, source: spy, startAt: 0)   // session-1
+        await session.selectAudioTrack(MediaAudioTrack(id: "12", title: "Czech")) // session-2
+
+        let stopped = await spy.stoppedSessions
+        #expect(stopped == ["session-1"])   // old session stopped, only after the swap
+    }
+
+    @Test("stop() stops the active transcode session")
+    func stopStopsTranscodeSession() async {
+        let spy = SpyPlaybackSource()
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+
+        await session.prepare(item: Self.transcodeItem(), source: spy, startAt: 0)
+        await session.stop()
+
+        let stopped = await spy.stoppedSessions
+        #expect(stopped == ["session-1"])
     }
 
     @Test("a resolve failure surfaces a controlled .failed state, never a black screen")

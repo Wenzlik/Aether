@@ -57,6 +57,10 @@ public actor PlaybackSession {
     /// the item's own `streamURL` (tests / sources with no resolver).
     private var source: (any MediaSource)?
 
+    /// The server transcode session currently driving playback, so we can stop
+    /// it on teardown / after a track switch. `nil` for direct play.
+    private var activeTranscodeSessionID: String?
+
     /// Content seconds represented by the player's `currentTime() == 0`.
     ///
     /// A Plex transcode started at `offset` emits a fresh HLS timeline whose
@@ -89,11 +93,16 @@ public actor PlaybackSession {
         source: (any MediaSource)? = nil,
         startAt explicitStart: Double? = nil
     ) async {
-        // Tear down previous session before starting a new one.
+        // Tear down previous session before starting a new one (stops its
+        // transcode session too).
         resumeTask?.cancel()
         resumeTask = nil
         await teardownPlayer()
         self.source = source
+
+        // Show "loading" up front: resolving warms up the transcode (can take a
+        // few seconds), and we'd rather sit in loading than flash a failure.
+        state = PlaybackState(status: .loading, item: item)
 
         let resumeSeconds: Double
         if let explicitStart {
@@ -102,9 +111,9 @@ public actor PlaybackSession {
             resumeSeconds = await persistedResumeSeconds(for: item.id)
         }
 
-        // Resolve a FRESH URL through the source — a new transcode session at
-        // the resume offset, not a reused/mutated one. This is what stops a
-        // reaped Plex session from surfacing as NSURLError -1008 on resume.
+        // Resolve a FRESH, warmed-up URL through the source — a new transcode
+        // session at the resume offset, confirmed readable. This is what stops a
+        // reaped / not-yet-ready Plex session surfacing as NSURLError -1008.
         let resolved: ResolvedPlayback
         do {
             resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
@@ -117,14 +126,14 @@ public actor PlaybackSession {
             return
         }
 
-        let needsClientSeek = !resolved.isServerTranscode && resumeSeconds > 0
+        activeTranscodeSessionID = resolved.transcodeSessionID
         baseOffsetSeconds = resolved.baseOffsetSeconds
+        let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
         let player = await MainActor.run { () -> AVPlayer in
             let p = AVPlayer(url: url)
-            if needsClientSeek {
-                let cmTime = CMTime(seconds: resumeSeconds, preferredTimescale: 600)
-                p.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            if let seekTarget {
+                p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             }
             return p
         }
@@ -136,6 +145,15 @@ public actor PlaybackSession {
             position: .seconds(resumeSeconds)
         )
         startResumeLoop()
+    }
+
+    /// Where the player should seek after the item is ready: the resolver's
+    /// explicit `clientSeekSeconds` (small transcode offset), else the resume
+    /// point for direct play. Transcodes with a baked-in offset return `nil`.
+    private func seekTarget(for resolved: ResolvedPlayback, position: Double) -> Double? {
+        if let explicit = resolved.clientSeekSeconds { return explicit > 0 ? explicit : nil }
+        if !resolved.isServerTranscode, position > 0 { return position }
+        return nil
     }
 
     public func play() async {
@@ -186,8 +204,10 @@ public actor PlaybackSession {
         let wasPlaying = state.status == .playing
         let priorStatus = state.status
         let seconds = await currentPlaybackSeconds()
-        let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
+        let previousSessionID = activeTranscodeSessionID
 
+        // Resolve + warm up the NEW session before touching the player, so we
+        // never swap in a cold URL.
         let resolved: ResolvedPlayback
         do {
             resolved = try await resolvePlayback(for: nextItem, startSeconds: seconds)
@@ -197,14 +217,14 @@ public actor PlaybackSession {
         }
 
         let url = resolved.url
-        let needsClientSeek = !resolved.isServerTranscode
         baseOffsetSeconds = resolved.baseOffsetSeconds
+        let seekTarget = seekTarget(for: resolved, position: seconds)
 
         if let avPlayer {
             await MainActor.run {
                 avPlayer.replaceCurrentItem(with: AVPlayerItem(url: url))
-                if needsClientSeek {
-                    avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if let seekTarget {
+                    avPlayer.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
                 }
                 if wasPlaying {
                     avPlayer.play()
@@ -213,8 +233,8 @@ public actor PlaybackSession {
         } else {
             let player = await MainActor.run { () -> AVPlayer in
                 let player = AVPlayer(url: url)
-                if needsClientSeek {
-                    player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if let seekTarget {
+                    player.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
                 }
                 if wasPlaying {
                     player.play()
@@ -225,12 +245,19 @@ public actor PlaybackSession {
             startResumeLoop()
         }
 
+        activeTranscodeSessionID = resolved.transcodeSessionID
         state = PlaybackState(
             status: wasPlaying ? .playing : priorStatus,
             item: nextItem,
             position: .seconds(seconds),
             duration: state.duration
         )
+
+        // Now that the new session is live, stop the old one — never before, so
+        // we don't interrupt playback if the swap is mid-flight.
+        if let previousSessionID, previousSessionID != resolved.transcodeSessionID {
+            await source?.stopTranscode(sessionID: previousSessionID)
+        }
     }
 
     public func stop() async {
@@ -301,10 +328,14 @@ public actor PlaybackSession {
     /// surfaced only behind the player's Details disclosure — the user sees a
     /// friendly message, not this).
     private static func resolveErrorDetail(_ error: any Error) -> String {
-        if case PlaybackResolveError.noPlayableStream = error {
+        switch error {
+        case PlaybackResolveError.noPlayableStream:
             return "No playable stream — the server didn't return a usable Part or connection."
+        case let PlaybackResolveError.notReady(diagnostics):
+            return diagnostics
+        default:
+            return "Couldn't resolve a playback URL: \(error)"
         }
-        return "Couldn't resolve a playback URL: \(error)"
     }
 
     private func startResumeLoop() {
@@ -353,6 +384,12 @@ public actor PlaybackSession {
 
     private func teardownPlayer() async {
         baseOffsetSeconds = 0
+        // Stop the server transcode session so Plex frees it immediately rather
+        // than reaping it later (and so a stale one can't linger).
+        if let sessionID = activeTranscodeSessionID {
+            activeTranscodeSessionID = nil
+            await source?.stopTranscode(sessionID: sessionID)
+        }
         guard let player = avPlayer else { return }
         await MainActor.run {
             player.pause()

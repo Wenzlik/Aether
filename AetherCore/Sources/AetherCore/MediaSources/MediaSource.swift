@@ -44,8 +44,17 @@ public protocol MediaSource: Sendable {
     /// audio / subtitle streams + start offset. They must never hand back or
     /// string-mutate a previously issued URL. Reusing a stale Plex transcode
     /// session is exactly what surfaces as `NSURLErrorDomain -1008` on audio
-    /// switch and on resume-after-a-delay. See `PlaybackRequest`.
+    /// switch and on resume-after-a-delay. For server transcodes the
+    /// implementation should also **warm up** the stream (confirm the HLS
+    /// playlist is actually readable) before returning, so AVPlayer never opens
+    /// a not-yet-ready URL. See `PlaybackRequest`.
     func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback
+
+    /// Tear down a server-side transcode session previously handed back in
+    /// `ResolvedPlayback.transcodeSessionID`. Called when switching tracks (the
+    /// old session, after the new one is live) and on stop. Default: no-op for
+    /// sources without server sessions.
+    func stopTranscode(sessionID: String) async
 }
 
 public extension MediaSource {
@@ -62,6 +71,9 @@ public extension MediaSource {
         }
         return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0)
     }
+
+    /// Default: nothing to tear down.
+    func stopTranscode(sessionID: String) async {}
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }
@@ -171,11 +183,27 @@ public struct ResolvedPlayback: Sendable, Equatable {
     /// or `0` for direct play. The session adds this back when recording
     /// resume points so saved positions stay absolute.
     public let baseOffsetSeconds: Double
+    /// When non-nil, the player should seek to this absolute content second
+    /// after the item is ready. Used for direct play and for **small transcode
+    /// offsets** — Plex's first HLS segment may not exist for a tiny offset, so
+    /// we start the transcode at zero and seek client-side instead.
+    public let clientSeekSeconds: Double?
+    /// The server transcode session id backing this URL, so the caller can stop
+    /// it later (`stopTranscode(sessionID:)`). `nil` for direct play.
+    public let transcodeSessionID: String?
 
-    public init(url: URL, isServerTranscode: Bool, baseOffsetSeconds: Double = 0) {
+    public init(
+        url: URL,
+        isServerTranscode: Bool,
+        baseOffsetSeconds: Double = 0,
+        clientSeekSeconds: Double? = nil,
+        transcodeSessionID: String? = nil
+    ) {
         self.url = url
         self.isServerTranscode = isServerTranscode
         self.baseOffsetSeconds = baseOffsetSeconds
+        self.clientSeekSeconds = clientSeekSeconds
+        self.transcodeSessionID = transcodeSessionID
     }
 }
 
@@ -183,4 +211,7 @@ public enum PlaybackResolveError: Error, Sendable, Equatable {
     /// The source couldn't produce a playable URL (no Part / no reachable
     /// connection / unsupported item).
     case noPlayableStream
+    /// The transcode stream didn't become readable within the warm-up window.
+    /// `diagnostics` is a sanitised, token-free summary for the Details view.
+    case notReady(diagnostics: String)
 }

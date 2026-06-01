@@ -44,6 +44,21 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Plex transcode HLS warm-up — the rest of the `-1008` story.** Even with a
+  fresh session per playback, AVPlayer could still open the `start.m3u8` URL
+  before Plex had produced a readable playlist, so audio-switch / resume could
+  fail with `NSURLErrorDomain -1008` and only succeed if you waited and retried.
+  The resolver now **warms up** the stream before returning: a new
+  `PlexTranscodeSessionManager` fetches the master playlist with short
+  exponential backoff (immediate, 250 ms, 500 ms, 1 s, 2 s) and only hands the
+  URL to the player once it's HTTP 200 + `#EXTM3U`. Plus: small resume offsets
+  (≤ 12 s) are no longer sent to the transcoder (the first segment may not
+  exist) — playback starts at zero and seeks client-side; transcode sessions are
+  explicitly **stopped** on close and after a track switch (old session stopped
+  only once the new one is live); local connections send `location=lan`; and a
+  failed warm-up shows a calm "Unable to prepare playback" Retry/Close state with
+  token-free diagnostics behind *Details*. (The `ResolvedPlayback` contract is
+  source-agnostic, so Jellyfin's HLS can adopt the same warm-up next.)
 - **Playback `-1008` on audio switch and resume-after-a-delay.** Transcode
   playback URLs were built once (with a `session` id minted at fetch time) and
   then string-mutated / replayed — so a Plex transcode session reaped
