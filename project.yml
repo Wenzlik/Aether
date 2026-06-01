@@ -91,6 +91,11 @@ targets:
         # Surfaces "Aether" in Xcode's Identity → Display Name field. Also
         # generated into the per-destination Info.plist by Xcode.
         INFOPLIST_KEY_CFBundleDisplayName: Aether
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
 
   AetherTests:
     type: bundle.unit-test
