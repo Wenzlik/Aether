@@ -32,11 +32,23 @@ struct DetailView: View {
             }
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
-        #if os(iOS) || os(visionOS)
-        // The player overlays this view *inside* the NavigationStack, so the
-        // navigation bar's back button would otherwise stay visible behind /
-        // above the video. Hide it for the duration of playback; the player
-        // owns its own dismiss surface.
+        #if os(iOS)
+        // iOS only. The player overlays this view *inside* the NavigationStack
+        // and on iPhone / iPad the nav bar's back button would otherwise sit
+        // behind / above the video — looks like junk, so we hide it for the
+        // duration of playback. The player's own overlay xmark is the dismiss
+        // surface on iOS.
+        //
+        // visionOS is **excluded on purpose.** Hiding the toolbar there leaves
+        // the system back chevron rendered in the window's ornament bar but
+        // non-functional — taps fire haptic feedback (we saw
+        // `MRUIFeedbackTypeButtonWithoutBackgroundTouchDown` timeouts in the
+        // logs) without actually popping the NavigationStack. Keeping the
+        // toolbar visible during playback makes the chevron behave normally:
+        // tap → pop DetailView → PlayerView's `.onDisappear` writes the
+        // resume point and tears down → user lands back on Home. The small
+        // strip of window chrome over the player is an acceptable price for
+        // a functional native back gesture.
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
         .task {
