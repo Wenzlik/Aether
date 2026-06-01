@@ -128,6 +128,22 @@ public actor PlexMediaSource: MediaSource {
         return metadata.map { mapMetadataToMediaItem($0, base: base) }
     }
 
+    /// Fetch a single item's full metadata. Plex library rails often omit
+    /// `Media.Part.Stream`, which means the player cannot know about alternate
+    /// audio tracks. `/library/metadata/{ratingKey}` includes the richer shape,
+    /// so hydrate immediately before playback.
+    public func item(for id: MediaID) async throws -> MediaItem? {
+        guard id.source == self.id else { return nil }
+        let base = try await resolveBaseURL()
+        let request = request(base: base, path: "/library/metadata/\(id.rawValue)")
+        let response = try await api.decode(
+            PlexAPI.LibraryItemsResponse.self,
+            from: request,
+            decoder: decoder
+        )
+        return response.mediaContainer.metadata?.first.map { mapMetadataToMediaItem($0, base: base) }
+    }
+
     // MARK: - Connection resolution + failover
 
     /// Return a reachable connection's base URL, probing `/identity` in ranked

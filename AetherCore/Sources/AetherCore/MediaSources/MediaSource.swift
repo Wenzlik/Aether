@@ -31,9 +31,18 @@ public protocol MediaSource: Sendable {
     /// Returns `[]` for leaf items (movies, episodes) and for sources that
     /// don't model a hierarchy.
     func children(of id: MediaID) async throws -> [MediaItem]
+
+    /// Fresh metadata for one item, when the source can cheaply resolve it.
+    /// Player entry points use this to hydrate details that list endpoints may
+    /// omit, like Plex audio streams.
+    func item(for id: MediaID) async throws -> MediaItem?
 }
 
 public extension MediaSource {
+    /// Default: no detail endpoint. Callers should fall back to the item they
+    /// already have.
+    func item(for id: MediaID) async throws -> MediaItem? { nil }
+
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }
 

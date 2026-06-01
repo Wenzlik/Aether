@@ -792,6 +792,55 @@ struct PlexMediaSourceLibrariesTests {
         #expect(stream.query?.contains("X-Plex-Token=srv-token") == true)
     }
 
+    @Test("item(for:) hydrates a leaf item with Plex audio streams")
+    func itemEndpointHydratesAudioStreams() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {
+                "ratingKey":"123",
+                "type":"movie",
+                "title":"Multi Audio",
+                "Media":[
+                  {
+                    "container":"mkv",
+                    "Part":[
+                      {
+                        "key":"/library/parts/123/1700/file.mkv",
+                        "Stream":[
+                          {"id":"1","streamType":1,"codec":"hevc"},
+                          {"id":"11","streamType":2,"selected":true,"codec":"aac","language":"English","languageCode":"eng","channels":6},
+                          {"id":"12","streamType":2,"selected":false,"codec":"ac3","language":"Czech","languageCode":"ces","channels":2}
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let id = MediaID(source: .plex(serverID: "test-server"), rawValue: "123")
+        let item = try #require(try await source.item(for: id))
+
+        let recorded = await api.requests
+        try #require(recorded.count == 2)
+        #expect(recorded[1].url?.path == "/library/metadata/123")
+        #expect(item.audioTracks.map(\.id) == ["11", "12"])
+        #expect(item.selectedAudioTrackID == "11")
+
+        let stream = try #require(item.streamURL)
+        let components = try #require(URLComponents(url: stream, resolvingAgainstBaseURL: false))
+        #expect(components.queryItems?.first { $0.name == "audioStreamID" }?.value == "11")
+    }
+
     @Test("children(of:) hits /library/metadata/{key}/children and maps seasons")
     func childrenEndpointAndMapping() async throws {
         let api = RecordingAPIClient()

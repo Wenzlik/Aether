@@ -8,7 +8,7 @@ struct PlayerView: View {
     @State private var viewModel: PlayerStateViewModel
 
     /// Chrome auto-hide window. Lines up with `AVPlayerViewController`'s
-    /// native transport bar so the overlay xmark on iOS / visionOS feels
+    /// native transport bar so the overlay close affordance feels
     /// like part of the system chrome rather than a separate always-visible
     /// surface.
     private static let chromeIdleHide: Duration = .seconds(3)
@@ -32,8 +32,17 @@ struct PlayerView: View {
             if viewModel.state.status == .failed {
                 playbackUnavailable
             } else if let player = viewModel.player {
-                SystemVideoPlayer(player: player)
-                    .ignoresSafeArea()
+                SystemVideoPlayer(
+                    player: player,
+                    onDismiss: {
+                        Task { await dismissPlayer() }
+                    }
+                )
+                #if os(visionOS)
+                .safeAreaPadding(.top, AetherDesign.Spacing.l)
+                #else
+                .ignoresSafeArea()
+                #endif
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)
@@ -41,6 +50,7 @@ struct PlayerView: View {
 
             #if os(iOS) || os(visionOS)
             playerChrome
+                .zIndex(20)
                 .opacity(effectiveCloseVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
@@ -54,9 +64,9 @@ struct PlayerView: View {
         }
         #if os(iOS) || os(visionOS)
         // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome
-        // intact while letting us mirror its visibility on the overlay
-        // xmark. Without the simultaneous variant, our tap would consume
-        // the touch and the native transport bar would stop responding.
+        // intact while letting us mirror its visibility on the overlay close
+        // button. Without the simultaneous variant, our tap would consume the
+        // touch and the native transport bar would stop responding.
         .simultaneousGesture(
             TapGesture().onEnded { revealChrome() }
         )
@@ -112,7 +122,7 @@ struct PlayerView: View {
                 Button {
                     Task { await dismissPlayer() }
                 } label: {
-                    Image(systemName: "xmark")
+                    Image(systemName: closeButtonSystemImage)
                         .font(.system(size: closeGlyphPointSize, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(closeButtonInnerPadding)
@@ -145,6 +155,14 @@ struct PlayerView: View {
             .padding(AetherDesign.Spacing.m)
             Spacer()
         }
+    }
+
+    private var closeButtonSystemImage: String {
+        #if os(visionOS)
+        return "chevron.left"
+        #else
+        return "xmark"
+        #endif
     }
 
     /// Glyph size for the close button. visionOS needs a larger target

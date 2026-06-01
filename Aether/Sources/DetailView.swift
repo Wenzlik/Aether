@@ -9,6 +9,8 @@ struct DetailView: View {
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
+    @State private var playbackItem: MediaItem?
+    @State private var isPreparingPlayback = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,7 +22,7 @@ struct DetailView: View {
 
             if isPlayerPresented {
                 PlayerView(
-                    item: item,
+                    item: playbackItem ?? item,
                     session: playbackSession,
                     onDismiss: dismissPlayer
                 )
@@ -232,13 +234,13 @@ struct DetailView: View {
             systemImage: "play.fill",
             role: .primary
         ) {
-            withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
-                isPlayerPresented = true
-            }
+            Task { await presentPlayer() }
         }
+        .disabled(isPreparingPlayback)
     }
 
     private var playButtonLabel: String {
+        if isPreparingPlayback { return "Preparing..." }
         if let resume { return "Resume \(formatPosition(resume.position))" }
         return "Play"
     }
@@ -254,10 +256,27 @@ struct DetailView: View {
 
     // MARK: - Player dismiss
 
+    private func presentPlayer() async {
+        guard !isPreparingPlayback else { return }
+        isPreparingPlayback = true
+        defer { isPreparingPlayback = false }
+
+        if let source, let hydrated = try? await source.item(for: item.id) {
+            playbackItem = hydrated
+        } else {
+            playbackItem = item
+        }
+
+        withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+            isPlayerPresented = true
+        }
+    }
+
     private func dismissPlayer() {
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = false
         }
+        playbackItem = nil
         Task { resume = await resumeStore.point(for: item.id) }
     }
 
@@ -292,4 +311,3 @@ struct DetailView: View {
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
     }
 }
-
