@@ -4,9 +4,9 @@ import AetherCore
 /// Backs `SettingsView` with reactive state derived from `AppSession`.
 ///
 /// Kept lightweight on purpose — Settings is a presentation surface, not its
-/// own domain. The only behavior owned here is `signOut()`, which delegates
-/// straight to the session and then closes the sheet so the user lands back
-/// on a Home that's already re-rendered into its welcome state.
+/// own domain. It owns two behaviours: `signOut()` (delegates to the session,
+/// which resets Home to its welcome state) and `connect()` (opens the sign-in
+/// sheet). Settings is a full-screen tab now, so there's no sheet to dismiss.
 @MainActor
 @Observable
 final class SettingsViewModel {
@@ -22,26 +22,31 @@ final class SettingsViewModel {
 
     var connectedServerName: String? { session.plexServer?.name }
 
-    /// User-facing label for the Plex row in the Account section.
-    var plexAccountLabel: String {
-        if let name = connectedServerName { return "Connected as \(name)" }
-        if isPlexSignedIn                 { return "Signed in" }
-        return "Not connected"
+    /// Colour-coded account state for the Account card.
+    var plexAccountStatus: AetherStatus {
+        if connectedServerName != nil { return .connected }
+        if isPlexSignedIn             { return .positive("Signed in") }
+        return .notConnected
+    }
+
+    /// Secondary line under the Plex account row when we know the server.
+    var connectedServerDetail: String? {
+        connectedServerName.map { "Server: \($0)" }
     }
 
     // MARK: - Sources
 
-    var plexSourceLabel: String {
-        isPlexSignedIn ? "Connected" : "Not connected"
+    var plexSourceStatus: AetherStatus {
+        isPlexSignedIn ? .connected : .notConnected
     }
 
-    let synologySourceLabel = "Coming soon"
+    let synologyStatus: AetherStatus = .comingSoon
 
     // MARK: - Playback
 
-    let directPlayLabel = "Available"
-    let transcodingLabel = "Coming soon"
-    let offlineDownloadsLabel = "Coming soon"
+    let directPlayStatus: AetherStatus = .available
+    let transcodingStatus: AetherStatus = .comingSoon
+    let offlineDownloadsStatus: AetherStatus = .comingSoon
 
     // MARK: - About
 
@@ -65,12 +70,14 @@ final class SettingsViewModel {
 
     // MARK: - Actions
 
-    func signOut() async {
-        await session.signOutOfPlex()
-        session.isSettingsPresented = false
+    /// Open the Plex sign-in / discovery flow.
+    func connect() {
+        session.presentSignIn()
     }
 
-    func dismiss() {
-        session.isSettingsPresented = false
+    /// Clear the Plex token + selected server and reset app state. Home returns
+    /// to its welcome state; no app delete required.
+    func signOut() async {
+        await session.signOutOfPlex()
     }
 }

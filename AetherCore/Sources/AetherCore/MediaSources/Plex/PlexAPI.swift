@@ -177,6 +177,31 @@ public enum PlexAPI {
             audioTracks.first(where: \.isSelected)?.id
         }
 
+        /// Subtitle streams (`streamType == 3`) from the first media part —
+        /// the same `Stream` list audio tracks come from. Forced status is
+        /// inferred from the title (Plex doesn't always set an explicit flag
+        /// in this response shape), e.g. "Czech (Forced)".
+        public var subtitleTracks: [MediaSubtitleTrack] {
+            guard let streams = media?.first?.part?.first?.stream else { return [] }
+            return streams.enumerated().compactMap { index, stream in
+                guard stream.streamType == 3, let id = stream.id else { return nil }
+                let fallbackTitle = "Subtitle \(index + 1)"
+                let title = stream.bestTitle ?? fallbackTitle
+                return MediaSubtitleTrack(
+                    id: id,
+                    title: title,
+                    languageCode: stream.languageCode,
+                    codec: stream.codec,
+                    isForced: title.localizedCaseInsensitiveContains("forced"),
+                    isSelected: stream.selected ?? false
+                )
+            }
+        }
+
+        public var selectedSubtitleTrackID: String? {
+            subtitleTracks.first(where: \.isSelected)?.id
+        }
+
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case media = "Media"
