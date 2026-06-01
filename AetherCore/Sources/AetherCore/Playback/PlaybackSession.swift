@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 /// Minimal playback state surfaced to UI.
 ///
@@ -61,6 +62,31 @@ public actor PlaybackSession {
     /// it on teardown / after a track switch. `nil` for direct play.
     private var activeTranscodeSessionID: String?
 
+    // MARK: - Diagnostics
+
+    /// Structured playback-lifecycle logging — to settle whether failures live
+    /// in this shared layer or the source layer. Visible in Console.app /
+    /// `log stream --predicate 'subsystem == "cz.zmrhal.aether"'`. **Never logs
+    /// tokens or full URLs** — only a stable one-way hash of the URL so you can
+    /// tell whether two attempts used the same stream.
+    private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "playback")
+
+    /// Monotonic "Playback Attempt #N" counter for the current process.
+    private var attempt = 0
+
+    /// djb2 hash of a string — stable within a run, one-way (token-safe).
+    nonisolated static func urlHash(_ url: URL?) -> String {
+        guard let url else { return "nil" }
+        var hash: UInt64 = 5381
+        for byte in url.absoluteString.utf8 { hash = (hash &* 33) &+ UInt64(byte) }
+        return String(hash, radix: 16)
+    }
+
+    nonisolated static func shortID(_ object: AnyObject?) -> String {
+        guard let object else { return "nil" }
+        return String(UInt(bitPattern: ObjectIdentifier(object).hashValue) & 0xFFFFFF, radix: 16)
+    }
+
     /// Content seconds represented by the player's `currentTime() == 0`.
     ///
     /// A Plex transcode started at `offset` emits a fresh HLS timeline whose
@@ -93,6 +119,10 @@ public actor PlaybackSession {
         source: (any MediaSource)? = nil,
         startAt explicitStart: Double? = nil
     ) async {
+        attempt += 1
+        let startLabel = explicitStart.map { String($0) } ?? "resume"
+        Self.log.notice("prepare #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) source=\(item.id.source.stableKey, privacy: .public) startAt=\(startLabel, privacy: .public)")
+
         // Tear down previous session before starting a new one (stops its
         // transcode session too).
         resumeTask?.cancel()
@@ -130,13 +160,17 @@ public actor PlaybackSession {
         baseOffsetSeconds = resolved.baseOffsetSeconds
         let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
-        let player = await MainActor.run { () -> AVPlayer in
+        let (player, itemID) = await MainActor.run { () -> (AVPlayer, String) in
             let p = AVPlayer(url: url)
             if let seekTarget {
                 p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             }
-            return p
+            return (p, Self.shortID(p.currentItem))
         }
+
+        let sessionShort: String = resolved.transcodeSessionID.map { String($0.prefix(8)) } ?? "-"
+        let createdLog = "player created #\(attempt) player=\(Self.shortID(player)) item=\(itemID) transcode=\(resolved.isServerTranscode) session=\(sessionShort) urlHash=\(Self.urlHash(url))"
+        Self.log.notice("\(createdLog, privacy: .public)")
 
         self.avPlayer = player
         self.state = PlaybackState(
@@ -158,12 +192,14 @@ public actor PlaybackSession {
 
     public func play() async {
         guard let avPlayer, state.item != nil else { return }
+        Self.log.notice("play #\(self.attempt, privacy: .public)")
         await MainActor.run { avPlayer.play() }
         state.status = .playing
     }
 
     public func pause() async {
         guard let avPlayer, state.status == .playing else { return }
+        Self.log.notice("pause #\(self.attempt, privacy: .public) pos=\(Self.durationSeconds(self.state.position), privacy: .public)s")
         await MainActor.run { avPlayer.pause() }
         state.status = .paused
         await writeResumeNow()
@@ -274,6 +310,7 @@ public actor PlaybackSession {
     /// `.loading` or `.playing` forever — and the UI would show a spinner or
     /// a black screen with no indication of what went wrong.
     public func markFailed(message: String) async {
+        Self.log.error("playback FAILED #\(self.attempt, privacy: .public) status=\(String(describing: self.state.status), privacy: .public) pos=\(Self.durationSeconds(self.state.position), privacy: .public)s reason=\(message, privacy: .public)")
         let failedState = PlaybackState(
             status: .failed,
             item: state.item,
@@ -391,6 +428,7 @@ public actor PlaybackSession {
             await source?.stopTranscode(sessionID: sessionID)
         }
         guard let player = avPlayer else { return }
+        Self.log.notice("teardown #\(self.attempt, privacy: .public) player=\(Self.shortID(player), privacy: .public)")
         await MainActor.run {
             player.pause()
             player.replaceCurrentItem(with: nil)
