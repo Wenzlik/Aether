@@ -189,12 +189,16 @@ struct PlayerView: View {
             }
         } label: {
             Image(systemName: "speaker.wave.2")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: closeGlyphPointSize, weight: .semibold))
                 .foregroundStyle(.white)
-                .padding(AetherDesign.Spacing.s)
+                .padding(closeButtonInnerPadding)
                 .background(.ultraThinMaterial, in: Circle())
+                .contentShape(Circle())
         }
         .accessibilityLabel("Audio track")
+        #if os(visionOS)
+        .hoverEffect()
+        #endif
     }
 
     private func revealChrome() {
