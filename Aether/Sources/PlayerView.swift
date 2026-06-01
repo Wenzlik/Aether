@@ -116,10 +116,26 @@ struct PlayerView: View {
                         .font(.system(size: closeGlyphPointSize, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(closeButtonInnerPadding)
+                        // `contentShape(Circle())` guarantees the hit-test
+                        // area matches the visible button. Without it, the
+                        // ultraThinMaterial background isn't always honoured
+                        // for hit testing, and the button feels "dead" in a
+                        // few pixel rings around the glyph.
                         .background(.ultraThinMaterial, in: Circle())
+                        .contentShape(Circle())
                 }
                 .padding(AetherDesign.Spacing.m)
                 .accessibilityLabel("Close player")
+                // visionOS-only hint: tells the system this is an
+                // interactive element so the gaze-driven hover effect lights
+                // it up. Without `.hoverEffect`, visionOS sometimes doesn't
+                // route a pinch on a small SwiftUI button that sits over an
+                // AVPlayerViewController to our handler — the button looks
+                // like decoration, the gaze passes through to the player
+                // chrome behind it, and the user can't dismiss.
+                #if os(visionOS)
+                .hoverEffect()
+                #endif
                 Spacer()
             }
             Spacer()
