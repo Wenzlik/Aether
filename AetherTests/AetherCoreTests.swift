@@ -100,6 +100,23 @@ struct PlaybackSessionTests {
         #expect(state.item == nil)
     }
 
+    @Test("markFailed() clears the current AVPlayer")
+    func markFailedClearsPlayer() async {
+        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+        let item = Self.makeItem(id: "bad-stream")
+
+        await session.prepare(item: item)
+        #expect(await session.currentAVPlayer() != nil)
+
+        await session.markFailed(message: "Codec unsupported")
+
+        let state = await session.state
+        #expect(state.status == .failed)
+        #expect(state.item?.id == item.id)
+        #expect(state.error == "Codec unsupported")
+        #expect(await session.currentAVPlayer() == nil)
+    }
+
     @Test("prepare() resumes from a previously stored position")
     func resumesFromStore() async {
         let store = ResumeStore()

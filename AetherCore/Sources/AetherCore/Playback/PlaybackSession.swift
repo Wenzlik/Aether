@@ -136,15 +136,17 @@ public actor PlaybackSession {
     /// `.loading` or `.playing` forever — and the UI would show a spinner or
     /// a black screen with no indication of what went wrong.
     public func markFailed(message: String) async {
-        resumeTask?.cancel()
-        resumeTask = nil
-        state = PlaybackState(
+        let failedState = PlaybackState(
             status: .failed,
             item: state.item,
             position: state.position,
             duration: state.duration,
             error: message
         )
+        resumeTask?.cancel()
+        resumeTask = nil
+        await teardownPlayer()
+        state = failedState
     }
 
     // MARK: - Player vending

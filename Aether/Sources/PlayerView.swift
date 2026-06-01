@@ -29,13 +29,13 @@ struct PlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let player = viewModel.player {
+            if viewModel.state.status == .failed {
+                playbackUnavailable
+            } else if let player = viewModel.player {
                 SystemVideoPlayer(player: player) {
                     Task { await dismissPlayer() }
                 }
                 .ignoresSafeArea()
-            } else if viewModel.state.status == .failed {
-                playbackUnavailable
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)
@@ -95,6 +95,7 @@ struct PlayerView: View {
     /// user can always exit — particularly important on visionOS, where a
     /// ZStack overlay has no system back gesture to fall back on.
     private var effectiveCloseVisibility: Bool {
+        guard viewModel.state.status != .failed else { return true }
         guard viewModel.player != nil else { return true }
         return isCloseVisible
     }
@@ -146,7 +147,10 @@ struct PlayerView: View {
         AetherErrorState(
             glyph: "play.slash",
             title: "Playback unavailable",
-            message: failureDiagnostic
+            message: failureDiagnostic,
+            retry: .init(label: "Close player") {
+                Task { await dismissPlayer() }
+            }
         )
         .padding(AetherDesign.Spacing.xl)
     }
