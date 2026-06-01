@@ -82,6 +82,25 @@ struct HomeView: View {
 
     private var topChrome: some View {
         HStack(spacing: AetherDesign.Spacing.s) {
+            #if os(tvOS)
+            HStack(spacing: AetherDesign.Spacing.xs) {
+                TopTabButton(surface: .home, isSelected: selectedSurface == .home) {
+                    selectedSurface = .home
+                }
+                TopTabButton(surface: .files, isSelected: selectedSurface == .files) {
+                    selectedSurface = .files
+                }
+                TopTabButton(surface: .search, isSelected: selectedSurface == .search) {
+                    selectedSurface = .search
+                }
+            }
+            .padding(AetherDesign.Spacing.xxs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
+            }
+            #endif
+
             HStack(spacing: AetherDesign.Spacing.xxs) {
                 // Always-visible source button so sign-in remains reachable
                 // even when Home is full of content.
@@ -101,22 +120,20 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Refresh sources")
                 }
+
+                #if os(tvOS)
+                Button(action: onOpenSettings) {
+                    HeaderIcon(glyph: "gearshape", isActive: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
+                #endif
             }
             .padding(AetherDesign.Spacing.xxs)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
             }
-
-            Button(action: onAddSource) {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.black)
-                    .frame(width: 56, height: 56)
-                    .background(AetherDesign.Palette.accent, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Add a source")
         }
     }
 
@@ -537,6 +554,31 @@ private struct HeaderIcon: View {
                     y: isFocused ? 8 : 0)
             .scaleEffect(isFocused ? 1.10 : 1.0)
             .animation(AetherDesign.Motion.focus, value: isFocused)
+    }
+}
+
+private struct TopTabButton: View {
+    let surface: HomeSurface
+    let isSelected: Bool
+    let action: () -> Void
+
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        Button(action: action) {
+            Text(surface.title)
+                .font(AetherDesign.Typography.cardTitle)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.s)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? AetherDesign.Palette.accent.opacity(isFocused ? 0.45 : 0.22) : AetherDesign.Palette.surface.opacity(isFocused ? 1.0 : 0.0))
+                )
+                .foregroundStyle(isSelected ? AetherDesign.Palette.textPrimary : AetherDesign.Palette.textSecondary)
+                .scaleEffect(isFocused ? 1.05 : 1.0)
+                .animation(AetherDesign.Motion.focus, value: isFocused)
+        }
+        .buttonStyle(.plain)
     }
 }
 

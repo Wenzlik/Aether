@@ -34,14 +34,9 @@ public struct AetherCard: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            let shape = RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous)
-
             artwork
-                .clipShape(shape)
+                .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 .overlay(alignment: .bottom) { progressBar }
-                .overlay {
-                    shape.stroke(AetherDesign.Palette.separator, lineWidth: 1)
-                }
                 .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
                         radius: isFocused ? 18 : 0,
                         y: isFocused ? 12 : 0)
