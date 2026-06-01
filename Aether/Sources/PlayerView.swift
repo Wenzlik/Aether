@@ -4,11 +4,14 @@ import AetherCore
 
 struct PlayerView: View {
     let item: MediaItem
+    /// Where playback should begin. `nil` resumes from the persisted point;
+    /// `0` (or any explicit value) starts there, ignoring the saved resume.
+    let startAt: Double?
     let onDismiss: () -> Void
     @State private var viewModel: PlayerStateViewModel
 
     /// Chrome auto-hide window. Lines up with `AVPlayerViewController`'s
-    /// native transport bar so the overlay xmark on iOS / visionOS feels
+    /// native transport bar so the overlay close affordance feels
     /// like part of the system chrome rather than a separate always-visible
     /// surface.
     private static let chromeIdleHide: Duration = .seconds(3)
@@ -19,8 +22,14 @@ struct PlayerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #endif
 
-    init(item: MediaItem, session: PlaybackSession, onDismiss: @escaping () -> Void) {
+    init(
+        item: MediaItem,
+        session: PlaybackSession,
+        startAt: Double? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.item = item
+        self.startAt = startAt
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
     }
@@ -32,8 +41,17 @@ struct PlayerView: View {
             if viewModel.state.status == .failed {
                 playbackUnavailable
             } else if let player = viewModel.player {
-                SystemVideoPlayer(player: player)
-                    .ignoresSafeArea()
+                SystemVideoPlayer(
+                    player: player,
+                    onDismiss: {
+                        Task { await dismissPlayer() }
+                    }
+                )
+                #if os(visionOS)
+                .safeAreaPadding(.top, AetherDesign.Spacing.l)
+                #else
+                .ignoresSafeArea()
+                #endif
             } else {
                 ProgressView()
                     .tint(AetherDesign.Palette.textPrimary)
@@ -41,6 +59,7 @@ struct PlayerView: View {
 
             #if os(iOS) || os(visionOS)
             playerChrome
+                .zIndex(20)
                 .opacity(effectiveCloseVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
@@ -54,23 +73,19 @@ struct PlayerView: View {
         }
         #if os(iOS) || os(visionOS)
         // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome
-        // intact while letting us mirror its visibility on the overlay
-        // xmark. Without the simultaneous variant, our tap would consume
-        // the touch and the native transport bar would stop responding.
+        // intact while letting us mirror its visibility on the overlay close
+        // button. Without the simultaneous variant, our tap would consume the
+        // touch and the native transport bar would stop responding.
         .simultaneousGesture(
             TapGesture().onEnded { revealChrome() }
         )
         #endif
         .task {
-            await viewModel.open(item)
-            #if os(iOS)
-            // iOS only: schedule the auto-hide so the xmark mirrors
-            // AVKit's transport bar. visionOS keeps the close button
-            // permanently visible (see `effectiveCloseVisibility`) —
-            // gaze + pinch on the player area doesn't reliably reach our
-            // `simultaneousGesture` past AVPlayerViewController's own
-            // gesture stack, so an auto-hidden button there strands the
-            // user mid-playback.
+            await viewModel.open(item, startAt: startAt)
+            #if os(iOS) || os(visionOS)
+            // Schedule the auto-hide so our chrome (iOS xmark, visionOS audio
+            // menu) mirrors AVKit's transport bar instead of sitting over the
+            // video permanently. A tap (`revealChrome`) brings it back.
             if viewModel.player != nil {
                 scheduleChromeHide()
             }
@@ -88,20 +103,16 @@ struct PlayerView: View {
     }
 
     #if os(iOS) || os(visionOS)
-    /// Chrome visibility that respects the auto-hide timer **only** while
-    /// playback is actually live, **and only on iOS**. visionOS keeps the
-    /// close button permanently visible: a gaze + pinch tap against the
-    /// player area doesn't reliably reach our SwiftUI `simultaneousGesture`
-    /// (AVPlayerViewController's UIKit gesture stack tends to swallow it),
-    /// so auto-hiding the xmark there strands users mid-playback.
+    /// Chrome visibility that respects the auto-hide timer while playback is
+    /// actually live. The chrome (audio-track menu on visionOS, plus the close
+    /// xmark on iOS) fades out a few seconds after the last interaction and a
+    /// tap reveals it again — mirroring AVKit's own transport bar so it doesn't
+    /// sit on top of the video the whole time. Always visible while loading or
+    /// on failure so the user is never stranded without a control.
     private var effectiveCloseVisibility: Bool {
-        #if os(visionOS)
-        return true
-        #else
         guard viewModel.state.status != .failed else { return true }
         guard viewModel.player != nil else { return true }
         return isCloseVisible
-        #endif
     }
     #endif
 
@@ -109,6 +120,12 @@ struct PlayerView: View {
     private var playerChrome: some View {
         VStack {
             HStack {
+                // iOS only. visionOS dismisses through the native AVKit
+                // `Back` contextual action (see `SystemVideoPlayer`): it's the
+                // reliable escape hatch when `AVPlayerViewController` owns the
+                // gaze / pinch routing, and a second SwiftUI chevron here just
+                // duplicated both it and the system window ornament.
+                #if os(iOS)
                 Button {
                     Task { await dismissPlayer() }
                 } label: {
@@ -125,15 +142,6 @@ struct PlayerView: View {
                         .contentShape(Circle())
                 }
                 .accessibilityLabel("Close player")
-                // visionOS-only hint: tells the system this is an
-                // interactive element so the gaze-driven hover effect lights
-                // it up. Without `.hoverEffect`, visionOS sometimes doesn't
-                // route a pinch on a small SwiftUI button that sits over an
-                // AVPlayerViewController to our handler — the button looks
-                // like decoration, the gaze passes through to the player
-                // chrome behind it, and the user can't dismiss.
-                #if os(visionOS)
-                .hoverEffect()
                 #endif
 
                 Spacer()

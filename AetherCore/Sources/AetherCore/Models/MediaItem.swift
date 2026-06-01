@@ -48,6 +48,29 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         return audioTracks.first { $0.id == selectedAudioTrackID }
     }
 
+    /// Whether playback start/seek is handled by the server (Plex universal
+    /// transcode) rather than the local `AVPlayer`. A transcode session emits
+    /// HLS from a fixed start offset, so seeking the player into a from-zero
+    /// transcode requests segments the server never produced — surfacing as
+    /// `NSURLErrorDomain -1008`. For these we bake the start position into the
+    /// URL (`offset`) instead of seeking. Direct-play files seek client-side.
+    public var isServerTranscode: Bool {
+        guard let streamURL else { return false }
+        return streamURL.path.contains("/transcode/universal/start")
+    }
+
+    /// Return a copy whose stream begins at `seconds`.
+    ///
+    /// For server-transcode URLs this writes a Plex `offset` query item so the
+    /// transcoder starts producing segments from that point. For direct-play
+    /// it's a no-op — the caller seeks the `AVPlayer` instead. A non-positive
+    /// `seconds` returns `self` unchanged (start from the beginning).
+    public func startingPlayback(at seconds: Double) -> MediaItem {
+        guard seconds > 0, isServerTranscode, let streamURL else { return self }
+        let offset = String(Int(seconds.rounded()))
+        return replacingStreamURL(streamURL.replacingQueryItem(name: "offset", value: offset))
+    }
+
     public func selectingAudioTrack(_ track: MediaAudioTrack) -> MediaItem {
         let nextTracks = audioTracks.map { $0.withSelection($0.id == track.id) }
         return MediaItem(
@@ -59,9 +82,34 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             summary: summary,
             posterURL: posterURL,
             backdropURL: backdropURL,
-            streamURL: streamURL?.replacingQueryItem(name: "audioStreamID", value: track.id),
+            // Set the new track *and* mint a fresh Plex transcode session.
+            // Plex keys a running transcode by its `session` id: re-requesting
+            // `start.m3u8` with the same session but a different `audioStreamID`
+            // just resumes the existing transcode and the new track is ignored
+            // — the stream keeps playing the old audio. A new session forces
+            // the server to start a transcode that honours the selection.
+            streamURL: streamURL?
+                .replacingQueryItem(name: "audioStreamID", value: track.id)
+                .regeneratingPlexTranscodeSession(),
             audioTracks: nextTracks,
             selectedAudioTrackID: track.id
+        )
+    }
+
+    /// Copy with a different stream URL, preserving every other field.
+    private func replacingStreamURL(_ url: URL?) -> MediaItem {
+        MediaItem(
+            id: id,
+            title: title,
+            kind: kind,
+            year: year,
+            runtime: runtime,
+            summary: summary,
+            posterURL: posterURL,
+            backdropURL: backdropURL,
+            streamURL: url,
+            audioTracks: audioTracks,
+            selectedAudioTrackID: selectedAudioTrackID
         )
     }
 
@@ -177,6 +225,27 @@ private extension URL {
         queryItems.removeAll { $0.name == name }
         queryItems.append(URLQueryItem(name: name, value: value))
         components.queryItems = queryItems
+        return components.url ?? self
+    }
+
+    /// Mint a fresh Plex transcode session id on a `start.m3u8` URL so the
+    /// server starts a new transcode instead of resuming the running one.
+    /// No-op for direct-play URLs, which carry no `session` query item.
+    func regeneratingPlexTranscodeSession() -> URL {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems,
+              queryItems.contains(where: { $0.name == "session" }) else {
+            return self
+        }
+        let fresh = UUID().uuidString
+        components.queryItems = queryItems.map { item in
+            switch item.name {
+            case "session", "X-Plex-Session-Identifier":
+                return URLQueryItem(name: item.name, value: fresh)
+            default:
+                return item
+            }
+        }
         return components.url ?? self
     }
 }

@@ -11,9 +11,12 @@ import AVKit
 /// - Picture-in-Picture and AirPlay,
 /// - the subtitle / audio-track picker.
 ///
-/// **Dismiss surface.** Every platform routes back through `PlayerView`'s
-/// own chrome:
-/// - iOS / iPadOS / visionOS: the auto-hiding overlay xmark.
+/// **Dismiss surface.** Every platform routes back through app-owned chrome:
+/// - iOS / iPadOS: the auto-hiding overlay xmark.
+/// - visionOS: a single native AVKit `Back` contextual action. It's the
+///   reliable escape hatch when `AVPlayerViewController` owns gaze / pinch
+///   routing — a SwiftUI overlay chevron there only duplicated both this
+///   action and the system window ornament, so we don't draw one.
 /// - tvOS: the Menu button on the Siri Remote (`.onExitCommand`).
 /// We don't attach a `Done` `contextualAction` to `AVPlayerViewController`
 /// on tvOS — earlier attempts pinned it to the lower-right of the transport
@@ -24,9 +27,15 @@ import AVKit
 /// Used on iOS, tvOS, and visionOS (all have UIKit + AVKit).
 struct SystemVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
+    let onDismiss: () -> Void
 
-    init(player: AVPlayer) {
+    init(player: AVPlayer, onDismiss: @escaping () -> Void = {}) {
         self.player = player
+        self.onDismiss = onDismiss
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismiss: onDismiss)
     }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
@@ -48,6 +57,14 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         // we just stop the system from auto-starting it.
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         controller.videoGravity = .resizeAspect
+        controller.contextualActions = [
+            UIAction(
+                title: "Back",
+                image: UIImage(systemName: "chevron.backward")
+            ) { [weak coordinator = context.coordinator] _ in
+                coordinator?.dismiss()
+            }
+        ]
         #endif
 
         return controller
@@ -73,8 +90,22 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        context.coordinator.onDismiss = onDismiss
         if controller.player !== player {
             controller.player = player
+        }
+    }
+
+    final class Coordinator {
+        var onDismiss: () -> Void
+
+        init(onDismiss: @escaping () -> Void) {
+            self.onDismiss = onDismiss
+        }
+
+        @MainActor
+        func dismiss() {
+            onDismiss()
         }
     }
 }
