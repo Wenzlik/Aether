@@ -26,8 +26,8 @@ public enum AetherStatus: Sendable, Equatable {
 
     public var color: Color {
         switch self {
-        case .positive: return Color.green
-        case .negative: return Color.red.opacity(0.9)
+        case .positive: return AetherDesign.Palette.success
+        case .negative: return AetherDesign.Palette.error
         case .muted:    return AetherDesign.Palette.textTertiary
         }
     }
@@ -51,10 +51,19 @@ struct AetherFocusRow: ViewModifier {
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(AetherDesign.Palette.surfaceElevated)
+                    .overlay {
+                        // Faint violet wash + hairline so the focused row reads
+                        // as "brand-selected", not just lighter grey.
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(AetherDesign.Palette.accent.opacity(0.14))
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(AetherDesign.Palette.accent.opacity(0.45), lineWidth: 1)
+                    }
                     .opacity(isFocused ? 1 : 0)
             }
-            .shadow(color: .black.opacity(isFocused ? 0.35 : 0.0),
-                    radius: isFocused ? 12 : 0,
+            // Soft violet glow instead of a flat black shadow.
+            .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.45 : 0.0),
+                    radius: isFocused ? 16 : 0,
                     y: isFocused ? 6 : 0)
             .scaleEffect(isFocused ? 1.02 : 1.0)
             .animation(AetherDesign.Motion.focus, value: isFocused)

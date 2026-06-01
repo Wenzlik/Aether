@@ -21,7 +21,7 @@ struct LibraryBrowseView: View {
     var body: some View {
         NavigationStack {
             content
-                .background(AetherDesign.Palette.background.ignoresSafeArea())
+                .background(AetherDesign.Gradients.background.ignoresSafeArea())
                 .mediaNavigationDestinations(
                     source: source,
                     resumeStore: resumeStore,
@@ -122,8 +122,12 @@ private struct LibraryTile: View {
             AetherDesign.Palette.surface,
             in: RoundedRectangle(cornerRadius: AetherDesign.Radius.cardTV, style: .continuous)
         )
-        .shadow(color: .black.opacity(isFocused ? 0.45 : 0.0),
-                radius: isFocused ? 18 : 0,
+        .overlay {
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.cardTV, style: .continuous)
+                .strokeBorder(AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0.0), lineWidth: 2)
+        }
+        .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.5 : 0.0),
+                radius: isFocused ? 22 : 0,
                 y: isFocused ? 12 : 0)
         .scaleEffect(isFocused ? 1.04 : 1.0)
         .animation(AetherDesign.Motion.focus, value: isFocused)

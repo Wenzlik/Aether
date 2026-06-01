@@ -151,7 +151,13 @@ public struct AetherSettingsSection<Content: View>: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+            // Translucent frosted card over the cinematic background (tvOS 26 /
+            // visionOS material), with a hairline so it still reads as a card.
+            .background(AetherDesign.Materials.card, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+            }
         }
     }
 }

@@ -27,7 +27,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
-                .background(AetherDesign.Palette.background.ignoresSafeArea())
+                .background(AetherDesign.Gradients.background.ignoresSafeArea())
                 .mediaNavigationDestinations(
                     source: source,
                     resumeStore: resumeStore,
@@ -320,21 +320,13 @@ private struct WelcomeView: View {
 
     var body: some View {
         ZStack {
-            RadialGradient(
-                colors: [
-                    AetherDesign.Palette.accent.opacity(0.22),
-                    AetherDesign.Palette.background
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 640
-            )
-            .ignoresSafeArea()
+            AetherDesign.Gradients.heroBloom
+                .ignoresSafeArea()
 
             VStack(spacing: AetherDesign.Spacing.l) {
                 Image(systemName: "play.circle")
                     .font(.system(size: 64, weight: .thin))
-                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .foregroundStyle(AetherDesign.Gradients.aurora)
 
                 VStack(spacing: AetherDesign.Spacing.s) {
                     Text("Welcome to Aether")

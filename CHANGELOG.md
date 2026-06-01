@@ -4,6 +4,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Aether visual identity — the violet "personal cinema" brand.** Aether's
+  first real visual identity, replacing the grayscale developer look. A reusable
+  brand token system in `DesignSystem/Tokens`: `AetherDesign.Palette` (Aether
+  Violet `#8B5CF6` primary, Indigo `#6366F1`, Aurora `#A855F7`; near-black
+  `#09090B` background, zinc surfaces, `#FAFAFA`/`#A1A1AA`/`#71717A` text, and
+  semantic success/warning/error), authored from hex via a new `Color(hex:)`;
+  `AetherDesign.Gradients` (`aurora` hero sweep, `progress`, `background` wash,
+  `heroBloom`); and `AetherDesign.Materials` (translucent `card` / `chrome`).
+  Applied across the app: the primary button + Continue Watching progress wear
+  the aurora gradient, settings/source cards become frosted translucent material
+  over a faint violet-washed background, the Welcome hero gets a radial violet
+  bloom, and focus states everywhere (cards, buttons, rows, library tiles) use a
+  soft **violet glow** + scale instead of flat black shadows or white borders.
+  Status values are colour-coded from the semantic palette. tvOS tab selection
+  and system controls pick up the violet tint automatically.
+
 ### Fixed
 
 - **Playback `-1008` on audio switch and resume-after-a-delay.** Transcode

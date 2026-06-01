@@ -63,32 +63,45 @@ private struct AetherButtonLabel: View {
         .font(AetherDesign.Typography.cardTitle)
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.vertical, AetherDesign.Spacing.s)
-        .background(background, in: Capsule())
+        .background(background)
+        .clipShape(Capsule())
         .foregroundStyle(foreground)
-        .shadow(color: .black.opacity(isFocused ? 0.40 : 0.0),
-                radius: isFocused ? 16 : 0,
+        // Brand-violet glow on focus (and a permanent soft bloom under the
+        // primary action so it reads as the hero CTA), never a flat black drop.
+        .shadow(color: glowColor.opacity(isFocused ? 0.55 : (role == .primary ? 0.25 : 0.0)),
+                radius: isFocused ? 18 : (role == .primary ? 10 : 0),
                 y: isFocused ? 8 : 0)
         .scaleEffect(isFocused ? 1.05 : 1.0)
         .animation(AetherDesign.Motion.focus, value: isFocused)
     }
 
-    private var background: Color {
+    @ViewBuilder
+    private var background: some View {
         switch role {
         case .primary:
-            return AetherDesign.Palette.accent.opacity(isFocused ? 0.45 : 0.22)
+            // The hero action wears the aurora gradient; it brightens on focus.
+            AetherDesign.Gradients.aurora
+                .opacity(isFocused ? 1.0 : 0.85)
         case .secondary:
-            return AetherDesign.Palette.surface.opacity(isFocused ? 1.0 : 0.6)
+            AetherDesign.Palette.surface.opacity(isFocused ? 1.0 : 0.6)
         case .destructive:
-            return Color.red.opacity(isFocused ? 0.40 : 0.18)
+            AetherDesign.Palette.error.opacity(isFocused ? 0.40 : 0.18)
+        }
+    }
+
+    private var glowColor: Color {
+        switch role {
+        case .primary:     return AetherDesign.Palette.accent
+        case .secondary:   return AetherDesign.Palette.accent
+        case .destructive: return AetherDesign.Palette.error
         }
     }
 
     private var foreground: Color {
         switch role {
-        case .primary, .secondary:
-            return AetherDesign.Palette.textPrimary
-        case .destructive:
-            return Color.red.opacity(0.95)
+        case .primary:     return Color.white
+        case .secondary:   return AetherDesign.Palette.textPrimary
+        case .destructive: return AetherDesign.Palette.error
         }
     }
 }
