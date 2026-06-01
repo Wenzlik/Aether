@@ -79,12 +79,10 @@ public final class PlayerStateViewModel {
         // here on @MainActor where the AVPlayer/AVPlayerItem are safe to
         // touch, and tell the session to flip its status if needed.
         if snapshot.status != .failed,
-           let item = avPlayer?.currentItem,
-           item.status == .failed {
-            let message = avplayerErrorMessage(item: item)
+           let message = avplayerFailureMessage(player: avPlayer) {
             await session.markFailed(message: message)
             self.state = await session.state
-            self.player = avPlayer
+            self.player = await session.currentAVPlayer()
             return
         }
 
@@ -92,16 +90,29 @@ public final class PlayerStateViewModel {
         self.player = avPlayer
     }
 
-    /// Build a short, user-readable hint from `AVPlayerItem.error`. Falls back
-    /// to a sentinel when the item failed without an attached error (rare but
-    /// possible for malformed manifests).
+    /// Build a short, user-readable hint from `AVPlayer.error` /
+    /// `AVPlayerItem.error`. Falls back to a sentinel when playback failed
+    /// without an attached error (rare but possible for malformed manifests).
     @MainActor
-    private func avplayerErrorMessage(item: AVPlayerItem) -> String {
-        if let error = item.error as NSError? {
+    private func avplayerFailureMessage(player: AVPlayer?) -> String? {
+        guard let player else { return nil }
+        if player.status == .failed {
+            return avplayerErrorMessage(error: player.error)
+        }
+        guard let item = player.currentItem, item.status == .failed else {
+            return nil
+        }
+        return avplayerErrorMessage(error: item.error)
+    }
+
+    @MainActor
+    private func avplayerErrorMessage(error: (any Error)?) -> String {
+        if let error = error as NSError? {
             // `localizedDescription` is usually one line; we include the
             // domain + code so developer-side reports survive translation.
             return "AVPlayer: \(error.localizedDescription) (\(error.domain) \(error.code))"
         }
         return "AVPlayer reported a failure without an attached error."
     }
+
 }
