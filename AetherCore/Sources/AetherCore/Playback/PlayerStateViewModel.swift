@@ -73,7 +73,35 @@ public final class PlayerStateViewModel {
     private func refresh() async {
         let snapshot = await session.state
         let avPlayer = await session.currentAVPlayer()
+
+        // Surface AVPlayer failures into the session state. The session itself
+        // doesn't KVO the player (it lives on its own actor); we do the check
+        // here on @MainActor where the AVPlayer/AVPlayerItem are safe to
+        // touch, and tell the session to flip its status if needed.
+        if snapshot.status != .failed,
+           let item = avPlayer?.currentItem,
+           item.status == .failed {
+            let message = avplayerErrorMessage(item: item)
+            await session.markFailed(message: message)
+            self.state = await session.state
+            self.player = avPlayer
+            return
+        }
+
         self.state = snapshot
         self.player = avPlayer
+    }
+
+    /// Build a short, user-readable hint from `AVPlayerItem.error`. Falls back
+    /// to a sentinel when the item failed without an attached error (rare but
+    /// possible for malformed manifests).
+    @MainActor
+    private func avplayerErrorMessage(item: AVPlayerItem) -> String {
+        if let error = item.error as NSError? {
+            // `localizedDescription` is usually one line; we include the
+            // domain + code so developer-side reports survive translation.
+            return "AVPlayer: \(error.localizedDescription) (\(error.domain) \(error.code))"
+        }
+        return "AVPlayer reported a failure without an attached error."
     }
 }

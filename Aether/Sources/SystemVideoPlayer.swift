@@ -54,8 +54,17 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
 
     /// Put the app in the `.playback` audio category so video has sound even
     /// when the ring/silent switch is on, and so PiP / background audio work.
+    ///
+    /// **visionOS is excluded on purpose.** Reports came in (June 2026) that
+    /// configuring an explicit audio session category on Vision Pro made
+    /// `AVPlayer` refuse to start playback — every title flipped straight to
+    /// `failed`. visionOS's spatial audio engine prefers to manage its own
+    /// session; explicit `.playback` here fights it. iOS still needs the
+    /// override (otherwise the ring/silent switch mutes video); tvOS keeps it
+    /// for parity. If the symptom returns on visionOS in a future OS, revisit
+    /// with `.ambient` mode rather than blanket-skipping.
     private func configureAudioSession() {
-        #if os(iOS) || os(tvOS) || os(visionOS)
+        #if os(iOS) || os(tvOS)
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback)
         try? session.setActive(true)

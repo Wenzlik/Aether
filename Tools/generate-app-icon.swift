@@ -281,21 +281,25 @@ func renderTVOS() {
         ]
     )
 
-    // Top Shelf Image (primary): 1920×720 @ 1x.
+    // Top Shelf Image (primary): 1920×720 @ 1x + 3840×1440 @ 2x.
     renderTVOSTopShelf(
         at: "\(root)/Top Shelf Image.imageset",
-        width: 1920,
-        height: 720,
-        filename: "Top.png"
+        baseName: "Top",
+        scales: [
+            (suffix: "",    width: 1920, height: 720,  scale: "1x"),
+            (suffix: "@2x", width: 3840, height: 1440, scale: "2x")
+        ]
     )
 
-    // Top Shelf Image Wide: 2320×720 @ 1x. Without this, ASC rejects with
-    // "Missing Info.plist Key … TVTopShelfPrimaryImageWide".
+    // Top Shelf Image Wide: 2320×720 @ 1x + 4640×1440 @ 2x. App Store Connect
+    // rejected the upload with ITMS-90471 when the @2x was missing.
     renderTVOSTopShelf(
         at: "\(root)/Top Shelf Image Wide.imageset",
-        width: 2320,
-        height: 720,
-        filename: "TopWide.png"
+        baseName: "TopWide",
+        scales: [
+            (suffix: "",    width: 2320, height: 720,  scale: "1x"),
+            (suffix: "@2x", width: 4640, height: 1440, scale: "2x")
+        ]
     )
 
     // Brand asset root metadata
@@ -383,22 +387,28 @@ func renderTVOSAppIconStack(at root: String, scales: [TVScaleSpec]) {
     ] as [String: Any], to: "\(root)/Contents.json")
 }
 
-func renderTVOSTopShelf(at root: String, width: Int, height: Int, filename: String) {
-    let ctx = makeContext(width: width, height: height)
-    drawBackgroundGradient(into: ctx, width: width, height: height)
-    drawPlayTriangle(into: ctx, width: width, height: height, withGlow: true)
-    guard let img = ctx.makeImage() else { fatalError("Top Shelf \(width)×\(height) failed") }
-    writePNG(img, to: "\(root)/\(filename)")
+func renderTVOSTopShelf(at root: String, baseName: String, scales: [TVScaleSpec]) {
+    var imageEntries: [[String: String]] = []
+
+    for spec in scales {
+        let ctx = makeContext(width: spec.width, height: spec.height)
+        drawBackgroundGradient(into: ctx, width: spec.width, height: spec.height)
+        drawPlayTriangle(into: ctx, width: spec.width, height: spec.height, withGlow: true)
+        guard let img = ctx.makeImage() else {
+            fatalError("Top Shelf \(baseName) \(spec.width)×\(spec.height) failed")
+        }
+        let filename = "\(baseName)\(spec.suffix).png"
+        writePNG(img, to: "\(root)/\(filename)")
+        imageEntries.append([
+            "filename": filename,
+            "idiom": "tv",
+            "scale": spec.scale
+        ])
+    }
 
     writeJSON([
         "info": standardInfo,
-        "images": [
-            [
-                "filename": filename,
-                "idiom": "tv",
-                "scale": "1x"
-            ]
-        ]
+        "images": imageEntries
     ] as [String: Any], to: "\(root)/Contents.json")
 }
 
