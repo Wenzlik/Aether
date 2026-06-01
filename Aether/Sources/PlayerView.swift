@@ -2,6 +2,15 @@ import SwiftUI
 import AVKit
 import AetherCore
 
+/// Full-screen player. Deliberately bare: `AVPlayerViewController`'s native
+/// transport owns Play/Pause, Seek, and the Audio / Subtitle media-options
+/// picker (HLS renditions for transcode titles), so Aether adds only what the
+/// system doesn't — a Back affordance on iOS — and otherwise gets out of the
+/// way. Primary audio / subtitle selection already happened on Detail.
+///
+/// Chrome auto-hides ~2.5s after the last interaction and reveals on tap, so
+/// when the user isn't touching anything it's 100% content. No permanent
+/// overlays, no floating buttons left behind.
 struct PlayerView: View {
     let item: MediaItem
     /// Where playback should begin. `nil` resumes from the persisted point;
@@ -10,13 +19,10 @@ struct PlayerView: View {
     let onDismiss: () -> Void
     @State private var viewModel: PlayerStateViewModel
 
-    /// Chrome auto-hide window. Lines up with `AVPlayerViewController`'s
-    /// native transport bar so the overlay close affordance feels
-    /// like part of the system chrome rather than a separate always-visible
-    /// surface.
-    private static let chromeIdleHide: Duration = .seconds(3)
+    /// Chrome auto-hide window — short, so controls don't linger over the video.
+    private static let chromeIdleHide: Duration = .milliseconds(2500)
 
-    #if os(iOS) || os(visionOS)
+    #if os(iOS)
     @State private var isCloseVisible = true
     @State private var hideTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -39,7 +45,7 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
 
             if viewModel.state.status == .failed {
-                playbackUnavailable
+                playbackFailed
             } else if let player = viewModel.player {
                 SystemVideoPlayer(
                     player: player,
@@ -57,43 +63,37 @@ struct PlayerView: View {
                     .tint(AetherDesign.Palette.textPrimary)
             }
 
-            #if os(iOS) || os(visionOS)
-            playerChrome
+            #if os(iOS)
+            // iOS-only Back affordance. visionOS dismisses through AVKit's
+            // native `Back` contextual action; tvOS through the Menu button
+            // (`.onExitCommand`) and the native `Done` action — neither needs a
+            // SwiftUI overlay, which would just duplicate system chrome.
+            closeButton
                 .zIndex(20)
-                .opacity(effectiveCloseVisibility ? 1 : 0)
+                .opacity(effectiveChromeVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
-                    value: effectiveCloseVisibility
+                    value: effectiveChromeVisibility
                 )
-                .allowsHitTesting(effectiveCloseVisibility)
+                .allowsHitTesting(effectiveChromeVisibility)
             #endif
-            // tvOS routes dismiss through the native chrome's `Done`
-            // contextual action and the Menu button on the Siri Remote
-            // (`.onExitCommand` below). No SwiftUI overlay there.
         }
-        #if os(iOS) || os(visionOS)
-        // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome
-        // intact while letting us mirror its visibility on the overlay close
-        // button. Without the simultaneous variant, our tap would consume the
-        // touch and the native transport bar would stop responding.
-        .simultaneousGesture(
-            TapGesture().onEnded { revealChrome() }
-        )
+        #if os(iOS)
+        // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome intact
+        // while letting us mirror its visibility on the Back button. Without the
+        // simultaneous variant our tap would consume the touch and the native
+        // transport bar would stop responding.
+        .simultaneousGesture(TapGesture().onEnded { revealChrome() })
         #endif
         .task {
             await viewModel.open(item, startAt: startAt)
-            #if os(iOS) || os(visionOS)
-            // Schedule the auto-hide so our chrome (iOS xmark, visionOS audio
-            // menu) mirrors AVKit's transport bar instead of sitting over the
-            // video permanently. A tap (`revealChrome`) brings it back.
-            if viewModel.player != nil {
-                scheduleChromeHide()
-            }
+            #if os(iOS)
+            if viewModel.player != nil { scheduleChromeHide() }
             #endif
         }
         .onDisappear {
             Task { await viewModel.close() }
-            #if os(iOS) || os(visionOS)
+            #if os(iOS)
             hideTask?.cancel()
             #endif
         }
@@ -102,111 +102,40 @@ struct PlayerView: View {
         #endif
     }
 
-    #if os(iOS) || os(visionOS)
-    /// Chrome visibility that respects the auto-hide timer while playback is
-    /// actually live. The chrome (audio-track menu on visionOS, plus the close
-    /// xmark on iOS) fades out a few seconds after the last interaction and a
-    /// tap reveals it again — mirroring AVKit's own transport bar so it doesn't
-    /// sit on top of the video the whole time. Always visible while loading or
-    /// on failure so the user is never stranded without a control.
-    private var effectiveCloseVisibility: Bool {
+    // MARK: - iOS chrome (Back only)
+
+    #if os(iOS)
+    /// Visible while loading or on failure (so the user is never stranded), and
+    /// auto-hidden during live playback to mirror AVKit's transport bar.
+    private var effectiveChromeVisibility: Bool {
         guard viewModel.state.status != .failed else { return true }
         guard viewModel.player != nil else { return true }
         return isCloseVisible
     }
-    #endif
 
-    #if os(iOS) || os(visionOS)
-    private var playerChrome: some View {
+    private var closeButton: some View {
         VStack {
             HStack {
-                // iOS only. visionOS dismisses through the native AVKit
-                // `Back` contextual action (see `SystemVideoPlayer`): it's the
-                // reliable escape hatch when `AVPlayerViewController` owns the
-                // gaze / pinch routing, and a second SwiftUI chevron here just
-                // duplicated both it and the system window ornament.
-                #if os(iOS)
                 Button {
                     Task { await dismissPlayer() }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: closeGlyphPointSize, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
-                        .padding(closeButtonInnerPadding)
-                        // `contentShape(Circle())` guarantees the hit-test
-                        // area matches the visible button. Without it, the
-                        // ultraThinMaterial background isn't always honoured
-                        // for hit testing, and the button feels "dead" in a
-                        // few pixel rings around the glyph.
+                        .padding(AetherDesign.Spacing.s)
+                        // Match the hit-test area to the visible button — the
+                        // material background isn't always honoured for hit
+                        // testing otherwise, leaving "dead" rings around it.
                         .background(.ultraThinMaterial, in: Circle())
                         .contentShape(Circle())
                 }
                 .accessibilityLabel("Close player")
-                #endif
 
                 Spacer()
-
-                if audioTracks.count > 1 {
-                    audioTrackMenu
-                }
             }
             .padding(AetherDesign.Spacing.m)
             Spacer()
         }
-    }
-
-    /// Glyph size for the close button. visionOS needs a larger target
-    /// because the user "taps" by gazing at it and pinching — a small
-    /// iOS-sized button is hard to acquire.
-    private var closeGlyphPointSize: CGFloat {
-        #if os(visionOS)
-        return 24
-        #else
-        return 18
-        #endif
-    }
-
-    private var closeButtonInnerPadding: CGFloat {
-        #if os(visionOS)
-        return AetherDesign.Spacing.m
-        #else
-        return AetherDesign.Spacing.s
-        #endif
-    }
-
-    private var audioTracks: [MediaAudioTrack] {
-        viewModel.state.item?.audioTracks ?? item.audioTracks
-    }
-
-    private var selectedAudioTrackID: String? {
-        viewModel.state.item?.selectedAudioTrackID ?? item.selectedAudioTrackID
-    }
-
-    private var audioTrackMenu: some View {
-        Menu {
-            ForEach(audioTracks) { track in
-                Button {
-                    revealChrome()
-                    Task { await viewModel.selectAudioTrack(track) }
-                } label: {
-                    Label(
-                        track.displayTitle,
-                        systemImage: track.id == selectedAudioTrackID ? "checkmark" : "speaker.wave.2"
-                    )
-                }
-            }
-        } label: {
-            Image(systemName: "speaker.wave.2")
-                .font(.system(size: closeGlyphPointSize, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(closeButtonInnerPadding)
-                .background(.ultraThinMaterial, in: Circle())
-                .contentShape(Circle())
-        }
-        .accessibilityLabel("Audio track")
-        #if os(visionOS)
-        .hoverEffect()
-        #endif
     }
 
     private func revealChrome() {
@@ -224,45 +153,61 @@ struct PlayerView: View {
     }
     #endif
 
+    // MARK: - Dismiss / retry
+
     private func dismissPlayer() async {
         // Pause first so audio stops on the same frame the fade begins.
         await viewModel.pause()
         onDismiss()
     }
 
-    private var playbackUnavailable: some View {
-        AetherErrorState(
-            glyph: "play.slash",
-            title: "Playback unavailable",
-            message: failureDiagnostic,
-            retry: .init(label: "Close player") {
-                Task { await dismissPlayer() }
+    private func retryPlayback() async {
+        await viewModel.open(item, startAt: startAt)
+        #if os(iOS)
+        if viewModel.player != nil { scheduleChromeHide() }
+        #endif
+    }
+
+    // MARK: - Failure state (Retry + Close, never a dead-end black screen)
+
+    private var playbackFailed: some View {
+        VStack(spacing: AetherDesign.Spacing.l) {
+            Image(systemName: "play.slash")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+
+            VStack(spacing: AetherDesign.Spacing.s) {
+                Text("Can't play this title")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+                Text(failureMessage)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        )
+
+            HStack(spacing: AetherDesign.Spacing.m) {
+                AetherButton("Retry", systemImage: "arrow.clockwise", role: .primary) {
+                    Task { await retryPlayback() }
+                }
+                AetherButton("Close", systemImage: "xmark", role: .secondary) {
+                    Task { await dismissPlayer() }
+                }
+            }
+        }
+        .frame(maxWidth: 560)
         .padding(AetherDesign.Spacing.xl)
     }
 
-    /// Surface the underlying reason so we can tell, in TestFlight on a real
-    /// device, *why* playback failed: missing stream URL, AVPlayer network /
-    /// codec / TLS failure (with domain + code), or something stranger.
-    /// Intentionally noisy until playback is reliable on every platform —
-    /// tighten to a single sentence once visionOS is stable.
-    private var failureDiagnostic: String {
-        let state = viewModel.state
-        guard let item = state.item else {
-            return "No item — the player opened without a title attached."
+    /// Human-readable, but keeps the underlying reason when we have one so a
+    /// real-device failure is still diagnosable from TestFlight feedback.
+    private var failureMessage: String {
+        let base = "Aether couldn't start \(item.title)."
+        if let error = viewModel.state.error, !error.isEmpty {
+            return "\(base) \(error)"
         }
-        var parts: [String] = []
-        parts.append("\(item.title) (\(item.kind))")
-        if let url = item.streamURL {
-            parts.append("URL host: \(url.host ?? "?")")
-            parts.append("scheme: \(url.scheme ?? "?")")
-        } else {
-            parts.append("Stream URL is missing.")
-        }
-        if let error = state.error {
-            parts.append(error)
-        }
-        return parts.joined(separator: " · ")
+        return "\(base) Check your connection to the server, then try again."
     }
 }

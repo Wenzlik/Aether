@@ -195,9 +195,13 @@ public actor PlexMediaSource: MediaSource {
     ///   - anything else (mkv, avi, ts, …) → the server transcode HLS URL.
     nonisolated func mapMetadataToMediaItem(_ dto: PlexAPI.Metadata, base: URL) -> MediaItem {
         let streamURL = streamURL(for: dto, base: base)
-        let audioTracks = streamURL?.path == "/video/:/transcode/universal/start.m3u8"
-            ? dto.audioTracks
-            : []
+        // Track switching is a transcode-only capability: the server honours
+        // audioStreamID / subtitleStreamID on a `start.m3u8` session. Direct
+        // play has no such knob, so we don't surface tracks the user can't act
+        // on (AVKit's native picker covers direct-play subtitles in the player).
+        let isTranscode = streamURL?.path == "/video/:/transcode/universal/start.m3u8"
+        let audioTracks = isTranscode ? dto.audioTracks : []
+        let subtitleTracks = isTranscode ? dto.subtitleTracks : []
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,
@@ -209,7 +213,9 @@ public actor PlexMediaSource: MediaSource {
             backdropURL: tokenisedURL(base: base, path: dto.art),
             streamURL: streamURL,
             audioTracks: audioTracks,
-            selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id
+            selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
+            subtitleTracks: subtitleTracks,
+            selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id
         )
     }
 

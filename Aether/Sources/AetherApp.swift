@@ -11,7 +11,7 @@ struct AetherApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(session: session)
+            RootTabView(session: session)
                 .preferredColorScheme(.dark)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
@@ -78,7 +78,6 @@ final class AppSession {
     // MARK: - UI bridging
 
     var isSignInPresented: Bool = false
-    var isSettingsPresented: Bool = false
 
     // MARK: - Init
 
@@ -276,10 +275,6 @@ final class AppSession {
         isSignInPresented = true
     }
 
-    func presentSettings() {
-        isSettingsPresented = true
-    }
-
     // MARK: - Keychain keys
 
     static let plexClientIdentifierKey = "plex.clientIdentifier"
@@ -321,59 +316,5 @@ final class AppSession {
 
     private var currentPlatformVersion: String {
         ProcessInfo.processInfo.operatingSystemVersionString
-    }
-}
-
-// MARK: - Root
-
-private struct RootView: View {
-    @Bindable var session: AppSession
-
-    var body: some View {
-        // HomeView handles a nil source itself (it renders the welcome / empty
-        // state with the right discovery-aware copy), so there's a single
-        // surface instead of a separate boot screen.
-        HomeView(
-            source: session.source,
-            resumeStore: session.resumeStore,
-            playbackSession: session.playback,
-            libraryPreferences: session.libraryPreferences,
-            isPlexSignedIn: session.isPlexSignedIn,
-            plexServerName: session.plexServer?.name,
-            plexDiscoveryState: session.discoveryState,
-            onAddSource: { session.presentSignIn() },
-            onRetryDiscovery: { Task { await session.discoverPlexServers() } },
-            onOpenSettings: { session.presentSettings() }
-        )
-        .sheet(isPresented: $session.isSignInPresented) {
-            PlexOnboardingView(session: session)
-        }
-        .sheet(isPresented: $session.isSettingsPresented) {
-            SettingsView(viewModel: SettingsViewModel(session: session))
-        }
-    }
-}
-
-/// Switches between the sign-in step and the discovery step based on
-/// `AppSession` state. Lives here (not its own file) because it's pure glue.
-private struct PlexOnboardingView: View {
-    @Bindable var session: AppSession
-
-    var body: some View {
-        if session.isPlexSignedIn {
-            PlexDiscoveryView(
-                state: session.discoveryState,
-                onRetry: { Task { await session.discoverPlexServers() } },
-                onClose: { session.isSignInPresented = false }
-            )
-        } else if let authClient = session.plexAuthClient {
-            PlexSignInView(
-                authClient: authClient,
-                onSuccess: { token in
-                    Task { await session.completePlexSignIn(token: token) }
-                },
-                onCancel: { session.isSignInPresented = false }
-            )
-        }
     }
 }

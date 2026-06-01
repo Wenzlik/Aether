@@ -1018,6 +1018,76 @@ struct PlexMediaSourceLibrariesTests {
         #expect(switchedComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "12")
     }
 
+    @Test("Plex subtitle streams map to selectable tracks and subtitleStreamID")
+    func subtitleTrackMapping() throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+        let dto = PlexAPI.Metadata(
+            ratingKey: "43",
+            type: "movie",
+            title: "Subtitled MKV",
+            summary: nil,
+            year: nil,
+            duration: nil,
+            thumb: nil,
+            art: nil,
+            media: [
+                .init(
+                    container: "mkv",
+                    part: [
+                        .init(
+                            key: "/library/parts/43/1/file.mkv",
+                            stream: [
+                                .init(id: "10", streamType: 1, codec: "h264"),
+                                .init(id: "11", streamType: 2, selected: true, codec: "aac", channels: 6),
+                                .init(
+                                    id: "20",
+                                    streamType: 3,
+                                    selected: false,
+                                    codec: "srt",
+                                    language: "English",
+                                    languageCode: "eng",
+                                    title: "English"
+                                ),
+                                .init(
+                                    id: "21",
+                                    streamType: 3,
+                                    selected: true,
+                                    codec: "srt",
+                                    language: "Czech",
+                                    languageCode: "ces",
+                                    title: "Czech (Forced)"
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let item = source.mapMetadataToMediaItem(dto, base: base)
+        #expect(item.subtitleTracks.map(\.id) == ["20", "21"])
+        #expect(item.selectedSubtitleTrackID == "21")
+        // Forced status inferred from the title.
+        #expect(item.subtitleTracks.last?.isForced == true)
+        #expect(item.subtitleTracks.first?.isForced == false)
+
+        // Switching to the English track writes its id.
+        let english = try #require(item.subtitleTracks.first)
+        let switched = item.selectingSubtitleTrack(english)
+        let switchedURL = try #require(switched.streamURL)
+        let switchedComponents = try #require(URLComponents(url: switchedURL, resolvingAgainstBaseURL: false))
+        #expect(switched.selectedSubtitleTrackID == "20")
+        #expect(switchedComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "20")
+
+        // Turning subtitles off writes subtitleStreamID=0 and clears selection.
+        let off = item.selectingSubtitleTrack(nil)
+        let offURL = try #require(off.streamURL)
+        let offComponents = try #require(URLComponents(url: offURL, resolvingAgainstBaseURL: false))
+        #expect(off.selectedSubtitleTrackID == nil)
+        #expect(offComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "0")
+    }
+
     @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
     func connectionFailover() async throws {
         let api = RecordingAPIClient()
