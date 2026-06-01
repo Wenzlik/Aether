@@ -35,8 +35,18 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.allowsPictureInPicturePlayback = true
-        #if os(iOS) || os(visionOS)
+        #if os(iOS)
         controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.videoGravity = .resizeAspect
+        #elseif os(visionOS)
+        // visionOS: explicit *false* on `canStartPictureInPictureAutomaticallyFromInline`.
+        // The default `true` causes the system to spin up an additional PiP
+        // surface when focus/gaze drifts away from the inline player — and
+        // since the inline player is still rendered behind it, the user
+        // sees *two transport bars* simultaneously, which they reported. PiP
+        // is still available via the explicit button in AVKit's chrome;
+        // we just stop the system from auto-starting it.
+        controller.canStartPictureInPictureAutomaticallyFromInline = false
         controller.videoGravity = .resizeAspect
         #endif
 

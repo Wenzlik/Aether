@@ -231,6 +231,14 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "protocol", value: "hls"),
             URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
+            // Keep *all* of the source's audio tracks in the HLS output as
+            // alternate `EXT-X-MEDIA` renditions instead of letting the
+            // transcoder fold them to a single default track. Without this,
+            // AVPlayer sees one audio stream and the picker in the transport
+            // bar has nothing to switch between — multi-track MKVs lose
+            // their other languages. The original audio is muxed through
+            // (cheap), not re-encoded.
+            URLQueryItem(name: "directStreamAudio", value: "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
