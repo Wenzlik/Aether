@@ -221,13 +221,74 @@ Closes #14
 
 ## Branching strategy
 
-- **`main`** is always shippable. Tags cut releases.
+Aether runs a **two-stage flow**: agents land into `staging`, then `staging`
+gets promoted to `main` in batches. The point isn't process for its own sake;
+it's that **every merge into `main` triggers an Xcode Cloud archive** (three
+destinations, ~15 minutes each), and we don't need an archive after every
+small PR. Batching cuts cost and gives TestFlight testers fewer "version 0.1
+build 47" notifications they don't care about.
+
+### The two long-lived branches
+
+- **`main`** — always shippable. The state TestFlight reflects. Tagged for
+  releases. Direct pushes are reserved for emergency hotfixes only.
+- **`staging`** — integration branch. Every feature / fix / docs PR from
+  Claude, Codex, Gemini, or a human targets `staging`, not `main`.
+
+### Feature branches → `staging`
+
 - **Feature branches:** `feature/<short-slug>` — one feature, one branch.
 - **Fix branches:** `fix/<short-slug>`.
 - **Docs branches:** `docs/<short-slug>`.
-- **Spike branches:** `spike/<short-slug>` — explicitly disposable; never merged without follow-up work.
-- **Rebase, don't merge.** Keep history linear on `main`.
-- **No long-lived branches.** If a branch is open for a week, split it.
+- **Spike branches:** `spike/<short-slug>` — explicitly disposable; never
+  merged without follow-up work.
+- PRs target **`staging`** as the base branch.
+- **Rebase, don't merge.** Keep history linear; squash-merge in the PR UI.
+- **No long-lived feature branches.** If one is open for a week, split it.
+
+### Promotion `staging → main`
+
+A separate PR with `staging` as head, `main` as base. Open when you've
+accumulated something shippable on `staging` and you actually want a new
+TestFlight build. Typical cadence: a few times a week, or whenever something
+meaningful is ready — there's no fixed schedule.
+
+Format:
+
+- **Title:** `Promote staging → main — <short theme>` (e.g.
+  `Promote staging → main — Library view + visionOS playback fix`)
+- **Body:**
+  - Bullet list of every PR being promoted (number + title), in merge order.
+  - Consolidated "What to Test" notes for TestFlight — one short bullet per
+    user-visible change.
+  - Any known caveats or partial work (e.g. "tvOS untested locally; Xcode
+    Cloud will verify").
+- **Merge:** regular merge (no squash) so individual PR commits stay
+  visible in `main`'s history. The promo PR itself is the squash boundary.
+
+### Xcode Cloud trigger
+
+The "Internal TestFlight" workflow's start condition is **Manual** — building
+isn't automatic, it fires when you click *Start Build* in App Store Connect.
+The promotion PR is your cue: merge it, then manually trigger Xcode Cloud.
+Future automation (e.g. branch-change on `main` with a `[release]` commit
+tag) is fine to add later; manual is the safe default while the flow is new.
+
+### CI gate
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `swift build` on AetherCore
+plus `xcodebuild test` on `AetherTests` against every PR targeting **either**
+`main` **or** `staging`. CI failure blocks merge on both. The promotion PR
+re-runs CI against `main`, which is the last chance to catch a regression
+before it touches the deployable branch.
+
+### Bug-bisect note
+
+When a regression shows up after a promotion, identify the offending PR by
+inspecting `main`'s merge commit list since the previous promotion (regular
+merges into `main`, so the individual PR commits are still there). Revert
+the specific PR via a new fix branch on `staging`; don't revert the
+promotion as a whole.
 
 ---
 
