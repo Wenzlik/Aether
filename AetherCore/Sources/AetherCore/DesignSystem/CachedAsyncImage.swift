@@ -61,7 +61,20 @@ public struct CachedAsyncImage: View {
     }
 
     private var skeleton: some View {
-        AetherDesign.Palette.surface
+        ZStack {
+            LinearGradient(
+                colors: [
+                    AetherDesign.Palette.surfaceElevated,
+                    AetherDesign.Palette.surface
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Image(systemName: "play.rectangle")
+                .font(.system(size: 34, weight: .regular))
+                .foregroundStyle(AetherDesign.Palette.accent.opacity(0.65))
+        }
     }
 }
 

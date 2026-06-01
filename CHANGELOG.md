@@ -54,6 +54,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### UI
 
+- Started a modern mobile player shell inspired by dedicated media apps:
+  Home/Files/Search surfaces now hang off a glass bottom dock, Home has compact
+  top chrome for source and refresh actions, source tiles give Files a real
+  destination, and empty artwork now renders as a designed playback placeholder
+  instead of a flat gray block.
 - **Settings screen + sign out from Plex — no more app reinstall to disconnect.**
   A new `SettingsView` reachable from a gear icon in the Home header. Four short
   sections: **Account** (Plex connection state, "Sign Out of Plex" — the only

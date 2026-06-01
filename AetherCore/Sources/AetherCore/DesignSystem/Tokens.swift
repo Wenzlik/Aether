@@ -40,10 +40,12 @@ public enum AetherDesign {
     public enum Palette {
         public static let background = Color.black
         public static let surface = Color(white: 0.08)
+        public static let surfaceElevated = Color(white: 0.16)
+        public static let separator = Color.white.opacity(0.10)
         public static let textPrimary = Color.white
         public static let textSecondary = Color.white.opacity(0.65)
         public static let textTertiary = Color.white.opacity(0.40)
-        public static let accent = Color(red: 0.78, green: 0.78, blue: 0.86)
+        public static let accent = Color(red: 1.00, green: 0.60, blue: 0.20)
     }
 
     // MARK: - Typography
