@@ -4,6 +4,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **Playback `-1008` on audio switch and resume-after-a-delay.** Transcode
+  playback URLs were built once (with a `session` id minted at fetch time) and
+  then string-mutated / replayed — so a Plex transcode session reaped
+  server-side after inactivity resurfaced as `NSURLErrorDomain -1008`
+  ("resource unavailable") on resume, and audio switching reused fragile
+  hand-rewritten URLs. Playback URL construction now lives entirely in the
+  source layer behind a `PlaybackRequest` → `MediaSource.resolvePlayback(_:)`
+  resolver: `PlaybackSession` asks for a **fresh** URL (new transcode session,
+  current connection + token, requested audio/subtitle streams, baked-in
+  offset) every time playback context changes — initial play, audio/subtitle
+  switch, and resume. The player no longer owns any Plex URL mutation. Audio
+  switching captures and restores the current position; a resolve failure
+  surfaces the controlled Retry/Close state instead of a black screen. The
+  player's failure message is now calm (no raw host / `NSURLErrorDomain`); the
+  technical detail sits behind a **Details** disclosure.
+
 ### Changed
 
 - **tvOS 26 redesign — native top navigation, cinematic Home, calmer player.**

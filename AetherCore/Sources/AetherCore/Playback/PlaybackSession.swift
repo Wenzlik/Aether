@@ -52,6 +52,11 @@ public actor PlaybackSession {
     private var avPlayer: AVPlayer?
     private var resumeTask: Task<Void, Never>?
 
+    /// The source that resolves fresh playback URLs. Set on `prepare(...)` and
+    /// reused by `selectAudioTrack` / `selectSubtitleTrack`. `nil` falls back to
+    /// the item's own `streamURL` (tests / sources with no resolver).
+    private var source: (any MediaSource)?
+
     /// Content seconds represented by the player's `currentTime() == 0`.
     ///
     /// A Plex transcode started at `offset` emits a fresh HLS timeline whose
@@ -79,11 +84,16 @@ public actor PlaybackSession {
     /// - `nil` → resume from the persisted point (the default; "Resume").
     /// - an explicit value → start exactly there. Pass `0` for "Play from
     ///   start", which ignores any saved resume point.
-    public func prepare(item: MediaItem, startAt explicitStart: Double? = nil) async {
+    public func prepare(
+        item: MediaItem,
+        source: (any MediaSource)? = nil,
+        startAt explicitStart: Double? = nil
+    ) async {
         // Tear down previous session before starting a new one.
         resumeTask?.cancel()
         resumeTask = nil
         await teardownPlayer()
+        self.source = source
 
         let resumeSeconds: Double
         if let explicitStart {
@@ -92,23 +102,24 @@ public actor PlaybackSession {
             resumeSeconds = await persistedResumeSeconds(for: item.id)
         }
 
-        // Bake the start position into the URL for server transcodes (Plex
-        // `offset`); direct-play files seek the player below. Seeking a player
-        // into a from-zero transcode asks for segments the server never made →
-        // NSURLError -1008.
-        let playItem = item.startingPlayback(at: resumeSeconds)
-        guard let url = playItem.streamURL else {
+        // Resolve a FRESH URL through the source — a new transcode session at
+        // the resume offset, not a reused/mutated one. This is what stops a
+        // reaped Plex session from surfacing as NSURLError -1008 on resume.
+        let resolved: ResolvedPlayback
+        do {
+            resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
+        } catch {
             state = PlaybackState(
                 status: .failed,
-                item: playItem,
-                error: "Stream URL is missing — Plex didn't return a playable Part."
+                item: item,
+                error: Self.resolveErrorDetail(error)
             )
             return
         }
 
-        let needsClientSeek = !playItem.isServerTranscode && resumeSeconds > 0
-        // Transcode timeline starts at the offset; direct-play stays absolute.
-        baseOffsetSeconds = playItem.isServerTranscode ? resumeSeconds : 0
+        let needsClientSeek = !resolved.isServerTranscode && resumeSeconds > 0
+        baseOffsetSeconds = resolved.baseOffsetSeconds
+        let url = resolved.url
         let player = await MainActor.run { () -> AVPlayer in
             let p = AVPlayer(url: url)
             if needsClientSeek {
@@ -121,7 +132,7 @@ public actor PlaybackSession {
         self.avPlayer = player
         self.state = PlaybackState(
             status: .loading,
-            item: playItem,
+            item: item,
             position: .seconds(resumeSeconds)
         )
         startResumeLoop()
@@ -150,30 +161,44 @@ public actor PlaybackSession {
         state.position = position
     }
 
-    /// Switch Plex transcoder audio streams without forcing the user back to
-    /// the detail screen. PMS exposes audio selection as a transcoder query
-    /// item (`audioStreamID`); changing it requires a fresh transcode session
-    /// (the server otherwise resumes the running one and ignores the new
-    /// track), started at the current position via `offset` so playback
-    /// continues from where the user was.
+    /// Switch the audio track mid-playback without bouncing back to Detail.
+    /// Captures the current position, resolves a fresh URL with the new
+    /// `audioStreamID` (new transcode session at that offset), swaps the player
+    /// item, and resumes if it was playing.
     public func selectAudioTrack(_ track: MediaAudioTrack) async {
         guard let item = state.item,
               item.audioTracks.contains(where: { $0.id == track.id }) else { return }
+        await switchStream(to: item.selectingAudioTrack(track), failure: "Couldn't switch the audio track.")
+    }
 
+    /// Switch the subtitle track (or turn subtitles off with `nil`) mid-playback,
+    /// using the same fresh-URL path as audio.
+    public func selectSubtitleTrack(_ track: MediaSubtitleTrack?) async {
+        guard let item = state.item else { return }
+        await switchStream(to: item.selectingSubtitleTrack(track), failure: "Couldn't switch subtitles.")
+    }
+
+    /// Shared core for audio / subtitle switching: capture position → resolve a
+    /// fresh URL for `nextItem` → replace the player item → seek (direct play
+    /// only) → resume. On a resolve failure, surface a controlled error instead
+    /// of leaving a black screen.
+    private func switchStream(to nextItem: MediaItem, failure: String) async {
         let wasPlaying = state.status == .playing
         let priorStatus = state.status
         let seconds = await currentPlaybackSeconds()
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
 
-        // Switching tracks restarts the Plex transcode (fresh session); start
-        // it at the current position via `offset` so the server has segments
-        // there. Only seek the player for direct-play, where there's no
-        // server-side offset and the file is fully seekable.
-        let nextItem = item.selectingAudioTrack(track).startingPlayback(at: seconds)
-        guard let url = nextItem.streamURL else { return }
-        let needsClientSeek = !nextItem.isServerTranscode
-        // New transcode timeline restarts at the offset we just baked in.
-        baseOffsetSeconds = nextItem.isServerTranscode ? seconds : 0
+        let resolved: ResolvedPlayback
+        do {
+            resolved = try await resolvePlayback(for: nextItem, startSeconds: seconds)
+        } catch {
+            await markFailed(message: failure)
+            return
+        }
+
+        let url = resolved.url
+        let needsClientSeek = !resolved.isServerTranscode
+        baseOffsetSeconds = resolved.baseOffsetSeconds
 
         if let avPlayer {
             await MainActor.run {
@@ -247,6 +272,40 @@ public actor PlaybackSession {
     }
 
     // MARK: - Internals
+
+    /// Resolve a fresh playback URL for `item` at `startSeconds`. Routes through
+    /// the source's resolver when we have one (Plex mints a new transcode
+    /// session); falls back to the item's own `streamURL` otherwise (tests and
+    /// sources without a resolver).
+    private func resolvePlayback(for item: MediaItem, startSeconds: Double) async throws -> ResolvedPlayback {
+        let startTime: Duration? = startSeconds > 0 ? .seconds(startSeconds) : nil
+        let request = PlaybackRequest(item: item, startTime: startTime)
+
+        if let source {
+            return try await source.resolvePlayback(request)
+        }
+
+        // No source: legacy direct path. Bake the offset for a transcode URL,
+        // otherwise the player seeks client-side.
+        guard let url = item.startingPlayback(at: startSeconds).streamURL else {
+            throw PlaybackResolveError.noPlayableStream
+        }
+        return ResolvedPlayback(
+            url: url,
+            isServerTranscode: item.isServerTranscode,
+            baseOffsetSeconds: item.isServerTranscode ? startSeconds : 0
+        )
+    }
+
+    /// Developer-facing detail for a resolve failure (kept in `state.error`,
+    /// surfaced only behind the player's Details disclosure — the user sees a
+    /// friendly message, not this).
+    private static func resolveErrorDetail(_ error: any Error) -> String {
+        if case PlaybackResolveError.noPlayableStream = error {
+            return "No playable stream — the server didn't return a usable Part or connection."
+        }
+        return "Couldn't resolve a playback URL: \(error)"
+    }
 
     private func startResumeLoop() {
         resumeTask?.cancel()

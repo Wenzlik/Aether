@@ -13,11 +13,15 @@ import AetherCore
 /// overlays, no floating buttons left behind.
 struct PlayerView: View {
     let item: MediaItem
+    /// The source the item came from — resolves a fresh playback URL (new Plex
+    /// transcode session) on open / retry, instead of replaying a stale one.
+    let source: (any MediaSource)?
     /// Where playback should begin. `nil` resumes from the persisted point;
     /// `0` (or any explicit value) starts there, ignoring the saved resume.
     let startAt: Double?
     let onDismiss: () -> Void
     @State private var viewModel: PlayerStateViewModel
+    @State private var showFailureDetails = false
 
     /// Chrome auto-hide window — short, so controls don't linger over the video.
     private static let chromeIdleHide: Duration = .milliseconds(2500)
@@ -30,11 +34,13 @@ struct PlayerView: View {
 
     init(
         item: MediaItem,
+        source: (any MediaSource)?,
         session: PlaybackSession,
         startAt: Double? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.item = item
+        self.source = source
         self.startAt = startAt
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
@@ -86,7 +92,7 @@ struct PlayerView: View {
         .simultaneousGesture(TapGesture().onEnded { revealChrome() })
         #endif
         .task {
-            await viewModel.open(item, startAt: startAt)
+            await viewModel.open(item, source: source, startAt: startAt)
             #if os(iOS)
             if viewModel.player != nil { scheduleChromeHide() }
             #endif
@@ -162,7 +168,8 @@ struct PlayerView: View {
     }
 
     private func retryPlayback() async {
-        await viewModel.open(item, startAt: startAt)
+        showFailureDetails = false
+        await viewModel.open(item, source: source, startAt: startAt)
         #if os(iOS)
         if viewModel.player != nil { scheduleChromeHide() }
         #endif
@@ -196,18 +203,42 @@ struct PlayerView: View {
                     Task { await dismissPlayer() }
                 }
             }
+
+            // Technical detail (host, NSURLError domain/code) is hidden by
+            // default — surfaced only on demand so the user sees a calm message,
+            // not a stack of jargon.
+            if let detail = viewModel.state.error, !detail.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showFailureDetails.toggle() }
+                } label: {
+                    Text(showFailureDetails ? "Hide details" : "Details")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+                .buttonStyle(.plain)
+
+                if showFailureDetails {
+                    let detailText = Text(detail)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    #if os(tvOS)
+                    // `.textSelection` is unavailable on tvOS.
+                    detailText
+                    #else
+                    detailText.textSelection(.enabled)
+                    #endif
+                }
+            }
         }
         .frame(maxWidth: 560)
         .padding(AetherDesign.Spacing.xl)
     }
 
-    /// Human-readable, but keeps the underlying reason when we have one so a
-    /// real-device failure is still diagnosable from TestFlight feedback.
+    /// Calm, human-readable — no raw host or `NSURLErrorDomain`. The underlying
+    /// reason lives behind the Details disclosure above.
     private var failureMessage: String {
-        let base = "Aether couldn't start \(item.title)."
-        if let error = viewModel.state.error, !error.isEmpty {
-            return "\(base) \(error)"
-        }
-        return "\(base) Check your connection to the server, then try again."
+        "Aether couldn't start \(item.title). Check your connection to the server, then try again."
     }
 }
