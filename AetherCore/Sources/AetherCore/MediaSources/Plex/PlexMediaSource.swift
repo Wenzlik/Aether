@@ -407,14 +407,6 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "protocol", value: "hls"),
             URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
-            // Keep *all* of the source's audio tracks in the HLS output as
-            // alternate `EXT-X-MEDIA` renditions instead of letting the
-            // transcoder fold them to a single default track. Without this,
-            // AVPlayer sees one audio stream and the picker in the transport
-            // bar has nothing to switch between — multi-track MKVs lose
-            // their other languages. The original audio is muxed through
-            // (cheap), not re-encoded.
-            URLQueryItem(name: "directStreamAudio", value: "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
@@ -428,7 +420,20 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "X-Plex-Token", value: accessToken)
         ]
         if let audioStreamID {
+            // Select exactly this audio stream. `directStreamAudio=0` is the
+            // key: with `=1` the server keeps *every* source track as an
+            // alternate HLS rendition, AVPlayer just plays the default one, and
+            // `audioStreamID` is effectively ignored — so picking a track on
+            // Detail had no audible effect. `=0` makes the transcoder emit only
+            // the chosen track, so the selection is honoured. (Track switching
+            // now happens on Detail before playback, not via a transport-bar
+            // picker, so we no longer need all renditions present.)
             queryItems.append(URLQueryItem(name: "audioStreamID", value: audioStreamID))
+            queryItems.append(URLQueryItem(name: "directStreamAudio", value: "0"))
+        } else {
+            // No explicit choice: keep all tracks as renditions (the default
+            // track plays; nothing to honour).
+            queryItems.append(URLQueryItem(name: "directStreamAudio", value: "1"))
         }
         if let subtitleStreamID {
             // `subtitleStreamID=0` disables subtitles (Plex convention).
