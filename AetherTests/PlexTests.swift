@@ -968,6 +968,111 @@ struct PlexMediaSourceLibrariesTests {
     }
 }
 
+@Suite("Plex — PlexMediaSource items(sortedBy:limit:offset:)")
+struct PlexMediaSourceSortedItemsTests {
+
+    private static let config = PlexConfiguration(
+        product: "Aether", version: "0.2.0", clientIdentifier: "id",
+        deviceName: "iPhone", platform: "iOS", platformVersion: "26.0"
+    )
+
+    private func makeSource(api: any APIClient) -> PlexMediaSource {
+        PlexMediaSource(
+            serverID: "test-server",
+            displayName: "Test",
+            accessToken: "srv-token",
+            connections: [.init(uri: "https://lan.plex.direct:32400", isLocal: true, isRelay: false)],
+            configuration: Self.config,
+            api: api,
+            probeTimeout: 1
+        )
+    }
+
+    private func enqueueReachable(_ api: RecordingAPIClient) async {
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
+    }
+
+    private let emptyMetadata = #"{"MediaContainer":{}}"#
+
+    @Test("sort=titleSort:asc + start/size query items match the .titleAZ + limit + offset call")
+    func sortAndPaginationQueryItems() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data(emptyMetadata.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "1")
+        _ = try await source.items(in: libraryID, sortedBy: .titleAZ, limit: 50, offset: 100)
+
+        let recorded = await api.requests
+        try #require(recorded.count == 2)            // probe + items
+        let request = recorded[1]
+        #expect(request.url?.path == "/library/sections/1/all")
+        let query = request.url?.query ?? ""
+        // URLQueryItem encodes `:` as `%3A` per RFC 3986.
+        #expect(query.contains("sort=titleSort%3Aasc") || query.contains("sort=titleSort:asc"))
+        #expect(query.contains("X-Plex-Container-Start=100"))
+        #expect(query.contains("X-Plex-Container-Size=50"))
+    }
+
+    @Test("random sort sends `sort=random` (no direction suffix)")
+    func randomSortParameter() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data(emptyMetadata.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "2")
+        _ = try await source.items(in: libraryID, sortedBy: .random, limit: nil, offset: nil)
+
+        let recorded = await api.requests
+        let query = recorded[1].url?.query ?? ""
+        #expect(query.contains("sort=random"))
+        // No pagination — keep the URL clean.
+        #expect(!query.contains("X-Plex-Container-Start"))
+        #expect(!query.contains("X-Plex-Container-Size"))
+    }
+
+    @Test("items(in:) without sort defaults to .default (.recentlyAdded → addedAt:desc)")
+    func defaultSort() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data(emptyMetadata.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "3")
+        _ = try await source.items(in: libraryID)
+
+        let recorded = await api.requests
+        let query = recorded[1].url?.query ?? ""
+        #expect(query.contains("sort=addedAt%3Adesc") || query.contains("sort=addedAt:desc"))
+    }
+
+    @Test("Year (newest) and rating sorts map to their Plex parameters")
+    func mappingCheck() async throws {
+        for (sort, expected) in [
+            (LibrarySort.yearNewest, "year:desc"),
+            (LibrarySort.yearOldest, "year:asc"),
+            (LibrarySort.ratingHighest, "audienceRating:desc")
+        ] {
+            let api = RecordingAPIClient()
+            await enqueueReachable(api)
+            await api.enqueue(.init(data: Data(emptyMetadata.utf8), statusCode: 200, headers: [:]))
+
+            let source = makeSource(api: api)
+            let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "1")
+            _ = try await source.items(in: libraryID, sortedBy: sort, limit: nil, offset: nil)
+
+            let query = await api.requests.last?.url?.query ?? ""
+            let encoded = expected.replacingOccurrences(of: ":", with: "%3A")
+            #expect(
+                query.contains("sort=\(expected)") || query.contains("sort=\(encoded)"),
+                "expected sort=\(expected) in query for \(sort), got: \(query)"
+            )
+        }
+    }
+}
+
 @Suite("Plex — PlexMediaSource request shape")
 struct PlexMediaSourceRequestTests {
 

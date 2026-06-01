@@ -44,6 +44,7 @@ final class AppSession {
     let playback: PlaybackSession
     let keychain: KeychainStore
     let api: any APIClient
+    let libraryPreferences: LibraryPreferencesStore
 
     // MARK: - Plex — auth
 
@@ -90,6 +91,7 @@ final class AppSession {
         self.playback = PlaybackSession(resumeStore: store)
         self.keychain = keychain
         self.api = api
+        self.libraryPreferences = LibraryPreferencesStore(keychain: keychain)
     }
 
     // MARK: - Lifecycle
@@ -313,6 +315,7 @@ private struct RootView: View {
             source: session.source,
             resumeStore: session.resumeStore,
             playbackSession: session.playback,
+            libraryPreferences: session.libraryPreferences,
             isPlexSignedIn: session.isPlexSignedIn,
             plexServerName: session.plexServer?.name,
             plexDiscoveryState: session.discoveryState,

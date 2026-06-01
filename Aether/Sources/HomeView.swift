@@ -7,6 +7,7 @@ struct HomeView: View {
     let source: (any MediaSource)?
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
+    let libraryPreferences: LibraryPreferencesStore
     let isPlexSignedIn: Bool
     let plexServerName: String?
     let plexDiscoveryState: AppSession.DiscoveryState
@@ -18,6 +19,10 @@ struct HomeView: View {
     @State private var loadError: String?
     @State private var isLoading = false
     @State private var selectedSurface: HomeSurface = .home
+    /// Drives the `NavigationStack` so the "See all" accessory on a library
+    /// section header can push `LibraryView` programmatically. `NavigationLink`
+    /// pushes from cards still feed into the same path under the hood.
+    @State private var navigationPath = NavigationPath()
 
     /// Initial focus target for tvOS. Without this the focus engine picks the
     /// first focusable element below the fold (typically a poster card in the
@@ -29,7 +34,7 @@ struct HomeView: View {
     @FocusState private var focusedTopTab: HomeSurface?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             #if os(tvOS)
             // tvOS: keep the header outside the ScrollView so the top-tab
             // capsule never scrolls offscreen. `.defaultFocus` alone wasn't
@@ -49,6 +54,15 @@ struct HomeView: View {
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession
+                )
+            }
+            .navigationDestination(for: Library.self) { library in
+                LibraryView(
+                    library: library,
+                    source: source,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession,
+                    libraryPreferences: libraryPreferences
                 )
             }
             // Belt-and-suspenders for the focus engine: explicitly send
@@ -77,6 +91,15 @@ struct HomeView: View {
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession
+                )
+            }
+            .navigationDestination(for: Library.self) { library in
+                LibraryView(
+                    library: library,
+                    source: source,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession,
+                    libraryPreferences: libraryPreferences
                 )
             }
             #endif
@@ -252,7 +275,8 @@ struct HomeView: View {
                 section(
                     title: librarySection.library.title,
                     items: librarySection.items,
-                    aspect: .poster
+                    aspect: .poster,
+                    library: librarySection.library
                 )
             }
         }
@@ -369,9 +393,24 @@ struct HomeView: View {
         }
     }
 
-    private func section(title: String, items: [MediaItem], aspect: CardAspect) -> some View {
+    /// Generic horizontal rail. When `library` is non-nil the header gains a
+    /// "See all" accessory that pushes `LibraryView` for the full grid; pass
+    /// `nil` for virtual sections (Featured, Continue Watching) where there's
+    /// nothing to drill into.
+    private func section(
+        title: String,
+        items: [MediaItem],
+        aspect: CardAspect,
+        library: Library? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: title)
+            AetherSectionHeader(
+                title: title,
+                accessoryTitle: library != nil ? "See all" : nil,
+                accessoryAction: library.map { lib in
+                    { navigationPath.append(lib) }
+                }
+            )
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {

@@ -67,4 +67,20 @@ public enum MediaSourceID: Hashable, Sendable {
     case mock
     case plex(serverID: String)
     case synology(host: String)
+
+    /// A stable, run-to-run identical string for this source. Suitable as a
+    /// component of persistence keys (e.g. per-library preferences). The
+    /// default `String(describing:)` reflects the underlying Swift enum
+    /// representation and is *not* stable across compiler versions, so we
+    /// hand-roll one here.
+    public var stableKey: String {
+        switch self {
+        case .mock:
+            return "mock"
+        case .plex(let serverID):
+            return "plex.\(serverID)"
+        case .synology(let host):
+            return "synology.\(host)"
+        }
+    }
 }
