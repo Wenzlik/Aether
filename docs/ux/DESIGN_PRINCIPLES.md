@@ -128,6 +128,29 @@ Concrete colors are in `DesignSystem/Tokens`. Never hard-code a color in a view.
 
 ---
 
+## Navigation pattern
+
+Home is a three-surface shell, not a single screen. The same `HomeView` switches between **Home** (the library), **Files** (sources), and **Search** with a `HomeSurface` enum. Each surface keeps its own content; the chrome around them stays put.
+
+How the user switches surfaces is platform-specific:
+
+- **iOS / iPadOS / visionOS** — a **glass bottom dock**: three larger icons in an ultra-thin-material capsule (Home / Files / Settings), with **Search** broken out as a separate circle to its right. The dock floats above content via `.safeAreaInset(edge: .bottom)`, casts a soft shadow, and never overlaps interactive content (it pads its own bottom inset). One-handed reachable on iPhone, finger-friendly on iPad, comfortable for Vision Pro pinch.
+- **tvOS** — a **top segmented capsule** in the header chrome, plus a compact **gear icon** alongside the source and refresh icons. tvOS does not get a bottom dock — focus engine treats top chrome as expected; a dock would fight the system focus model.
+
+Common chrome (every platform):
+
+- **Compact source/refresh capsule** in the header — the account badge (source icon, lit accent when a server is selected) sits next to a refresh button (only shown when signed in). Both in a single material capsule with a 1pt `separator` stroke.
+- **Header subtitle** updates per surface: *Home* surfaces the server name or sign-in status; *Files* says *"Sources, servers, and local media"*; *Search* says *"Find titles across your library."*
+
+Rules that follow from this:
+
+- **The gear icon** lives in the dock (iOS / visionOS) or in the top chrome (tvOS) — never in both, never elsewhere.
+- **Settings always opens as a sheet**, regardless of which surface the user is on. (See *Overlays*.)
+- **Adding a fourth surface** is a deliberate design discussion — three is the budget. Pick the right surface to retire first.
+- **`SourceTile`** in the Files surface is the canonical shape for any "source" entry (Plex / Synology / Offline). Tile-style with a glyph, title, and one subtitle line — never a list row.
+
+---
+
 ## Component naming
 
 Every reusable view primitive in `AetherCore/DesignSystem/` shares the `Aether*` prefix:
