@@ -19,6 +19,15 @@ struct HomeView: View {
     @State private var isLoading = false
     @State private var selectedSurface: HomeSurface = .home
 
+    /// Initial focus target for tvOS. Without this the focus engine picks the
+    /// first focusable element below the fold (typically a poster card in the
+    /// featured rail) and scrolls the page to make it visible — which on cold
+    /// launch hides the top tab capsule. `.defaultFocus` on the top-tab HStack
+    /// points the engine at the Home tab instead. iOS / iPadOS / visionOS
+    /// don't use the focus engine the same way, but the state declaration is
+    /// harmless on those platforms.
+    @FocusState private var focusedTopTab: HomeSurface?
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -87,18 +96,27 @@ struct HomeView: View {
                 TopTabButton(surface: .home, isSelected: selectedSurface == .home) {
                     selectedSurface = .home
                 }
+                .focused($focusedTopTab, equals: .home)
+
                 TopTabButton(surface: .files, isSelected: selectedSurface == .files) {
                     selectedSurface = .files
                 }
+                .focused($focusedTopTab, equals: .files)
+
                 TopTabButton(surface: .search, isSelected: selectedSurface == .search) {
                     selectedSurface = .search
                 }
+                .focused($focusedTopTab, equals: .search)
             }
             .padding(AetherDesign.Spacing.xxs)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
                 Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1)
             }
+            // Tell tvOS's focus engine: this is where to start. Without it,
+            // the engine picks the first card below and scrolls to it,
+            // hiding the chrome on cold launch.
+            .defaultFocus($focusedTopTab, .home)
             #endif
 
             HStack(spacing: AetherDesign.Spacing.xxs) {
