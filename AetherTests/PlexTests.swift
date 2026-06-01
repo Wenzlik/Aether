@@ -905,6 +905,70 @@ struct PlexMediaSourceLibrariesTests {
         #expect(q.contains { $0.name == "X-Plex-Session-Identifier" })
     }
 
+    @Test("Plex audio streams map to selectable tracks and audioStreamID")
+    func audioTrackMapping() throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.example:32400")!
+        let dto = PlexAPI.Metadata(
+            ratingKey: "42",
+            type: "movie",
+            title: "Multi Audio MKV",
+            summary: nil,
+            year: nil,
+            duration: nil,
+            thumb: nil,
+            art: nil,
+            media: [
+                .init(
+                    container: "mkv",
+                    part: [
+                        .init(
+                            key: "/library/parts/42/1/file.mkv",
+                            stream: [
+                                .init(id: "10", streamType: 1, codec: "h264"),
+                                .init(
+                                    id: "11",
+                                    streamType: 2,
+                                    selected: true,
+                                    codec: "aac",
+                                    language: "English",
+                                    languageCode: "eng",
+                                    title: "English 5.1",
+                                    channels: 6
+                                ),
+                                .init(
+                                    id: "12",
+                                    streamType: 2,
+                                    selected: false,
+                                    codec: "ac3",
+                                    language: "Czech",
+                                    languageCode: "ces",
+                                    title: "Czech",
+                                    channels: 2
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let item = source.mapMetadataToMediaItem(dto, base: base)
+        #expect(item.audioTracks.map(\.id) == ["11", "12"])
+        #expect(item.selectedAudioTrackID == "11")
+
+        let initialURL = try #require(item.streamURL)
+        let initialComponents = try #require(URLComponents(url: initialURL, resolvingAgainstBaseURL: false))
+        #expect(initialComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "11")
+
+        let czech = try #require(item.audioTracks.last)
+        let switched = item.selectingAudioTrack(czech)
+        let switchedURL = try #require(switched.streamURL)
+        let switchedComponents = try #require(URLComponents(url: switchedURL, resolvingAgainstBaseURL: false))
+        #expect(switched.selectedAudioTrackID == "12")
+        #expect(switchedComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "12")
+    }
+
     @Test("Connection failover: skips an unreachable connection, uses the next reachable one")
     func connectionFailover() async throws {
         let api = RecordingAPIClient()

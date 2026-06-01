@@ -157,6 +157,26 @@ public enum PlexAPI {
             media?.first?.container
         }
 
+        public var audioTracks: [MediaAudioTrack] {
+            guard let streams = media?.first?.part?.first?.stream else { return [] }
+            return streams.enumerated().compactMap { index, stream in
+                guard stream.streamType == 2, let id = stream.id else { return nil }
+                let fallbackTitle = "Audio \(index + 1)"
+                return MediaAudioTrack(
+                    id: id,
+                    title: stream.bestTitle ?? fallbackTitle,
+                    languageCode: stream.languageCode,
+                    codec: stream.codec,
+                    channels: stream.channels,
+                    isSelected: stream.selected ?? false
+                )
+            }
+        }
+
+        public var selectedAudioTrackID: String? {
+            audioTracks.first(where: \.isSelected)?.id
+        }
+
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case media = "Media"
@@ -177,6 +197,119 @@ public enum PlexAPI {
             /// Relative path to the original file, e.g.
             /// `/library/parts/12345/1700000000/file.mkv`.
             public let key: String?
+            public let stream: [Stream]?
+
+            public init(key: String?, stream: [Stream]? = nil) {
+                self.key = key
+                self.stream = stream
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case key
+                case stream = "Stream"
+            }
+
+            public struct Stream: Decodable, Sendable, Equatable {
+                public let id: String?
+                public let streamType: Int?
+                public let selected: Bool?
+                public let codec: String?
+                public let language: String?
+                public let languageCode: String?
+                public let title: String?
+                public let channels: Int?
+
+                public var bestTitle: String? {
+                    [title, language, languageCode]
+                        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .first { !$0.isEmpty }
+                }
+
+                public init(
+                    id: String?,
+                    streamType: Int?,
+                    selected: Bool? = nil,
+                    codec: String? = nil,
+                    language: String? = nil,
+                    languageCode: String? = nil,
+                    title: String? = nil,
+                    channels: Int? = nil
+                ) {
+                    self.id = id
+                    self.streamType = streamType
+                    self.selected = selected
+                    self.codec = codec
+                    self.language = language
+                    self.languageCode = languageCode
+                    self.title = title
+                    self.channels = channels
+                }
+
+                enum CodingKeys: String, CodingKey {
+                    case id, streamType, selected, codec, language, languageCode, title, channels
+                }
+
+                public init(from decoder: any Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    id = Self.decodeString(container, forKey: .id)
+                    streamType = Self.decodeInt(container, forKey: .streamType)
+                    selected = Self.decodeBool(container, forKey: .selected)
+                    codec = try container.decodeIfPresent(String.self, forKey: .codec)
+                    language = try container.decodeIfPresent(String.self, forKey: .language)
+                    languageCode = try container.decodeIfPresent(String.self, forKey: .languageCode)
+                    title = try container.decodeIfPresent(String.self, forKey: .title)
+                    channels = Self.decodeInt(container, forKey: .channels)
+                }
+
+                private static func decodeString(
+                    _ container: KeyedDecodingContainer<CodingKeys>,
+                    forKey key: CodingKeys
+                ) -> String? {
+                    if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+                        return value
+                    }
+                    if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+                        return String(value)
+                    }
+                    return nil
+                }
+
+                private static func decodeInt(
+                    _ container: KeyedDecodingContainer<CodingKeys>,
+                    forKey key: CodingKeys
+                ) -> Int? {
+                    if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+                        return value
+                    }
+                    if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+                        return Int(value)
+                    }
+                    return nil
+                }
+
+                private static func decodeBool(
+                    _ container: KeyedDecodingContainer<CodingKeys>,
+                    forKey key: CodingKeys
+                ) -> Bool? {
+                    if let value = try? container.decodeIfPresent(Bool.self, forKey: key) {
+                        return value
+                    }
+                    if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+                        return value != 0
+                    }
+                    if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+                        switch value.lowercased() {
+                        case "1", "true", "yes":
+                            return true
+                        case "0", "false", "no":
+                            return false
+                        default:
+                            return nil
+                        }
+                    }
+                    return nil
+                }
+            }
         }
     }
 }

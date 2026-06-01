@@ -86,7 +86,14 @@ final class AppSession {
         keychain: KeychainStore = KeychainStore(),
         api: any APIClient = URLSessionAPIClient()
     ) {
-        let store = ResumeStore()
+        // Production-wired ResumeStore: documents-directory JSON file as the
+        // local source of truth, NSUbiquitousKeyValueStore for cross-device
+        // sync. Defaults (`nil`) on either argument fall back to in-memory,
+        // which is what tests rely on.
+        let store = ResumeStore(
+            diskURL: ResumeStore.defaultDiskURL(),
+            icloud: .default
+        )
         self.resumeStore = store
         self.playback = PlaybackSession(resumeStore: store)
         self.keychain = keychain
@@ -97,6 +104,13 @@ final class AppSession {
     // MARK: - Lifecycle
 
     func start() async {
+        // 0. Hydrate resume points from disk + a one-shot iCloud read, then
+        //    start listening for external iCloud changes (other devices on
+        //    the same iCloud account writing). Must run before Home / Library
+        //    views ask the store for state.
+        await resumeStore.loadFromDisk()
+        await resumeStore.observeICloudChanges()
+
         // 1. Plex auth seam.
         await setUpPlex()
 

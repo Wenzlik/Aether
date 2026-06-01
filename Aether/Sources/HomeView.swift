@@ -407,7 +407,12 @@ struct HomeView: View {
             AetherSectionHeader(
                 title: title,
                 accessoryTitle: library != nil ? "See all" : nil,
-                accessoryAction: library.map { lib in
+                // Explicit return type so the closure inherits the
+                // `@MainActor` isolation that `AetherSectionHeader.accessoryAction`
+                // expects. Without it, `Optional.map`'s transform doesn't
+                // propagate actor isolation and Swift 6 strict concurrency
+                // flags a potential data race.
+                accessoryAction: library.map { lib -> @MainActor () -> Void in
                     { navigationPath.append(lib) }
                 }
             )

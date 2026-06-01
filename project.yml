@@ -85,6 +85,19 @@ targets:
         TVTopShelfImage:
           TVTopShelfPrimaryImage: Top Shelf Image
           TVTopShelfPrimaryImageWide: Top Shelf Image Wide
+    # iCloud Key-Value Store — used by ResumeStore for cross-device resume
+    # point sync (iPhone / iPad / Apple TV / Vision Pro share state via the
+    # user's iCloud account). The entitlement identifier defaults to the team
+    # identifier prefix + bundle identifier, which is what Apple's signing
+    # infrastructure expects for a per-app KVS container.
+    #
+    # Apple-side step (one-time): in Apple Developer portal, the App ID
+    # `cz.zmrhal.aether` must have "iCloud" capability enabled with
+    # "Key-value storage" sub-service ticked.
+    entitlements:
+      path: Aether/SupportingFiles/Aether.entitlements
+      properties:
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether

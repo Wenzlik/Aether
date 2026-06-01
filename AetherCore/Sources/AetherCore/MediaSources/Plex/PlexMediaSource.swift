@@ -178,7 +178,11 @@ public actor PlexMediaSource: MediaSource {
     ///   - AVPlayer-friendly container (mp4/m4v/mov) → the direct-play file URL,
     ///   - anything else (mkv, avi, ts, …) → the server transcode HLS URL.
     nonisolated func mapMetadataToMediaItem(_ dto: PlexAPI.Metadata, base: URL) -> MediaItem {
-        MediaItem(
+        let streamURL = streamURL(for: dto, base: base)
+        let audioTracks = streamURL?.path == "/video/:/transcode/universal/start.m3u8"
+            ? dto.audioTracks
+            : []
+        return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,
             kind: dto.kind,
@@ -187,7 +191,9 @@ public actor PlexMediaSource: MediaSource {
             summary: dto.summary,
             posterURL: tokenisedURL(base: base, path: dto.thumb),
             backdropURL: tokenisedURL(base: base, path: dto.art),
-            streamURL: streamURL(for: dto, base: base)
+            streamURL: streamURL,
+            audioTracks: audioTracks,
+            selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id
         )
     }
 
@@ -211,7 +217,11 @@ public actor PlexMediaSource: MediaSource {
             return tokenisedURL(base: base, path: dto.firstPartKey)
         }
         // Unknown or unfriendly container → let the server decide / transcode.
-        return transcodeURL(base: base, ratingKey: dto.ratingKey)
+        return transcodeURL(
+            base: base,
+            ratingKey: dto.ratingKey,
+            audioStreamID: dto.selectedAudioTrackID
+        )
     }
 
     /// Build a universal-transcoder HLS URL for an item.
@@ -220,17 +230,29 @@ public actor PlexMediaSource: MediaSource {
     /// (the common, cheap case) and full-transcode only when codecs truly need
     /// it — i.e. "Aether requests; the server decides." The token rides in the
     /// query because `AVPlayer` fetches the playlist directly.
-    nonisolated func transcodeURL(base: URL, ratingKey: String) -> URL? {
+    nonisolated func transcodeURL(
+        base: URL,
+        ratingKey: String,
+        audioStreamID: String? = nil
+    ) -> URL? {
         var components = URLComponents(
             url: base.appendingPathComponent("/video/:/transcode/universal/start.m3u8"),
             resolvingAgainstBaseURL: false
         )
         let session = UUID().uuidString
-        components?.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
             URLQueryItem(name: "protocol", value: "hls"),
             URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
+            // Keep *all* of the source's audio tracks in the HLS output as
+            // alternate `EXT-X-MEDIA` renditions instead of letting the
+            // transcoder fold them to a single default track. Without this,
+            // AVPlayer sees one audio stream and the picker in the transport
+            // bar has nothing to switch between — multi-track MKVs lose
+            // their other languages. The original audio is muxed through
+            // (cheap), not re-encoded.
+            URLQueryItem(name: "directStreamAudio", value: "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
@@ -243,6 +265,10 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
             URLQueryItem(name: "X-Plex-Token", value: accessToken)
         ]
+        if let audioStreamID {
+            queryItems.append(URLQueryItem(name: "audioStreamID", value: audioStreamID))
+        }
+        components?.queryItems = queryItems
         return components?.url
     }
 

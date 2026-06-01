@@ -40,7 +40,7 @@ struct PlayerView: View {
             }
 
             #if os(iOS) || os(visionOS)
-            closeButton
+            playerChrome
                 .opacity(effectiveCloseVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
@@ -63,13 +63,14 @@ struct PlayerView: View {
         #endif
         .task {
             await viewModel.open(item)
-            #if os(iOS) || os(visionOS)
-            // Schedule the auto-hide only if we actually have an active
-            // player to hide chrome over. Loading / failed states keep the
-            // close button up via `effectiveCloseVisibility` so the user
-            // is never stranded without a dismiss path — the visionOS
-            // window has no system back gesture wired to a ZStack overlay,
-            // so this is the only way out.
+            #if os(iOS)
+            // iOS only: schedule the auto-hide so the xmark mirrors
+            // AVKit's transport bar. visionOS keeps the close button
+            // permanently visible (see `effectiveCloseVisibility`) —
+            // gaze + pinch on the player area doesn't reliably reach our
+            // `simultaneousGesture` past AVPlayerViewController's own
+            // gesture stack, so an auto-hidden button there strands the
+            // user mid-playback.
             if viewModel.player != nil {
                 scheduleChromeHide()
             }
@@ -88,36 +89,116 @@ struct PlayerView: View {
 
     #if os(iOS) || os(visionOS)
     /// Chrome visibility that respects the auto-hide timer **only** while
-    /// playback is actually live. With no `player` (loading, failed, or any
-    /// non-playing state) the close button stays on screen forever so the
-    /// user can always exit — particularly important on visionOS, where a
-    /// ZStack overlay has no system back gesture to fall back on.
+    /// playback is actually live, **and only on iOS**. visionOS keeps the
+    /// close button permanently visible: a gaze + pinch tap against the
+    /// player area doesn't reliably reach our SwiftUI `simultaneousGesture`
+    /// (AVPlayerViewController's UIKit gesture stack tends to swallow it),
+    /// so auto-hiding the xmark there strands users mid-playback.
     private var effectiveCloseVisibility: Bool {
+        #if os(visionOS)
+        return true
+        #else
         guard viewModel.state.status != .failed else { return true }
         guard viewModel.player != nil else { return true }
         return isCloseVisible
+        #endif
     }
     #endif
 
     #if os(iOS) || os(visionOS)
-    private var closeButton: some View {
+    private var playerChrome: some View {
         VStack {
             HStack {
                 Button {
                     Task { await dismissPlayer() }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: closeGlyphPointSize, weight: .semibold))
                         .foregroundStyle(.white)
-                        .padding(AetherDesign.Spacing.s)
+                        .padding(closeButtonInnerPadding)
+                        // `contentShape(Circle())` guarantees the hit-test
+                        // area matches the visible button. Without it, the
+                        // ultraThinMaterial background isn't always honoured
+                        // for hit testing, and the button feels "dead" in a
+                        // few pixel rings around the glyph.
                         .background(.ultraThinMaterial, in: Circle())
+                        .contentShape(Circle())
                 }
-                .padding(AetherDesign.Spacing.m)
                 .accessibilityLabel("Close player")
+                // visionOS-only hint: tells the system this is an
+                // interactive element so the gaze-driven hover effect lights
+                // it up. Without `.hoverEffect`, visionOS sometimes doesn't
+                // route a pinch on a small SwiftUI button that sits over an
+                // AVPlayerViewController to our handler — the button looks
+                // like decoration, the gaze passes through to the player
+                // chrome behind it, and the user can't dismiss.
+                #if os(visionOS)
+                .hoverEffect()
+                #endif
+
                 Spacer()
+
+                if audioTracks.count > 1 {
+                    audioTrackMenu
+                }
             }
+            .padding(AetherDesign.Spacing.m)
             Spacer()
         }
+    }
+
+    /// Glyph size for the close button. visionOS needs a larger target
+    /// because the user "taps" by gazing at it and pinching — a small
+    /// iOS-sized button is hard to acquire.
+    private var closeGlyphPointSize: CGFloat {
+        #if os(visionOS)
+        return 24
+        #else
+        return 18
+        #endif
+    }
+
+    private var closeButtonInnerPadding: CGFloat {
+        #if os(visionOS)
+        return AetherDesign.Spacing.m
+        #else
+        return AetherDesign.Spacing.s
+        #endif
+    }
+
+    private var audioTracks: [MediaAudioTrack] {
+        viewModel.state.item?.audioTracks ?? item.audioTracks
+    }
+
+    private var selectedAudioTrackID: String? {
+        viewModel.state.item?.selectedAudioTrackID ?? item.selectedAudioTrackID
+    }
+
+    private var audioTrackMenu: some View {
+        Menu {
+            ForEach(audioTracks) { track in
+                Button {
+                    revealChrome()
+                    Task { await viewModel.selectAudioTrack(track) }
+                } label: {
+                    Label(
+                        track.displayTitle,
+                        systemImage: track.id == selectedAudioTrackID ? "checkmark" : "speaker.wave.2"
+                    )
+                }
+            }
+        } label: {
+            Image(systemName: "speaker.wave.2")
+                .font(.system(size: closeGlyphPointSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(closeButtonInnerPadding)
+                .background(.ultraThinMaterial, in: Circle())
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("Audio track")
+        #if os(visionOS)
+        .hoverEffect()
+        #endif
     }
 
     private func revealChrome() {
