@@ -122,6 +122,50 @@ public actor PlaybackSession {
         state.position = position
     }
 
+    /// Switch Plex transcoder audio streams without forcing the user back to
+    /// the detail screen. PMS exposes audio selection as a transcoder query
+    /// item (`audioStreamID`), so changing tracks means replacing the current
+    /// player item with the same URL plus the selected stream id.
+    public func selectAudioTrack(_ track: MediaAudioTrack) async {
+        guard let item = state.item,
+              item.audioTracks.contains(where: { $0.id == track.id }) else { return }
+        let nextItem = item.selectingAudioTrack(track)
+        guard let url = nextItem.streamURL else { return }
+
+        let wasPlaying = state.status == .playing
+        let priorStatus = state.status
+        let seconds = await currentPlaybackSeconds()
+        let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
+
+        if let avPlayer {
+            await MainActor.run {
+                avPlayer.replaceCurrentItem(with: AVPlayerItem(url: url))
+                avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if wasPlaying {
+                    avPlayer.play()
+                }
+            }
+        } else {
+            let player = await MainActor.run { () -> AVPlayer in
+                let player = AVPlayer(url: url)
+                player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if wasPlaying {
+                    player.play()
+                }
+                return player
+            }
+            avPlayer = player
+            startResumeLoop()
+        }
+
+        state = PlaybackState(
+            status: wasPlaying ? .playing : priorStatus,
+            item: nextItem,
+            position: .seconds(seconds),
+            duration: state.duration
+        )
+    }
+
     public func stop() async {
         resumeTask?.cancel()
         resumeTask = nil
@@ -186,6 +230,16 @@ public actor PlaybackSession {
         let position = Duration.seconds(seconds)
         state.position = position
         await resumeStore.record(.init(mediaID: item.id, position: position))
+    }
+
+    private func currentPlaybackSeconds() async -> Double {
+        if let avPlayer {
+            let seconds = await MainActor.run { avPlayer.currentTime().seconds }
+            if seconds.isFinite, !seconds.isNaN {
+                return seconds
+            }
+        }
+        return Self.durationSeconds(state.position)
     }
 
     private func persistedResumeSeconds(for id: MediaID) async -> Double {

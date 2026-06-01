@@ -40,7 +40,7 @@ struct PlayerView: View {
             }
 
             #if os(iOS) || os(visionOS)
-            closeButton
+            playerChrome
                 .opacity(effectiveCloseVisibility ? 1 : 0)
                 .animation(
                     reduceMotion ? nil : .easeInOut(duration: 0.25),
@@ -106,7 +106,7 @@ struct PlayerView: View {
     #endif
 
     #if os(iOS) || os(visionOS)
-    private var closeButton: some View {
+    private var playerChrome: some View {
         VStack {
             HStack {
                 Button {
@@ -124,7 +124,6 @@ struct PlayerView: View {
                         .background(.ultraThinMaterial, in: Circle())
                         .contentShape(Circle())
                 }
-                .padding(AetherDesign.Spacing.m)
                 .accessibilityLabel("Close player")
                 // visionOS-only hint: tells the system this is an
                 // interactive element so the gaze-driven hover effect lights
@@ -136,8 +135,14 @@ struct PlayerView: View {
                 #if os(visionOS)
                 .hoverEffect()
                 #endif
+
                 Spacer()
+
+                if audioTracks.count > 1 {
+                    audioTrackMenu
+                }
             }
+            .padding(AetherDesign.Spacing.m)
             Spacer()
         }
     }
@@ -159,6 +164,37 @@ struct PlayerView: View {
         #else
         return AetherDesign.Spacing.s
         #endif
+    }
+
+    private var audioTracks: [MediaAudioTrack] {
+        viewModel.state.item?.audioTracks ?? item.audioTracks
+    }
+
+    private var selectedAudioTrackID: String? {
+        viewModel.state.item?.selectedAudioTrackID ?? item.selectedAudioTrackID
+    }
+
+    private var audioTrackMenu: some View {
+        Menu {
+            ForEach(audioTracks) { track in
+                Button {
+                    revealChrome()
+                    Task { await viewModel.selectAudioTrack(track) }
+                } label: {
+                    Label(
+                        track.displayTitle,
+                        systemImage: track.id == selectedAudioTrackID ? "checkmark" : "speaker.wave.2"
+                    )
+                }
+            }
+        } label: {
+            Image(systemName: "speaker.wave.2")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(AetherDesign.Spacing.s)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("Audio track")
     }
 
     private func revealChrome() {
