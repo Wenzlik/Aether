@@ -222,6 +222,9 @@ private struct WirePoint: Codable {
         case .plex(let serverID):
             kind = "plex"
             param = serverID
+        case .jellyfin(let serverID):
+            kind = "jellyfin"
+            param = serverID
         case .synology(let host):
             kind = "synology"
             param = host
@@ -245,6 +248,9 @@ private struct WirePoint: Codable {
         case "plex":
             guard let param = sourceParam else { return nil }
             source = .plex(serverID: param)
+        case "jellyfin":
+            guard let param = sourceParam else { return nil }
+            source = .jellyfin(serverID: param)
         case "synology":
             guard let param = sourceParam else { return nil }
             source = .synology(host: param)

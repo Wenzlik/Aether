@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 /// Minimal playback state surfaced to UI.
 ///
@@ -57,6 +58,43 @@ public actor PlaybackSession {
     /// the item's own `streamURL` (tests / sources with no resolver).
     private var source: (any MediaSource)?
 
+    /// The server transcode session currently driving playback, so we can stop
+    /// it on teardown / after a track switch. `nil` for direct play.
+    private var activeTranscodeSessionID: String?
+
+    // MARK: - Diagnostics
+
+    /// Structured playback-lifecycle logging — to settle whether failures live
+    /// in this shared layer or the source layer. Visible in Console.app /
+    /// `log stream --predicate 'subsystem == "cz.zmrhal.aether"'`. **Never logs
+    /// tokens or full URLs** — only a stable one-way hash of the URL so you can
+    /// tell whether two attempts used the same stream.
+    private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "playback")
+
+    /// Monotonic "Playback Attempt #N" counter for the current process.
+    private var attempt = 0
+
+    /// Auto-recovery budget for a mid-stream failure (e.g. the server reaped a
+    /// paused / idle transcode session). One automatic retry per user-initiated
+    /// open: a recovery that immediately fails again gives up (rather than
+    /// looping) and surfaces the error, where the user's Retry re-opens and
+    /// re-arms the budget.
+    private var recoveryAttempts = 0
+    private static let maxRecoveryAttempts = 1
+
+    /// djb2 hash of a string — stable within a run, one-way (token-safe).
+    nonisolated static func urlHash(_ url: URL?) -> String {
+        guard let url else { return "nil" }
+        var hash: UInt64 = 5381
+        for byte in url.absoluteString.utf8 { hash = (hash &* 33) &+ UInt64(byte) }
+        return String(hash, radix: 16)
+    }
+
+    nonisolated static func shortID(_ object: AnyObject?) -> String {
+        guard let object else { return "nil" }
+        return String(UInt(bitPattern: ObjectIdentifier(object).hashValue) & 0xFFFFFF, radix: 16)
+    }
+
     /// Content seconds represented by the player's `currentTime() == 0`.
     ///
     /// A Plex transcode started at `offset` emits a fresh HLS timeline whose
@@ -87,13 +125,26 @@ public actor PlaybackSession {
     public func prepare(
         item: MediaItem,
         source: (any MediaSource)? = nil,
-        startAt explicitStart: Double? = nil
+        startAt explicitStart: Double? = nil,
+        isRecovery: Bool = false
     ) async {
-        // Tear down previous session before starting a new one.
+        // A user-initiated open re-arms the recovery budget; a recovery re-prepare
+        // must not, or it could loop on a permanently broken stream.
+        if !isRecovery { recoveryAttempts = 0 }
+        attempt += 1
+        let startLabel = explicitStart.map { String($0) } ?? "resume"
+        Self.log.notice("prepare #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) source=\(item.id.source.stableKey, privacy: .public) startAt=\(startLabel, privacy: .public)")
+
+        // Tear down previous session before starting a new one (stops its
+        // transcode session too).
         resumeTask?.cancel()
         resumeTask = nil
         await teardownPlayer()
         self.source = source
+
+        // Show "loading" up front: resolving warms up the transcode (can take a
+        // few seconds), and we'd rather sit in loading than flash a failure.
+        state = PlaybackState(status: .loading, item: item)
 
         let resumeSeconds: Double
         if let explicitStart {
@@ -102,9 +153,9 @@ public actor PlaybackSession {
             resumeSeconds = await persistedResumeSeconds(for: item.id)
         }
 
-        // Resolve a FRESH URL through the source — a new transcode session at
-        // the resume offset, not a reused/mutated one. This is what stops a
-        // reaped Plex session from surfacing as NSURLError -1008 on resume.
+        // Resolve a FRESH, warmed-up URL through the source — a new transcode
+        // session at the resume offset, confirmed readable. This is what stops a
+        // reaped / not-yet-ready Plex session surfacing as NSURLError -1008.
         let resolved: ResolvedPlayback
         do {
             resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
@@ -117,17 +168,21 @@ public actor PlaybackSession {
             return
         }
 
-        let needsClientSeek = !resolved.isServerTranscode && resumeSeconds > 0
+        activeTranscodeSessionID = resolved.transcodeSessionID
         baseOffsetSeconds = resolved.baseOffsetSeconds
+        let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
-        let player = await MainActor.run { () -> AVPlayer in
+        let (player, itemID) = await MainActor.run { () -> (AVPlayer, String) in
             let p = AVPlayer(url: url)
-            if needsClientSeek {
-                let cmTime = CMTime(seconds: resumeSeconds, preferredTimescale: 600)
-                p.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            if let seekTarget {
+                p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             }
-            return p
+            return (p, Self.shortID(p.currentItem))
         }
+
+        let sessionShort: String = resolved.transcodeSessionID.map { String($0.prefix(8)) } ?? "-"
+        let createdLog = "player created #\(attempt) player=\(Self.shortID(player)) item=\(itemID) transcode=\(resolved.isServerTranscode) session=\(sessionShort) urlHash=\(Self.urlHash(url))"
+        Self.log.notice("\(createdLog, privacy: .public)")
 
         self.avPlayer = player
         self.state = PlaybackState(
@@ -138,14 +193,25 @@ public actor PlaybackSession {
         startResumeLoop()
     }
 
+    /// Where the player should seek after the item is ready: the resolver's
+    /// explicit `clientSeekSeconds` (small transcode offset), else the resume
+    /// point for direct play. Transcodes with a baked-in offset return `nil`.
+    private func seekTarget(for resolved: ResolvedPlayback, position: Double) -> Double? {
+        if let explicit = resolved.clientSeekSeconds { return explicit > 0 ? explicit : nil }
+        if !resolved.isServerTranscode, position > 0 { return position }
+        return nil
+    }
+
     public func play() async {
         guard let avPlayer, state.item != nil else { return }
+        Self.log.notice("play #\(self.attempt, privacy: .public)")
         await MainActor.run { avPlayer.play() }
         state.status = .playing
     }
 
     public func pause() async {
         guard let avPlayer, state.status == .playing else { return }
+        Self.log.notice("pause #\(self.attempt, privacy: .public) pos=\(Self.durationSeconds(self.state.position), privacy: .public)s")
         await MainActor.run { avPlayer.pause() }
         state.status = .paused
         await writeResumeNow()
@@ -186,8 +252,10 @@ public actor PlaybackSession {
         let wasPlaying = state.status == .playing
         let priorStatus = state.status
         let seconds = await currentPlaybackSeconds()
-        let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
+        let previousSessionID = activeTranscodeSessionID
 
+        // Resolve + warm up the NEW session before touching the player, so we
+        // never swap in a cold URL.
         let resolved: ResolvedPlayback
         do {
             resolved = try await resolvePlayback(for: nextItem, startSeconds: seconds)
@@ -197,14 +265,14 @@ public actor PlaybackSession {
         }
 
         let url = resolved.url
-        let needsClientSeek = !resolved.isServerTranscode
         baseOffsetSeconds = resolved.baseOffsetSeconds
+        let seekTarget = seekTarget(for: resolved, position: seconds)
 
         if let avPlayer {
             await MainActor.run {
                 avPlayer.replaceCurrentItem(with: AVPlayerItem(url: url))
-                if needsClientSeek {
-                    avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if let seekTarget {
+                    avPlayer.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
                 }
                 if wasPlaying {
                     avPlayer.play()
@@ -213,8 +281,8 @@ public actor PlaybackSession {
         } else {
             let player = await MainActor.run { () -> AVPlayer in
                 let player = AVPlayer(url: url)
-                if needsClientSeek {
-                    player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                if let seekTarget {
+                    player.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
                 }
                 if wasPlaying {
                     player.play()
@@ -225,12 +293,19 @@ public actor PlaybackSession {
             startResumeLoop()
         }
 
+        activeTranscodeSessionID = resolved.transcodeSessionID
         state = PlaybackState(
             status: wasPlaying ? .playing : priorStatus,
             item: nextItem,
             position: .seconds(seconds),
             duration: state.duration
         )
+
+        // Now that the new session is live, stop the old one — never before, so
+        // we don't interrupt playback if the swap is mid-flight.
+        if let previousSessionID, previousSessionID != resolved.transcodeSessionID {
+            await source?.stopTranscode(sessionID: previousSessionID)
+        }
     }
 
     public func stop() async {
@@ -246,7 +321,31 @@ public actor PlaybackSession {
     /// network/codec/TLS failure would leave the session sitting at
     /// `.loading` or `.playing` forever — and the UI would show a spinner or
     /// a black screen with no indication of what went wrong.
+    /// Called by the view model when it observes an `AVPlayerItem` failure.
+    /// Attempts **one** automatic recovery — re-resolve a fresh, warmed URL at
+    /// the last position and resume — before surfacing the error. This is what
+    /// recovers from a paused/idle stream whose server-side transcode session
+    /// was reaped (the cross-source "pause → wait → fail" case): the native
+    /// transport drives `AVPlayer` directly, so without this there's no hook to
+    /// rebuild the stream on resume.
+    public func recoverOrFail(message: String) async {
+        // A load / recovery is already in flight — let it settle.
+        if state.status == .loading { return }
+        guard let source, let item = state.item, recoveryAttempts < Self.maxRecoveryAttempts else {
+            await markFailed(message: message)
+            return
+        }
+        recoveryAttempts += 1
+        let position = Self.durationSeconds(state.position)
+        Self.log.notice("auto-recover #\(self.attempt, privacy: .public) (try \(self.recoveryAttempts, privacy: .public)) at \(position, privacy: .public)s after: \(message, privacy: .public)")
+        await prepare(item: item, source: source, startAt: position, isRecovery: true)
+        if state.status != .failed {
+            await play()
+        }
+    }
+
     public func markFailed(message: String) async {
+        Self.log.error("playback FAILED #\(self.attempt, privacy: .public) status=\(String(describing: self.state.status), privacy: .public) pos=\(Self.durationSeconds(self.state.position), privacy: .public)s reason=\(message, privacy: .public)")
         let failedState = PlaybackState(
             status: .failed,
             item: state.item,
@@ -301,10 +400,14 @@ public actor PlaybackSession {
     /// surfaced only behind the player's Details disclosure — the user sees a
     /// friendly message, not this).
     private static func resolveErrorDetail(_ error: any Error) -> String {
-        if case PlaybackResolveError.noPlayableStream = error {
+        switch error {
+        case PlaybackResolveError.noPlayableStream:
             return "No playable stream — the server didn't return a usable Part or connection."
+        case let PlaybackResolveError.notReady(diagnostics):
+            return diagnostics
+        default:
+            return "Couldn't resolve a playback URL: \(error)"
         }
-        return "Couldn't resolve a playback URL: \(error)"
     }
 
     private func startResumeLoop() {
@@ -353,7 +456,14 @@ public actor PlaybackSession {
 
     private func teardownPlayer() async {
         baseOffsetSeconds = 0
+        // Stop the server transcode session so Plex frees it immediately rather
+        // than reaping it later (and so a stale one can't linger).
+        if let sessionID = activeTranscodeSessionID {
+            activeTranscodeSessionID = nil
+            await source?.stopTranscode(sessionID: sessionID)
+        }
         guard let player = avPlayer else { return }
+        Self.log.notice("teardown #\(self.attempt, privacy: .public) player=\(Self.shortID(player), privacy: .public)")
         await MainActor.run {
             player.pause()
             player.replaceCurrentItem(with: nil)

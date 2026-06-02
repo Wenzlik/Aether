@@ -31,12 +31,13 @@ Real media, from real servers. This is the milestone that turns Aether from a sh
 - ✅ **Native video player** — `AVPlayerViewController` (rotation, full-screen, system transport, PiP, AirPlay, subtitle/audio track picker). Chrome auto-hides on iOS / visionOS in sync with the native transport.
 - ✅ **Settings + Sign Out** — reachable Settings screen (Account / Sources / Playback / About), Sign Out of Plex that clears keychain + persisted server + every Plex-related field. No more app reinstall to disconnect.
 - ✅ **Aether Design System v1** — `Aether*` prefix across all reusable primitives, with designed empty / loading / error states everywhere they're needed.
-- ⬜ **Synology connector** — auth (DSM session or Video Station, spike first), shares + collections + items, stream URLs (direct play + server transcode fallback).
+- ✅ **Jellyfin connector** — manual server URL + **Quick Connect** sign-in, libraries + items, seasons/episodes, direct-play + HLS transcode (audio/subtitle stream selection, resume offset). A second `MediaSource` alongside Plex; the app keeps one **active source**, switchable in Settings → Sources.
+- ⬜ **Synology connector** — auth (DSM session or Video Station, spike first), shares + collections + items, stream URLs (direct play + server transcode fallback). *(Lower priority now that Jellyfin covers the "second source" goal; Synology stays optional.)*
 - ⬜ **Metadata mapping (cross-source)** — a single `MediaItem` shape that both Plex and Synology fill in equivalently (the shape is correct already; the second connector validates it).
 - ⬜ **Artwork pipeline upgrade** — disk-backed LRU + downsampling inside `CachedAsyncImage` (today is a thin wrapper around `AsyncImage`).
 - ⬜ **Persistent ResumeStore** — SwiftData-backed; today is in-memory. Outbox plumbing for offline writes lands properly in 0.3.
 
-**Definition of done:** sign in to a real Plex server *and* a real Synology, browse both libraries from the same Home, play a title from each, see resume state on next launch.
+**Definition of done:** sign in to a real Plex server *and* a real Jellyfin server, switch between them as the active source, play a title from each, see resume state on next launch.
 
 Notes: [`docs/next-steps/0.2-media-sources.md`](docs/next-steps/0.2-media-sources.md).
 

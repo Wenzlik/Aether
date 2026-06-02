@@ -1092,6 +1092,9 @@ struct PlexMediaSourceLibrariesTests {
     func resolvePlaybackTranscodeIsFresh() async throws {
         let api = RecordingAPIClient()
         await enqueueReachable(api)   // /identity probe (resolveBaseURL caches after)
+        // Each resolve warms up the playlist before returning.
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
         let source = makeSource(api: api)
 
         let request = PlaybackRequest(
@@ -1337,5 +1340,181 @@ struct PlexMediaSourceRequestTests {
         #expect(request.url?.query?.contains("type=1") == true)
         #expect(request.value(forHTTPHeaderField: "X-Plex-Token") == "server-token")
         #expect(request.value(forHTTPHeaderField: "X-Plex-Product") == "Aether")
+    }
+}
+
+@Suite("Plex — transcode warm-up")
+struct PlexTranscodeWarmUpTests {
+    private func request() -> URLRequest {
+        URLRequest(url: URL(string: "https://server.example/video/:/transcode/universal/start.m3u8")!)
+    }
+
+    @Test("warmUp succeeds on HTTP 200 + #EXTM3U")
+    func success() async {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("#EXTM3U\n#EXT-X-VERSION:3".utf8), statusCode: 200, headers: [:]))
+        let manager = PlexTranscodeSessionManager(api: api)
+        let outcome = await manager.warmUp(request(), delays: [])
+        #expect(outcome.ready)
+        #expect(outcome.attempts == 1)
+        #expect(outcome.sawPlaylistMarker)
+    }
+
+    @Test("warmUp retries until the playlist is ready")
+    func retries() async {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("still spinning up".utf8), statusCode: 503, headers: [:]))
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+        let manager = PlexTranscodeSessionManager(api: api)
+        let outcome = await manager.warmUp(request(), delays: [.milliseconds(1)])
+        #expect(outcome.ready)
+        #expect(outcome.attempts == 2)
+    }
+
+    @Test("warmUp fails cleanly when never ready")
+    func failsCleanly() async {
+        let api = RecordingAPIClient()
+        for _ in 0..<3 { await api.enqueue(.init(data: Data("nope".utf8), statusCode: 500, headers: [:])) }
+        let manager = PlexTranscodeSessionManager(api: api)
+        let outcome = await manager.warmUp(request(), delays: [.milliseconds(1), .milliseconds(1)])
+        #expect(!outcome.ready)
+        #expect(outcome.attempts == 3)
+        #expect(outcome.lastStatus == 500)
+        #expect(!outcome.sawPlaylistMarker)
+    }
+}
+
+@Suite("Plex — resolvePlayback warm-up + offset")
+struct PlexResolveWarmUpTests {
+    private static let config = PlexConfiguration(
+        product: "Aether", version: "0.2.0", clientIdentifier: "cid",
+        deviceName: "Test", platform: "iOS", platformVersion: "26"
+    )
+
+    private func makeSource(api: any APIClient) -> PlexMediaSource {
+        PlexMediaSource(
+            serverID: "s", displayName: "D", accessToken: "srv-token",
+            connections: [.init(uri: "https://lan.example:32400", isLocal: true, isRelay: false)],
+            configuration: Self.config, api: api, probeTimeout: 1, warmUpBackoff: []
+        )
+    }
+
+    private func enqueueReachable(_ api: RecordingAPIClient) async {
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
+    }
+    private func enqueuePlaylist(_ api: RecordingAPIClient) async {
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+    }
+
+    @Test("Large offset (>12s) is baked into the URL, with location=lan + fresh session")
+    func largeOffsetBaked() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode, audioStreamID: "2", startTime: .seconds(90)
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.baseOffsetSeconds == 90)
+        #expect(resolved.clientSeekSeconds == nil)
+        #expect(resolved.transcodeSessionID != nil)
+
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.first { $0.name == "offset" }?.value == "90")
+        #expect(c.queryItems?.first { $0.name == "location" }?.value == "lan")
+    }
+
+    @Test("Small offset (<=12s) is NOT sent; falls back to client-side seek")
+    func smallOffsetClientSeek() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode, startTime: .seconds(5)
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.baseOffsetSeconds == 0)
+        #expect(resolved.clientSeekSeconds == 5)
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.contains { $0.name == "offset" } == false)
+    }
+
+    @Test("Selecting an audio track sends directStreamAudio=0 so the choice is honoured")
+    func audioSelectionTranscodesChosenTrack() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode, audioStreamID: "3"
+        )
+        let resolved = try await source.resolvePlayback(request)
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.first { $0.name == "audioStreamID" }?.value == "3")
+        // The fix: a chosen track transcodes only that stream, instead of
+        // keeping all renditions (which made AVPlayer ignore the selection).
+        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "0")
+    }
+
+    @Test("With no audio choice, all tracks are kept (directStreamAudio=1)")
+    func noAudioChoiceKeepsAllTracks() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await enqueuePlaylist(api)
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode
+        )
+        let resolved = try await source.resolvePlayback(request)
+        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "1")
+    }
+
+    @Test("Warm-up failure maps to .notReady with token-free diagnostics")
+    func warmUpFailureMapsToNotReady() async {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data("err".utf8), statusCode: 500, headers: [:]))
+        let source = makeSource(api: api)
+
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
+            mode: .transcode, startTime: .seconds(90)
+        )
+        do {
+            _ = try await source.resolvePlayback(request)
+            Issue.record("expected resolvePlayback to throw .notReady")
+        } catch let PlaybackResolveError.notReady(diagnostics) {
+            #expect(!diagnostics.contains("srv-token"))
+            #expect(!diagnostics.lowercased().contains("token"))
+            #expect(diagnostics.contains("host=lan.example"))
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("diagnostics never contain the Plex token")
+    func diagnosticsHideToken() {
+        let outcome = PlexTranscodeSessionManager.WarmUpOutcome(ready: false, attempts: 5, lastStatus: 404, sawPlaylistMarker: false)
+        let diag = PlexMediaSource.diagnostics(
+            isLocal: true, base: URL(string: "https://lan.example:32400")!,
+            sessionID: "abcdef123456", offset: 90, audioStreamID: "2", subtitleStreamID: nil, outcome: outcome
+        )
+        #expect(!diag.contains("srv-token"))
+        #expect(diag.contains("connection=lan"))
+        #expect(diag.contains("host=lan.example"))
     }
 }

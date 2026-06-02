@@ -184,7 +184,7 @@ struct PlayerView: View {
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
 
             VStack(spacing: AetherDesign.Spacing.s) {
-                Text("Can't play this title")
+                Text("Unable to prepare playback")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
 
@@ -239,6 +239,6 @@ struct PlayerView: View {
     /// Calm, human-readable — no raw host or `NSURLErrorDomain`. The underlying
     /// reason lives behind the Details disclosure above.
     private var failureMessage: String {
-        "Aether couldn't start \(item.title). Check your connection to the server, then try again."
+        "Aether couldn't prepare the stream for \(item.title) yet. Check that the server is reachable, then try again."
     }
 }
