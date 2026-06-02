@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A Plex Media Server connection wired up as an Aether `MediaSource`.
 ///
@@ -45,6 +46,8 @@ public actor PlexMediaSource: MediaSource {
     /// Warm-up backoff before AVPlayer gets the URL. Overridable so tests don't
     /// wait the real ~3.75 s.
     private let warmUpBackoff: [Duration]
+
+    private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "plex.transcode")
 
     public init(
         serverID: String,
@@ -205,11 +208,23 @@ public actor PlexMediaSource: MediaSource {
             // it's readable, then mark the session active.
             let outcome = await sessionManager.warmUp(warmUpRequest(for: url), delays: warmUpBackoff)
             guard outcome.ready else {
+                // Log the EXACT request (token redacted) + Plex's error body, and
+                // probe which parameter combination Plex rejects — evidence, not
+                // guesses. (Only runs on the failure path.)
+                Self.log.error("transcode warm-up FAILED status=\(outcome.lastStatus.map(String.init) ?? "none", privacy: .public) extm3u=\(outcome.sawPlaylistMarker, privacy: .public) body=\(outcome.bodySnippet ?? "-", privacy: .public)")
+                Self.log.error("transcode params: \(Self.redactedParams(url), privacy: .public)")
+                let probe = await isolationProbe(
+                    base: base, ratingKey: request.itemID.rawValue,
+                    offsetSeconds: bakeOffset ? rawOffset : nil,
+                    audioStreamID: request.audioStreamID, subtitleStreamID: request.subtitleStreamID,
+                    isLocal: isLocal
+                )
+                Self.log.error("transcode isolation probe → \(probe, privacy: .public)")
                 throw PlaybackResolveError.notReady(diagnostics: Self.diagnostics(
                     isLocal: isLocal, base: base, sessionID: sessionID, offset: rawOffset,
                     audioStreamID: request.audioStreamID, subtitleStreamID: request.subtitleStreamID,
                     outcome: outcome
-                ))
+                ) + " · body=\(outcome.bodySnippet ?? "-") · probe[\(probe)]")
             }
             await sessionManager.markActive(sessionID)
 
@@ -271,6 +286,45 @@ public actor PlexMediaSource: MediaSource {
     private static func seconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
+    /// Every query parameter name=value of a transcode URL, with the token
+    /// redacted — so we can compare exactly what we send vs. Plex Web / kodi.
+    nonisolated static func redactedParams(_ url: URL) -> String {
+        guard let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return "-" }
+        return items.map { item in
+            let value = item.name == "X-Plex-Token" ? "<redacted>" : (item.value ?? "")
+            return "\(item.name)=\(value)"
+        }.joined(separator: "&")
+    }
+
+    /// Find the smallest parameter combination Plex rejects: probe `offset`,
+    /// `offset+audio`, `offset+subtitle`, `offset+audio+subtitle` with one GET
+    /// each (fresh session per probe) and report the HTTP status of each. Runs
+    /// only when the real warm-up already failed.
+    private func isolationProbe(
+        base: URL,
+        ratingKey: String,
+        offsetSeconds: Double?,
+        audioStreamID: String?,
+        subtitleStreamID: String?,
+        isLocal: Bool
+    ) async -> String {
+        func status(audio: String?, subtitle: String?) async -> String {
+            let sessionID = await sessionManager.newSessionID()
+            guard let url = transcodeURL(
+                base: base, ratingKey: ratingKey,
+                audioStreamID: audio, subtitleStreamID: subtitle,
+                offsetSeconds: offsetSeconds, sessionID: sessionID,
+                location: isLocal ? "lan" : nil
+            ) else { return "?" }
+            return await sessionManager.probeStatus(warmUpRequest(for: url)).map(String.init) ?? "err"
+        }
+        let offsetOnly = await status(audio: nil, subtitle: nil)
+        let withAudio = await status(audio: audioStreamID, subtitle: nil)
+        let withSubtitle = await status(audio: nil, subtitle: subtitleStreamID)
+        let withBoth = await status(audio: audioStreamID, subtitle: subtitleStreamID)
+        return "offset=\(offsetOnly) offset+audio=\(withAudio) offset+subtitle=\(withSubtitle) offset+audio+subtitle=\(withBoth)"
     }
 
     // MARK: - Connection resolution + failover

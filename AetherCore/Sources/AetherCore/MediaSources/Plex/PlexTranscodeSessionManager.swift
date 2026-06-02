@@ -18,6 +18,18 @@ public actor PlexTranscodeSessionManager {
         public let attempts: Int
         public let lastStatus: Int?
         public let sawPlaylistMarker: Bool
+        /// First ~200 bytes of the response on a non-2xx — Plex puts a
+        /// human-readable error here (e.g. why a 400 was returned). Tokens live
+        /// in the request URL, not the body, so this is safe to log.
+        public let bodySnippet: String?
+
+        public init(ready: Bool, attempts: Int, lastStatus: Int?, sawPlaylistMarker: Bool, bodySnippet: String? = nil) {
+            self.ready = ready
+            self.attempts = attempts
+            self.lastStatus = lastStatus
+            self.sawPlaylistMarker = sawPlaylistMarker
+            self.bodySnippet = bodySnippet
+        }
     }
 
     /// Default backoff *before* attempts 2…n (attempt 1 is immediate):
@@ -54,6 +66,7 @@ public actor PlexTranscodeSessionManager {
         var attempt = 0
         var lastStatus: Int?
         var sawMarker = false
+        var bodySnippet: String?
 
         while attempt < totalAttempts {
             if attempt > 0 {
@@ -71,13 +84,30 @@ public actor PlexTranscodeSessionManager {
                     if sawMarker {
                         return WarmUpOutcome(ready: true, attempts: attempt, lastStatus: lastStatus, sawPlaylistMarker: true)
                     }
+                } else {
+                    // Capture Plex's error body so we know *why* it rejected us
+                    // (the whole point of this round).
+                    bodySnippet = Self.snippet(data)
                 }
             } catch {
                 lastStatus = nil
             }
         }
 
-        return WarmUpOutcome(ready: false, attempts: attempt, lastStatus: lastStatus, sawPlaylistMarker: sawMarker)
+        return WarmUpOutcome(ready: false, attempts: attempt, lastStatus: lastStatus, sawPlaylistMarker: sawMarker, bodySnippet: bodySnippet)
+    }
+
+    /// First ~200 bytes of a response body, whitespace-collapsed, for logging.
+    private static func snippet(_ data: Data) -> String {
+        let text = String(decoding: data.prefix(200), as: UTF8.self)
+        return text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// One-shot GET for the param-isolation probe: returns the HTTP status (or
+    /// nil on transport error).
+    public func probeStatus(_ request: URLRequest) async -> Int? {
+        guard let (_, response) = try? await api.data(for: request) else { return nil }
+        return response.statusCode
     }
 
     /// Fire-and-forget stop of a transcode session (`/transcode/universal/stop`).
