@@ -33,6 +33,15 @@ struct RootTabView: View {
         #endif
     }
 
+    #if os(visionOS)
+    // Cinema Mode bridge. The coordinator signals intent via `openRequestID`;
+    // these environment actions are only reachable from a view, so the actual
+    // immersive-space transition happens here and reports back to the
+    // coordinator. See `docs/next-steps/visionos-cinema.md` → §5.
+    @Environment(CinemaCoordinator.self) private var cinema
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    #endif
+
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house.fill") {
@@ -105,6 +114,24 @@ struct RootTabView: View {
                 JellyfinSignInView(session: session)
             }
         }
+        #if os(visionOS)
+        .onChange(of: cinema.openRequestID) { _, id in
+            guard id != nil else { return }
+            Task {
+                switch await openImmersiveSpace(id: CinemaCoordinator.spaceID) {
+                case .opened:
+                    cinema.didEnter()
+                default:
+                    // User dismissed the system dialog, or the space failed to
+                    // open — fall back to windowed so we don't strand the UI.
+                    cinema.didLeave()
+                }
+            }
+        }
+        // The exit is owned by `CinemaImmersiveView` (it dismisses the space +
+        // reopens this window), because the main window is gone while the
+        // cinema is open and this view can't drive the transition then.
+        #endif
     }
 }
 

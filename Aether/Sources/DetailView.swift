@@ -45,6 +45,12 @@ struct DetailView: View {
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(visionOS)
+    /// Cinema Mode coordinator — drives the "Watch in Cinema" entry. Injected
+    /// at the app root; always present inside the windowed view tree on
+    /// visionOS.
+    @Environment(CinemaCoordinator.self) private var cinema
+    #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
     /// playback configuration triplet; `downloadQuality` reuses the same
@@ -291,6 +297,9 @@ struct DetailView: View {
                 } else {
                     playButton
                 }
+                #if os(visionOS)
+                watchInCinemaButton
+                #endif
                 if shouldShowDownloadControl {
                     downloadControl
                 }
@@ -419,6 +428,23 @@ struct DetailView: View {
         }
         .disabled(isPreparingPlayback)
     }
+
+    #if os(visionOS)
+    /// visionOS-only: enter Cinema Mode — the same title on a cinematic screen
+    /// in a dedicated immersive space, driven by the same `PlaybackSession`.
+    /// Resumes from the saved point when one exists, else starts from the top,
+    /// matching the Play / Resume button above it.
+    private var watchInCinemaButton: some View {
+        AetherButton(
+            "Watch in Cinema",
+            systemImage: "visionpro",
+            role: .secondary
+        ) {
+            Task { await watchInCinema() }
+        }
+        .disabled(isPreparingPlayback)
+    }
+    #endif
 
     /// Resume exists: **Resume** (primary, with a resume-from caption) and
     /// **Restart** (secondary) sitting side-by-side, each expanding to
@@ -898,6 +924,23 @@ struct DetailView: View {
         playbackItem = nil
         Task { resume = await resumeStore.point(for: item.id) }
     }
+
+    #if os(visionOS)
+    /// Hand the (hydrated) item to the cinema coordinator. `RootTabView` opens
+    /// the immersive space; `CinemaImmersiveView` then opens the same item
+    /// through the same view model the windowed player uses. `nil` startAt
+    /// resumes from the saved point, mirroring the Resume button.
+    private func watchInCinema() async {
+        guard !isPreparingPlayback else { return }
+        isPreparingPlayback = true
+        defer { isPreparingPlayback = false }
+
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+            configuredItem = hydrated
+        }
+        cinema.watch(current, source: source, startAt: resume != nil ? nil : 0)
+    }
+    #endif
 
     // MARK: - Formatting helpers
 

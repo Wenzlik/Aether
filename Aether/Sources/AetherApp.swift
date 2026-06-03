@@ -18,13 +18,41 @@ struct AetherApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
 
+    #if os(visionOS)
+    // Cinema Mode (visionOS only). The coordinator owns the immersive-space
+    // lifecycle intent + live screen/environment config; `RootTabView` opens
+    // the space, `CinemaImmersiveView` dismisses it on Leave. `immersionStyle`
+    // defaults to `.full` (true blacks, IMAX feel) with `.progressive`
+    // available so the Digital Crown can blend the room back in.
+    // See `docs/next-steps/visionos-cinema.md`.
+    @State private var cinema = CinemaCoordinator()
+    @State private var immersionStyle: any ImmersionStyle = .full
+    #endif
+
     var body: some Scene {
+        #if os(visionOS)
+        WindowGroup(id: CinemaCoordinator.mainWindowID) {
+            RootTabView(session: session)
+                .preferredColorScheme(session.appearance.preference.colorScheme)
+                .tint(AetherDesign.Palette.accent)
+                .task { await session.start() }
+                .environment(cinema)
+        }
+        #else
         WindowGroup {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
         }
+        #endif
+
+        #if os(visionOS)
+        ImmersiveSpace(id: CinemaCoordinator.spaceID) {
+            CinemaImmersiveView(session: session.playback, cinema: cinema)
+        }
+        .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
+        #endif
     }
 }
 
@@ -191,7 +219,17 @@ final class AppSession {
 
     // MARK: - Lifecycle
 
+    /// Guards `start()` against re-running. `RootTabView.task` calls it on
+    /// every window appearance — and on visionOS the main window is dismissed
+    /// when entering the cinema and reopened on exit, which re-creates
+    /// `RootTabView` and would otherwise re-run discovery / rebuild the active
+    /// source mid-session (which surfaced as a black cinema on re-entry).
+    private var hasStarted = false
+
     func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+
         // 0. Hydrate resume points from disk + a one-shot iCloud read, then
         //    start listening for external iCloud changes (other devices on
         //    the same iCloud account writing). Must run before Home / Library
