@@ -6,6 +6,39 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Playback quality picker — Plex Web's eight-step ladder.** A new section on
+  Detail lets the user pick the playback quality before pressing Play, mirroring
+  Plex Web exactly: **Original** (Direct Play priority — preserves the source
+  codec via container remux when possible), **Convert Automatically** (server
+  decides), and six bitrate caps (20 / 12 / 8 Mbps 1080p, 4 / 2 Mbps 720p,
+  720 kbps). The choice rides on the new decision pipeline (see *Fixed*) as
+  `maxVideoBitrate` / `videoResolution` query items, and the projected playback
+  mode — *Original · Direct Play* / *Original · Direct Stream* / *Transcode* —
+  surfaces inline next to the chosen quality so the user knows what's about to
+  happen before they tap. New `PlaybackQuality` enum + `PlaybackDecisionMode`
+  + `MediaInfo` types in `AetherCore/MediaSources/MediaSource`.
+- **Aether wordmark + brand mark — a reusable identity component.** New
+  `AetherWordmark` SwiftUI view (app target) combines the app-icon glyph with
+  the "Aether" wordmark — SF Pro Display Semibold, white text, only the leading
+  "A" wears the violet → aurora gradient (Apple-restrained, not a startup
+  logo). Three variants (`.small` / `.medium` / `.large`) and an optional
+  `tagline:` parameter for the landing-page block (`[logo] Aether / tagline`).
+  Brand artwork ships as a separate `AetherBrandMark` imageset alongside the
+  AppIcon set so `Image("AetherBrandMark")` resolves cleanly without touching
+  app-icon assets. Used at the top of Home (signed-in *and* welcome),
+  Library, Settings, and the Plex / Jellyfin sign-in / discovery sheets — the
+  brand reads inside the app, not only on the home-screen icon.
+- **`AetherDisclosureRow` — the row family's third member.** New atomic next to
+  `AetherSettingsRow` / `AetherSelectionRow`: label + current value + chevron,
+  tap-to-open. The iOS-native "current choice with more behind a tap" pattern
+  from Settings.app and Plex Web's bottom-sheet pickers. Powers the new
+  compact Audio / Subtitles / Quality rows on Detail (see *Changed*).
+- **Warm gold accent — the cinematic partner to violet.** New
+  `Palette.accentGold` (`#F5B524`) and `accentAmber` (`#F59E0B`) extracted from
+  the app icon's neon "A" mark, plus `Gradients.cinematic` (violet → aurora →
+  gold) used sparingly on hero glyphs. Violet stays the primary tint; gold is a
+  *secondary* accent, never for selection or focus.
+
 - **Jellyfin — a second media source.** Aether is no longer Plex-only. Connect a
   Jellyfin server by typing its URL and approving a **Quick Connect** code
   (ideal for the Apple TV remote — no password typing). New connector in
@@ -44,6 +77,62 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Plex audio-switch unreliability + pause/resume `400` — by mirroring Plex
+  Web's PUT-then-decide flow.** Audio-switching often kept playing the original
+  track; pausing and resuming a minute later sometimes failed with HTTP 400 +
+  `EXTM3U=false`. Root cause: Aether was jamming `audioStreamID` /
+  `subtitleStreamID` onto the `start.m3u8` URL and hoping the server honoured
+  it, while Plex's canonical state for a track selection lives on the **Part**
+  itself. The resolver now matches Plex Web exactly: **(1)** `PUT
+  /library/parts/{partId}?audioStreamID=…&subtitleStreamID=…` so the chosen
+  streams become the Part's selection (the new `applyStreamSelection` step,
+  using `Part.id` which is now decoded — previously discarded); **(2)** `GET
+  /video/:/transcode/universal/decision` with the user's quality / stream / off
+  set ask, reading back `Part.decision` (`directplay` / `copy` / `transcode`)
+  and the post-decision codecs / bitrate / resolution (the new `fetchDecision`
+  step + `PlexAPI.DecisionResponse` model); **(3)** build the playback URL from
+  the verdict — a direct file URL for *directplay*, a `start.m3u8` URL with
+  the same session id for *directstream* / *transcode*. The whole pipeline is
+  fronted by structured `os.Logger` diagnostics (`subsystem
+  cz.zmrhal.aether`, category `plex.playback`) that log quality / decision
+  mode / verdict / codecs / warm-up status — token-free, debuggable from
+  Console.app. Three new public types in `MediaSource.swift`
+  (`PlaybackQuality`, `PlaybackDecisionMode`, `MediaInfo`); `PlaybackRequest`
+  gains `partID` + `quality`; `ResolvedPlayback` gains `decision`. Selection
+  on `MediaItem` becomes pure state — the URL-mutation helpers
+  (`startingPlayback(at:)`, `replacingQueryItem(name:value:)`,
+  `regeneratingPlexTranscodeSession()`) are gone, and the in-player audio /
+  subtitle switching paths on `PlaybackSession` /
+  `PlayerStateViewModel` are removed (the player is no longer responsible for
+  configuring streams; Detail is).
+- **Quality = Original HTTP 400 (the Tron: Ares incident).** Even with the
+  PUT-then-decide pipeline live, the *Original* quality path failed with HTTP
+  400 from the decision endpoint while *Convert Automatically* worked fine.
+  Cause: my decision call sent `directPlay=1` for Original, expecting Plex to
+  evaluate "may we direct play?" — but without `X-Plex-Client-Profile-Extra`
+  (the detailed codec / container profile Plex Web sends) Plex returns 400
+  instead of just "no directplay possible." The decision call now always sends
+  `directPlay=0` regardless of quality; the "preserve original quality" intent
+  is carried by `directStream=1` (lossless container remux when codecs match)
+  plus the absence of a bitrate / resolution cap. Direct play for
+  client-friendly containers (mp4 / mov / m4v) was already handled separately
+  by `streamURL(for:)` mapping and stays unaffected. `start.m3u8` also pinned
+  to `directPlay=0` so a future decision-endpoint shift can't reintroduce a
+  contradictory transcode request. New regression test
+  (`transcodeStartURLParams`) iterates **every** `PlaybackQuality` case and
+  asserts `directPlay=0` on `start.m3u8` so the bug can't sneak back.
+- **Jellyfin connectivity over plain HTTP — App Transport Security relaxed.**
+  Connecting to a Jellyfin server at `http://your-server:8096` failed with
+  `NSURLErrorDomain -1022` because iOS ATS blocks plain HTTP. Self-hosted media
+  servers (Jellyfin, Emby, Synology DSM, generic NAS) typically don't ship
+  with a valid TLS cert, and the user's hostname (DDNS, Tailscale Magic DNS,
+  custom domain) defeats `NSAllowsLocalNetworking` even when it resolves to a
+  private IP. The Info.plist now sets `NSAppTransportSecurity /
+  NSAllowsArbitraryLoads = true` — the same pattern Infuse, VLC, and the
+  official Jellyfin client use; Apple accepts the justification for
+  personal-media clients at review time. Plex is unaffected — it already
+  worked via `*.plex.direct` TLS.
+
 - **Plex transcode HLS warm-up — the rest of the `-1008` story.** Even with a
   fresh session per playback, AVPlayer could still open the `start.m3u8` URL
   before Plex had produced a readable playlist, so audio-switch / resume could
@@ -76,6 +165,49 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   technical detail sits behind a **Details** disclosure.
 
 ### Changed
+
+- **Detail playback options collapse into compact rows + bottom sheet.** The
+  Detail screen no longer scrolls through four expanded settings groups —
+  Audio / Subtitles / Quality each collapse into a single `AetherDisclosureRow`
+  under one **Playback** section, showing the current selection in muted text.
+  Tap opens a half-height bottom sheet (`presentationDetents([.medium,
+  .large])`) that reuses `AetherSelectionRow` for the option list. The
+  *Media* block stays expanded as read-only source info (Video / Audio /
+  Bitrate / HDR / Playback mode / Source). The in-player audio / subtitle
+  pickers are gone — selection is *Detail's* responsibility, the player just
+  plays what was configured.
+- **Library tab — branded hub instead of two empty tiles.** The Library tab no
+  longer opens to oversized Movies / TV Shows category tiles. New layout: a
+  large `AetherWordmark` hero ("Aether Library" + tagline), a Continue Watching
+  rail (cross-library), a Recently Added rail (round-robin merge across
+  libraries, capped at 12), and a section per library — `"Movies (1,234)"`
+  inline count + horizontal poster rail (top 12) + a `See all` link that
+  pushes the existing `LibraryView` grid for deep browse. Reuses
+  `HomeFeedBuilder` so no new endpoints land.
+- **Home opens with the brand, not just artwork.** The signed-in Home now
+  carries an `AetherWordmark(.large, tagline: "Your media, beautifully
+  organized.")` hero above the rails — Home reads as Aether's product
+  landing page rather than a generic rail browser. The Welcome (signed-out)
+  hero swaps `play.circle` for the same wordmark to keep the identity
+  consistent.
+- **Settings reorganised + "Coming soon" → "Planned".** The Settings header
+  pairs the `AetherWordmark(.medium)` with a calmer tagline ("Manage your
+  media sources and playback.") — the inline version reference moved out;
+  version still lives in the **About** section row. `AetherStatus.comingSoon`
+  text changed from `"Coming soon"` to `"Planned"` — propagates to Synology,
+  Direct Play, Transcoding, and Offline Downloads rows in one step.
+- **Plex onboarding sheets carry the wordmark too.** Plex / Jellyfin sign-in
+  and Plex discovery sheets now show a small `AetherWordmark(.small)` above
+  the existing title — the user keeps a thread to Aether's identity even
+  while staring at Plex / Jellyfin instructions.
+- **`MediaItem.selectingAudioTrack` / `selectingSubtitleTrack` are now
+  state-only.** Previously these returned a new `MediaItem` with a mutated
+  `streamURL` (audio id baked into the query string + regenerated transcode
+  session). Now they only update `selectedAudioTrackID` /
+  `selectedSubtitleTrackID`; the source's `resolvePlayback` builds the URL
+  fresh from these IDs every time Play is pressed. The URL-mutation
+  helpers (`replacingQueryItem`, `regeneratingPlexTranscodeSession`,
+  `startingPlayback(at:)`) are removed from `MediaItem`.
 
 - **tvOS 26 redesign — native top navigation, cinematic Home, calmer player.**
   A UX/product pass to make Aether feel native on tvOS 26 (and ready for a

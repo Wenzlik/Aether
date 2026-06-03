@@ -23,21 +23,28 @@ The skeleton: a multi-platform SwiftUI shell that compiles on iOS and tvOS, with
 
 ---
 
-## 🚧 0.2 Media Sources
+## ✅ 0.2 Media Sources
 
 Real media, from real servers. This is the milestone that turns Aether from a shell into a player.
 
 - ✅ **Plex connector** — PIN sign-in UI, server discovery (with off-LAN failover via persisted connection set), libraries + items, direct-play stream URLs, transcode fallback for incompatible containers, show → seasons → episodes drill-down. Persistent server selection survives launches.
+- ✅ **Plex playback aligned with Plex Web** — PUT-then-decide pipeline (`PUT /library/parts/{partId}` → `GET /video/:/transcode/universal/decision` → `start.m3u8` or direct file URL), source-of-truth stream selection on the Part, structured `os.Logger` diagnostics. Resolves the audio-switch unreliability + pause/resume HTTP 400 that the original Plex pipeline carried.
+- ✅ **Playback quality picker** — Detail-screen choice between Original / Convert Automatically / six bitrate caps (20 / 12 / 8 Mbps 1080p, 4 / 2 Mbps 720p, 720 kbps). Decision-endpoint-driven; projected playback mode (Direct Play / Direct Stream / Transcode) shown inline.
 - ✅ **Native video player** — `AVPlayerViewController` (rotation, full-screen, system transport, PiP, AirPlay, subtitle/audio track picker). Chrome auto-hides on iOS / visionOS in sync with the native transport.
-- ✅ **Settings + Sign Out** — reachable Settings screen (Account / Sources / Playback / About), Sign Out of Plex that clears keychain + persisted server + every Plex-related field. No more app reinstall to disconnect.
-- ✅ **Aether Design System v1** — `Aether*` prefix across all reusable primitives, with designed empty / loading / error states everywhere they're needed.
-- ✅ **Jellyfin connector** — manual server URL + **Quick Connect** sign-in, libraries + items, seasons/episodes, direct-play + HLS transcode (audio/subtitle stream selection, resume offset). A second `MediaSource` alongside Plex; the app keeps one **active source**, switchable in Settings → Sources.
+- ✅ **Settings + Sign Out** — reachable Settings screen (Account / Sources / Playback / About), Sign Out of Plex / Jellyfin that clears keychain + persisted server + every source-related field. No more app reinstall to disconnect.
+- ✅ **Aether Design System v1** — `Aether*` prefix across all reusable primitives (Card, SectionHeader, Button, EmptyState, LoadingState, ErrorState, SettingsRow, SelectionRow, DisclosureRow), with designed empty / loading / error states everywhere they're needed.
+- ✅ **Aether brand identity** — violet palette + warm gold accent extracted from the app icon, `AetherWordmark` component (small / medium / large + optional tagline), `Gradients.cinematic`, branded hero on Home / Library / Settings / sign-in surfaces.
+- ✅ **Jellyfin connector** — manual server URL + **Quick Connect** sign-in, libraries + items, seasons/episodes, direct-play + HLS transcode (audio/subtitle stream selection, resume offset). A second `MediaSource` alongside Plex; the app keeps one **active source**, switchable in Settings → Sources. App Transport Security relaxed (`NSAllowsArbitraryLoads`) so plain-HTTP Jellyfin servers (the common case) are reachable.
+
+Carried forward to 0.3 / 0.4 — not blockers for this milestone but worth tracking:
+
 - ⬜ **Synology connector** — auth (DSM session or Video Station, spike first), shares + collections + items, stream URLs (direct play + server transcode fallback). *(Lower priority now that Jellyfin covers the "second source" goal; Synology stays optional.)*
-- ⬜ **Metadata mapping (cross-source)** — a single `MediaItem` shape that both Plex and Synology fill in equivalently (the shape is correct already; the second connector validates it).
+- ⬜ **Plex Web parity for the Quality picker** — `X-Plex-Client-Profile-Extra` so Plex can evaluate true direct play on the decision endpoint without the client falling back to direct stream. Currently we always send `directPlay=0` to avoid HTTP 400; sending a real client profile would unlock direct play for MKV/HEVC content that AVPlayer can actually decode.
 - ⬜ **Artwork pipeline upgrade** — disk-backed LRU + downsampling inside `CachedAsyncImage` (today is a thin wrapper around `AsyncImage`).
 - ⬜ **Persistent ResumeStore** — SwiftData-backed; today is in-memory. Outbox plumbing for offline writes lands properly in 0.3.
+- ⬜ **Accurate library counts** — display `Plex MediaContainer.totalSize` on `LibraryBrowseView` per-library headers instead of `items.count` (which is a best-effort lower bound on libraries that exceed one page).
 
-**Definition of done:** sign in to a real Plex server *and* a real Jellyfin server, switch between them as the active source, play a title from each, see resume state on next launch.
+**Shipped in main.** Definition of done: sign in to a real Plex server *and* a real Jellyfin server, switch between them as the active source, play a title from each, see resume state on next launch — all done.
 
 Notes: [`docs/next-steps/0.2-media-sources.md`](docs/next-steps/0.2-media-sources.md).
 

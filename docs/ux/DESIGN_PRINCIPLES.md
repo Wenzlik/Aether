@@ -113,6 +113,7 @@ Aether's identity is **personal cinema**: a violet brand over near-black surface
 
 - **Near-black backgrounds** (`#09090B`), OLED-friendly, with a faint violet wash at the top of primary screens (`AetherDesign.Gradients.background`). Surfaces are zinc (`#18181B` / elevated `#27272A`).
 - **Aether Violet** `#8B5CF6` is the primary accent — focus, selection, primary action. **Aether Indigo** `#6366F1` and **Aether Aurora** `#A855F7` are its gradient partners (`Gradients.aurora` on the hero CTA + progress). Accent appears on focus glow, progress, selected tracks, key CTAs — nowhere decorative.
+- **Aether Gold** `#F5B524` and **Aether Amber** `#F59E0B` are the **secondary** accent — the warm cinematic partner extracted from the app icon's neon "A" mark. Only used on the leading "A" of the `AetherWordmark` (via `Gradients.cinematic` violet → aurora → gold) and on hero glyphs that pair with the wordmark. **Never for selection, focus, or interactive primary actions** — violet still owns those.
 - **Type uses grayscale** — primary `#FAFAFA`, secondary `#A1A1AA`, tertiary `#71717A`.
 - **Status colors** — success `#22C55E`, warning `#F59E0B`, error `#EF4444` — used only when status *is* the message (the colour-coded settings/source values), never decorative.
 - **Focus** uses scale + depth + brightness + a soft violet glow. **Never thick white borders.**
@@ -137,10 +138,10 @@ Aether uses **native top navigation** (`RootTabView` → SwiftUI `TabView`), not
 
 Four tabs, in order: **Home / Library / Search / Settings**.
 
-- **Home** — cinematic, content-first. No page chrome (the tab bar already says "Home"): it opens straight into artwork — Featured, Continue Watching, then a rail per library. Signed-out, it shows the **Welcome** hero, not a dashboard.
-- **Library** — pick a library (focusable tiles), drill into the full `LibraryView` grid.
+- **Home** — cinematic, content-first. The top of the page carries an `AetherWordmark(.large, tagline: "Your media, beautifully organized.")` so Home reads as Aether's landing page, not a generic rail browser. Below: Featured, Continue Watching, then a rail per library. Signed-out it shows the **Welcome** hero (also wordmark-led), not a dashboard.
+- **Library** — branded browse hub. An `AetherWordmark(.large)` hero + page label, a Continue Watching rail (cross-library), a Recently Added rail (round-robin merge across libraries), and a section per library — title with inline count `"Movies (1,234)"`, horizontal poster rail, `See all` link that pushes the full `LibraryView` grid.
 - **Search** — `.searchable` client-side title search across the source's libraries.
-- **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet).
+- **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet). Header pairs `AetherWordmark(.medium)` with the page label + a calm tagline; version lives in the About section, not the header.
 
 Each content tab (Home / Library / Search) owns its own `NavigationStack`; the shared `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` pushes once so the three stacks stay identical.
 
@@ -163,15 +164,22 @@ Every reusable view primitive in `AetherCore/DesignSystem/` shares the `Aether*`
 - **`AetherLoadingState`** — skeleton rails (`.rails(count:)`) or inline pulse
 - **`AetherErrorState`** — same shape as empty state, with a required retry
 - **`AetherSettingsRow`** + **`AetherSettingsSection`** — settings list primitives; rows take a `value:`, an `actionRole:`, or a colour-coded `status:`
-- **`AetherStatus`** — the colour-coded status value (`Available` green / `Not connected` red / `Coming soon` grey) shown on the trailing edge of settings + source rows
-- **`AetherSelectionRow`** — focusable single-choice row (leading checkmark) shared by the Detail audio + subtitle pickers
+- **`AetherStatus`** — the colour-coded status value (`Available` green / `Not connected` red / `Planned` grey) shown on the trailing edge of settings + source rows
+- **`AetherSelectionRow`** — focusable single-choice row (leading checkmark) used inside the Detail bottom-sheet pickers
+- **`AetherDisclosureRow`** — label + current value + chevron; the iOS-native "current choice with more behind a tap" pattern. Used on Detail for Audio / Subtitles / Quality and anywhere a settings-style row opens into a deeper picker
 - **`aetherFocusRow()`** — the standard tvOS focus lift (elevated fill + small scale + soft shadow) for list-style rows; native focus only, no borders
+
+And the brand identity component (in the **app target**, not `AetherCore` — it carries an app-bundled image asset and isn't reusable outside this project):
+
+- **`AetherWordmark`** — the brand mark glyph paired with the "Aether" wordmark. Three variants (`.small` / `.medium` / `.large`), an optional `tagline:` parameter for the landing-page block (`[logo] Aether / tagline`). SF Pro Display Semibold, white text, only the leading "A" wears the violet → aurora gradient. No outer glow, no bevel, no outline — visionOS-friendly. Used at the top of Home (signed-in + welcome), Library, Settings, and Plex / Jellyfin sign-in / discovery sheets. Don't put it in every nav bar — over-application would dilute the mark.
 
 If a view needs an "ad-hoc" empty / loading / error / selection surface, it's almost certainly missing one of these. Extend the primitive before reaching for a one-off.
 
 ### Track selection
 
-Audio and subtitle selection live on **Detail**, before playback — the user should know exactly what will play before pressing Play. Both lists use `AetherSelectionRow` so they can't drift apart. Subtitles always include an **Off** row. The player itself carries no custom track menu; in-player switching is AVKit's native picker.
+Audio, subtitle, and quality selection live on **Detail**, before playback — the user should know exactly what will play before pressing Play. The Detail screen shows three `AetherDisclosureRow`s under one **Playback** section (`Audio · English · EAC3 5.1 ›` / `Subtitles · Off ›` / `Quality · Original · Direct Play ›`). Tapping a row opens a half-height bottom sheet (`presentationDetents([.medium, .large])`) containing the `AetherSelectionRow` list. Subtitles always include an **Off** row. The Quality row carries the projected playback mode inline for the Original choice (*Direct Play* / *Direct Stream* / *Transcode*) so the user knows what's about to happen before pressing Play.
+
+The player itself carries **no track-switching API** — both `PlaybackSession.selectAudioTrack` and the in-player audio / subtitle pickers were removed; the player is no longer responsible for configuring streams. To change a track mid-watch, the user returns to Detail.
 
 ---
 
@@ -181,7 +189,7 @@ Settings is calm and factual, not marketing. Phrases:
 
 - **"Plex / Connected as <name>"** — not *"Manage your Plex account"*.
 - **"Sign Out of Plex"** — not *"Disconnect"* and not *"Log out"*. Capitalised, destructive role.
-- **"Coming soon"** — exactly that, not *"Not available yet"* or *"In development"*. Used uniformly for Synology, transcoding, offline downloads, anywhere a row references a future capability.
+- **"Planned"** — exactly that, not *"Coming soon"*, *"Not available yet"*, or *"In development"*. Used uniformly for Synology, transcoding, offline downloads, anywhere a row references a future capability. Reads calmer and more deliberate than "Coming soon" — a status the team owns, not a promise the user is waiting on.
 - **"Direct Play / Available"** — facts about the current playback path, not a promise.
 
 The sign-out action is the **only destructive surface** in Settings. After tapping it, the user lands back on the Home welcome state — never on an error and never on a stale signed-in shell.
@@ -295,6 +303,8 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 | `Palette.accent` | `#8B5CF6` | **Aether Violet** — focus glow, selection, primary action |
 | `Palette.accentIndigo` | `#6366F1` | secondary accent / gradient partner |
 | `Palette.accentAurora` | `#A855F7` | hero accent (brightest brand tone) |
+| `Palette.accentGold` | `#F5B524` | **Aether Gold** — wordmark tail of `Gradients.cinematic`; secondary accent only |
+| `Palette.accentAmber` | `#F59E0B` | warm amber sibling of gold; also reused for `warning` status |
 | `Palette.background` | `#09090B` | near-black base (OLED) |
 | `Palette.surface` | `#18181B` | cards, chrome |
 | `Palette.surfaceElevated` | `#27272A` | focused rows, raised surfaces |
@@ -305,7 +315,7 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 | `Palette.warning` | `#F59E0B` | warnings |
 | `Palette.error` | `#EF4444` | "Not connected" status, destructive |
 
-Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
+Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero), `Gradients.cinematic` (violet → aurora → gold — used only on the `AetherWordmark`'s leading "A" and paired hero glyphs; once per screen at most). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
 
 ### Typography
 
