@@ -298,6 +298,11 @@ public actor DownloadManager {
     // MARK: - Error helpers
 
     private static func userFacing(error: any Error) -> String {
+        // HTTP errors are typed; surface the status code first so the user
+        // sees "HTTP 401" rather than "The operation couldn't be completed".
+        if let httpError = error as? DownloadHTTPError {
+            return httpError.shortDescription
+        }
         let ns = error as NSError
         // NSURLError codes we care about are surfaced as short text;
         // anything else falls through to `localizedDescription`.
@@ -364,6 +369,24 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
                     downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         guard let id = downloadTask.taskDescription else { return }
+
+        // URLSession fires this callback even when the server returns a
+        // non-2xx response — the response body becomes the "downloaded"
+        // file. Without an HTTP status check, a Plex remote endpoint
+        // returning HTTP 401/500 with a short JSON error body would
+        // land as `.completed` with a 89-byte file, indistinguishable
+        // from a successful download to the user. Surface non-2xx as a
+        // failure with the status code so the UI shows
+        // "Failed · HTTP 401" instead of pretending the file is good.
+        if let response = downloadTask.response as? HTTPURLResponse,
+           !(200..<300).contains(response.statusCode) {
+            continuation.yield(DownloadEvent(
+                taskDescription: id,
+                kind: .failed(error: DownloadHTTPError(statusCode: response.statusCode))
+            ))
+            return
+        }
+
         let expected = downloadTask.response?.expectedContentLength ?? -1
 
         // Synchronous move INSIDE the delegate callback. See the type-
@@ -451,4 +474,20 @@ public enum DownloadError: Error, Sendable, Equatable {
     /// The source returned `nil` from `downloadURL(for:quality:)` — no
     /// download capability available for this combination.
     case sourceDoesNotSupportDownloads
+}
+
+/// Carries an HTTP status code through the bridge → actor path so the
+/// failure message can read "HTTP 401" instead of generic "Cancelled".
+struct DownloadHTTPError: Error, Sendable {
+    let statusCode: Int
+
+    var shortDescription: String {
+        switch statusCode {
+        case 401: return "HTTP 401 — server rejected the request (auth)"
+        case 403: return "HTTP 403 — server denied the download"
+        case 404: return "HTTP 404 — file not found on server"
+        case 500...599: return "HTTP \(statusCode) — server error"
+        default: return "HTTP \(statusCode)"
+        }
+    }
 }
