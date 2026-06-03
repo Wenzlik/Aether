@@ -55,6 +55,21 @@ public protocol MediaSource: Sendable {
     /// old session, after the new one is live) and on stop. Default: no-op for
     /// sources without server sessions.
     func stopTranscode(sessionID: String) async
+
+    /// Optional download capability — returns a stable URL the
+    /// `DownloadManager` can hand to `URLSessionDownloadTask`.
+    ///
+    /// Returns `nil` for sources that don't support downloads (Local
+    /// Library plays files in-place; Mock has nothing to fetch). Plex
+    /// and Jellyfin override this to return either the original Part /
+    /// item file URL (for `.original` quality, no transcode) or a
+    /// progressive-MP4 transcode URL (for bitrate-capped qualities).
+    ///
+    /// The download itself isn't streamed through this method — the URL
+    /// is fed to a long-lived background `URLSession`. So the URL must
+    /// stay valid for the lifetime of the download (Plex tokens are good
+    /// for hours; the Part URL is stable for years).
+    func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL?
 }
 
 public extension MediaSource {
@@ -74,6 +89,9 @@ public extension MediaSource {
 
     /// Default: nothing to tear down.
     func stopTranscode(sessionID: String) async {}
+
+    /// Default: no download capability. Plex / Jellyfin override.
+    func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? { nil }
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }

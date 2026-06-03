@@ -510,6 +510,65 @@ public actor PlexMediaSource: MediaSource {
         await sessionManager.stop(request, sessionID: sessionID)
     }
 
+    /// Build a download URL for an item — a progressive-MP4 transcode the
+    /// `DownloadManager`'s background `URLSession` can pull in one big GET.
+    ///
+    /// Phase 2.0 uses the universal-transcoder endpoint with
+    /// `protocol=http` (instead of `protocol=hls`) for **every** quality,
+    /// including Original. That means the server transcodes / remuxes even
+    /// when the source container is directly downloadable (mp4 / mov / m4v
+    /// could be GET'd raw). Tradeoff: simpler one-path implementation, at
+    /// the cost of some server CPU for direct-playable Originals. A future
+    /// optimisation will route Original-quality + AVPlayer-friendly
+    /// containers through the raw Part URL.
+    public func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? {
+        guard item.id.source == self.id else { return nil }
+        let base = try await resolveBaseURL()
+        var components = URLComponents(
+            url: base.appendingPathComponent("/video/:/transcode/universal/start"),
+            resolvingAgainstBaseURL: false
+        )
+        var queryItems = [
+            URLQueryItem(name: "path", value: "/library/metadata/\(item.id.rawValue)"),
+            // The key difference from `transcodeStartURL`: `protocol=http`
+            // makes Plex emit a single progressive MP4 stream instead of an
+            // HLS playlist. `URLSessionDownloadTask` can pull it in one
+            // request and save it as a movable file.
+            URLQueryItem(name: "protocol", value: "http"),
+            URLQueryItem(name: "container", value: "mp4"),
+            URLQueryItem(name: "directPlay", value: "0"),
+            URLQueryItem(name: "directStream", value: "1"),
+            URLQueryItem(name: "fastSeek", value: "1"),
+            URLQueryItem(name: "mediaIndex", value: "0"),
+            URLQueryItem(name: "partIndex", value: "0"),
+            URLQueryItem(name: "videoQuality", value: "100"),
+            // Each download gets a fresh transcoder session so a stuck job
+            // can't poison subsequent attempts.
+            URLQueryItem(name: "session", value: UUID().uuidString),
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: configuration.clientIdentifier),
+            URLQueryItem(name: "X-Plex-Product", value: configuration.product),
+            URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
+            URLQueryItem(name: "X-Plex-Token", value: accessToken)
+        ]
+        if let maxKbps = quality.maxVideoBitrateKbps {
+            queryItems.append(URLQueryItem(name: "maxVideoBitrate", value: String(maxKbps)))
+        }
+        if let resolution = quality.videoResolution {
+            queryItems.append(URLQueryItem(name: "videoResolution", value: resolution))
+        }
+        if let audioStreamID = item.selectedAudioTrackID {
+            queryItems.append(URLQueryItem(name: "audioStreamID", value: audioStreamID))
+        }
+        if let subtitleStreamID = item.selectedSubtitleTrackID {
+            queryItems.append(URLQueryItem(name: "subtitleStreamID", value: subtitleStreamID))
+        }
+        if resolvedIsLocal {
+            queryItems.append(URLQueryItem(name: "location", value: "lan"))
+        }
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
     /// A warm-up GET for an `.m3u8` URL. The token already rides in the query
     /// (AVPlayer can't set headers), so this just adds the common headers.
     private func warmUpRequest(for url: URL) -> URLRequest {
