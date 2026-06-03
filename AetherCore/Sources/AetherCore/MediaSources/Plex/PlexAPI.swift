@@ -220,6 +220,39 @@ public enum PlexAPI {
         /// like shows and seasons (you play their children, not them).
         public let media: [Media]?
 
+        /// Explicit init with defaults for every optional field, so the
+        /// test fixtures that build `Metadata` synthetically don't have
+        /// to enumerate the full optional tail each time a new field
+        /// lands (e.g. episode context). New episode fields default to
+        /// `nil` so existing test call sites compile unchanged.
+        public init(
+            ratingKey: String,
+            type: String,
+            title: String,
+            summary: String? = nil,
+            year: Int? = nil,
+            duration: Int? = nil,
+            thumb: String? = nil,
+            art: String? = nil,
+            grandparentTitle: String? = nil,
+            parentIndex: Int? = nil,
+            index: Int? = nil,
+            media: [Media]? = nil
+        ) {
+            self.ratingKey = ratingKey
+            self.type = type
+            self.title = title
+            self.summary = summary
+            self.year = year
+            self.duration = duration
+            self.thumb = thumb
+            self.art = art
+            self.grandparentTitle = grandparentTitle
+            self.parentIndex = parentIndex
+            self.index = index
+            self.media = media
+        }
+
         public var kind: MediaItem.Kind {
             switch type {
             case "movie":   return .movie
