@@ -222,5 +222,21 @@ public struct DownloadSnapshot: Sendable, Equatable {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// All jobs still in flight — queued / downloading / paused / failed.
+    /// Newest first so the row the user just enqueued appears at the top
+    /// of Storage's "In Progress" section without scrolling.
+    public var inProgress: [DownloadJob] {
+        jobsByMediaID.values
+            .filter {
+                switch statusByJobID[$0.id] {
+                case .queued, .downloading, .paused, .failed, .expired:
+                    return true
+                case .completed, .notDownloaded, .none:
+                    return false
+                }
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     public static let empty = DownloadSnapshot(jobsByMediaID: [:], statusByJobID: [:])
 }

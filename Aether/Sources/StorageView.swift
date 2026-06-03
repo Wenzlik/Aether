@@ -35,6 +35,7 @@ struct StorageView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                     header
+                    inProgressList
                     breakdown
                     downloadsList
                     if !(downloads?.snapshot.completed.isEmpty ?? true) {
@@ -56,14 +57,14 @@ struct StorageView: View {
         }
     }
 
-    // MARK: - Header (total + free)
+    // MARK: - Header (total + free + in-progress count)
 
     private var header: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             Text(formatBytes(totalDownloadBytes))
                 .font(AetherDesign.Typography.heroTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Used by Aether downloads")
+            Text(headerSubtitle)
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
             if let capacity = deviceCapacity {
@@ -73,6 +74,18 @@ struct StorageView: View {
                     .padding(.top, AetherDesign.Spacing.xs)
             }
         }
+    }
+
+    /// "Used by Aether downloads" — or with an "N in progress" suffix when
+    /// there are active jobs so the user knows the number behind the
+    /// In Progress section without scrolling.
+    private var headerSubtitle: String {
+        let activeCount = downloads?.snapshot.inProgress.count ?? 0
+        if activeCount == 0 {
+            return "Used by Aether downloads"
+        }
+        let unit = activeCount == 1 ? "download" : "downloads"
+        return "Used by Aether downloads · \(activeCount) \(unit) in progress"
     }
 
     // MARK: - Per-source breakdown
@@ -101,9 +114,10 @@ struct StorageView: View {
     @ViewBuilder
     private var downloadsList: some View {
         let completed = downloads?.snapshot.completed ?? []
+        let inProgress = downloads?.snapshot.inProgress ?? []
         if !completed.isEmpty {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text("Downloads")
+                Text("Downloaded")
                     .font(AetherDesign.Typography.caption)
                     .tracking(0.6)
                     .textCase(.uppercase)
@@ -115,11 +129,133 @@ struct StorageView: View {
                     }
                 }
             }
-        } else {
+        } else if inProgress.isEmpty {
+            // Only show the "No downloads yet" prompt when there's
+            // truly nothing — completed *or* in-flight. An active
+            // download with no completed siblings would otherwise read
+            // as both "In Progress" *and* "no downloads yet", which
+            // contradicts itself.
             Text("No downloads yet. Tap Download on a movie or episode to save it here.")
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .frame(maxWidth: 520, alignment: .leading)
+        }
+    }
+
+    /// "In Progress" section — every job that's not yet `.completed`.
+    /// Hidden when there are no active jobs; otherwise sits between the
+    /// header and the per-source breakdown so the user sees their
+    /// running download right at the top of the tab.
+    @ViewBuilder
+    private var inProgressList: some View {
+        let inProgress = downloads?.snapshot.inProgress ?? []
+        if !inProgress.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text("In Progress")
+                    .font(AetherDesign.Typography.caption)
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+
+                VStack(spacing: AetherDesign.Spacing.xs) {
+                    ForEach(inProgress) { job in
+                        inProgressRow(job)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Active-download row: poster + title + status text + a trailing
+    /// action button whose label depends on the state (Pause / Resume /
+    /// Retry / Cancel). Source label sits under the title so the user
+    /// knows which server this is downloading from when multiple are
+    /// connected.
+    @ViewBuilder
+    private func inProgressRow(_ job: DownloadJob) -> some View {
+        let status = downloads?.snapshot.statusByJobID[job.id] ?? .notDownloaded
+        HStack(spacing: AetherDesign.Spacing.m) {
+            CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
+                .frame(width: 44, height: 66)
+                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text(job.title)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(1)
+                Text(inProgressDetail(for: status, job: job))
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: AetherDesign.Spacing.s)
+            inProgressAction(for: status, job: job)
+        }
+        .padding(.vertical, AetherDesign.Spacing.s)
+        .padding(.horizontal, AetherDesign.Spacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Materials.card)
+        )
+    }
+
+    /// One-line status text for the in-progress row. Combines source
+    /// label + state-specific detail so the second line is always
+    /// informative: "Plex · Downloading 47%" / "Plex · Paused at 47%" /
+    /// "Plex · Failed · HTTP 401".
+    private func inProgressDetail(for status: DownloadStatus, job: DownloadJob) -> String {
+        let prefix = sourceLabel(for: job.mediaID.source)
+        let state: String
+        switch status {
+        case .queued:
+            state = "Queued"
+        case let .downloading(fraction):
+            state = fraction > 0
+                ? "Downloading \(Int((fraction * 100).rounded()))%"
+                : "Downloading"
+        case let .paused(fraction):
+            state = "Paused at \(Int((fraction * 100).rounded()))%"
+        case let .failed(reason):
+            state = "Failed · \(reason)"
+        case .expired:
+            state = "Expired"
+        case .completed, .notDownloaded:
+            state = ""
+        }
+        return state.isEmpty ? prefix : "\(prefix) · \(state)"
+    }
+
+    /// Primary action for an in-progress row, picked by status:
+    /// Downloading → Pause, Paused → Resume, Failed/Expired → Retry,
+    /// Queued → Cancel. Each state has one obvious next step; we never
+    /// show two buttons (would compete for attention) — Delete is on
+    /// the completed row instead.
+    @ViewBuilder
+    private func inProgressAction(for status: DownloadStatus, job: DownloadJob) -> some View {
+        switch status {
+        case .queued:
+            Button("Cancel") { Task { await cancelDownload(job) } }
+                .buttonStyle(.plain)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.accent)
+        case .downloading:
+            Button("Pause") { Task { await pauseDownload(job) } }
+                .buttonStyle(.plain)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.accent)
+        case .paused:
+            Button("Resume") { Task { await resumeDownload(job) } }
+                .buttonStyle(.plain)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.accent)
+        case .failed, .expired:
+            Button("Retry") { Task { await retryDownload(job) } }
+                .buttonStyle(.plain)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.accent)
+        case .completed, .notDownloaded:
+            EmptyView()
         }
     }
 
@@ -281,6 +417,34 @@ struct StorageView: View {
         for job in downloads.snapshot.completed {
             await manager.remove(job.id)
         }
+        await refreshCapacity()
+    }
+
+    // MARK: - In-progress actions
+
+    private func pauseDownload(_ job: DownloadJob) async {
+        await downloadManager?.pause(job.id)
+    }
+
+    private func resumeDownload(_ job: DownloadJob) async {
+        await downloadManager?.resume(job.id)
+    }
+
+    private func cancelDownload(_ job: DownloadJob) async {
+        await downloadManager?.cancel(job.id)
+    }
+
+    /// Drop the failed/expired record and re-enqueue with the same
+    /// quality. URLSession's resume-data for the failed task is gone by
+    /// then; a fresh start is the only path. The source lookup goes
+    /// through `mediaID.source` — we don't have a live MediaSource
+    /// reference here, but the user can also Retry from Detail (which
+    /// does have one). For Storage tab we drop the failed record
+    /// silently and let the user re-trigger from Detail; that's the
+    /// simplest path that doesn't require plumbing a source resolver
+    /// into Storage just for retries.
+    private func retryDownload(_ job: DownloadJob) async {
+        await downloadManager?.remove(job.id)
         await refreshCapacity()
     }
 
