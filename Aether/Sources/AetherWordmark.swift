@@ -69,9 +69,11 @@ public struct AetherWordmark: View {
     // MARK: - Wordmark
 
     /// "Aether" with a single-letter gradient on "A" and the rest in white.
-    /// `Text + Text` concatenation preserves per-segment foreground styling,
-    /// so the kerning + font applied to the combined value flows through both
-    /// halves and the letterforms stay perfectly tracked.
+    /// Uses iOS 26's `Text` string interpolation (the `Text + Text` `+`
+    /// operator was deprecated in iOS 26) — embedding a styled `Text` via
+    /// `\(...)` keeps per-segment foregroundStyle while the outer modifiers
+    /// (font, kerning) flow through both halves so the letterforms stay
+    /// perfectly tracked.
     private var wordmarkText: some View {
         let gradient = LinearGradient(
             colors: [
@@ -81,9 +83,8 @@ public struct AetherWordmark: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-        let leading = Text("A").foregroundStyle(gradient)
-        let rest = Text("ether").foregroundStyle(AetherDesign.Palette.textPrimary)
-        return (leading + rest)
+        return Text("\(Text("A").foregroundStyle(gradient))ether")
+            .foregroundStyle(AetherDesign.Palette.textPrimary)
             .font(.system(size: typeSize, weight: .semibold, design: .default))
             .kerning(kerning)
             .lineLimit(1)
