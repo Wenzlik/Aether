@@ -58,6 +58,8 @@ struct HomeView: View {
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                heroHeader
+
                 if !feed.featured.isEmpty {
                     featuredSection
                 }
@@ -77,6 +79,20 @@ struct HomeView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// The Home wordmark block — replaces the previous "rails open straight
+    /// into artwork" pattern. With the brand identity now visible at the top
+    /// of the page, Home reads as Aether's product landing surface rather
+    /// than a generic media browser. Layout follows the brief:
+    ///
+    /// ```
+    /// [logo]  Aether
+    ///         Your media, beautifully organized.
+    /// ```
+    private var heroHeader: some View {
+        AetherWordmark(.large, tagline: "Your media, beautifully organized.")
+            .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     // MARK: - Section (generic horizontal poster rail)
@@ -324,21 +340,16 @@ private struct WelcomeView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: AetherDesign.Spacing.l) {
-                Image(systemName: "play.circle")
-                    .font(.system(size: 64, weight: .thin))
-                    .foregroundStyle(AetherDesign.Gradients.aurora)
+                // The wordmark IS the welcome — first surface where the user
+                // meets the brand inside the app, so the mark takes the hero
+                // slot. The tagline + CTA support it underneath.
+                AetherWordmark(.large)
 
-                VStack(spacing: AetherDesign.Spacing.s) {
-                    Text("Welcome to Aether")
-                        .font(AetherDesign.Typography.heroTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-
-                    Text("Connect a Plex or Synology source to start watching your media.")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text("Your media, beautifully organized. Connect a Plex or Synology source to begin.")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 AetherButton("Add a source", systemImage: "plus", action: onAddSource)
                     .padding(.top, AetherDesign.Spacing.s)

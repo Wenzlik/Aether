@@ -22,7 +22,24 @@ struct DetailView: View {
     /// opens — the configured item is what launches. `nil` until the detail
     /// endpoint resolves; `current` falls back to the list `item`.
     @State private var configuredItem: MediaItem?
+    /// Which compact selector sheet is currently presented on Detail. `nil`
+    /// = nothing open; tapping a disclosure row sets one. iOS / iPadOS uses
+    /// `.presentationDetents([.medium])` so the picker takes about half the
+    /// screen and the Detail backdrop is still visible behind.
+    @State private var presentedSelector: PlaybackSelector?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Which playback option is being changed by the user right now.
+    private enum PlaybackSelector: Identifiable {
+        case audio, subtitles, quality
+        var id: String {
+            switch self {
+            case .audio: return "audio"
+            case .subtitles: return "subtitles"
+            case .quality: return "quality"
+            }
+        }
+    }
 
     /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? item }
@@ -58,6 +75,9 @@ struct DetailView: View {
             await loadChildrenIfNeeded()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
+        .sheet(item: $presentedSelector) { _ in
+            playbackSelectorSheet
+        }
     }
 
     // MARK: - Detail content
@@ -290,67 +310,169 @@ struct DetailView: View {
         .padding(.top, -AetherDesign.Spacing.xxl)
     }
 
-    // MARK: - Playback options (audio / subtitles / quality / media info)
+    // MARK: - Playback options (compact selectors + media info)
 
-    /// Everything the user can see and change *before* pressing Play. Selecting
-    /// an audio / subtitle track or a quality level updates the configured
-    /// item; the source layer PUTs the choice to the Part and re-asks Plex for
-    /// a decision when the user presses Play. The Media section is purely
-    /// informational, showing the source file's codecs / resolution / bitrate.
+    /// Everything the user can see and change *before* pressing Play.
+    ///
+    /// Audio / Subtitles / Quality each collapse to a single `AetherDisclosureRow`
+    /// showing the current choice; tapping opens a bottom-sheet picker that
+    /// reuses `AetherSelectionRow` for the option list. This keeps the long
+    /// Detail screen calm even for items with many audio / subtitle tracks
+    /// and an eight-step quality ladder.
+    ///
+    /// The Media section stays expanded — it's read-only info about the source
+    /// file (codecs, resolution, bitrate, HDR badge) plus the projected
+    /// playback mode.
     @ViewBuilder
     private var playbackOptions: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            if !current.audioTracks.isEmpty {
-                AetherSettingsSection("Audio") {
-                    ForEach(current.audioTracks) { track in
-                        AetherSelectionRow(
-                            title: track.displayTitle,
-                            isSelected: track.id == current.selectedAudioTrackID
-                        ) {
-                            configuredItem = current.selectingAudioTrack(track)
-                        }
-                    }
-                }
-            }
-
-            if !current.subtitleTracks.isEmpty {
-                AetherSettingsSection("Subtitles") {
-                    AetherSelectionRow(
-                        title: "Off",
-                        isSelected: current.selectedSubtitleTrackID == nil
-                    ) {
-                        configuredItem = current.selectingSubtitleTrack(nil)
-                    }
-                    ForEach(current.subtitleTracks) { track in
-                        AetherSelectionRow(
-                            title: track.displayTitle,
-                            isSelected: track.id == current.selectedSubtitleTrackID
-                        ) {
-                            configuredItem = current.selectingSubtitleTrack(track)
-                        }
-                    }
-                }
-            }
-
-            qualitySection
-
+            playbackSection
             mediaSection
         }
     }
 
-    /// Quality picker — Original (Direct Play priority) by default, then
-    /// Convert Automatically, then a ladder of bitrate caps that force a
-    /// transcode. Mirrors Plex Web's set so users coming from there feel at
-    /// home.
-    private var qualitySection: some View {
-        AetherSettingsSection("Quality") {
-            ForEach(PlaybackQuality.allCases, id: \.self) { quality in
-                AetherSelectionRow(
-                    title: quality.displayName,
-                    isSelected: quality == current.selectedQuality
+    /// Compact Audio / Subtitles / Quality rows. Each row shows the current
+    /// selection in muted text and a chevron; tap opens a bottom sheet.
+    private var playbackSection: some View {
+        AetherSettingsSection("Playback") {
+            if !current.audioTracks.isEmpty {
+                AetherDisclosureRow(
+                    label: "Audio",
+                    value: current.selectedAudioTrack?.displayTitle
                 ) {
-                    configuredItem = current.selectingQuality(quality)
+                    presentedSelector = .audio
                 }
+            }
+            if !current.subtitleTracks.isEmpty {
+                AetherDisclosureRow(
+                    label: "Subtitles",
+                    value: current.selectedSubtitleTrack?.displayTitle ?? "Off"
+                ) {
+                    presentedSelector = .subtitles
+                }
+            }
+            AetherDisclosureRow(
+                label: "Quality",
+                value: qualityRowValue
+            ) {
+                presentedSelector = .quality
+            }
+        }
+    }
+
+    /// "Original · Direct Play" / "Convert Automatically" / "8 Mbps 1080p"
+    /// — the chosen quality plus a hint at the projected playback mode for
+    /// Original (Direct Play if container is AVPlayer-friendly, else
+    /// Direct Stream). Other qualities just show their label.
+    private var qualityRowValue: String {
+        switch current.selectedQuality {
+        case .original:
+            switch projectedPlaybackMode {
+            case .directPlay:   return "Original · Direct Play"
+            case .directStream: return "Original · Direct Stream"
+            case .transcode:    return "Original"
+            }
+        default:
+            return current.selectedQuality.displayName
+        }
+    }
+
+    /// The bottom sheet behind the disclosure rows. Half-height on iOS, full
+    /// modal on tvOS / visionOS. Driven by `presentedSelector`.
+    private var playbackSelectorSheet: some View {
+        Group {
+            switch presentedSelector {
+            case .audio:
+                playbackSelectorContent(title: "Audio") {
+                    audioSelectorList
+                }
+            case .subtitles:
+                playbackSelectorContent(title: "Subtitles") {
+                    subtitleSelectorList
+                }
+            case .quality:
+                playbackSelectorContent(title: "Quality") {
+                    qualitySelectorList
+                }
+            case .none:
+                EmptyView()
+            }
+        }
+    }
+
+    /// The sheet body: a calm header + the option list, on the same dark
+    /// background the rest of the app uses (the system sheet chrome handles
+    /// the "card on top of detail" affordance).
+    @ViewBuilder
+    private func playbackSelectorContent<Content: View>(
+        title: String,
+        @ViewBuilder list: () -> Content
+    ) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                Text(title)
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+
+                VStack(spacing: 0) {
+                    list()
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                        .fill(AetherDesign.Materials.card)
+                )
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.bottom, AetherDesign.Spacing.l)
+            }
+        }
+        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var audioSelectorList: some View {
+        ForEach(current.audioTracks) { track in
+            AetherSelectionRow(
+                title: track.displayTitle,
+                isSelected: track.id == current.selectedAudioTrackID
+            ) {
+                configuredItem = current.selectingAudioTrack(track)
+                presentedSelector = nil
+            }
+        }
+    }
+
+    private var subtitleSelectorList: some View {
+        Group {
+            AetherSelectionRow(
+                title: "Off",
+                isSelected: current.selectedSubtitleTrackID == nil
+            ) {
+                configuredItem = current.selectingSubtitleTrack(nil)
+                presentedSelector = nil
+            }
+            ForEach(current.subtitleTracks) { track in
+                AetherSelectionRow(
+                    title: track.displayTitle,
+                    isSelected: track.id == current.selectedSubtitleTrackID
+                ) {
+                    configuredItem = current.selectingSubtitleTrack(track)
+                    presentedSelector = nil
+                }
+            }
+        }
+    }
+
+    private var qualitySelectorList: some View {
+        ForEach(PlaybackQuality.allCases, id: \.self) { quality in
+            AetherSelectionRow(
+                title: quality.displayName,
+                isSelected: quality == current.selectedQuality
+            ) {
+                configuredItem = current.selectingQuality(quality)
+                presentedSelector = nil
             }
         }
     }

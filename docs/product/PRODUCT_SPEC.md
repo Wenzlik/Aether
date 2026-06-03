@@ -101,24 +101,33 @@ Two connectors at launch:
 - Account-based PIN auth (web flow) — no username/password in app.
 - Server discovery via Plex.tv → preferred connection picked by RTT.
 - Library and item listings via Plex Media Server HTTP API.
-- Stream URLs include a session token; transcoding decisions stay with the server.
+- Playback follows Plex Web's three-step flow: **PUT** stream selection on the Part → **GET** the decision endpoint for the verdict + post-decision codec/bitrate → build the playback URL from the verdict (file URL for direct play, `start.m3u8` for direct stream / transcode). Stream URLs include a session token; transcoding decisions stay with the server. See [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md) for the full pipeline.
 - Tokens stored in Keychain.
 
-### Synology
+### Jellyfin
+- Manual server URL + **Quick Connect** sign-in (no password typing — ideal for Apple TV remotes).
+- Library and item listings via Jellyfin's `/Users/{id}/Items` API.
+- Direct play for AVPlayer-friendly containers; HLS transcode (`master.m3u8`) for everything else, with `audioStreamIndex` / `subtitleStreamIndex` and `startTimeTicks` resume offset.
+- Token stored in Keychain. `api_key` query param attached to image + media URLs (AVPlayer / `AsyncImage` can't set headers).
+- Works alongside Plex via the single-active-source model: connect both, switch in Settings → Sources, the rest of the app renders the active one.
+
+### Synology *(deferred)*
 - DSM session auth or Video Station auth — whichever produces a usable stream URL with the least friction.
 - Library = configured shares + Video Station collections.
 - Direct play when codec is supported by AVPlayer; fall back to server transcoding via DSM's transcoding endpoints when available.
 - Credentials stored in Keychain.
+- *Lower priority now that Jellyfin covers the "second source" goal; Synology remains on the roadmap as an optional add for users who only run DSM.*
 
-Both connectors implement a small, shared protocol so the rest of the app sees a unified `MediaItem` and `MediaStream`. See [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
+All connectors implement a small, shared protocol so the rest of the app sees a unified `MediaItem` and `MediaStream`. See [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
 
 ---
 
 ## Playback goals
 
-- Direct play first. Transcode only when the server insists.
+- **Direct Play first. Transcode only when needed.** Priority is always Direct Play → Direct Stream (container remux, lossless) → Transcode (re-encode). The user's quality choice biases this; sources confirm via the decision endpoint where available.
+- **Quality picker on Detail** — Plex Web's eight-step ladder (Original / Convert Automatically / 20·12·8 Mbps 1080p / 4·2 Mbps 720p / 720 kbps). Default = Original. The picker shows the projected playback mode inline (*Original · Direct Play* / *Original · Direct Stream* / *Transcode*) so the user knows what's about to happen before pressing Play.
+- **Track selection lives on Detail, not in the player.** Audio / Subtitles / Quality each open a half-height bottom sheet showing the option list. The player carries no track-switching API — Detail is the configuration surface, the player just plays what was configured.
 - Resume points written every few seconds; respected on next open.
-- Subtitle and audio track switching is instant and obvious.
 - AirPlay and PiP on iOS/iPadOS are first-class — not afterthoughts.
 - tvOS playback uses the system player chrome where it makes sense; custom only where Aether can do meaningfully better.
 
@@ -127,6 +136,7 @@ Non-goals for MVP:
 - Live TV / DVR
 - Surround downmix configuration (use the system)
 - Custom decoders (no FFmpeg in-app)
+- Mid-playback track switching from the player overlay (it's a Detail-screen choice — the user goes back to change it)
 
 ---
 

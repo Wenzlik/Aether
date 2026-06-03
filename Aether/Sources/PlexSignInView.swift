@@ -57,14 +57,19 @@ struct PlexSignInView: View {
 
     // MARK: - Header
 
+    /// The small wordmark anchors the sheet to the Aether brand even when
+    /// the user's eye is on Plex — a quiet reminder of which app they're in.
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Connect to Plex")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Sign in by entering a four-letter code on plex.tv/link.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.small)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text("Connect to Plex")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Sign in by entering a four-letter code on plex.tv/link.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
         }
     }
 
