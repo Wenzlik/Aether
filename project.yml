@@ -85,6 +85,24 @@ targets:
         TVTopShelfImage:
           TVTopShelfPrimaryImage: Top Shelf Image
           TVTopShelfPrimaryImageWide: Top Shelf Image Wide
+        # App Transport Security is relaxed because Aether's whole job is to
+        # talk to media servers users host themselves. Most real-world setups
+        # don't have valid TLS certs:
+        # - Jellyfin / Emby on a NAS or Raspberry Pi typically runs over plain
+        #   HTTP on the LAN.
+        # - Synology DSM / Video Station ships with a self-signed cert.
+        # - Plex is the rare exception (per-server `*.plex.direct` certs), but
+        #   that's their proprietary infrastructure, not a general pattern.
+        #
+        # NSAllowsLocalNetworking alone isn't enough — users often reach their
+        # server over a public hostname (DDNS, custom domain, Tailscale Magic
+        # DNS) that ATS treats as "remote" even though it points at a private
+        # IP. Per-domain exceptions can't enumerate user-entered hostnames.
+        # NSAllowsArbitraryLoads matches Infuse / VLC / the official Jellyfin
+        # app, and Apple accepts the justification for personal-media clients
+        # at review time.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     # iCloud Key-Value Store — used by ResumeStore for cross-device resume
     # point sync (iPhone / iPad / Apple TV / Vision Pro share state via the
     # user's iCloud account). The entitlement identifier defaults to the team
