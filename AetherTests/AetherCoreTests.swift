@@ -229,36 +229,20 @@ struct PlaybackURLLifecycleTests {
         #expect(state.status == .loading)
     }
 
-    @Test("selectAudioTrack resolves again with the new track, preserving position")
-    func selectAudioTrackResolvesFreshAndKeepsPosition() async {
-        let spy = SpyPlaybackSource()
+    @Test("selectingAudioTrack updates state only — no URL mutation, no resolve")
+    func selectingAudioTrackIsStateOnly() async {
+        // In the new pipeline, the player no longer switches tracks mid-stream.
+        // The audio / subtitle pickers live on Detail and only update the
+        // item's selection state; the source layer PUTs the choice and asks
+        // Plex for a fresh decision when the user presses Play. So changing
+        // the track on a `MediaItem` must NOT alter `streamURL`.
         let item = Self.transcodeItem(audioID: "11")
-        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
+        let originalURL = item.streamURL
 
-        // Start at 120s → transcode base offset is 120 (the stream's t=0).
-        await session.prepare(item: item, source: spy, startAt: 120)
-        await session.selectAudioTrack(MediaAudioTrack(id: "12", title: "Czech"))
+        let switched = item.selectingAudioTrack(MediaAudioTrack(id: "12", title: "Czech"))
 
-        let requests = await spy.requests
-        #expect(requests.count == 2)                       // a second, fresh resolve
-        #expect(requests.last?.audioStreamID == "12")      // with the new track
-        #expect(requests.last?.startTime == .seconds(120)) // position preserved
-
-        let state = await session.state
-        #expect(state.item?.selectedAudioTrackID == "12")
-    }
-
-    @Test("switching audio stops the previous transcode session after the new one is live")
-    func audioSwitchStopsOldSession() async {
-        let spy = SpyPlaybackSource()
-        let item = Self.transcodeItem(audioID: "11")
-        let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))
-
-        await session.prepare(item: item, source: spy, startAt: 0)   // session-1
-        await session.selectAudioTrack(MediaAudioTrack(id: "12", title: "Czech")) // session-2
-
-        let stopped = await spy.stoppedSessions
-        #expect(stopped == ["session-1"])   // old session stopped, only after the swap
+        #expect(switched.selectedAudioTrackID == "12")
+        #expect(switched.streamURL == originalURL) // URL is identical
     }
 
     @Test("stop() stops the active transcode session")

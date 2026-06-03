@@ -122,6 +122,134 @@ public enum PlaybackMode: Sendable, Equatable {
     case transcode
 }
 
+/// What the server actually agreed to do for a playback request, mirroring
+/// Plex's `/video/:/transcode/universal/decision` verdict (`directplay` /
+/// `directstream` / `transcode`).
+///
+/// - `directPlay` — the client opens the original file as-is; no server work.
+/// - `directStream` — the server remuxes container only (cheap, lossless).
+/// - `transcode` — the server re-encodes video and/or audio (CPU-intensive).
+///
+/// Priority is always Direct Play → Direct Stream → Transcode. The user's
+/// `PlaybackQuality` choice biases this: `original` asks for direct play and
+/// only falls back if the client can't handle the codec/container; a bitrate
+/// cap forces a transcode.
+public enum PlaybackDecisionMode: String, Sendable, Equatable {
+    case directPlay
+    case directStream
+    case transcode
+
+    /// Short label for the Detail-screen "Playback:" line.
+    public var displayName: String {
+        switch self {
+        case .directPlay:   return "Direct Play"
+        case .directStream: return "Direct Stream"
+        case .transcode:    return "Transcode"
+        }
+    }
+}
+
+/// User-selectable quality on the movie detail screen.
+///
+/// `original` mirrors Plex Web's default — try Direct Play, fall back to Direct
+/// Stream, and only transcode when truly necessary. The bitrate caps force a
+/// transcode at that ceiling (for slow networks or thumbnail-quality previews).
+public enum PlaybackQuality: String, Sendable, Hashable, CaseIterable, Codable {
+    case original
+    case convertAutomatically
+    case bitrate20Mbps1080p
+    case bitrate12Mbps1080p
+    case bitrate8Mbps1080p
+    case bitrate4Mbps720p
+    case bitrate2Mbps720p
+    case bitrate720kbps
+
+    public var displayName: String {
+        switch self {
+        case .original:             return "Original"
+        case .convertAutomatically: return "Convert Automatically"
+        case .bitrate20Mbps1080p:   return "20 Mbps 1080p"
+        case .bitrate12Mbps1080p:   return "12 Mbps 1080p"
+        case .bitrate8Mbps1080p:    return "8 Mbps 1080p"
+        case .bitrate4Mbps720p:     return "4 Mbps 720p"
+        case .bitrate2Mbps720p:     return "2 Mbps 720p"
+        case .bitrate720kbps:       return "720 kbps"
+        }
+    }
+
+    /// Max video bitrate the server should respect, in **kilobits per second**.
+    /// `nil` means no cap — used by `original` and `convertAutomatically`.
+    public var maxVideoBitrateKbps: Int? {
+        switch self {
+        case .original, .convertAutomatically: return nil
+        case .bitrate20Mbps1080p: return 20_000
+        case .bitrate12Mbps1080p: return 12_000
+        case .bitrate8Mbps1080p:  return 8_000
+        case .bitrate4Mbps720p:   return 4_000
+        case .bitrate2Mbps720p:   return 2_000
+        case .bitrate720kbps:     return 720
+        }
+    }
+
+    /// Max video resolution as a `WxH` string Plex understands on the decision
+    /// endpoint. `nil` means no cap.
+    public var videoResolution: String? {
+        switch self {
+        case .bitrate20Mbps1080p, .bitrate12Mbps1080p, .bitrate8Mbps1080p:
+            return "1920x1080"
+        case .bitrate4Mbps720p, .bitrate2Mbps720p, .bitrate720kbps:
+            return "1280x720"
+        case .original, .convertAutomatically:
+            return nil
+        }
+    }
+
+    /// Whether the request should ask Plex to attempt Direct Play. Only
+    /// `original` does — every other choice has a transcode goal in mind.
+    public var allowsDirectPlay: Bool {
+        self == .original
+    }
+}
+
+/// Pre-playback media information shown on the Detail screen: codecs, file
+/// resolution, source bitrate, HDR/Dolby Vision badges. Populated from Plex
+/// metadata, used purely for display.
+public struct MediaInfo: Sendable, Hashable {
+    public let videoCodec: String?
+    public let audioCodec: String?
+    public let audioChannels: Int?
+    /// Display string like `"1080p"`, `"4K"`. We keep the server's text so we
+    /// don't have to translate every Plex resolution alias here.
+    public let videoResolution: String?
+    /// Source bitrate in **kilobits per second**.
+    public let bitrateKbps: Int?
+    public let isHDR: Bool
+    public let isDolbyVision: Bool
+    /// Source file container, e.g. `"mp4"`, `"mkv"`. Used as a heuristic for
+    /// the projected playback mode on Detail (mp4/mov/m4v → Direct Play).
+    public let container: String?
+
+    public init(
+        videoCodec: String? = nil,
+        audioCodec: String? = nil,
+        audioChannels: Int? = nil,
+        videoResolution: String? = nil,
+        bitrateKbps: Int? = nil,
+        isHDR: Bool = false,
+        isDolbyVision: Bool = false,
+        container: String? = nil
+    ) {
+        self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
+        self.audioChannels = audioChannels
+        self.videoResolution = videoResolution
+        self.bitrateKbps = bitrateKbps
+        self.isHDR = isHDR
+        self.isDolbyVision = isDolbyVision
+        self.container = container
+    }
+}
+
 /// A request for a fresh playback URL. Built from a `MediaItem` plus the user's
 /// current choices, then resolved by the *source* layer — the player never
 /// constructs or mutates Plex URLs itself. Carrying the choices (rather than a
@@ -133,38 +261,64 @@ public struct PlaybackRequest: Sendable, Equatable {
     /// The stable direct-play file URL, when `mode == .directPlay`. Transcode
     /// requests ignore it — the source rebuilds the HLS URL from `itemID`.
     public let directPlayURL: URL?
+    /// Plex Part id (e.g. `"17905"`). Drives the `PUT /library/parts/{partId}`
+    /// stream-selection step that mirrors Plex Web. `nil` for sources without a
+    /// Part concept (mock / Synology direct play).
+    public let partID: String?
     public let audioStreamID: String?
     /// `"0"` turns subtitles off (Plex); `nil` leaves the server default.
     public let subtitleStreamID: String?
+    /// The Detail-screen quality choice — drives `maxVideoBitrate` /
+    /// `videoResolution` and the `directPlay` flag on the decision call.
+    public let quality: PlaybackQuality
     public let startTime: Duration?
 
     public init(
         itemID: MediaID,
         mode: PlaybackMode,
         directPlayURL: URL? = nil,
+        partID: String? = nil,
         audioStreamID: String? = nil,
         subtitleStreamID: String? = nil,
+        quality: PlaybackQuality = .original,
         startTime: Duration? = nil
     ) {
         self.itemID = itemID
         self.mode = mode
         self.directPlayURL = directPlayURL
+        self.partID = partID
         self.audioStreamID = audioStreamID
         self.subtitleStreamID = subtitleStreamID
+        self.quality = quality
         self.startTime = startTime
     }
 
     /// Build a request from an item and a start position, reading the item's
-    /// current audio / subtitle selection. Mode is derived from the item's
-    /// stream kind so the player doesn't have to know about transcoding.
+    /// current audio / subtitle / quality selection. Mode is derived from the
+    /// item's stream kind — but the Plex source ignores it once `partID` is
+    /// present, because the decision endpoint is the real source of truth.
+    ///
+    /// The subtitle bridge: `MediaItem.selectedSubtitleTrackID == nil` is the
+    /// user's explicit "Off" choice (the row with no id in the picker). On the
+    /// wire Plex wants `"0"` for that, while `nil` means "don't touch the
+    /// current selection." So we map nil → `"0"` whenever the item *has*
+    /// subtitle tracks to choose from, and leave it nil when there are none.
     public init(item: MediaItem, startTime: Duration?) {
         let transcode = item.isServerTranscode
+        let subtitleID: String? = {
+            if !item.subtitleTracks.isEmpty {
+                return item.selectedSubtitleTrackID ?? "0"
+            }
+            return item.selectedSubtitleTrackID
+        }()
         self.init(
             itemID: item.id,
             mode: transcode ? .transcode : .directPlay,
             directPlayURL: transcode ? nil : item.streamURL,
+            partID: item.partID,
             audioStreamID: item.selectedAudioTrackID,
-            subtitleStreamID: item.selectedSubtitleTrackID,
+            subtitleStreamID: subtitleID,
+            quality: item.selectedQuality,
             startTime: startTime
         )
     }
@@ -175,9 +329,9 @@ public struct PlaybackRequest: Sendable, Equatable {
 public struct ResolvedPlayback: Sendable, Equatable {
     public let url: URL
     /// `true` when the server emits an HLS timeline that already starts at the
-    /// requested offset (Plex transcode). The player must **not** seek in that
-    /// case — the offset is baked into the stream. Direct play is `false`: the
-    /// player seeks client-side.
+    /// requested offset (Plex transcode / direct stream). The player must
+    /// **not** seek in that case — the offset is baked into the stream. Direct
+    /// play is `false`: the player seeks client-side.
     public let isServerTranscode: Bool
     /// Content seconds at the stream's `t = 0` — the baked-in transcode offset,
     /// or `0` for direct play. The session adds this back when recording
@@ -191,19 +345,25 @@ public struct ResolvedPlayback: Sendable, Equatable {
     /// The server transcode session id backing this URL, so the caller can stop
     /// it later (`stopTranscode(sessionID:)`). `nil` for direct play.
     public let transcodeSessionID: String?
+    /// What the server actually agreed to do, when the source asked. `nil` for
+    /// sources without a decision step (Synology / Mock / legacy paths) — in
+    /// that case the caller infers it from `isServerTranscode`.
+    public let decision: PlaybackDecisionMode?
 
     public init(
         url: URL,
         isServerTranscode: Bool,
         baseOffsetSeconds: Double = 0,
         clientSeekSeconds: Double? = nil,
-        transcodeSessionID: String? = nil
+        transcodeSessionID: String? = nil,
+        decision: PlaybackDecisionMode? = nil
     ) {
         self.url = url
         self.isServerTranscode = isServerTranscode
         self.baseOffsetSeconds = baseOffsetSeconds
         self.clientSeekSeconds = clientSeekSeconds
         self.transcodeSessionID = transcodeSessionID
+        self.decision = decision
     }
 }
 

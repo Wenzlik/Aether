@@ -54,8 +54,8 @@ public actor PlaybackSession {
     private var resumeTask: Task<Void, Never>?
 
     /// The source that resolves fresh playback URLs. Set on `prepare(...)` and
-    /// reused by `selectAudioTrack` / `selectSubtitleTrack`. `nil` falls back to
-    /// the item's own `streamURL` (tests / sources with no resolver).
+    /// reused by `recoverOrFail`. `nil` falls back to the item's own
+    /// `streamURL` (tests / sources with no resolver).
     private var source: (any MediaSource)?
 
     /// The server transcode session currently driving playback, so we can stop
@@ -227,87 +227,6 @@ public actor PlaybackSession {
         state.position = position
     }
 
-    /// Switch the audio track mid-playback without bouncing back to Detail.
-    /// Captures the current position, resolves a fresh URL with the new
-    /// `audioStreamID` (new transcode session at that offset), swaps the player
-    /// item, and resumes if it was playing.
-    public func selectAudioTrack(_ track: MediaAudioTrack) async {
-        guard let item = state.item,
-              item.audioTracks.contains(where: { $0.id == track.id }) else { return }
-        await switchStream(to: item.selectingAudioTrack(track), failure: "Couldn't switch the audio track.")
-    }
-
-    /// Switch the subtitle track (or turn subtitles off with `nil`) mid-playback,
-    /// using the same fresh-URL path as audio.
-    public func selectSubtitleTrack(_ track: MediaSubtitleTrack?) async {
-        guard let item = state.item else { return }
-        await switchStream(to: item.selectingSubtitleTrack(track), failure: "Couldn't switch subtitles.")
-    }
-
-    /// Shared core for audio / subtitle switching: capture position → resolve a
-    /// fresh URL for `nextItem` → replace the player item → seek (direct play
-    /// only) → resume. On a resolve failure, surface a controlled error instead
-    /// of leaving a black screen.
-    private func switchStream(to nextItem: MediaItem, failure: String) async {
-        let wasPlaying = state.status == .playing
-        let priorStatus = state.status
-        let seconds = await currentPlaybackSeconds()
-        let previousSessionID = activeTranscodeSessionID
-
-        // Resolve + warm up the NEW session before touching the player, so we
-        // never swap in a cold URL.
-        let resolved: ResolvedPlayback
-        do {
-            resolved = try await resolvePlayback(for: nextItem, startSeconds: seconds)
-        } catch {
-            await markFailed(message: failure)
-            return
-        }
-
-        let url = resolved.url
-        baseOffsetSeconds = resolved.baseOffsetSeconds
-        let seekTarget = seekTarget(for: resolved, position: seconds)
-
-        if let avPlayer {
-            await MainActor.run {
-                avPlayer.replaceCurrentItem(with: AVPlayerItem(url: url))
-                if let seekTarget {
-                    avPlayer.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                }
-                if wasPlaying {
-                    avPlayer.play()
-                }
-            }
-        } else {
-            let player = await MainActor.run { () -> AVPlayer in
-                let player = AVPlayer(url: url)
-                if let seekTarget {
-                    player.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                }
-                if wasPlaying {
-                    player.play()
-                }
-                return player
-            }
-            avPlayer = player
-            startResumeLoop()
-        }
-
-        activeTranscodeSessionID = resolved.transcodeSessionID
-        state = PlaybackState(
-            status: wasPlaying ? .playing : priorStatus,
-            item: nextItem,
-            position: .seconds(seconds),
-            duration: state.duration
-        )
-
-        // Now that the new session is live, stop the old one — never before, so
-        // we don't interrupt playback if the swap is mid-flight.
-        if let previousSessionID, previousSessionID != resolved.transcodeSessionID {
-            await source?.stopTranscode(sessionID: previousSessionID)
-        }
-    }
-
     public func stop() async {
         resumeTask?.cancel()
         resumeTask = nil
@@ -384,15 +303,18 @@ public actor PlaybackSession {
             return try await source.resolvePlayback(request)
         }
 
-        // No source: legacy direct path. Bake the offset for a transcode URL,
-        // otherwise the player seeks client-side.
-        guard let url = item.startingPlayback(at: startSeconds).streamURL else {
+        // No source: legacy direct path. We can no longer mutate URLs to bake
+        // an offset, so transcodes fall back to client-side seeking — fine for
+        // tests / Mock; the real Plex path always has a `source` to resolve
+        // through. Direct-play already seeks client-side.
+        guard let url = item.streamURL else {
             throw PlaybackResolveError.noPlayableStream
         }
         return ResolvedPlayback(
             url: url,
             isServerTranscode: item.isServerTranscode,
-            baseOffsetSeconds: item.isServerTranscode ? startSeconds : 0
+            baseOffsetSeconds: 0,
+            clientSeekSeconds: startSeconds > 0 ? startSeconds : nil
         )
     }
 
@@ -437,16 +359,6 @@ public actor PlaybackSession {
         let position = Duration.seconds(baseOffsetSeconds + elapsed)
         state.position = position
         await resumeStore.record(.init(mediaID: item.id, position: position))
-    }
-
-    private func currentPlaybackSeconds() async -> Double {
-        if let avPlayer {
-            let elapsed = await MainActor.run { avPlayer.currentTime().seconds }
-            if elapsed.isFinite, !elapsed.isNaN {
-                return baseOffsetSeconds + elapsed
-            }
-        }
-        return Self.durationSeconds(state.position)
     }
 
     private func persistedResumeSeconds(for id: MediaID) async -> Double {

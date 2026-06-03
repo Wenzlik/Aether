@@ -21,6 +21,17 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// the user-facing "Off" row in the picker. A non-nil id matches one of
     /// `subtitleTracks`.
     public let selectedSubtitleTrackID: String?
+    /// Plex Part id (e.g. `"17905"`). Surfaces `Media.Part.id` so the playback
+    /// pipeline can `PUT /library/parts/{partId}?audioStreamID=…` before
+    /// asking Plex for a decision — the canonical way to set the active
+    /// streams, instead of jamming ids onto the start.m3u8 URL.
+    public let partID: String?
+    /// Pre-playback media info shown on Detail (source codec, resolution,
+    /// bitrate, HDR badge). Filled by the source layer from server metadata.
+    public let mediaInfo: MediaInfo?
+    /// The Detail-screen quality picker selection. Defaults to `.original`
+    /// (Direct Play priority) — every other choice biases toward a transcode.
+    public let selectedQuality: PlaybackQuality
 
     public init(
         id: MediaID,
@@ -35,7 +46,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         audioTracks: [MediaAudioTrack] = [],
         selectedAudioTrackID: String? = nil,
         subtitleTracks: [MediaSubtitleTrack] = [],
-        selectedSubtitleTrackID: String? = nil
+        selectedSubtitleTrackID: String? = nil,
+        partID: String? = nil,
+        mediaInfo: MediaInfo? = nil,
+        selectedQuality: PlaybackQuality = .original
     ) {
         self.id = id
         self.title = title
@@ -50,6 +64,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.selectedAudioTrackID = selectedAudioTrackID ?? audioTracks.first(where: \.isSelected)?.id
         self.subtitleTracks = subtitleTracks
         self.selectedSubtitleTrackID = selectedSubtitleTrackID ?? subtitleTracks.first(where: \.isSelected)?.id
+        self.partID = partID
+        self.mediaInfo = mediaInfo
+        self.selectedQuality = selectedQuality
     }
 
     public var selectedAudioTrack: MediaAudioTrack? {
@@ -63,14 +80,13 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     }
 
     /// Copy preserving every field except those explicitly overridden. Keeps
-    /// the track-selection / stream-URL transforms below from drifting as new
-    /// fields are added.
+    /// the selection transforms below from drifting as new fields are added.
     private func copy(
-        streamURL: URL?? = nil,
         audioTracks: [MediaAudioTrack]? = nil,
         selectedAudioTrackID: String?? = nil,
         subtitleTracks: [MediaSubtitleTrack]? = nil,
-        selectedSubtitleTrackID: String?? = nil
+        selectedSubtitleTrackID: String?? = nil,
+        selectedQuality: PlaybackQuality? = nil
     ) -> MediaItem {
         MediaItem(
             id: id,
@@ -81,11 +97,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             summary: summary,
             posterURL: posterURL,
             backdropURL: backdropURL,
-            streamURL: streamURL ?? self.streamURL,
+            streamURL: streamURL,
             audioTracks: audioTracks ?? self.audioTracks,
             selectedAudioTrackID: selectedAudioTrackID ?? self.selectedAudioTrackID,
             subtitleTracks: subtitleTracks ?? self.subtitleTracks,
-            selectedSubtitleTrackID: selectedSubtitleTrackID ?? self.selectedSubtitleTrackID
+            selectedSubtitleTrackID: selectedSubtitleTrackID ?? self.selectedSubtitleTrackID,
+            partID: partID,
+            mediaInfo: mediaInfo,
+            selectedQuality: selectedQuality ?? self.selectedQuality
         )
     }
 
@@ -105,58 +124,28 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             || streamURL.path.contains("/transcode/universal/start")
     }
 
-    /// Return a copy whose stream begins at `seconds`.
-    ///
-    /// For server-transcode URLs this writes a Plex `offset` query item so the
-    /// transcoder starts producing segments from that point. For direct-play
-    /// it's a no-op — the caller seeks the `AVPlayer` instead. A non-positive
-    /// `seconds` returns `self` unchanged (start from the beginning).
-    public func startingPlayback(at seconds: Double) -> MediaItem {
-        guard seconds > 0, isServerTranscode, let streamURL else { return self }
-        let offset = String(Int(seconds.rounded()))
-        return replacingStreamURL(streamURL.replacingQueryItem(name: "offset", value: offset))
-    }
-
+    /// Return a copy with this audio track marked as selected. Pure state
+    /// update — the playback URL is rebuilt by the source's `resolvePlayback`
+    /// when the user actually presses Play (PUT the selection to the Part,
+    /// then ask the server for a fresh decision).
     public func selectingAudioTrack(_ track: MediaAudioTrack) -> MediaItem {
         let nextTracks = audioTracks.map { $0.withSelection($0.id == track.id) }
-        return copy(
-            // Set the new track *and* mint a fresh Plex transcode session.
-            // Plex keys a running transcode by its `session` id: re-requesting
-            // `start.m3u8` with the same session but a different `audioStreamID`
-            // just resumes the existing transcode and the new track is ignored
-            // — the stream keeps playing the old audio. A new session forces
-            // the server to start a transcode that honours the selection.
-            streamURL: streamURL?
-                .replacingQueryItem(name: "audioStreamID", value: track.id)
-                .regeneratingPlexTranscodeSession(),
-            audioTracks: nextTracks,
-            selectedAudioTrackID: track.id
-        )
+        return copy(audioTracks: nextTracks, selectedAudioTrackID: track.id)
     }
 
     /// Return a copy with `track` selected as the burned-in / muxed subtitle,
-    /// or subtitles turned **off** when `track` is `nil`.
-    ///
-    /// Mirrors `selectingAudioTrack`: for a Plex transcode it writes
-    /// `subtitleStreamID` (`0` disables subtitles, per Plex) and mints a fresh
-    /// transcode session so the server honours the change instead of resuming
-    /// the running stream. Direct-play is a no-op on the URL — AVKit's own
-    /// subtitle picker handles those, and `selectedSubtitleTrackID` still
-    /// records the user's intent for the Detail UI.
+    /// or subtitles turned **off** when `track` is `nil`. Like
+    /// `selectingAudioTrack`, this is a pure state update; the source layer
+    /// PUTs the selection to the Part at play time.
     public func selectingSubtitleTrack(_ track: MediaSubtitleTrack?) -> MediaItem {
         let nextTracks = subtitleTracks.map { $0.withSelection($0.id == track?.id) }
-        return copy(
-            streamURL: streamURL?
-                .replacingQueryItem(name: "subtitleStreamID", value: track?.id ?? "0")
-                .regeneratingPlexTranscodeSession(),
-            subtitleTracks: nextTracks,
-            selectedSubtitleTrackID: .some(track?.id)
-        )
+        return copy(subtitleTracks: nextTracks, selectedSubtitleTrackID: .some(track?.id))
     }
 
-    /// Copy with a different stream URL, preserving every other field.
-    private func replacingStreamURL(_ url: URL?) -> MediaItem {
-        copy(streamURL: .some(url))
+    /// Return a copy with the chosen playback quality. `.original` keeps Direct
+    /// Play priority; everything else biases the request toward a transcode.
+    public func selectingQuality(_ quality: PlaybackQuality) -> MediaItem {
+        copy(selectedQuality: quality)
     }
 
     public enum Kind: String, Sendable, Hashable {
@@ -316,39 +305,5 @@ public enum MediaSourceID: Hashable, Sendable {
         case .synology(let host):
             return "synology.\(host)"
         }
-    }
-}
-
-private extension URL {
-    func replacingQueryItem(name: String, value: String) -> URL {
-        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
-            return self
-        }
-        var queryItems = components.queryItems ?? []
-        queryItems.removeAll { $0.name == name }
-        queryItems.append(URLQueryItem(name: name, value: value))
-        components.queryItems = queryItems
-        return components.url ?? self
-    }
-
-    /// Mint a fresh Plex transcode session id on a `start.m3u8` URL so the
-    /// server starts a new transcode instead of resuming the running one.
-    /// No-op for direct-play URLs, which carry no `session` query item.
-    func regeneratingPlexTranscodeSession() -> URL {
-        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false),
-              let queryItems = components.queryItems,
-              queryItems.contains(where: { $0.name == "session" }) else {
-            return self
-        }
-        let fresh = UUID().uuidString
-        components.queryItems = queryItems.map { item in
-            switch item.name {
-            case "session", "X-Plex-Session-Identifier":
-                return URLQueryItem(name: item.name, value: fresh)
-            default:
-                return item
-            }
-        }
-        return components.url ?? self
     }
 }

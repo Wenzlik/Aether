@@ -11,20 +11,20 @@ struct DetailView: View {
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
-    /// point ("Continue Watching"); `0` forces a restart ("Play From Beginning").
+    /// point ("Resume"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
-    /// The item with full metadata (audio + subtitle streams) once hydrated,
-    /// carrying the user's audio/subtitle choices. Playback decisions happen
-    /// here on Detail, before the player opens — the configured item is what
-    /// launches. `nil` until the detail endpoint resolves; `current` falls back
-    /// to the list `item` so direct-play titles still play.
+    /// The item with full metadata (audio + subtitle streams, partID,
+    /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
+    /// choices. Playback decisions happen here on Detail, before the player
+    /// opens — the configured item is what launches. `nil` until the detail
+    /// endpoint resolves; `current` falls back to the list `item`.
     @State private var configuredItem: MediaItem?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The item reflecting hydration + the user's track selections.
+    /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? item }
 
     var body: some View {
@@ -49,27 +49,8 @@ struct DetailView: View {
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
         #if os(iOS)
-        // iOS only. The player overlays this view *inside* the NavigationStack
-        // and on iPhone / iPad the nav bar's back button would otherwise sit
-        // behind / above the video — looks like junk, so we hide it for the
-        // duration of playback. The player's own overlay xmark is the dismiss
-        // surface on iOS.
-        //
-        // visionOS is **excluded on purpose.** Hiding the toolbar there leaves
-        // the system back chevron rendered in the window's ornament bar but
-        // non-functional — taps fire haptic feedback (we saw
-        // `MRUIFeedbackTypeButtonWithoutBackgroundTouchDown` timeouts in the
-        // logs) without actually popping the NavigationStack. Keeping the
-        // toolbar visible during playback makes the chevron behave normally:
-        // tap → pop DetailView → PlayerView's `.onDisappear` writes the
-        // resume point and tears down → user lands back on Home. The small
-        // strip of window chrome over the player is an acceptable price for
-        // a functional native back gesture.
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
-        // Hide the TabView's bar (the top nav "menu" on tvOS, bottom bar / ornament
-        // elsewhere) for the duration of playback — otherwise it stays drawn over
-        // the video. Applied on all platforms; the player is a full-screen surface.
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .tabBar)
         .task {
             resume = await resumeStore.point(for: item.id)
@@ -242,7 +223,7 @@ struct DetailView: View {
         .foregroundStyle(AetherDesign.Palette.textSecondary)
     }
 
-    // MARK: - Action row (Continue Watching / Play, or unavailable state)
+    // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
 
     @ViewBuilder
     private var actionRow: some View {
@@ -269,13 +250,13 @@ struct DetailView: View {
         .disabled(isPreparingPlayback)
     }
 
-    /// Resume exists: Continue Watching (primary, with a resume-from caption)
-    /// plus Play From Beginning (secondary).
+    /// Resume exists: Resume (primary, with a resume-from caption) plus Play
+    /// From Beginning (secondary). Resume uses Plex's stored `viewOffset`.
     private var resumeButtons: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                 AetherButton(
-                    isPreparingPlayback ? "Preparing…" : "Continue Watching",
+                    isPreparingPlayback ? "Preparing…" : "Resume",
                     systemImage: "play.fill",
                     role: .primary
                 ) {
@@ -309,13 +290,13 @@ struct DetailView: View {
         .padding(.top, -AetherDesign.Spacing.xxl)
     }
 
-    // MARK: - Playback options (audio / subtitles / source / quality)
+    // MARK: - Playback options (audio / subtitles / quality / media info)
 
-    /// Everything the user can see and change *before* pressing Play. The
-    /// selected audio + subtitle tracks are always visible, so it's clear what
-    /// will play. Source + quality are informational (display only). Track
-    /// lists appear only for transcode titles, which is where Aether can act on
-    /// the selection — direct-play falls back to AVKit's own picker in-player.
+    /// Everything the user can see and change *before* pressing Play. Selecting
+    /// an audio / subtitle track or a quality level updates the configured
+    /// item; the source layer PUTs the choice to the Part and re-asks Plex for
+    /// a decision when the user presses Play. The Media section is purely
+    /// informational, showing the source file's codecs / resolution / bitrate.
     @ViewBuilder
     private var playbackOptions: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
@@ -351,17 +332,134 @@ struct DetailView: View {
                 }
             }
 
-            AetherSettingsSection("Playback") {
-                if let source {
-                    AetherSettingsRow(label: "Source", value: source.displayName)
+            qualitySection
+
+            mediaSection
+        }
+    }
+
+    /// Quality picker — Original (Direct Play priority) by default, then
+    /// Convert Automatically, then a ladder of bitrate caps that force a
+    /// transcode. Mirrors Plex Web's set so users coming from there feel at
+    /// home.
+    private var qualitySection: some View {
+        AetherSettingsSection("Quality") {
+            ForEach(PlaybackQuality.allCases, id: \.self) { quality in
+                AetherSelectionRow(
+                    title: quality.displayName,
+                    isSelected: quality == current.selectedQuality
+                ) {
+                    configuredItem = current.selectingQuality(quality)
                 }
-                AetherSettingsRow(label: "Quality", status: qualityStatus)
             }
         }
     }
 
-    private var qualityStatus: AetherStatus {
-        current.isServerTranscode ? .muted("Transcoding") : .positive("Direct Play")
+    /// Source media info + projected playback mode. The codecs / bitrate /
+    /// resolution come from Plex metadata as the file is on disk; the
+    /// "Playback" line is a best-effort guess based on container + quality.
+    /// The server's actual decision is taken when Play is pressed.
+    @ViewBuilder
+    private var mediaSection: some View {
+        let info = current.mediaInfo
+        AetherSettingsSection("Media") {
+            if let video = videoLine(info) {
+                AetherSettingsRow(label: "Video", value: video)
+            }
+            if let audio = audioLine(info) {
+                AetherSettingsRow(label: "Audio", value: audio)
+            }
+            if let bitrate = info?.bitrateKbps {
+                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            }
+            if let hdrBadge = hdrBadge(info) {
+                AetherSettingsRow(label: "HDR", value: hdrBadge)
+            }
+            AetherSettingsRow(label: "Playback", status: playbackModeStatus)
+            if let source {
+                AetherSettingsRow(label: "Source", value: source.displayName)
+            }
+        }
+    }
+
+    private func videoLine(_ info: MediaInfo?) -> String? {
+        guard let info else { return nil }
+        let codec = info.videoCodec?.uppercased()
+        let resolution = info.videoResolution
+        switch (codec, resolution) {
+        case let (codec?, resolution?): return "\(codec) \(resolution)"
+        case let (codec?, nil):         return codec
+        case let (nil, resolution?):    return resolution
+        case (nil, nil):                return nil
+        }
+    }
+
+    private func audioLine(_ info: MediaInfo?) -> String? {
+        guard let info else { return nil }
+        let codec = info.audioCodec?.uppercased()
+        let channels = info.audioChannels.map { channelLabel($0) }
+        switch (codec, channels) {
+        case let (codec?, channels?): return "\(codec) \(channels)"
+        case let (codec?, nil):       return codec
+        case let (nil, channels?):    return channels
+        case (nil, nil):              return nil
+        }
+    }
+
+    /// Plex's channel count → loudspeaker layout label: 2 → "2.0", 6 → "5.1",
+    /// 8 → "7.1". Anything we don't recognise falls back to "N ch".
+    private func channelLabel(_ channels: Int) -> String {
+        switch channels {
+        case 1: return "Mono"
+        case 2: return "2.0"
+        case 6: return "5.1"
+        case 8: return "7.1"
+        default: return "\(channels) ch"
+        }
+    }
+
+    private func hdrBadge(_ info: MediaInfo?) -> String? {
+        guard let info else { return nil }
+        if info.isDolbyVision { return "Dolby Vision" }
+        if info.isHDR { return "HDR" }
+        return nil
+    }
+
+    private func formatBitrate(_ kbps: Int) -> String {
+        if kbps >= 1000 {
+            let mbps = Double(kbps) / 1000.0
+            return String(format: "%.1f Mbps", mbps)
+        }
+        return "\(kbps) kbps"
+    }
+
+    /// Best-effort projected playback mode for the Media line, computed from
+    /// container + quality choice. The server's actual decision is taken when
+    /// Play is pressed; this is just a hint so the user knows what'll happen.
+    private var playbackModeStatus: AetherStatus {
+        let mode = projectedPlaybackMode
+        switch mode {
+        case .directPlay:   return .positive(mode.displayName)
+        case .directStream: return .positive(mode.displayName)
+        case .transcode:    return .muted(mode.displayName)
+        }
+    }
+
+    private var projectedPlaybackMode: PlaybackDecisionMode {
+        let container = current.mediaInfo?.container?.lowercased()
+        let directPlayContainers: Set<String> = ["mp4", "m4v", "mov"]
+        switch current.selectedQuality {
+        case .original:
+            if let container, directPlayContainers.contains(container) {
+                return .directPlay
+            }
+            return .directStream
+        case .convertAutomatically:
+            return .directStream
+        case .bitrate20Mbps1080p, .bitrate12Mbps1080p, .bitrate8Mbps1080p,
+             .bitrate4Mbps720p, .bitrate2Mbps720p, .bitrate720kbps:
+            return .transcode
+        }
     }
 
     private func hydrateForPlayback() async {
@@ -379,9 +477,9 @@ struct DetailView: View {
         defer { isPreparingPlayback = false }
 
         // `current` is already hydrated (on appear) and carries the user's
-        // audio + subtitle choices, so the player launches exactly what the
-        // Detail screen showed. Fall back to a fresh hydrate if it somehow
-        // hasn't resolved yet.
+        // audio + subtitle + quality choices, so the player launches exactly
+        // what the Detail screen showed. Fall back to a fresh hydrate if it
+        // somehow hasn't resolved yet.
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
             configuredItem = hydrated
         }

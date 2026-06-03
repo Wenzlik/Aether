@@ -98,6 +98,83 @@ public enum PlexAPI {
         }
     }
 
+    // MARK: - Decision endpoint
+
+    /// Response wrapper for `GET /video/:/transcode/universal/decision`.
+    ///
+    /// Plex returns the same `MediaContainer.Metadata` shape it uses for
+    /// library listings, plus a few decision-level fields at the container.
+    /// We model only what the playback pipeline reads.
+    public struct DecisionResponse: Decodable, Sendable {
+        public let mediaContainer: Container
+
+        public struct Container: Decodable, Sendable {
+            public let generalDecisionCode: Int?
+            public let generalDecisionText: String?
+            public let mdeDecisionCode: Int?
+            public let transcodeDecisionCode: Int?
+            public let directPlayDecisionCode: Int?
+            public let directPlayDecisionText: String?
+            public let metadata: [DecisionMetadata]?
+
+            enum CodingKeys: String, CodingKey {
+                case generalDecisionCode, generalDecisionText
+                case mdeDecisionCode, transcodeDecisionCode
+                case directPlayDecisionCode, directPlayDecisionText
+                case metadata = "Metadata"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaContainer = "MediaContainer"
+        }
+    }
+
+    /// One metadata entry from a decision response — same shape as a library
+    /// `Metadata` but with `Part.decision` populated and the chosen Part's
+    /// `file` path for direct-play URL construction.
+    public struct DecisionMetadata: Decodable, Sendable {
+        public let media: [DecisionMedia]?
+
+        enum CodingKeys: String, CodingKey {
+            case media = "Media"
+        }
+
+        public struct DecisionMedia: Decodable, Sendable {
+            public let videoCodec: String?
+            public let audioCodec: String?
+            public let videoResolution: String?
+            public let bitrate: Int?
+            public let container: String?
+            public let part: [DecisionPart]?
+
+            enum CodingKeys: String, CodingKey {
+                case videoCodec, audioCodec, videoResolution, bitrate, container
+                case part = "Part"
+            }
+        }
+
+        public struct DecisionPart: Decodable, Sendable {
+            /// One of `"directplay"`, `"copy"` (direct stream), `"transcode"`.
+            /// Plex names this verdict on the Part itself; we map it into
+            /// `PlaybackDecisionMode`.
+            public let decision: String?
+            /// Filesystem path to the original file, e.g.
+            /// `/data/Tron Ares.mkv`. Surfaced from the decision response so we
+            /// can build the direct-play URL (`/library/parts/{partId}/{ts}/{name}`
+            /// is encoded by Plex into `key` on the regular Part; the decision
+            /// response duplicates it as `file`).
+            public let file: String?
+            /// Same `key` Plex returns on library Parts — relative URL Path the
+            /// client can fetch directly.
+            public let key: String?
+
+            enum CodingKeys: String, CodingKey {
+                case decision, file, key
+            }
+        }
+    }
+
     /// Response wrapper for `GET /library/sections/{key}/all`.
     public struct LibraryItemsResponse: Decodable, Sendable {
         public let mediaContainer: Container
@@ -202,6 +279,53 @@ public enum PlexAPI {
             subtitleTracks.first(where: \.isSelected)?.id
         }
 
+        /// The first Part's id surfaced as a string. Drives the
+        /// `PUT /library/parts/{partId}` stream-selection step.
+        public var firstPartID: String? {
+            media?.first?.part?.first?.id
+        }
+
+        /// Source media info for Detail-screen display: codec, resolution,
+        /// channels, HDR flags, source bitrate. Pulled from the first Media +
+        /// its primary video/audio streams.
+        public var sourceMediaInfo: MediaInfo? {
+            guard let media = media?.first else { return nil }
+            let part = media.part?.first
+            let video = part?.stream?.first { $0.streamType == 1 }
+            let audio = part?.stream?.first { $0.streamType == 2 && ($0.selected ?? false) }
+                ?? part?.stream?.first { $0.streamType == 2 }
+            let resolutionLabel: String? = {
+                if let r = media.videoResolution, !r.isEmpty {
+                    return Self.resolutionLabel(from: r)
+                }
+                return nil
+            }()
+            return MediaInfo(
+                videoCodec: media.videoCodec ?? video?.codec,
+                audioCodec: media.audioCodec ?? audio?.codec,
+                audioChannels: audio?.channels ?? media.audioChannels,
+                videoResolution: resolutionLabel,
+                bitrateKbps: media.bitrate,
+                isHDR: video?.colorTrc?.localizedCaseInsensitiveContains("smpte2084") == true
+                    || video?.colorTrc?.localizedCaseInsensitiveContains("hlg") == true
+                    || video?.dovi == true,
+                isDolbyVision: video?.dovi == true,
+                container: media.container
+            )
+        }
+
+        /// Translate Plex's free-form resolution value (`"1080"`, `"720"`,
+        /// `"4k"`) into the label we show on Detail.
+        private static func resolutionLabel(from raw: String) -> String {
+            switch raw.lowercased() {
+            case "4k", "2160": return "4K"
+            case "1080":       return "1080p"
+            case "720":        return "720p"
+            case "480":        return "480p"
+            default:           return raw
+            }
+        }
+
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case media = "Media"
@@ -210,28 +334,71 @@ public enum PlexAPI {
         public struct Media: Decodable, Sendable, Equatable {
             /// File container, e.g. `"mp4"`, `"mkv"`, `"avi"`.
             public let container: String?
+            public let videoCodec: String?
+            public let audioCodec: String?
+            /// Source bitrate in **kilobits per second**.
+            public let bitrate: Int?
+            /// Plex's free-form resolution label (`"1080"`, `"4k"`).
+            public let videoResolution: String?
+            public let audioChannels: Int?
             public let part: [Part]?
 
+            public init(
+                container: String? = nil,
+                videoCodec: String? = nil,
+                audioCodec: String? = nil,
+                bitrate: Int? = nil,
+                videoResolution: String? = nil,
+                audioChannels: Int? = nil,
+                part: [Part]? = nil
+            ) {
+                self.container = container
+                self.videoCodec = videoCodec
+                self.audioCodec = audioCodec
+                self.bitrate = bitrate
+                self.videoResolution = videoResolution
+                self.audioChannels = audioChannels
+                self.part = part
+            }
+
             enum CodingKeys: String, CodingKey {
-                case container
+                case container, videoCodec, audioCodec, bitrate, videoResolution, audioChannels
                 case part = "Part"
             }
         }
 
         public struct Part: Decodable, Sendable, Equatable {
+            /// Plex Part id (e.g. `"17905"`). Surfaced as a String to match
+            /// stream id encoding; Plex returns it as int or string depending
+            /// on endpoint shape, so the custom decoder handles both.
+            public let id: String?
             /// Relative path to the original file, e.g.
             /// `/library/parts/12345/1700000000/file.mkv`.
             public let key: String?
             public let stream: [Stream]?
 
-            public init(key: String?, stream: [Stream]? = nil) {
+            public init(id: String? = nil, key: String?, stream: [Stream]? = nil) {
+                self.id = id
                 self.key = key
                 self.stream = stream
             }
 
             enum CodingKeys: String, CodingKey {
-                case key
+                case id, key
                 case stream = "Stream"
+            }
+
+            public init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if let int = try? container.decodeIfPresent(Int.self, forKey: .id) {
+                    id = String(int)
+                } else if let s = try? container.decodeIfPresent(String.self, forKey: .id) {
+                    id = s
+                } else {
+                    id = nil
+                }
+                key = try container.decodeIfPresent(String.self, forKey: .key)
+                stream = try container.decodeIfPresent([Stream].self, forKey: .stream)
             }
 
             public struct Stream: Decodable, Sendable, Equatable {
@@ -243,6 +410,11 @@ public enum PlexAPI {
                 public let languageCode: String?
                 public let title: String?
                 public let channels: Int?
+                /// Video color transfer (e.g. `"smpte2084"` for HDR10,
+                /// `"arib-std-b67"` for HLG). Only present on video streams.
+                public let colorTrc: String?
+                /// `true` when Plex tagged the stream as Dolby Vision.
+                public let dovi: Bool?
 
                 public var bestTitle: String? {
                     [title, language, languageCode]
@@ -258,7 +430,9 @@ public enum PlexAPI {
                     language: String? = nil,
                     languageCode: String? = nil,
                     title: String? = nil,
-                    channels: Int? = nil
+                    channels: Int? = nil,
+                    colorTrc: String? = nil,
+                    dovi: Bool? = nil
                 ) {
                     self.id = id
                     self.streamType = streamType
@@ -268,10 +442,12 @@ public enum PlexAPI {
                     self.languageCode = languageCode
                     self.title = title
                     self.channels = channels
+                    self.colorTrc = colorTrc
+                    self.dovi = dovi
                 }
 
                 enum CodingKeys: String, CodingKey {
-                    case id, streamType, selected, codec, language, languageCode, title, channels
+                    case id, streamType, selected, codec, language, languageCode, title, channels, colorTrc, DOVIPresent
                 }
 
                 public init(from decoder: any Decoder) throws {
@@ -284,6 +460,8 @@ public enum PlexAPI {
                     languageCode = try container.decodeIfPresent(String.self, forKey: .languageCode)
                     title = try container.decodeIfPresent(String.self, forKey: .title)
                     channels = Self.decodeInt(container, forKey: .channels)
+                    colorTrc = try container.decodeIfPresent(String.self, forKey: .colorTrc)
+                    dovi = Self.decodeBool(container, forKey: .DOVIPresent)
                 }
 
                 private static func decodeString(

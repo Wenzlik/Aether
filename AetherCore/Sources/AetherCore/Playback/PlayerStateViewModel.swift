@@ -54,16 +54,6 @@ public final class PlayerStateViewModel {
         await refresh()
     }
 
-    public func selectAudioTrack(_ track: MediaAudioTrack) async {
-        await session.selectAudioTrack(track)
-        await refresh()
-    }
-
-    public func selectSubtitleTrack(_ track: MediaSubtitleTrack?) async {
-        await session.selectSubtitleTrack(track)
-        await refresh()
-    }
-
     /// Stop playback and tear down the player. Call this in `.onDisappear`.
     public func close() async {
         refreshTask?.cancel()

@@ -933,25 +933,54 @@ struct PlexMediaSourceLibrariesTests {
         #expect(source.streamURL(for: show, base: base) == nil)
     }
 
-    @Test("transcodeURL carries the expected universal-transcoder params")
-    func transcodeURLParams() throws {
+    @Test("transcodeStartURL never sends directPlay=1 (regardless of quality) and applies caps")
+    func transcodeStartURLParams() throws {
         let source = makeSource(api: RecordingAPIClient())
         let base = URL(string: "https://lan.example:32400")!
-        let url = try #require(source.transcodeURL(base: base, ratingKey: "777"))
 
-        #expect(url.path == "/video/:/transcode/universal/start.m3u8")
-        let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        let q = comps.queryItems ?? []
-        func value(_ name: String) -> String? { q.first { $0.name == name }?.value }
+        // The Original / 400 bug: `start.m3u8` is the transcode endpoint;
+        // Plex Web never sends `directPlay=1` here, and doing so makes Plex
+        // return HTTP 400. The Original "ask" goes to the decision call only.
+        for quality in PlaybackQuality.allCases {
+            let url = try #require(source.transcodeStartURL(
+                base: base, ratingKey: "777", quality: quality
+            ))
+            let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            let q = comps.queryItems ?? []
+            func value(_ name: String) -> String? { q.first { $0.name == name }?.value }
+            #expect(value("directPlay") == "0",
+                    "\(quality.rawValue) should NOT send directPlay=1 to start.m3u8")
+            #expect(value("directStream") == "1")
+            #expect(value("path") == "/library/metadata/777")
+            #expect(value("protocol") == "hls")
+        }
 
-        #expect(value("path") == "/library/metadata/777")
-        #expect(value("protocol") == "hls")
-        #expect(value("directPlay") == "0")
-        #expect(value("directStream") == "1")
-        #expect(value("X-Plex-Token") == "srv-token")
-        #expect(value("X-Plex-Client-Identifier") == "id")  // from makeSource's config
-        #expect(q.contains { $0.name == "session" })
-        #expect(q.contains { $0.name == "X-Plex-Session-Identifier" })
+        // Original has no bitrate / resolution cap; a capped quality does.
+        let originalURL = try #require(source.transcodeStartURL(
+            base: base, ratingKey: "777", quality: .original
+        ))
+        let origComps = try #require(URLComponents(url: originalURL, resolvingAgainstBaseURL: false))
+        let origQ = origComps.queryItems ?? []
+        #expect(origQ.contains { $0.name == "maxVideoBitrate" } == false)
+        #expect(origQ.contains { $0.name == "videoResolution" } == false)
+
+        let cappedURL = try #require(source.transcodeStartURL(
+            base: base, ratingKey: "777", quality: .bitrate8Mbps1080p
+        ))
+        let cappedComps = try #require(URLComponents(url: cappedURL, resolvingAgainstBaseURL: false))
+        let cappedQ = cappedComps.queryItems ?? []
+        func cappedValue(_ name: String) -> String? { cappedQ.first { $0.name == name }?.value }
+        #expect(cappedValue("maxVideoBitrate") == "8000")
+        #expect(cappedValue("videoResolution") == "1920x1080")
+
+        // Convert Automatically — the reference implementation: no cap, no DP.
+        let caURL = try #require(source.transcodeStartURL(
+            base: base, ratingKey: "777", quality: .convertAutomatically
+        ))
+        let caComps = try #require(URLComponents(url: caURL, resolvingAgainstBaseURL: false))
+        let caQ = caComps.queryItems ?? []
+        #expect(caQ.first { $0.name == "directPlay" }?.value == "0")
+        #expect(caQ.contains { $0.name == "maxVideoBitrate" } == false)
     }
 
     @Test("Plex audio streams map to selectable tracks and audioStreamID")
@@ -1006,16 +1035,20 @@ struct PlexMediaSourceLibrariesTests {
         #expect(item.audioTracks.map(\.id) == ["11", "12"])
         #expect(item.selectedAudioTrackID == "11")
 
+        // The transcode-placeholder URL still carries the initial selection so
+        // direct-play library rails play without a detail hop.
         let initialURL = try #require(item.streamURL)
         let initialComponents = try #require(URLComponents(url: initialURL, resolvingAgainstBaseURL: false))
         #expect(initialComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "11")
 
+        // Switching tracks is now a *state-only* update — the URL is rebuilt
+        // by `resolvePlayback` (PUT to the Part, then ask Plex for a decision)
+        // when the user presses Play. Mutating the URL on selection was the
+        // root cause of the audio-switch unreliability.
         let czech = try #require(item.audioTracks.last)
         let switched = item.selectingAudioTrack(czech)
-        let switchedURL = try #require(switched.streamURL)
-        let switchedComponents = try #require(URLComponents(url: switchedURL, resolvingAgainstBaseURL: false))
         #expect(switched.selectedAudioTrackID == "12")
-        #expect(switchedComponents.queryItems?.first { $0.name == "audioStreamID" }?.value == "12")
+        #expect(switched.streamURL == item.streamURL) // unchanged
     }
 
     @Test("Plex subtitle streams map to selectable tracks and subtitleStreamID")
@@ -1066,29 +1099,31 @@ struct PlexMediaSourceLibrariesTests {
         )
 
         let item = source.mapMetadataToMediaItem(dto, base: base)
+        // Subtitle pickers now show for every Plex item (not just transcoded
+        // ones) — the source layer PUTs the selection at play time, so direct
+        // play and transcode share the same picker UX on Detail.
         #expect(item.subtitleTracks.map(\.id) == ["20", "21"])
         #expect(item.selectedSubtitleTrackID == "21")
         // Forced status inferred from the title.
         #expect(item.subtitleTracks.last?.isForced == true)
         #expect(item.subtitleTracks.first?.isForced == false)
 
-        // Switching to the English track writes its id.
+        // Switching tracks is now state-only; URL stays the same.
         let english = try #require(item.subtitleTracks.first)
         let switched = item.selectingSubtitleTrack(english)
-        let switchedURL = try #require(switched.streamURL)
-        let switchedComponents = try #require(URLComponents(url: switchedURL, resolvingAgainstBaseURL: false))
         #expect(switched.selectedSubtitleTrackID == "20")
-        #expect(switchedComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "20")
+        #expect(switched.streamURL == item.streamURL)
 
-        // Turning subtitles off writes subtitleStreamID=0 and clears selection.
+        // Picking "Off" sets selectedSubtitleTrackID to nil. The wire-format
+        // bridge from nil → "0" happens in `PlaybackRequest.init(item:)` so the
+        // PUT and decision calls always carry an explicit value.
         let off = item.selectingSubtitleTrack(nil)
-        let offURL = try #require(off.streamURL)
-        let offComponents = try #require(URLComponents(url: offURL, resolvingAgainstBaseURL: false))
         #expect(off.selectedSubtitleTrackID == nil)
-        #expect(offComponents.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "0")
+        let request = PlaybackRequest(item: off, startTime: nil)
+        #expect(request.subtitleStreamID == "0")
     }
 
-    @Test("resolvePlayback mints a fresh transcode session and carries streams + offset")
+    @Test("resolvePlayback (legacy path, no partID) mints a fresh transcode session and carries streams + offset")
     func resolvePlaybackTranscodeIsFresh() async throws {
         let api = RecordingAPIClient()
         await enqueueReachable(api)   // /identity probe (resolveBaseURL caches after)
@@ -1097,6 +1132,9 @@ struct PlexMediaSourceLibrariesTests {
         await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
         let source = makeSource(api: api)
 
+        // Legacy path: no partID, so PlexMediaSource falls back to the old
+        // single-shot start.m3u8 flow (no PUT, no decision). This keeps the
+        // pipeline working for items that haven't been hydrated yet.
         let request = PlaybackRequest(
             itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
             mode: .transcode,
@@ -1125,6 +1163,322 @@ struct PlexMediaSourceLibrariesTests {
         #expect(s1 != nil)
         #expect(s2 != nil)
         #expect(s1 != s2)
+    }
+
+    @Test("resolvePlayback PUTs stream selection, fetches decision, then builds start.m3u8")
+    func resolvePlaybackPutThenDecideThenStart() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        // PUT to /library/parts/{partId} — Plex returns an empty success body.
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
+        // Decision response → server picks transcode.
+        let decisionJSON = #"""
+        {
+          "MediaContainer": {
+            "generalDecisionCode": 1000,
+            "generalDecisionText": "Transcode",
+            "Metadata": [{
+              "Media": [{
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "videoResolution": "1080",
+                "bitrate": 8000,
+                "container": "mp4",
+                "Part": [{ "decision": "transcode" }]
+              }]
+            }]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+        // Playlist warm-up.
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            partID: "17905",
+            audioStreamID: "41619",
+            subtitleStreamID: "41621",
+            quality: .original,
+            startTime: .seconds(90)
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        let recorded = await api.requests
+        // /identity probe + PUT + decision + warm-up = 4
+        try #require(recorded.count == 4)
+
+        // 1. PUT /library/parts/{partID}?audioStreamID=…&subtitleStreamID=…
+        let put = recorded[1]
+        #expect(put.httpMethod == "PUT")
+        #expect(put.url?.path == "/library/parts/17905")
+        let putComps = try #require(URLComponents(url: put.url!, resolvingAgainstBaseURL: false))
+        #expect(putComps.queryItems?.first { $0.name == "audioStreamID" }?.value == "41619")
+        #expect(putComps.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "41621")
+
+        // 2. GET /video/:/transcode/universal/decision with same params
+        let decision = recorded[2]
+        #expect(decision.httpMethod == nil || decision.httpMethod == "GET")
+        #expect(decision.url?.path == "/video/:/transcode/universal/decision")
+        let decComps = try #require(URLComponents(url: decision.url!, resolvingAgainstBaseURL: false))
+        #expect(decComps.queryItems?.first { $0.name == "path" }?.value == "/library/metadata/42")
+        // The 400 fix: decision endpoint never gets `directPlay=1` from us.
+        // Plex Web pairs `directPlay=1` with `X-Plex-Client-Profile-Extra`
+        // describing exact codec/container support — without that profile
+        // Plex returns HTTP 400 instead of just saying "no directplay".
+        // We rely on `directStream=1` to preserve original quality via
+        // container remux when codecs are compatible.
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
+        #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
+        #expect(decComps.queryItems?.first { $0.name == "audioStreamID" }?.value == "41619")
+        #expect(decComps.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "41621")
+        #expect(decComps.queryItems?.contains { $0.name == "session" } == true)
+
+        // 3. Warm-up of start.m3u8 — same session id as the decision call.
+        let warm = recorded[3]
+        #expect(warm.url?.path == "/video/:/transcode/universal/start.m3u8")
+        let warmComps = try #require(URLComponents(url: warm.url!, resolvingAgainstBaseURL: false))
+        let warmSession = warmComps.queryItems?.first { $0.name == "session" }?.value
+        let decSession = decComps.queryItems?.first { $0.name == "session" }?.value
+        #expect(warmSession != nil)
+        #expect(warmSession == decSession)
+        #expect(warmComps.queryItems?.first { $0.name == "offset" }?.value == "90")
+
+        // ResolvedPlayback reports transcode + the decision verdict.
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.decision == .transcode)
+        #expect(resolved.baseOffsetSeconds == 90)
+    }
+
+    @Test("Decision returning directplay yields a direct file URL, no warm-up")
+    func decisionDirectPlayBuildsFileURL() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
+        let decisionJSON = #"""
+        {
+          "MediaContainer": {
+            "generalDecisionCode": 1000,
+            "Metadata": [{
+              "Media": [{
+                "container": "mp4",
+                "videoCodec": "h264",
+                "audioCodec": "aac",
+                "Part": [{
+                  "decision": "directplay",
+                  "key": "/library/parts/17905/1700/Tron.Ares.mp4"
+                }]
+              }]
+            }]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            partID: "17905",
+            audioStreamID: "41619",
+            quality: .original
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        // /identity + PUT + decision = 3. No warm-up — direct play needs none.
+        let recorded = await api.requests
+        try #require(recorded.count == 3)
+
+        #expect(resolved.decision == .directPlay)
+        #expect(resolved.isServerTranscode == false)
+        #expect(resolved.url.path == "/library/parts/17905/1700/Tron.Ares.mp4")
+        #expect(resolved.url.query?.contains("X-Plex-Token=srv-token") == true)
+        #expect(resolved.transcodeSessionID == nil)
+    }
+
+    @Test("Original quality NEVER sends directPlay=1 — the Tron: Ares 400 fix")
+    func originalQualityNeverSendsDirectPlayOne() async throws {
+        // The actual bug surfaced in the field: the **decision** call with
+        // `directPlay=1` returns HTTP 400, because Plex requires
+        // `X-Plex-Client-Profile-Extra` to evaluate direct play and we don't
+        // send one. Convert Automatically works because it sends
+        // `directPlay=0` to the decision endpoint. Original must now do the
+        // same; the "preserve original quality" intent is carried by
+        // `directStream=1` (lossless container remux when codecs match) plus
+        // the absence of a bitrate / resolution cap.
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
+        let decisionJSON = #"""
+        { "MediaContainer": { "Metadata": [{ "Media": [{ "container":"mkv", "Part": [{ "decision":"transcode" }] }] }] } }
+        """#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            partID: "17905",
+            audioStreamID: "41619",
+            quality: .original,                       // <- the previously failing case
+            startTime: .seconds(120)
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        let recorded = await api.requests
+        try #require(recorded.count == 4)   // identity + PUT + decision + warm-up
+
+        // Decision call: directPlay=0 (the 400 fix), directStream=1 keeps
+        // remux available to preserve original codec when possible.
+        let decisionURL = try #require(recorded[2].url)
+        let decComps = try #require(URLComponents(url: decisionURL, resolvingAgainstBaseURL: false))
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
+        #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
+
+        // start.m3u8 also stays directPlay=0 (it always does — see the
+        // separate `transcodeStartURLParams` test for that pin).
+        let startURL = try #require(recorded[3].url)
+        let startComps = try #require(URLComponents(url: startURL, resolvingAgainstBaseURL: false))
+        #expect(startComps.path == "/video/:/transcode/universal/start.m3u8")
+        #expect(startComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
+
+        // Original has no bitrate/resolution cap — preserves source quality.
+        #expect(startComps.queryItems?.contains { $0.name == "maxVideoBitrate" } == false)
+        #expect(startComps.queryItems?.contains { $0.name == "videoResolution" } == false)
+
+        // Audio selection + resume offset survive.
+        #expect(startComps.queryItems?.first { $0.name == "audioStreamID" }?.value == "41619")
+        #expect(startComps.queryItems?.first { $0.name == "offset" }?.value == "120")
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.decision == .transcode)
+        #expect(resolved.baseOffsetSeconds == 120)
+    }
+
+    @Test("Original matches Convert Automatically on both decision AND start.m3u8 params")
+    func originalMatchesConvertAutomaticallyOnDecisionAndStart() async throws {
+        // The user's reference implementation: Convert Automatically works.
+        // After the fix, Original must hit *both* the decision call and the
+        // start.m3u8 call with the same critical params CA does — that's why
+        // CA plays Tron: Ares and Original used to 400.
+        struct Trace { let decision: URLComponents; let start: URLComponents }
+        func runQuality(_ quality: PlaybackQuality) async throws -> Trace {
+            let api = RecordingAPIClient()
+            await enqueueReachable(api)
+            await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
+            let decisionJSON = #"{ "MediaContainer": { "Metadata": [{ "Media": [{ "container":"mkv", "Part": [{ "decision":"transcode" }] }] }] } }"#
+            await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+            await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+
+            let source = makeSource(api: api)
+            let request = PlaybackRequest(
+                itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+                mode: .transcode, partID: "17905", audioStreamID: "41619", quality: quality
+            )
+            _ = try await source.resolvePlayback(request)
+            let recorded = await api.requests
+            let dec = try #require(URLComponents(url: recorded[2].url!, resolvingAgainstBaseURL: false))
+            let start = try #require(URLComponents(url: recorded[3].url!, resolvingAgainstBaseURL: false))
+            return Trace(decision: dec, start: start)
+        }
+
+        let original = try await runQuality(.original)
+        let auto = try await runQuality(.convertAutomatically)
+
+        func value(_ comps: URLComponents, _ name: String) -> String? {
+            comps.queryItems?.first { $0.name == name }?.value
+        }
+
+        // Decision call — both qualities now ask the same question, just
+        // labelled differently in the UI. directPlay=0 + directStream=1.
+        #expect(value(original.decision, "directPlay") == "0")
+        #expect(value(auto.decision, "directPlay") == "0")
+        #expect(value(original.decision, "directStream") == value(auto.decision, "directStream"))
+
+        // start.m3u8 — same critical params: directPlay, directStream, audio
+        // stream id, no bitrate / resolution cap.
+        #expect(value(original.start, "directPlay") == value(auto.start, "directPlay"))
+        #expect(value(original.start, "directStream") == value(auto.start, "directStream"))
+        #expect(value(original.start, "audioStreamID") == value(auto.start, "audioStreamID"))
+        #expect(original.start.queryItems?.contains { $0.name == "maxVideoBitrate" } ==
+                auto.start.queryItems?.contains { $0.name == "maxVideoBitrate" })
+    }
+
+    @Test("If Plex still returns directplay (despite our directPlay=0 ask) we honour the file URL")
+    func decisionDirectPlayHonouredEvenWhenAskedDirectPlayZero() async throws {
+        // We always send `directPlay=0` to avoid the 400. But in practice
+        // Plex may still answer `decision: "directplay"` for some files
+        // (e.g. the universal-transcoder optimisation path). This defensive
+        // branch keeps that working: when the response surfaces a file key,
+        // we open it directly instead of pointlessly transcoding.
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
+        let decisionJSON = #"""
+        {
+          "MediaContainer": {
+            "generalDecisionCode": 1000,
+            "Metadata": [{
+              "Media": [{
+                "container": "mp4", "videoCodec": "h264", "audioCodec": "aac",
+                "Part": [{
+                  "decision": "directplay",
+                  "key": "/library/parts/17905/1700/file.mp4"
+                }]
+              }]
+            }]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode, partID: "17905", quality: .original
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        // No start.m3u8 hit — direct play is served from the file URL only.
+        let recorded = await api.requests
+        try #require(recorded.count == 3)   // identity + PUT + decision
+        #expect(recorded.allSatisfy { $0.url?.path != "/video/:/transcode/universal/start.m3u8" })
+
+        #expect(resolved.decision == .directPlay)
+        #expect(resolved.isServerTranscode == false)
+        #expect(resolved.url.path == "/library/parts/17905/1700/file.mp4")
+    }
+
+    @Test("Quality cap forces transcode with maxVideoBitrate + videoResolution on the decision call")
+    func qualityCapDrivesDecisionParams() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
+        let decisionJSON = #"""
+        { "MediaContainer": { "Metadata": [{ "Media": [{ "container":"mp4", "Part": [{ "decision":"transcode" }] }] }] } }
+        """#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data("#EXTM3U".utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            partID: "17905",
+            audioStreamID: "41619",
+            quality: .bitrate4Mbps720p
+        )
+        _ = try await source.resolvePlayback(request)
+
+        let recorded = await api.requests
+        let decision = recorded[2]
+        let decComps = try #require(URLComponents(url: decision.url!, resolvingAgainstBaseURL: false))
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0") // capped → no DP
+        #expect(decComps.queryItems?.first { $0.name == "maxVideoBitrate" }?.value == "4000")
+        #expect(decComps.queryItems?.first { $0.name == "videoResolution" }?.value == "1280x720")
     }
 
     @Test("resolvePlayback direct play returns the stable URL untouched")
@@ -1448,39 +1802,31 @@ struct PlexResolveWarmUpTests {
         #expect(c.queryItems?.contains { $0.name == "offset" } == false)
     }
 
-    @Test("Selecting an audio track sends directStreamAudio=0 so the choice is honoured")
-    func audioSelectionTranscodesChosenTrack() async throws {
+    @Test("Audio selection rides on the start.m3u8 URL after the PUT-then-decide pipeline")
+    func audioSelectionOnStartURL() async throws {
         let api = RecordingAPIClient()
         await enqueueReachable(api)
+        await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
+        let decisionJSON = #"{ "MediaContainer": { "Metadata": [{ "Media": [{ "container":"mkv", "Part": [{ "decision":"transcode" }] }] }] } }"#
+        await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
         await enqueuePlaylist(api)
-        let source = makeSource(api: api)
 
+        let source = makeSource(api: api)
         let request = PlaybackRequest(
             itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
-            mode: .transcode, audioStreamID: "3"
+            mode: .transcode, partID: "17905", audioStreamID: "3"
         )
         let resolved = try await source.resolvePlayback(request)
         let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
+        // audioStreamID is still on the URL as a "honour this for this session"
+        // safeguard, but the canonical selection now lives on the Part (PUT).
+        // Both the PUT recorded above and the start URL here agree.
         #expect(c.queryItems?.first { $0.name == "audioStreamID" }?.value == "3")
-        // The fix: a chosen track transcodes only that stream, instead of
-        // keeping all renditions (which made AVPlayer ignore the selection).
-        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "0")
-    }
-
-    @Test("With no audio choice, all tracks are kept (directStreamAudio=1)")
-    func noAudioChoiceKeepsAllTracks() async throws {
-        let api = RecordingAPIClient()
-        await enqueueReachable(api)
-        await enqueuePlaylist(api)
-        let source = makeSource(api: api)
-
-        let request = PlaybackRequest(
-            itemID: .init(source: .plex(serverID: "s"), rawValue: "42"),
-            mode: .transcode
-        )
-        let resolved = try await source.resolvePlayback(request)
-        let c = try #require(URLComponents(url: resolved.url, resolvingAgainstBaseURL: false))
-        #expect(c.queryItems?.first { $0.name == "directStreamAudio" }?.value == "1")
+        // The `directStreamAudio` hack is gone — without PUT we couldn't be
+        // sure the right track was selected, so we forced single-track output.
+        // With the PUT pipeline, the server already knows which stream the
+        // user wants and no extra knob is needed.
+        #expect(c.queryItems?.contains { $0.name == "directStreamAudio" } == false)
     }
 
     @Test("Warm-up failure maps to .notReady with token-free diagnostics")
