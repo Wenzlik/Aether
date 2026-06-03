@@ -515,6 +515,15 @@ public actor PlexMediaSource: MediaSource {
     /// is decided at view-render time without an actor hop.
     public nonisolated var supportsDownloads: Bool { true }
 
+    /// Drop any cached connection so the next request re-probes against the
+    /// ranked list. Called by `downloadURL(for:quality:)` so a download
+    /// queued after the user moved off LAN doesn't try to hit the stale
+    /// LAN URL.
+    private func invalidateConnectionForFreshProbe() {
+        resolvedBaseURL = nil
+        resolvedIsLocal = false
+    }
+
     /// Build a download URL for an item — a progressive-MP4 transcode the
     /// `DownloadManager`'s background `URLSession` can pull in one big GET.
     ///
@@ -528,6 +537,13 @@ public actor PlexMediaSource: MediaSource {
     /// containers through the raw Part URL.
     public func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? {
         guard item.id.source == self.id else { return nil }
+        // Force a fresh probe: the user might have moved off LAN between
+        // the last library fetch and pressing Download. Cached LAN URLs
+        // would resolve to a dead 192.168.x.x host that
+        // URLSession.background can't recover from. The probe takes
+        // ~probeTimeout per dead candidate but is bounded by the
+        // connection list (typically 3-5 candidates).
+        invalidateConnectionForFreshProbe()
         let base = try await resolveBaseURL()
         var components = URLComponents(
             url: base.appendingPathComponent("/video/:/transcode/universal/start"),
