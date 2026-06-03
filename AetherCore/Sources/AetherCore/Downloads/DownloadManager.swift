@@ -48,6 +48,14 @@ public actor DownloadManager {
     /// task and the file picks up where it stopped.
     private var resumeDataByJobID: [UUID: Data] = [:]
 
+    /// Job ids whose URLSession task is about to fire
+    /// `didCompleteWithError(NSURLErrorCancelled)` because *we* cancelled
+    /// it (pause / cancel / remove), not the system or network. The
+    /// `.failed` event handler skips ids in this set so a deliberate
+    /// pause doesn't immediately get overwritten with status `.failed`.
+    /// Cleared once the matching event has been consumed.
+    private var expectedCancellations: Set<UUID> = []
+
     /// Public init. Async because we recover any in-flight tasks from
     /// the URLSession (relaunch case) and need to wait for the system.
     public init(store: DownloadStore, downloadsDirectory: URL = DownloadManager.defaultDownloadsDirectory()) async {
@@ -178,9 +186,18 @@ public actor DownloadManager {
 
     /// Pause an active download. Captures URLSession's resume data so
     /// the next `resume` continues from where the file was.
+    ///
+    /// The `task.cancel(byProducingResumeData:)` call triggers
+    /// `didCompleteWithError(NSURLErrorCancelled)` on the delegate —
+    /// which, without the `expectedCancellations` guard below, the
+    /// `.failed` event handler would then race against this method's
+    /// `updateStatus(.paused)` and immediately overwrite the row with
+    /// `.failed("Cancelled")`. Marking the id as expected before the
+    /// cancel ensures the delegate's `.failed` event is dropped.
     public func pause(_ jobID: UUID) async {
         guard let task = tasksByJobID[jobID] else { return }
         let progress = task.progress.fractionCompleted
+        expectedCancellations.insert(jobID)
         let resumeData: Data? = await withCheckedContinuation { cont in
             task.cancel(byProducingResumeData: { data in cont.resume(returning: data) })
         }
@@ -215,6 +232,12 @@ public actor DownloadManager {
     /// same row. Use `remove(_:)` for full deletion + file cleanup.
     public func cancel(_ jobID: UUID) async {
         if let task = tasksByJobID[jobID] {
+            // See pause() for the rationale on `expectedCancellations`.
+            // Without this, the delegate's `.failed(NSURLErrorCancelled)`
+            // would race our `updateStatus(.failed("Cancelled"))` below
+            // — same observable result, but cleaner to keep the failure
+            // reason we set rather than URLSession's localised string.
+            expectedCancellations.insert(jobID)
             task.cancel()
             tasksByJobID[jobID] = nil
         }
@@ -228,6 +251,7 @@ public actor DownloadManager {
     /// on Detail or Storage settings.
     public func remove(_ jobID: UUID) async {
         if let task = tasksByJobID[jobID] {
+            expectedCancellations.insert(jobID)
             task.cancel()
             tasksByJobID[jobID] = nil
         }
@@ -260,6 +284,15 @@ public actor DownloadManager {
             Self.log.notice("completed job=\(jobID, privacy: .public) size=\(sizeBytes, privacy: .public)B at=\(localURL.lastPathComponent, privacy: .public)")
 
         case let .failed(error):
+            // Was this *our* cancellation (pause / cancel / remove)? If
+            // so the matching public method already updated the store
+            // to `.paused` or `.failed("Cancelled")`; URLSession's
+            // delegate event would only overwrite it with the same
+            // (or a less useful) state. Drop the event.
+            if expectedCancellations.remove(jobID) != nil {
+                tasksByJobID[jobID] = nil
+                return
+            }
             // Only mark `.failed` if the task didn't already complete via
             // `.finished` — URLSession can fire both didFinishDownloading
             // and didCompleteWithError(nil) in the success path.
@@ -391,7 +424,19 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
 
         // Synchronous move INSIDE the delegate callback. See the type-
         // level doc comment for why this can't run on the actor.
-        let destination = downloadsDirectory.appendingPathComponent("\(id).mp4")
+        //
+        // The file extension matters: AVPlayer reads the container
+        // format from the path extension before sniffing bytes, so a
+        // .mp4 file that's actually an MKV inside fails with
+        // AVErrorCodeFileFormatNotRecognized (-11829). For Plex raw
+        // Part downloads the server attaches a
+        // `Content-Disposition: attachment; filename="…ext"` header —
+        // URLResponse parses that into `suggestedFilename`, which gives
+        // us the right extension (.mkv, .mov, .mp4, etc.). Transcoded
+        // downloads have no Content-Disposition; fall back to the URL
+        // path extension or default to .mp4.
+        let fileExt = Self.resolveFileExtension(for: downloadTask)
+        let destination = downloadsDirectory.appendingPathComponent("\(id).\(fileExt)")
         do {
             // Idempotent: directory may have been cleared by the OS since
             // DownloadManager.init last touched it (Caches eviction, app
@@ -445,6 +490,29 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
         Task { @MainActor in
             BackgroundDownloadCompletions.shared.flushAndClear()
         }
+    }
+
+    /// Pick the file extension a finished download should land with.
+    /// Order of preference:
+    ///   1. `URLResponse.suggestedFilename` — set by URLSession from the
+    ///      server's `Content-Disposition: attachment; filename="…"`
+    ///      header. Plex includes this on raw Part downloads
+    ///      (`?download=1`), Jellyfin includes it on its
+    ///      `/Items/{id}/Download` endpoint.
+    ///   2. The download URL's own path extension — works for direct
+    ///      Part URLs (`/library/parts/.../file.mkv`) when the server
+    ///      didn't send Content-Disposition.
+    ///   3. `mp4` as the universal fallback (transcoded MP4 downloads
+    ///      have no extension in the URL path; the container is mp4).
+    static func resolveFileExtension(for task: URLSessionDownloadTask) -> String {
+        if let suggested = task.response?.suggestedFilename {
+            let ext = (suggested as NSString).pathExtension
+            if !ext.isEmpty { return ext.lowercased() }
+        }
+        if let urlExt = task.originalRequest?.url?.pathExtension, !urlExt.isEmpty {
+            return urlExt.lowercased()
+        }
+        return "mp4"
     }
 }
 
