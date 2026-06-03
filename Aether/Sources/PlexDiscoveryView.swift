@@ -39,13 +39,16 @@ struct PlexDiscoveryView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Finding your servers")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Aether asks Plex which servers your account can reach.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.small)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text("Finding your servers")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Aether asks Plex which servers your account can reach.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
         }
     }
 

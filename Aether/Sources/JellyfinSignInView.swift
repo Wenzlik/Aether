@@ -36,13 +36,16 @@ struct JellyfinSignInView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Connect Jellyfin")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Enter your server address, then approve the code in Jellyfin.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.small)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text("Connect Jellyfin")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Enter your server address, then approve the code in Jellyfin.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
         }
     }
 

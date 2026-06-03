@@ -49,6 +49,14 @@ public enum AetherDesign {
         public static let accentIndigo = Color(hex: 0x6366F1)
         /// Aether Aurora — hero accent, the brightest brand tone.
         public static let accentAurora = Color(hex: 0xA855F7)
+        /// Aether Gold — the warm cinematic accent extracted from the app icon's
+        /// neon "A" mark. Pairs with violet on hero CTAs and the welcome /
+        /// onboarding bloom. **Secondary accent only** — never replaces violet
+        /// for selection, focus, or interactive primary actions.
+        public static let accentGold = Color(hex: 0xF5B524)
+        /// Slightly warmer amber sibling of `accentGold` — used for soft glows
+        /// and the bottom anchor of `cinematic` gradients.
+        public static let accentAmber = Color(hex: 0xF59E0B)
 
         // Surfaces (near-black zinc)
         public static let background = Color(hex: 0x09090B)
@@ -119,6 +127,18 @@ public enum AetherDesign {
                 center: .center,
                 startRadius: 0,
                 endRadius: 640
+            )
+        }
+
+        /// Violet → gold sweep for cinematic accents (the welcome glyph, the
+        /// Aether wordmark on hero headers). Echoes the neon "A" on the app
+        /// icon, where the violet halo gives way to the warm gold letterform.
+        /// Use sparingly — once per screen at most.
+        public static var cinematic: LinearGradient {
+            LinearGradient(
+                colors: [Palette.accentAurora, Palette.accent, Palette.accentGold],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
         }
     }

@@ -34,14 +34,20 @@ struct SettingsView: View {
 
     // MARK: - Header
 
+    /// Settings hero: the medium wordmark, the page label, a single
+    /// actionable tagline. The version moved to the About section at the
+    /// bottom — keeping the header focused on identity + intent, not facts.
     private var header: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Settings")
-                .font(AetherDesign.Typography.heroTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text("Manage your sources and your account.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+            AetherWordmark(.medium)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text("Settings")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Manage your media sources and playback.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
         }
     }
 
