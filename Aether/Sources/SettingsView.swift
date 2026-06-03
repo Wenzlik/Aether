@@ -34,9 +34,9 @@ struct SettingsView: View {
 
     // MARK: - Header
 
-    /// Settings hero: the medium wordmark, the page label, the version
-    /// (small, muted) — the brand mark replaces the previous gradient-text
-    /// rendering so the identity is consistent with Library and Welcome.
+    /// Settings hero: the medium wordmark, the page label, a single
+    /// actionable tagline. The version moved to the About section at the
+    /// bottom — keeping the header focused on identity + intent, not facts.
     private var header: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             AetherWordmark(.medium)
@@ -44,9 +44,9 @@ struct SettingsView: View {
                 Text("Settings")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("Version \(viewModel.versionString) · Manage your sources and your account.")
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                Text("Manage your media sources and playback.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
         }
     }

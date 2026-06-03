@@ -42,18 +42,41 @@ public struct AetherWordmark: View {
     }
 
     public let variant: Variant
+    /// Optional supporting line displayed under "Aether" on the right side of
+    /// the mark. When set, the layout becomes a landing-page-style brand block:
+    ///
+    /// ```
+    /// [logo]  Aether
+    ///         tagline
+    /// ```
+    ///
+    /// When `nil` the wordmark stays single-line next to the mark — the
+    /// original inline pattern used on sign-in / discovery screens.
+    public let tagline: String?
 
-    public init(_ variant: Variant = .medium) {
+    public init(_ variant: Variant = .medium, tagline: String? = nil) {
         self.variant = variant
+        self.tagline = tagline
     }
 
     public var body: some View {
         HStack(alignment: .center, spacing: spacing) {
             brandMark
-            wordmarkText
+            if let tagline {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                    wordmarkText
+                    Text(tagline)
+                        .font(taglineFont)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                wordmarkText
+            }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Aether")
+        .accessibilityLabel(tagline.map { "Aether. \($0)" } ?? "Aether")
     }
 
     // MARK: - Mark
@@ -93,24 +116,26 @@ public struct AetherWordmark: View {
 
     // MARK: - Variant metrics
 
-    /// Approx 1:1 ratio with the wordmark cap height so the mark sits visually
-    /// flush against the type without dominating it.
+    /// Mark size, in points. Tuned so the wordmark stays the primary focal
+    /// point (the type carries identity; the mark anchors it) — the mark is
+    /// roughly 1.4× the type size at large, narrowing to 1.2× at small so
+    /// the inline variant doesn't feel logo-led.
     private var markSize: CGFloat {
         switch variant {
-        case .small:  return 26
-        case .medium: return 38
-        case .large:  return 64
+        case .small:  return 22
+        case .medium: return 36
+        case .large:  return 56
         }
     }
 
-    /// Type size scales the same direction as the mark, weighted so the
-    /// wordmark always feels lighter than the mark (the type carries identity,
-    /// the mark anchors it).
+    /// Type size. The wordmark width (5 characters of display-weight text)
+    /// already exceeds the mark width at every variant, so "Aether" reads as
+    /// the focal point even when the mark is slightly taller.
     private var typeSize: CGFloat {
         switch variant {
         case .small:  return 18
         case .medium: return 26
-        case .large:  return 44
+        case .large:  return 40
         }
     }
 
@@ -134,15 +159,26 @@ public struct AetherWordmark: View {
         case .large:  return AetherDesign.Spacing.m
         }
     }
+
+    /// Tagline typography — supporting role, smaller than the wordmark so the
+    /// brand block reads `Aether` first, supporting copy second.
+    private var taglineFont: Font {
+        switch variant {
+        case .small:  return AetherDesign.Typography.caption
+        case .medium: return AetherDesign.Typography.metadata
+        case .large:  return AetherDesign.Typography.body
+        }
+    }
 }
 
 // MARK: - Previews
 
 #Preview("Wordmark variants") {
     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-        AetherWordmark(.large)
-        AetherWordmark(.medium)
+        AetherWordmark(.large, tagline: "Your media, beautifully organized.")
+        AetherWordmark(.medium, tagline: "Settings")
         AetherWordmark(.small)
+        AetherWordmark(.large)
     }
     .padding(AetherDesign.Spacing.xxl)
     .frame(maxWidth: .infinity, maxHeight: .infinity)

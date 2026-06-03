@@ -190,13 +190,14 @@ struct LibraryBrowseView: View {
 
     // MARK: - Per-library section
 
-    /// One library's row: title + item count + horizontal poster rail + "See
-    /// all" link that pushes the existing `LibraryView` grid for deep browse.
+    /// One library's row: title with inline count + horizontal poster rail +
+    /// "See all" link that pushes the existing `LibraryView` grid. The inline
+    /// `(N)` format — "Movies (1,234)" — gives a sense of scale at a glance
+    /// without taking a second line away from the artwork below.
     private func librarySectionRail(_ section: HomeFeed.LibrarySection) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(
-                title: section.library.title,
-                subtitle: itemCountLabel(for: section),
+                title: sectionTitle(for: section),
                 accessoryTitle: "See all",
                 accessoryAction: { @MainActor in navigationPath.append(section.library) }
             )
@@ -218,19 +219,18 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// "1,234 movies" / "387 series" etc. Best-effort count from the first
-    /// page of items the source returned — accurate for libraries that fit in
-    /// one page, an honest lower bound otherwise.
-    private func itemCountLabel(for section: HomeFeed.LibrarySection) -> String {
+    /// Section title with the item count baked in — `"Movies (1,234)"`. The
+    /// count is a best-effort number from the first page of items the source
+    /// returned; accurate for libraries that fit in one page, an honest lower
+    /// bound for very large libraries (true `totalSize` plumbing is future
+    /// work and the inline format makes the approximation unobtrusive).
+    private func sectionTitle(for section: HomeFeed.LibrarySection) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         let count = section.items.count
+        guard count > 0 else { return section.library.title }
         let formatted = formatter.string(from: NSNumber(value: count)) ?? "\(count)"
-        switch section.library.kind {
-        case .movie:  return count == 1 ? "1 movie" : "\(formatted) movies"
-        case .show:   return count == 1 ? "1 series" : "\(formatted) series"
-        default:      return count == 1 ? "1 item" : "\(formatted) items"
-        }
+        return "\(section.library.title) (\(formatted))"
     }
 
     // MARK: - Sizing

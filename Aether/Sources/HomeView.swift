@@ -58,6 +58,8 @@ struct HomeView: View {
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                heroHeader
+
                 if !feed.featured.isEmpty {
                     featuredSection
                 }
@@ -77,6 +79,20 @@ struct HomeView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// The Home wordmark block — replaces the previous "rails open straight
+    /// into artwork" pattern. With the brand identity now visible at the top
+    /// of the page, Home reads as Aether's product landing surface rather
+    /// than a generic media browser. Layout follows the brief:
+    ///
+    /// ```
+    /// [logo]  Aether
+    ///         Your media, beautifully organized.
+    /// ```
+    private var heroHeader: some View {
+        AetherWordmark(.large, tagline: "Your media, beautifully organized.")
+            .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     // MARK: - Section (generic horizontal poster rail)
