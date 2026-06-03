@@ -35,13 +35,20 @@ struct SettingsView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text("Settings")
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+            // Wordmark + page label. "Aether" reads as the brand mark; the
+            // smaller "Settings" line keeps the page's identity clear without
+            // hiding the product name.
+            Text("Aether")
                 .font(AetherDesign.Typography.heroTitle)
+                .foregroundStyle(AetherDesign.Gradients.cinematic)
+            Text("Settings")
+                .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
             Text("Manage your sources and your account.")
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .padding(.top, AetherDesign.Spacing.xxs)
         }
     }
 

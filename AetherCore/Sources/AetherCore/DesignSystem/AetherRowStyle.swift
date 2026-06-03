@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A colour-coded status value shown on the trailing edge of a settings /
-/// sources row, e.g. `Available` (green), `Not connected` (red), `Coming soon`
+/// sources row, e.g. `Available` (green), `Not connected` (red), `Planned`
 /// (grey). Replaces the old plain-grey value text so connection state reads at
 /// a glance from couch distance — see `docs/ux/DESIGN_PRINCIPLES.md`.
 public enum AetherStatus: Sendable, Equatable {
@@ -9,13 +9,16 @@ public enum AetherStatus: Sendable, Equatable {
     case positive(String)
     /// Red — something the user could act on is not set up (Not connected).
     case negative(String)
-    /// Grey — informational, nothing to do yet (Coming soon).
+    /// Grey — informational, nothing to do yet (Planned).
     case muted(String)
 
     public static let available = AetherStatus.positive("Available")
     public static let connected = AetherStatus.positive("Connected")
     public static let notConnected = AetherStatus.negative("Not connected")
-    public static let comingSoon = AetherStatus.muted("Coming soon")
+    /// "Planned" reads calmer and more deliberate than "Coming soon" — the
+    /// status the user lands on when a feature exists on the roadmap but
+    /// isn't shippable yet. Same grey treatment.
+    public static let comingSoon = AetherStatus.muted("Planned")
 
     public var text: String {
         switch self {

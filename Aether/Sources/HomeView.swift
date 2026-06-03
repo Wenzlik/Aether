@@ -324,16 +324,19 @@ private struct WelcomeView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: AetherDesign.Spacing.l) {
+                // Cinematic violet-→-gold gradient on the welcome glyph nods
+                // to the app icon's neon "A" mark — the first place the
+                // brand identity meets the user.
                 Image(systemName: "play.circle")
                     .font(.system(size: 64, weight: .thin))
-                    .foregroundStyle(AetherDesign.Gradients.aurora)
+                    .foregroundStyle(AetherDesign.Gradients.cinematic)
 
                 VStack(spacing: AetherDesign.Spacing.s) {
                     Text("Welcome to Aether")
                         .font(AetherDesign.Typography.heroTitle)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-                    Text("Connect a Plex or Synology source to start watching your media.")
+                    Text("Your media, beautifully organized. Connect a Plex or Synology source to begin.")
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                         .multilineTextAlignment(.center)

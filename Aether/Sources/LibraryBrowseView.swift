@@ -1,12 +1,20 @@
 import SwiftUI
 import AetherCore
 
-/// The Library tab root: pick a library, drill into its full grid.
+/// The Library tab root — Aether's browse hub.
 ///
-/// Loads the source's libraries and presents them as large focusable tiles.
-/// Selecting one pushes the existing `LibraryView` (registered as the `Library`
-/// navigation destination by `mediaNavigationDestinations`). Keeps Home's job
-/// (a cinematic feed) separate from Library's job (browse everything).
+/// Replaces the old "two big empty tiles" picker with a richer layout that
+/// makes the library feel inhabited even before the user drills in:
+/// - a branded hero header ("Aether Library" + tagline),
+/// - a Continue Watching rail (cross-library, only when there's something to
+///   resume),
+/// - a Recently Added rail (interleaved across libraries),
+/// - and a section per library with a horizontal poster rail and a "See all"
+///   link that pushes the existing `LibraryView` grid.
+///
+/// Reuses `HomeFeedBuilder` so we don't duplicate the data layer — the same
+/// per-library item fetch powers Home and Library, and the cross-library
+/// resume / recents derive from a single source of truth.
 struct LibraryBrowseView: View {
     let source: (any MediaSource)?
     let resumeStore: ResumeStore
@@ -14,12 +22,15 @@ struct LibraryBrowseView: View {
     let libraryPreferences: LibraryPreferencesStore
     let onAddSource: () -> Void
 
-    @State private var libraries: [Library] = []
+    @State private var feed: HomeFeed = .empty
     @State private var isLoading = false
     @State private var loadError: String?
+    /// Drives the `NavigationStack` so a section's "See all" can push the
+    /// per-library `LibraryView` grid. Card taps push via `NavigationLink`.
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             content
                 .background(AetherDesign.Gradients.background.ignoresSafeArea())
                 .mediaNavigationDestinations(
@@ -38,106 +49,231 @@ struct LibraryBrowseView: View {
             AetherEmptyState(
                 glyph: "rectangle.stack",
                 title: "No library yet",
-                message: "Connect a source to browse your movies and shows.",
+                message: "Connect a source and your Aether library appears here.",
                 action: .init(label: "Add a source", run: onAddSource)
             )
-        } else if let loadError, libraries.isEmpty {
+        } else if let loadError, feed.libraries.isEmpty {
             AetherErrorState(
                 title: "Couldn't load your libraries",
                 message: loadError,
                 retry: .init { Task { await load() } }
             )
-        } else if isLoading && libraries.isEmpty {
-            AetherLoadingState(.rails(count: 1))
+        } else if isLoading && feed.libraries.isEmpty {
+            AetherLoadingState(.rails(count: 2))
                 .padding(.top, AetherDesign.Spacing.l)
-        } else if libraries.isEmpty {
+        } else if feed.libraries.isEmpty {
             AetherEmptyState(
                 glyph: "tray",
                 title: "No libraries",
                 message: "This source doesn't expose any movie or show libraries Aether can read yet."
             )
         } else {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
-                    ForEach(libraries) { library in
-                        NavigationLink(value: library) {
-                            LibraryTile(library: library)
+            rails
+        }
+    }
+
+    // MARK: - Rails
+
+    private var rails: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                heroHeader
+
+                if !feed.continueWatching.isEmpty {
+                    continueWatchingRail
+                }
+
+                if !recentlyAdded.isEmpty {
+                    recentlyAddedRail
+                }
+
+                ForEach(feed.libraries) { librarySection in
+                    librarySectionRail(librarySection)
+                }
+            }
+            .padding(.top, AetherDesign.Spacing.l)
+            .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+
+    // MARK: - Hero header (branded)
+
+    private var heroHeader: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+            Text("Aether Library")
+                .font(AetherDesign.Typography.heroTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            Text("Your media, beautifully organized.")
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    // MARK: - Cross-library rails
+
+    /// Cross-library "Continue Watching" — same data as Home, exposed here so
+    /// the Library tab is useful even when the user opens it directly.
+    private var continueWatchingRail: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Continue Watching")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(feed.continueWatching) { entry in
+                        NavigationLink(value: entry.item) {
+                            AetherCard.episode(
+                                title: entry.item.title,
+                                thumbURL: entry.item.backdropURL ?? entry.item.posterURL,
+                                progress: entry.progress
+                            )
+                            .frame(width: episodeCardWidth)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(AetherDesign.Spacing.l)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
             }
+            .aetherFocusSection()
         }
     }
 
-    private var columns: [GridItem] {
+    /// Interleaved "Recently Added" rail. Plex / Jellyfin default-sort by
+    /// `addedAt:desc`, so the first items in each per-library list are the
+    /// newest. We round-robin across libraries so a single huge library
+    /// doesn't dominate, then cap at 12 cards.
+    private var recentlyAdded: [MediaItem] {
+        var perLibrary = feed.libraries.map { Array($0.items.prefix(6)) }
+        var merged: [MediaItem] = []
+        merged.reserveCapacity(12)
+        while merged.count < 12 {
+            var added = false
+            for i in 0..<perLibrary.count {
+                if !perLibrary[i].isEmpty {
+                    merged.append(perLibrary[i].removeFirst())
+                    added = true
+                    if merged.count >= 12 { break }
+                }
+            }
+            if !added { break }
+        }
+        return merged
+    }
+
+    private var recentlyAddedRail: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Recently Added")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(recentlyAdded) { item in
+                        NavigationLink(value: item) {
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL)
+                                .frame(width: posterWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
+    }
+
+    // MARK: - Per-library section
+
+    /// One library's row: title + item count + horizontal poster rail + "See
+    /// all" link that pushes the existing `LibraryView` grid for deep browse.
+    private func librarySectionRail(_ section: HomeFeed.LibrarySection) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(
+                title: section.library.title,
+                subtitle: itemCountLabel(for: section),
+                accessoryTitle: "See all",
+                accessoryAction: { @MainActor in navigationPath.append(section.library) }
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(section.items.prefix(12)) { item in
+                        NavigationLink(value: item) {
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL)
+                                .frame(width: posterWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
+    }
+
+    /// "1,234 movies" / "387 series" etc. Best-effort count from the first
+    /// page of items the source returned — accurate for libraries that fit in
+    /// one page, an honest lower bound otherwise.
+    private func itemCountLabel(for section: HomeFeed.LibrarySection) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let count = section.items.count
+        let formatted = formatter.string(from: NSNumber(value: count)) ?? "\(count)"
+        switch section.library.kind {
+        case .movie:  return count == 1 ? "1 movie" : "\(formatted) movies"
+        case .show:   return count == 1 ? "1 series" : "\(formatted) series"
+        default:      return count == 1 ? "1 item" : "\(formatted) items"
+        }
+    }
+
+    // MARK: - Sizing
+
+    private var posterWidth: CGFloat {
         #if os(tvOS)
-        [GridItem(.adaptive(minimum: 360, maximum: 460), spacing: AetherDesign.Spacing.l)]
+        300
         #else
-        [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: AetherDesign.Spacing.m)]
+        140
         #endif
     }
+
+    private var episodeCardWidth: CGFloat {
+        #if os(tvOS)
+        480
+        #else
+        296
+        #endif
+    }
+
+    // MARK: - Loading
 
     private func load() async {
         loadError = nil
         guard let source else {
-            libraries = []
+            feed = .empty
             return
         }
         isLoading = true
         defer { isLoading = false }
         do {
-            libraries = try await source.libraries()
+            let builder = HomeFeedBuilder()
+            feed = try await builder.build(source: source, resumeStore: resumeStore)
         } catch {
-            libraries = []
+            feed = .empty
             loadError = error.localizedDescription
         }
     }
 }
 
-/// A large, focusable library entry. No artwork (libraries have none), so it
-/// leans on a kind glyph + title with Aether's standard focus lift.
-private struct LibraryTile: View {
-    let library: Library
-
-    @Environment(\.isFocused) private var isFocused
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            Image(systemName: glyph)
-                .font(.system(size: 40, weight: .regular))
-                .foregroundStyle(AetherDesign.Palette.accent)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(library.title)
-                .font(AetherDesign.Typography.cardTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .lineLimit(1)
-        }
-        .padding(AetherDesign.Spacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 180)
-        .background(
-            AetherDesign.Palette.surface,
-            in: RoundedRectangle(cornerRadius: AetherDesign.Radius.cardTV, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: AetherDesign.Radius.cardTV, style: .continuous)
-                .strokeBorder(AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0.0), lineWidth: 2)
-        }
-        .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.5 : 0.0),
-                radius: isFocused ? 22 : 0,
-                y: isFocused ? 12 : 0)
-        .scaleEffect(isFocused ? 1.04 : 1.0)
-        .animation(AetherDesign.Motion.focus, value: isFocused)
-    }
-
-    private var glyph: String {
-        switch library.kind {
-        case .movie:  return "film.stack"
-        case .show:   return "tv"
-        case .season, .episode: return "rectangle.stack"
-        }
+private extension View {
+    /// Apply `.focusSection()` on tvOS for predictable D-pad movement between
+    /// rails; no-op elsewhere (the API is tvOS-only).
+    @ViewBuilder
+    func aetherFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
     }
 }
