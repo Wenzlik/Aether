@@ -63,9 +63,15 @@ public actor DownloadManager {
         // (URLSessionDownloadDelegate must be NSObject); the actor
         // consumes events from the stream. No retain cycle: the bridge
         // holds the stream's continuation, the actor holds neither.
+        // The bridge also needs the downloads directory because it moves
+        // the file synchronously inside `didFinishDownloadingTo` — see
+        // its type-level doc for the race-condition reason.
         var streamContinuation: AsyncStream<DownloadEvent>.Continuation!
         let stream = AsyncStream<DownloadEvent> { c in streamContinuation = c }
-        self.bridge = URLSessionEventBridge(continuation: streamContinuation)
+        self.bridge = URLSessionEventBridge(
+            continuation: streamContinuation,
+            downloadsDirectory: downloadsDirectory
+        )
 
         let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         // Run on cellular when the user asks for a download — they
@@ -245,38 +251,22 @@ public actor DownloadManager {
         case let .progress(fractionCompleted):
             await store.updateStatus(jobID, status: .downloading(fractionCompleted: fractionCompleted))
 
-        case let .finished(tempURL, expectedSize):
-            // Move the temp file into our persistent downloads dir
-            // *synchronously* on the actor — URLSession deletes the temp
-            // file as soon as the delegate returns, and we can't risk
-            // racing that.
-            let job = await store.all().first(where: { $0.id == jobID })
-            let filename = Self.filename(for: job, fallback: jobID.uuidString)
-            let destination = downloadsDirectory.appendingPathComponent(filename)
-            do {
-                // Replace any existing file at the destination (re-download).
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.moveItem(at: tempURL, to: destination)
-                let size = expectedSize > 0
-                    ? expectedSize
-                    : (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0).map(Int64.init) ?? 0
-                await store.updateStatus(jobID, status: .completed(localURL: destination, sizeBytes: size))
-                tasksByJobID[jobID] = nil
-                Self.log.notice("completed job=\(jobID, privacy: .public) size=\(size, privacy: .public)B at=\(destination.lastPathComponent, privacy: .public)")
-            } catch {
-                await store.updateStatus(jobID, status: .failed(reason: Self.userFacing(error: error)))
-                tasksByJobID[jobID] = nil
-                Self.log.error("move-on-finish failed job=\(jobID, privacy: .public) error=\(String(describing: error), privacy: .public)")
-            }
+        case let .finished(localURL, sizeBytes):
+            // The bridge already moved the file into place
+            // (synchronously inside `didFinishDownloadingTo`). The actor
+            // just records the destination + size in the store.
+            await store.updateStatus(jobID, status: .completed(localURL: localURL, sizeBytes: sizeBytes))
+            tasksByJobID[jobID] = nil
+            Self.log.notice("completed job=\(jobID, privacy: .public) size=\(sizeBytes, privacy: .public)B at=\(localURL.lastPathComponent, privacy: .public)")
 
         case let .failed(error):
             // Only mark `.failed` if the task didn't already complete via
             // `.finished` — URLSession can fire both didFinishDownloading
             // and didCompleteWithError(nil) in the success path.
-            let current = await store.status(for: await jobMediaID(for: jobID) ?? .init(source: .mock, rawValue: ""))
-            if case .completed = current { return }
+            if let mediaID = await jobMediaID(for: jobID) {
+                let current = await store.status(for: mediaID)
+                if case .completed = current { return }
+            }
             await store.updateStatus(jobID, status: .failed(reason: Self.userFacing(error: error)))
             tasksByJobID[jobID] = nil
             Self.log.error("failed job=\(jobID, privacy: .public) error=\(String(describing: error), privacy: .public)")
@@ -305,31 +295,7 @@ public actor DownloadManager {
         }
     }
 
-    // MARK: - Filename + error helpers
-
-    /// Build an on-disk filename that's stable per job (so re-downloads
-    /// overwrite, and the file is debuggable when poking around the
-    /// container with Files.app). Falls back to `{uuid}.bin` when no
-    /// job metadata is available (shouldn't happen in practice).
-    private static func filename(for job: DownloadJob?, fallback: String) -> String {
-        guard let job else { return "\(fallback).bin" }
-        let safeTitle = sanitize(job.title)
-        // We don't know the right extension yet — Plex's transcoded
-        // download is always .mp4, the Part file matches the source
-        // container (.mp4 / .mkv / .mov). For simplicity Phase 2.0
-        // settles on `.mp4` (transcoded) when quality is capped,
-        // `.bin` otherwise (the player reads the actual container from
-        // the file). Will refine when we wire Jellyfin downloads.
-        let ext = (job.quality == .original) ? "bin" : "mp4"
-        return "\(safeTitle)-\(job.id.uuidString.prefix(8)).\(ext)"
-    }
-
-    private static func sanitize(_ raw: String) -> String {
-        let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|").union(.whitespacesAndNewlines)
-        let parts = raw.unicodeScalars.split { forbidden.contains($0) }
-        let joined = parts.map { String(String.UnicodeScalarView($0)) }.joined(separator: "_")
-        return joined.isEmpty ? "Untitled" : String(joined.prefix(80))
-    }
+    // MARK: - Error helpers
 
     private static func userFacing(error: any Error) -> String {
         let ns = error as NSError
@@ -355,13 +321,30 @@ public actor DownloadManager {
 /// every relevant callback into an `AsyncStream`. The `DownloadManager`
 /// actor drains that stream.
 ///
+/// **The file move happens synchronously in the delegate**, not on the
+/// actor side. The temp file URLSession hands us at
+/// `didFinishDownloadingTo` lives in the system daemon's container
+/// (`/.nofollow/.../com.apple.nsurlsessiond/Downloads/`) and is deleted
+/// as soon as the delegate returns. An async actor hop loses the race —
+/// we'd see `NSPOSIXError 2` ("No such file or directory") and the
+/// download would land as `.failed` after a 100% progress trace. Moving
+/// inside the delegate, before the yield, keeps us inside the window
+/// URLSession guarantees.
+///
 /// Lives in this file (not its own) because it's an implementation
 /// detail of the manager and has no consumers elsewhere.
 private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let continuation: AsyncStream<DownloadEvent>.Continuation
+    /// Where finished downloads land. Captured at init from
+    /// `DownloadManager.defaultDownloadsDirectory()`; the bridge re-
+    /// creates it on every move attempt as a belt-and-braces against the
+    /// system having cleared the Caches container behind our back.
+    let downloadsDirectory: URL
 
-    init(continuation: AsyncStream<DownloadEvent>.Continuation) {
+    init(continuation: AsyncStream<DownloadEvent>.Continuation,
+         downloadsDirectory: URL) {
         self.continuation = continuation
+        self.downloadsDirectory = downloadsDirectory
         super.init()
     }
 
@@ -381,15 +364,45 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
                     downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         guard let id = downloadTask.taskDescription else { return }
-        // URLSession will delete `location` after this delegate returns;
-        // the manager must move the file inside its event handler. We
-        // copy the URL into the event — the manager hops to its actor
-        // and moves the file there. URLSession typically gives us a few
-        // hundred ms.
         let expected = downloadTask.response?.expectedContentLength ?? -1
+
+        // Synchronous move INSIDE the delegate callback. See the type-
+        // level doc comment for why this can't run on the actor.
+        let destination = downloadsDirectory.appendingPathComponent("\(id).mp4")
+        do {
+            // Idempotent: directory may have been cleared by the OS since
+            // DownloadManager.init last touched it (Caches eviction, app
+            // re-install simulator quirks, etc.). Belt + braces.
+            try FileManager.default.createDirectory(
+                at: downloadsDirectory, withIntermediateDirectories: true
+            )
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: location, to: destination)
+        } catch {
+            // The temp file is already gone or unmovable — there's nothing
+            // we can do here. Forward to the actor as a failure and let
+            // the user retry. We deliberately do NOT yield `.finished`
+            // because the destination doesn't exist.
+            continuation.yield(DownloadEvent(taskDescription: id, kind: .failed(error: error)))
+            return
+        }
+
+        // Resolve the on-disk size — `expected` is the server-advertised
+        // bytes which may not match the actual file (chunked encoding,
+        // transcoder cut-off). Read the file's real size for the store.
+        let actualSize: Int64 = {
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: destination.path),
+               let size = attrs[.size] as? Int64 {
+                return size
+            }
+            return max(expected, 0)
+        }()
+
         continuation.yield(DownloadEvent(
             taskDescription: id,
-            kind: .finished(tempURL: location, expectedSize: expected)
+            kind: .finished(localURL: destination, sizeBytes: actualSize)
         ))
     }
 
@@ -424,7 +437,10 @@ private struct DownloadEvent: @unchecked Sendable {
 
     enum Kind {
         case progress(fractionCompleted: Double)
-        case finished(tempURL: URL, expectedSize: Int64)
+        /// Fired AFTER the bridge has synchronously moved the file into
+        /// place. `localURL` is the on-disk destination, not a temp path —
+        /// the actor handler just needs to record it in the store.
+        case finished(localURL: URL, sizeBytes: Int64)
         case failed(error: any Error)
     }
 }
