@@ -510,6 +510,98 @@ public actor PlexMediaSource: MediaSource {
         await sessionManager.stop(request, sessionID: sessionID)
     }
 
+    /// Plex always supports downloads via the progressive-MP4 transcode
+    /// endpoint. Synchronous flag so Detail's Download button visibility
+    /// is decided at view-render time without an actor hop.
+    public nonisolated var supportsDownloads: Bool { true }
+
+    /// Drop any cached connection so the next request re-probes against the
+    /// ranked list. Called by `downloadURL(for:quality:)` so a download
+    /// queued after the user moved off LAN doesn't try to hit the stale
+    /// LAN URL.
+    private func invalidateConnectionForFreshProbe() {
+        resolvedBaseURL = nil
+        resolvedIsLocal = false
+    }
+
+    /// Build a download URL for an item — a progressive-MP4 transcode the
+    /// `DownloadManager`'s background `URLSession` can pull in one big GET.
+    ///
+    /// Phase 2.0 uses the universal-transcoder endpoint with
+    /// `protocol=http` (instead of `protocol=hls`) for **every** quality,
+    /// including Original. That means the server transcodes / remuxes even
+    /// when the source container is directly downloadable (mp4 / mov / m4v
+    /// could be GET'd raw). Tradeoff: simpler one-path implementation, at
+    /// the cost of some server CPU for direct-playable Originals. A future
+    /// optimisation will route Original-quality + AVPlayer-friendly
+    /// containers through the raw Part URL.
+    public func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? {
+        guard item.id.source == self.id else { return nil }
+        // Force a fresh probe: the user might have moved off LAN between
+        // the last library fetch and pressing Download. Cached LAN URLs
+        // would resolve to a dead 192.168.x.x host that
+        // URLSession.background can't recover from. The probe takes
+        // ~probeTimeout per dead candidate but is bounded by the
+        // connection list (typically 3-5 candidates).
+        invalidateConnectionForFreshProbe()
+        let base = try await resolveBaseURL()
+
+        // Prefer the raw Part file URL for Original quality — same path
+        // Plex Web's Download button uses (`?download=1` flag turns the
+        // response into a Content-Disposition attachment). This avoids
+        // the universal-transcoder endpoint entirely; the server just
+        // serves the file from disk. Critically, this works through
+        // Plex's remote endpoints where `/transcode/universal/start?
+        // protocol=http` returns HTTP 400.
+        if quality == .original, let fileURL = item.originalFileURL,
+           let rebased = rebaseTokenisedURL(fileURL, to: base) {
+            return appendingQueryItem(rebased, name: "download", value: "1")
+        }
+        var components = URLComponents(
+            url: base.appendingPathComponent("/video/:/transcode/universal/start"),
+            resolvingAgainstBaseURL: false
+        )
+        var queryItems = [
+            URLQueryItem(name: "path", value: "/library/metadata/\(item.id.rawValue)"),
+            // The key difference from `transcodeStartURL`: `protocol=http`
+            // makes Plex emit a single progressive MP4 stream instead of an
+            // HLS playlist. `URLSessionDownloadTask` can pull it in one
+            // request and save it as a movable file.
+            URLQueryItem(name: "protocol", value: "http"),
+            URLQueryItem(name: "container", value: "mp4"),
+            URLQueryItem(name: "directPlay", value: "0"),
+            URLQueryItem(name: "directStream", value: "1"),
+            URLQueryItem(name: "fastSeek", value: "1"),
+            URLQueryItem(name: "mediaIndex", value: "0"),
+            URLQueryItem(name: "partIndex", value: "0"),
+            URLQueryItem(name: "videoQuality", value: "100"),
+            // Each download gets a fresh transcoder session so a stuck job
+            // can't poison subsequent attempts.
+            URLQueryItem(name: "session", value: UUID().uuidString),
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: configuration.clientIdentifier),
+            URLQueryItem(name: "X-Plex-Product", value: configuration.product),
+            URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
+            URLQueryItem(name: "X-Plex-Token", value: accessToken)
+        ]
+        if let maxKbps = quality.maxVideoBitrateKbps {
+            queryItems.append(URLQueryItem(name: "maxVideoBitrate", value: String(maxKbps)))
+        }
+        if let resolution = quality.videoResolution {
+            queryItems.append(URLQueryItem(name: "videoResolution", value: resolution))
+        }
+        if let audioStreamID = item.selectedAudioTrackID {
+            queryItems.append(URLQueryItem(name: "audioStreamID", value: audioStreamID))
+        }
+        if let subtitleStreamID = item.selectedSubtitleTrackID {
+            queryItems.append(URLQueryItem(name: "subtitleStreamID", value: subtitleStreamID))
+        }
+        if resolvedIsLocal {
+            queryItems.append(URLQueryItem(name: "location", value: "lan"))
+        }
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
     /// A warm-up GET for an `.m3u8` URL. The token already rides in the query
     /// (AVPlayer can't set headers), so this just adds the common headers.
     private func warmUpRequest(for url: URL) -> URLRequest {
@@ -558,17 +650,41 @@ public actor PlexMediaSource: MediaSource {
     /// order. The first success is cached for the rest of the session.
     /// Throws `PlexConnectionError.noReachableConnection` when every candidate
     /// fails (e.g. server offline, or off-network with no remote connection).
+    ///
+    /// Logs every candidate's verdict to the playback log so off-LAN issues
+    /// can be diagnosed without a debugger: if the user's resource list has
+    /// only LAN (no relay / no remote), the log shows that explicitly —
+    /// the fix is server-side (enable Plex Remote Access).
     func resolveBaseURL() async throws -> URL {
         if let resolvedBaseURL { return resolvedBaseURL }
 
+        Self.log.notice(
+            "resolveBaseURL probing candidates=\(self.connections.count, privacy: .public) local=\(self.connections.filter { $0.isLocal }.count, privacy: .public) relay=\(self.connections.filter { $0.isRelay }.count, privacy: .public)"
+        )
+
         for connection in connections {
             guard let base = connection.url else { continue }
-            if await isReachable(base) {
+            let kind = connection.isLocal ? "lan" : (connection.isRelay ? "relay" : "remote")
+            let host = base.host ?? "?"
+            let reachable = await isReachable(base)
+            Self.log.notice(
+                "  candidate kind=\(kind, privacy: .public) host=\(host, privacy: .public) reachable=\(reachable, privacy: .public)"
+            )
+            if reachable {
                 resolvedBaseURL = base
                 resolvedIsLocal = connection.isLocal
                 return base
             }
         }
+
+        // No candidate worked. Diagnose for the user: an "only LAN" list
+        // means Remote Access isn't enabled on the server — we can't fix
+        // that from the client.
+        let hasRemote = connections.contains { !$0.isLocal && !$0.isRelay }
+        let hasRelay = connections.contains { $0.isRelay }
+        Self.log.error(
+            "no reachable connection. lanOnly=\(!hasRemote && !hasRelay, privacy: .public) hasRelay=\(hasRelay, privacy: .public) hasRemote=\(hasRemote, privacy: .public)"
+        )
         throw PlexConnectionError.noReachableConnection
     }
 
@@ -628,7 +744,18 @@ public actor PlexMediaSource: MediaSource {
             subtitleTracks: subtitleTracks,
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
             partID: dto.firstPartID,
+            // Always the raw Part file URL — the source-of-truth file the
+            // server has on disk. Same shape Plex Web uses for its download
+            // button. Independent of `streamURL`, which may be a transcode
+            // placeholder for unfriendly containers.
+            originalFileURL: tokenisedURL(base: base, path: dto.firstPartKey),
             mediaInfo: dto.sourceMediaInfo,
+            // Episode context — populated from grandparentTitle /
+            // parentIndex / index when the DTO is an episode. Movies
+            // leave these nil; `displayTitle` collapses gracefully.
+            seriesTitle: dto.grandparentTitle,
+            seasonNumber: dto.parentIndex,
+            episodeNumber: dto.index,
             selectedQuality: .original
         )
     }
@@ -773,6 +900,37 @@ public actor PlexMediaSource: MediaSource {
         var query = components.queryItems ?? []
         query.append(URLQueryItem(name: "X-Plex-Token", value: accessToken))
         components.queryItems = query
+        return components.url
+    }
+
+    /// Re-anchor a tokenised URL onto a different base (host + scheme +
+    /// port). The path and query items survive; only the host moves. Used
+    /// when `MediaItem.originalFileURL` was tokenised against a LAN base
+    /// during library load, but the download needs to go through the
+    /// currently-reachable connection (e.g. remote). Falls back to the
+    /// original URL if URLComponents can't parse anything.
+    nonisolated func rebaseTokenisedURL(_ url: URL, to newBase: URL) -> URL? {
+        guard
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let newBaseComponents = URLComponents(url: newBase, resolvingAgainstBaseURL: false)
+        else { return url }
+        components.scheme = newBaseComponents.scheme
+        components.host = newBaseComponents.host
+        components.port = newBaseComponents.port
+        return components.url
+    }
+
+    /// Append or override a single query item on a URL. Plex's
+    /// `?download=1` flag is the canonical example — flip from "stream"
+    /// to "download" behaviour without rebuilding the URL from scratch.
+    nonisolated func appendingQueryItem(_ url: URL, name: String, value: String) -> URL? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == name }
+        items.append(URLQueryItem(name: name, value: value))
+        components.queryItems = items
         return components.url
     }
 }

@@ -168,26 +168,85 @@ PlaybackSession (actor)
 ## Offline architecture
 
 ```
-Library view ─────► DownloadAction (start / pause / delete)
-                          │
-                          ▼
-                  DownloadManager (actor)
-                          │
-            ┌─────────────┼─────────────┐
-            ▼             ▼             ▼
-   URLSession        DownloadStore    DiskBudget
-   (background       (metadata)       (LRU eviction)
-   config)
-            │
-            ▼
-   Local file in app's caches directory
+Detail · Storage tab ─► enqueue / pause / cancel / remove
+                                   │
+                                   ▼
+                       DownloadManager (actor)
+                       ├─ URLSession.background (one per app process)
+                       ├─ URLSessionEventBridge (NSObject delegate → AsyncStream)
+                       └─ expectedCancellations: Set<UUID>
+                                   │
+                                   ▼
+                       DownloadStore (actor)
+                       ├─ in-memory dict (jobs + statuses)
+                       └─ Codable JSON file in Application Support
+                                   │
+                                   ▼   snapshotStream
+                       DownloadObserver (@MainActor @Observable)
+                                   │
+                                   ▼
+                            SwiftUI views
+                            (Storage tab, Library "Downloaded" rail,
+                             Detail Download row)
 ```
 
-- Downloads use a `URLSession` with a `background` configuration so they survive app suspension.
-- `DownloadStore` persists download metadata (item id, source, local URL, sizes, dates) in a small SwiftData store.
-- `DiskBudget` is a small actor that evicts least-recently-watched downloaded items when the user's configured cap is exceeded, unless the user has pinned an item.
-- Offline playback resolves the local URL first; if missing, falls back to the source's stream URL.
-- Resume points written offline land in an outbox; they sync to the server next time the source is reachable.
+- **`DownloadManager` (actor)** — single instance per app process,
+  owns one `URLSession.background` (identifier
+  `cz.zmrhal.aether.downloads`). Public API: `enqueue` / `pause` /
+  `resume` / `cancel` / `remove`. On launch `recoverExistingTasks()`
+  walks `session.allTasks` and re-binds each task to its `DownloadJob`
+  via `taskDescription = jobID.uuidString`.
+- **`URLSessionEventBridge` (class)** — `URLSessionDownloadDelegate`
+  conformance is on a class (Apple requires NSObject), so a small
+  bridge yields delegate callbacks into an `AsyncStream<DownloadEvent>`
+  the actor drains. The file **move** from the system daemon's temp
+  container to Application Support runs synchronously inside the
+  delegate, not after the actor hop — URLSession deletes the temp
+  file the moment the delegate returns, so any async hop loses the
+  file.
+- **`DownloadStore` (actor)** — in-memory dict of jobs + statuses
+  with a Codable JSON file at
+  `~/Library/Application Support/Aether/downloads.json` (excluded
+  from iCloud backup). Writes are atomic (single-file replace) and
+  fire a fresh `DownloadSnapshot` into every `snapshotStream()`
+  iterator after each mutation.
+- **`DownloadObserver` (`@MainActor @Observable`)** — mirrors the
+  store's snapshot into a SwiftUI-readable property so views can
+  query `observer.snapshot.status(for: mediaID)` synchronously in
+  `body` without crossing the actor.
+- **Source `downloadURL(for:quality:)` capability** — optional
+  protocol method, default `nil`. Plex returns the raw Part URL
+  with `?download=1` for `.original` (no transcoder, single GET);
+  bitrate caps fall through to the universal-transcoder MP4 endpoint
+  (`protocol=http`). Each request first invalidates the cached
+  connection so the user moving off LAN gets re-routed to the live
+  remote / relay candidate.
+- **Offline-first playback override** — `PlaybackSession.prepare`
+  checks `downloadStore.status(for: item.id)`; if a `.completed` job
+  exists AND `AVURLAsset.isPlayable` returns `true`, the player gets
+  the file URL directly — no source call, no warm-up. Unplayable
+  codecs (rare but real on MKV / DTS / TrueHD) silently fall through
+  to the source layer; the user gets streaming playback instead of
+  an error screen.
+- **Background-launch lifecycle** — iOS wakes the app via
+  `UIApplicationDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)`
+  when a download finishes while we're suspended. A minimal
+  `AppDelegate` adapter on `AetherApp` stores the completion handler
+  on a `@MainActor` singleton (`BackgroundDownloadCompletions`); the
+  bridge calls `flushAndClear()` from
+  `urlSessionDidFinishEvents(forBackgroundURLSession:)` once all events
+  have been delivered.
+- **Cancellation race protection** — `pause` / `cancel` / `remove`
+  add the jobID to `expectedCancellations: Set<UUID>` *before*
+  calling `task.cancel(...)`, because that call triggers
+  `didCompleteWithError(NSURLErrorCancelled)` on the delegate. The
+  `.failed` event handler drops events for ids in the set so a
+  deliberate pause doesn't get overwritten with `.failed("Cancelled")`.
+- **Resume points** still flow through the existing
+  `ResumeStore` + iCloud KVS; nothing offline-specific is needed
+  there. A disk budget + LRU eviction is the next layer (carried
+  forward — Storage tab surfaces totals and free space today,
+  enforcement comes later).
 
 ---
 

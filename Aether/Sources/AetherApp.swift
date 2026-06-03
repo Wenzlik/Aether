@@ -8,6 +8,15 @@ import UIKit
 @main
 struct AetherApp: App {
     @State private var session = AppSession()
+    // Adapter for the one UIKit-shaped callback SwiftUI's app lifecycle
+    // doesn't expose: `application(_:handleEventsForBackgroundURLSession:`
+    // `completionHandler:)`. Without it iOS keeps the app awake after
+    // delivering background download events, burning battery; with it we
+    // hand the closure to `BackgroundDownloadCompletions` and let the
+    // URLSession bridge release it when all events have been processed.
+    #if canImport(UIKit)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -18,6 +27,41 @@ struct AetherApp: App {
         }
     }
 }
+
+// MARK: - AppDelegate (background URL session bridge only)
+
+#if canImport(UIKit)
+/// Minimal `UIApplicationDelegate` that exists solely to bridge one
+/// background `URLSession` callback that SwiftUI's lifecycle doesn't
+/// surface. Everything else (scenes, state restoration, push) is handled
+/// by SwiftUI's `App` / `Scene` modifiers.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+
+    /// Called by iOS when a background `URLSession` event arrives while
+    /// the app is suspended. The closure is the OS-side latch: we MUST
+    /// invoke it once URLSession reports it's drained its event queue,
+    /// otherwise iOS keeps the app held in the background.
+    ///
+    /// We can't call the closure directly here — URLSession events are
+    /// still arriving on the delegate (the `URLSessionEventBridge` owned
+    /// by `DownloadManager`). The bridge knows when to flush via its
+    /// `urlSessionDidFinishEvents(forBackgroundURLSession:)` callback,
+    /// and uses the `BackgroundDownloadCompletions` singleton to find
+    /// the closure we stashed here.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            BackgroundDownloadCompletions.shared.storeHandler(
+                completionHandler,
+                identifier: identifier
+            )
+        }
+    }
+}
+#endif
 
 /// Owns the long-lived app-wide dependencies: the active media source, the
 /// resume store, the playback session, the Plex auth seam, and the Plex
@@ -45,6 +89,24 @@ final class AppSession {
     let keychain: KeychainStore
     let api: any APIClient
     let libraryPreferences: LibraryPreferencesStore
+
+    // MARK: - Downloads
+
+    /// Single-source-of-truth for download state. `nil` until `start()` has
+    /// finished its async init; views guard for that during the first paint
+    /// (the store + manager need `await` to spin up — initialising
+    /// synchronously in `init` would force every test fixture to be async,
+    /// so the cost is contained here).
+    private(set) var downloadStore: DownloadStore?
+
+    /// Owns the single background `URLSession`. Phase 2.0 wired the
+    /// behaviour; Phase 2.1 surfaces it to the UI via the observer below.
+    private(set) var downloadManager: DownloadManager?
+
+    /// `@MainActor`-bound mirror of `DownloadStore` for SwiftUI views.
+    /// Reads `downloads.snapshot.status(for: item.id)` synchronously from
+    /// `body` — no actor hop, no `await` in the render path.
+    private(set) var downloads: DownloadObserver?
 
     // MARK: - Plex — auth
 
@@ -145,7 +207,21 @@ final class AppSession {
         activeSourceKind = await loadActiveSourceKind()
         refreshActiveSource()
 
-        // 4. If Plex is signed in but no server is on file, run discovery so
+        // 4. Boot the downloads pipeline. The store reads its JSON file off
+        //    disk; the manager rebinds any in-flight URLSession tasks from
+        //    a previous launch. Both are idempotent. The observer is a
+        //    `@MainActor`-bound mirror SwiftUI views can read directly.
+        //    Attaching the store to PlaybackSession is what enables the
+        //    offline override: completed downloads play from disk without
+        //    touching the source layer.
+        let store = await DownloadStore()
+        let manager = await DownloadManager(store: store)
+        downloadStore = store
+        downloadManager = manager
+        downloads = DownloadObserver(store: store)
+        await playback.attachDownloadStore(store)
+
+        // 5. If Plex is signed in but no server is on file, run discovery so
         //    Home doesn't sit at the empty state forever.
         if isPlexSignedIn && plexServer == nil {
             await discoverPlexServers()
@@ -158,7 +234,7 @@ final class AppSession {
         let identifier = await ensurePlexClientIdentifier()
         let config = PlexConfiguration(
             product: "Aether",
-            version: "0.2.0",
+            version: "0.3.0",
             clientIdentifier: identifier,
             deviceName: currentDeviceName,
             platform: currentPlatform,
@@ -335,7 +411,7 @@ final class AppSession {
         let deviceID = await ensureJellyfinDeviceID()
         let config = JellyfinConfiguration(
             client: "Aether",
-            version: "0.2.0",
+            version: "0.3.0",
             deviceName: currentDeviceName,
             deviceID: deviceID
         )

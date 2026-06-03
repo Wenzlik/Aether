@@ -16,6 +16,11 @@ struct HomeView: View {
     let plexDiscoveryState: AppSession.DiscoveryState
     let onAddSource: () -> Void
     let onRetryDiscovery: () -> Void
+    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
+    /// Download button. Optional — `nil` before `AppSession.start()` has
+    /// booted the downloads pipeline.
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -23,16 +28,25 @@ struct HomeView: View {
     /// Drives the `NavigationStack` so a library rail's "See all" accessory can
     /// push `LibraryView`. Card taps push onto the same path via `NavigationLink`.
     @State private var navigationPath = NavigationPath()
+    /// Bound to the system search bar (`.searchable` modifier). When
+    /// non-empty, Home swaps its rails for `MediaSearchResults`. Same
+    /// search surface Library offers — both tabs let the user reach the
+    /// same client-side title filter so search isn't trapped behind a
+    /// dedicated tab anymore.
+    @State private var searchQuery = ""
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
                 .background(AetherDesign.Gradients.background.ignoresSafeArea())
+                .searchable(text: $searchQuery, prompt: "Search your library")
                 .mediaNavigationDestinations(
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences
+                    libraryPreferences: libraryPreferences,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
         }
         // Reload whenever the source changes (nil → Plex after discovery, or
@@ -40,9 +54,17 @@ struct HomeView: View {
         .task(id: source?.id) { await load() }
     }
 
+    /// True when the user is searching from Home. Drives the swap from
+    /// rails to results — same behaviour Library has.
+    private var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @ViewBuilder
     private var content: some View {
-        if let loadError {
+        if isSearching {
+            MediaSearchResults(source: source, query: searchQuery)
+        } else if let loadError {
             errorState(loadError)
         } else if isLoading && feed == .empty {
             loadingState
