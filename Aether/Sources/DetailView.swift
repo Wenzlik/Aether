@@ -97,8 +97,17 @@ struct DetailView: View {
             await loadChildrenIfNeeded()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
-        .sheet(item: $presentedSelector) { _ in
-            playbackSelectorSheet
+        .sheet(item: $presentedSelector) { selector in
+            // Use the closure parameter, not the @State again. On first
+            // presentation SwiftUI evaluates the sheet body before the
+            // @State write has propagated through, so reading
+            // `presentedSelector` inside `playbackSelectorSheet` hits
+            // the stale `nil` value, the switch falls into `case .none`,
+            // and the user sees an empty sheet. Reopening works because
+            // by then @State is settled. The closure parameter is the
+            // snapshot at presentation — always non-nil, always
+            // correct.
+            playbackSelectorSheet(for: selector)
         }
     }
 
@@ -512,29 +521,30 @@ struct DetailView: View {
         }
     }
 
-    /// The bottom sheet behind the disclosure rows. Half-height on iOS, full
-    /// modal on tvOS / visionOS. Driven by `presentedSelector`.
-    private var playbackSelectorSheet: some View {
-        Group {
-            switch presentedSelector {
-            case .audio:
-                playbackSelectorContent(title: "Audio") {
-                    audioSelectorList
-                }
-            case .subtitles:
-                playbackSelectorContent(title: "Subtitles") {
-                    subtitleSelectorList
-                }
-            case .quality:
-                playbackSelectorContent(title: "Quality") {
-                    qualitySelectorList
-                }
-            case .downloadQuality:
-                playbackSelectorContent(title: "Download Quality") {
-                    downloadQualitySelectorList
-                }
-            case .none:
-                EmptyView()
+    /// The bottom sheet behind the disclosure rows. Half-height on iOS,
+    /// full modal on tvOS / visionOS. Takes the `selector` as a
+    /// parameter (passed by `.sheet(item:)` at presentation time) so it
+    /// always renders the right content — see the comment at the
+    /// `.sheet` call site for why reading `presentedSelector` directly
+    /// here was the source of the "empty sheet on first open" bug.
+    @ViewBuilder
+    private func playbackSelectorSheet(for selector: PlaybackSelector) -> some View {
+        switch selector {
+        case .audio:
+            playbackSelectorContent(title: "Audio") {
+                audioSelectorList
+            }
+        case .subtitles:
+            playbackSelectorContent(title: "Subtitles") {
+                subtitleSelectorList
+            }
+        case .quality:
+            playbackSelectorContent(title: "Quality") {
+                qualitySelectorList
+            }
+        case .downloadQuality:
+            playbackSelectorContent(title: "Download Quality") {
+                downloadQualitySelectorList
             }
         }
     }
