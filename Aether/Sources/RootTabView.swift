@@ -44,6 +44,10 @@ struct RootTabView: View {
 
             Tab("Storage", systemImage: "internaldrive") {
                 StorageView(
+                    source: session.source,
+                    resumeStore: session.resumeStore,
+                    playbackSession: session.playback,
+                    libraryPreferences: session.libraryPreferences,
                     downloadManager: session.downloadManager,
                     downloads: session.downloads
                 )

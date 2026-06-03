@@ -750,6 +750,12 @@ public actor PlexMediaSource: MediaSource {
             // placeholder for unfriendly containers.
             originalFileURL: tokenisedURL(base: base, path: dto.firstPartKey),
             mediaInfo: dto.sourceMediaInfo,
+            // Episode context — populated from grandparentTitle /
+            // parentIndex / index when the DTO is an episode. Movies
+            // leave these nil; `displayTitle` collapses gracefully.
+            seriesTitle: dto.grandparentTitle,
+            seasonNumber: dto.parentIndex,
+            episodeNumber: dto.index,
             selectedQuality: .original
         )
     }

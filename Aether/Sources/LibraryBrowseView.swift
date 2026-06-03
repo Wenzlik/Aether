@@ -161,20 +161,24 @@ struct LibraryBrowseView: View {
     private func downloadedCard(_ job: DownloadJob) -> some View {
         // Find the live MediaItem (from any loaded library section) to
         // get the full metadata. Falls back to a synthetic item built
-        // from the job snapshot so the card is tappable even before the
-        // source has finished loading.
+        // from the job snapshot — including the episode-context fields
+        // — so the card reads "Breaking Bad · S1E1 · Pilot" even when
+        // the source is offline.
         let item = feed.libraries
             .flatMap { $0.items }
             .first { $0.id == job.mediaID }
             ?? MediaItem(
                 id: job.mediaID,
                 title: job.title,
-                kind: .movie,
-                posterURL: job.posterURL
+                kind: job.kind,
+                posterURL: job.posterURL,
+                seriesTitle: job.seriesTitle,
+                seasonNumber: job.seasonNumber,
+                episodeNumber: job.episodeNumber
             )
 
         NavigationLink(value: item) {
-            AetherCard.poster(title: item.title, posterURL: item.posterURL)
+            AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL)
                 .frame(width: posterWidth)
         }
         .buttonStyle(.plain)

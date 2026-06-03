@@ -164,6 +164,10 @@ public actor DownloadManager {
             mediaID: item.id,
             title: item.title,
             posterURL: item.posterURL,
+            kind: item.kind,
+            seriesTitle: item.seriesTitle,
+            seasonNumber: item.seasonNumber,
+            episodeNumber: item.episodeNumber,
             quality: quality
         )
         await store.record(job)

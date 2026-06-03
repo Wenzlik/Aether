@@ -30,6 +30,22 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
     /// auth) so it still loads while the user is signed-in to that source.
     public let posterURL: URL?
 
+    /// Whether this download is a movie or an episode. Lets the offline
+    /// surfaces decide which display format to use without re-fetching
+    /// metadata.
+    public let kind: MediaItem.Kind
+
+    /// For episodes: the parent series title at enqueue time. Captured
+    /// so Storage rows can render "Breaking Bad · S1E1 · Pilot" even
+    /// when the source is unreachable.
+    public let seriesTitle: String?
+
+    /// For episodes: parent season number.
+    public let seasonNumber: Int?
+
+    /// For episodes: this episode's number within its season.
+    public let episodeNumber: Int?
+
     /// User's quality choice at queue time. Stored so we can re-issue the
     /// download with the same parameters after a Retry, and so the
     /// Storage section can later report "Inception · 8 Mbps · 1.4 GB".
@@ -44,6 +60,10 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         mediaID: MediaID,
         title: String,
         posterURL: URL? = nil,
+        kind: MediaItem.Kind = .movie,
+        seriesTitle: String? = nil,
+        seasonNumber: Int? = nil,
+        episodeNumber: Int? = nil,
         quality: PlaybackQuality,
         createdAt: Date = Date()
     ) {
@@ -51,10 +71,30 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         self.mediaID = mediaID
         self.title = title
         self.posterURL = posterURL
+        self.kind = kind
+        self.seriesTitle = seriesTitle
+        self.seasonNumber = seasonNumber
+        self.episodeNumber = episodeNumber
         self.quality = quality
         self.createdAt = createdAt
     }
+
+    /// Same `displayTitle` semantics as `MediaItem`, but resolved from
+    /// the snapshot stored on this job. Used by Storage rows and the
+    /// Library "Downloaded" rail when the live `MediaItem` may not be
+    /// loaded (offline / source disconnected).
+    public var displayTitle: String {
+        guard kind == .episode else { return title }
+        let episodeCode: String? = {
+            guard let seasonNumber, let episodeNumber else { return nil }
+            return "S\(seasonNumber)E\(episodeNumber)"
+        }()
+        let parts: [String] = [seriesTitle, episodeCode, title].compactMap { $0 }
+        return parts.joined(separator: " · ")
+    }
 }
+
+extension MediaItem.Kind: Codable {}
 
 // MARK: - MediaID Codable conformance
 

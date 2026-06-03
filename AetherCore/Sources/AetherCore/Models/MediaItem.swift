@@ -41,6 +41,17 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Pre-playback media info shown on Detail (source codec, resolution,
     /// bitrate, HDR badge). Filled by the source layer from server metadata.
     public let mediaInfo: MediaInfo?
+    /// For episodes: the parent series's display title (Plex's
+    /// `grandparentTitle`). `nil` for movies and standalone clips.
+    /// Surfaced in rails / Storage rows so the user reads
+    /// "Breaking Bad" alongside the episode name instead of just "Pilot".
+    public let seriesTitle: String?
+    /// For episodes: parent season number (Plex's `parentIndex`).
+    /// Combined with `episodeNumber` to render the "S1E1" prefix.
+    public let seasonNumber: Int?
+    /// For episodes: the episode's own number within its season (Plex's
+    /// `index`).
+    public let episodeNumber: Int?
     /// The Detail-screen quality picker selection. Defaults to `.original`
     /// (Direct Play priority) — every other choice biases toward a transcode.
     public let selectedQuality: PlaybackQuality
@@ -62,6 +73,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         partID: String? = nil,
         originalFileURL: URL? = nil,
         mediaInfo: MediaInfo? = nil,
+        seriesTitle: String? = nil,
+        seasonNumber: Int? = nil,
+        episodeNumber: Int? = nil,
         selectedQuality: PlaybackQuality = .original
     ) {
         self.id = id
@@ -80,7 +94,27 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.partID = partID
         self.originalFileURL = originalFileURL
         self.mediaInfo = mediaInfo
+        self.seriesTitle = seriesTitle
+        self.seasonNumber = seasonNumber
+        self.episodeNumber = episodeNumber
         self.selectedQuality = selectedQuality
+    }
+
+    /// Display label that's smart about episodes vs movies. For an
+    /// episode with all the context the source provided, renders
+    /// `"Breaking Bad · S1E1 · Pilot"`. For a movie it's just `title`.
+    /// Edge cases gracefully degrade: missing series → `"S1E1 · Pilot"`,
+    /// missing numbers → `"Breaking Bad · Pilot"`. Surfaced in rails
+    /// and Storage rows where the bare episode name would read as
+    /// ambiguous out of context.
+    public var displayTitle: String {
+        guard kind == .episode else { return title }
+        let episodeCode: String? = {
+            guard let seasonNumber, let episodeNumber else { return nil }
+            return "S\(seasonNumber)E\(episodeNumber)"
+        }()
+        let parts: [String] = [seriesTitle, episodeCode, title].compactMap { $0 }
+        return parts.joined(separator: " · ")
     }
 
     public var selectedAudioTrack: MediaAudioTrack? {
@@ -119,6 +153,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             partID: partID,
             originalFileURL: originalFileURL,
             mediaInfo: mediaInfo,
+            seriesTitle: seriesTitle,
+            seasonNumber: seasonNumber,
+            episodeNumber: episodeNumber,
             selectedQuality: selectedQuality ?? self.selectedQuality
         )
     }

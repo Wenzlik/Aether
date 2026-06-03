@@ -206,6 +206,16 @@ public enum PlexAPI {
         public let thumb: String?
         /// Relative path to the backdrop / art.
         public let art: String?
+        /// For episodes: the parent series's title (Plex sends it as
+        /// `grandparentTitle`). `nil` for movies / shows / seasons.
+        public let grandparentTitle: String?
+        /// For episodes: the parent season's number (Plex's `parentIndex`).
+        /// Combined with `index` to render "S1E1" in UI.
+        public let parentIndex: Int?
+        /// For episodes: this episode's number within its season (Plex's
+        /// `index`). Also doubles as season number on a season DTO, but
+        /// we only read it from episodes today.
+        public let index: Int?
         /// Playable media. Present on movies + episodes; absent on containers
         /// like shows and seasons (you play their children, not them).
         public let media: [Media]?
@@ -328,6 +338,7 @@ public enum PlexAPI {
 
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
+            case grandparentTitle, parentIndex, index
             case media = "Media"
         }
 

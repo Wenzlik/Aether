@@ -21,6 +21,16 @@ import AetherCore
 /// store; everything derives from values the rest of the app already
 /// has.
 struct StorageView: View {
+    /// Plumbed in from `RootTabView` so a Storage row can push a real
+    /// `DetailView` (which needs the same dependencies any other
+    /// drill-in needs: a source to resolve fresh URLs, the resume
+    /// store, the playback session). Pre-boot the values are nil —
+    /// `mediaNavigationDestinations` guards on those, so taps no-op
+    /// safely until AppSession is ready.
+    let source: (any MediaSource)?
+    let resumeStore: ResumeStore
+    let playbackSession: PlaybackSession
+    let libraryPreferences: LibraryPreferencesStore
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
 
@@ -54,6 +64,14 @@ struct StorageView: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .task { await refreshCapacity() }
+            .mediaNavigationDestinations(
+                source: source,
+                resumeStore: resumeStore,
+                playbackSession: playbackSession,
+                libraryPreferences: libraryPreferences,
+                downloadManager: downloadManager,
+                downloads: downloads
+            )
         }
     }
 
@@ -174,30 +192,34 @@ struct StorageView: View {
     @ViewBuilder
     private func inProgressRow(_ job: DownloadJob) -> some View {
         let status = downloads?.snapshot.statusByJobID[job.id] ?? .notDownloaded
-        HStack(spacing: AetherDesign.Spacing.m) {
-            CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
-                .frame(width: 44, height: 66)
-                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        NavigationLink(value: syntheticMediaItem(for: job)) {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
+                    .frame(width: 44, height: 66)
+                    .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                Text(job.title)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    .lineLimit(1)
-                Text(inProgressDetail(for: status, job: job))
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                    Text(job.displayTitle)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        .lineLimit(1)
+                    Text(inProgressDetail(for: status, job: job))
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                inProgressAction(for: status, job: job)
             }
-            Spacer(minLength: AetherDesign.Spacing.s)
-            inProgressAction(for: status, job: job)
+            .padding(.vertical, AetherDesign.Spacing.s)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .fill(AetherDesign.Materials.card)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, AetherDesign.Spacing.s)
-        .padding(.horizontal, AetherDesign.Spacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                .fill(AetherDesign.Materials.card)
-        )
+        .buttonStyle(.plain)
     }
 
     /// One-line status text for the in-progress row. Combines source
@@ -262,50 +284,80 @@ struct StorageView: View {
     @ViewBuilder
     private func downloadRow(_ job: DownloadJob) -> some View {
         let size = jobSizeBytes(job)
-        HStack(spacing: AetherDesign.Spacing.m) {
-            CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
-                .frame(width: 44, height: 66)
-                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        // Whole row is a NavigationLink — tap navigates to Detail.
+        // Delete button sits as an overlay button so its tap doesn't
+        // bubble through to the row's link.
+        NavigationLink(value: syntheticMediaItem(for: job)) {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
+                    .frame(width: 44, height: 66)
+                    .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                Text(job.title)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    .lineLimit(1)
-                HStack(spacing: AetherDesign.Spacing.xs) {
-                    Text(sourceLabel(for: job.mediaID.source))
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                    Text("·")
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    Text(formatBytes(size))
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                    Text("·")
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    Text(job.quality.displayName)
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                    Text(job.displayTitle)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: AetherDesign.Spacing.xs) {
+                        Text(sourceLabel(for: job.mediaID.source))
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        Text("·")
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        Text(formatBytes(size))
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        Text("·")
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        Text(job.quality.displayName)
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    }
                 }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Button {
+                    Task { await delete(job) }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.error)
+                        .padding(AetherDesign.Spacing.s)
+                        .contentShape(Rectangle())
+                }
+                // `.plain` button style + the explicit hit area stops
+                // the trash tap from also triggering the row's
+                // NavigationLink (without `.plain` SwiftUI would treat
+                // both as one tappable region).
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(job.title)")
             }
-            Spacer(minLength: AetherDesign.Spacing.s)
-            Button {
-                Task { await delete(job) }
-            } label: {
-                Image(systemName: "trash")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.error)
-                    .padding(AetherDesign.Spacing.s)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete \(job.title)")
+            .padding(.vertical, AetherDesign.Spacing.s)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .fill(AetherDesign.Materials.card)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, AetherDesign.Spacing.s)
-        .padding(.horizontal, AetherDesign.Spacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                .fill(AetherDesign.Materials.card)
+        .buttonStyle(.plain)
+    }
+
+    /// Build a minimal `MediaItem` from a download job. `mediaNavigationDestinations`
+    /// then routes it to `DetailView`, which uses the live source to
+    /// hydrate full metadata + audio/sub/quality tracks. Until that
+    /// hydrate completes the offline snapshot fields (title, poster,
+    /// series context) still render correctly — and offline override
+    /// in PlaybackSession reads from the store at Play time, so the
+    /// local file plays even if the source is unreachable.
+    private func syntheticMediaItem(for job: DownloadJob) -> MediaItem {
+        MediaItem(
+            id: job.mediaID,
+            title: job.title,
+            kind: job.kind,
+            posterURL: job.posterURL,
+            seriesTitle: job.seriesTitle,
+            seasonNumber: job.seasonNumber,
+            episodeNumber: job.episodeNumber
         )
     }
 
