@@ -399,6 +399,17 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
         guard let id = task.taskDescription, let error else { return }
         continuation.yield(DownloadEvent(taskDescription: id, kind: .failed(error: error)))
     }
+
+    /// URLSession signals "all events for the background session have been
+    /// delivered to the delegate" — that's the cue to release the OS-side
+    /// completion handler so iOS can fully suspend us again. The
+    /// `BackgroundDownloadCompletions` singleton is the bridge between the
+    /// AppDelegate (which received the closure) and this point.
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        Task { @MainActor in
+            BackgroundDownloadCompletions.shared.flushAndClear()
+        }
+    }
 }
 
 // MARK: - Internal event model

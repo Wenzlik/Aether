@@ -21,6 +21,10 @@ struct LibraryBrowseView: View {
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
     let onAddSource: () -> Void
+    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
+    /// Download button. Optional — `nil` before `AppSession.start()`.
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     @State private var feed: HomeFeed = .empty
     @State private var isLoading = false
@@ -37,7 +41,9 @@ struct LibraryBrowseView: View {
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences
+                    libraryPreferences: libraryPreferences,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
         }
         .task(id: source?.id) { await load() }

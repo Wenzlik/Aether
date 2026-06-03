@@ -510,6 +510,11 @@ public actor PlexMediaSource: MediaSource {
         await sessionManager.stop(request, sessionID: sessionID)
     }
 
+    /// Plex always supports downloads via the progressive-MP4 transcode
+    /// endpoint. Synchronous flag so Detail's Download button visibility
+    /// is decided at view-render time without an actor hop.
+    public nonisolated var supportsDownloads: Bool { true }
+
     /// Build a download URL for an item — a progressive-MP4 transcode the
     /// `DownloadManager`'s background `URLSession` can pull in one big GET.
     ///

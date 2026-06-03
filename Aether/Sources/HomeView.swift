@@ -16,6 +16,11 @@ struct HomeView: View {
     let plexDiscoveryState: AppSession.DiscoveryState
     let onAddSource: () -> Void
     let onRetryDiscovery: () -> Void
+    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
+    /// Download button. Optional — `nil` before `AppSession.start()` has
+    /// booted the downloads pipeline.
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -32,7 +37,9 @@ struct HomeView: View {
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences
+                    libraryPreferences: libraryPreferences,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
         }
         // Reload whenever the source changes (nil → Plex after discovery, or

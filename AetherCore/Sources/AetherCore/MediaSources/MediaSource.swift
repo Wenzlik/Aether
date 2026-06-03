@@ -56,6 +56,13 @@ public protocol MediaSource: Sendable {
     /// sources without server sessions.
     func stopTranscode(sessionID: String) async
 
+    /// `true` when the source implements `downloadURL(for:quality:)` —
+    /// drives Detail's Download button visibility. Local Library plays
+    /// files in place (nothing to download); Mock has nothing to fetch;
+    /// Plex / Jellyfin return `true`. Synchronous so the UI doesn't have
+    /// to await before deciding whether to show the button.
+    var supportsDownloads: Bool { get }
+
     /// Optional download capability — returns a stable URL the
     /// `DownloadManager` can hand to `URLSessionDownloadTask`.
     ///
@@ -89,6 +96,9 @@ public extension MediaSource {
 
     /// Default: nothing to tear down.
     func stopTranscode(sessionID: String) async {}
+
+    /// Default: no download capability. Plex / Jellyfin override.
+    var supportsDownloads: Bool { false }
 
     /// Default: no download capability. Plex / Jellyfin override.
     func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? { nil }

@@ -9,6 +9,10 @@ struct SearchView: View {
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
+    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
+    /// Download button. Optional — `nil` before `AppSession.start()`.
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     @State private var allItems: [MediaItem] = []
     @State private var isLoading = false
@@ -23,7 +27,9 @@ struct SearchView: View {
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences
+                    libraryPreferences: libraryPreferences,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
         }
         .task(id: source?.id) { await load() }
