@@ -45,6 +45,12 @@ struct LibraryBrowseView: View {
                     downloadManager: downloadManager,
                     downloads: downloads
                 )
+                .navigationDestination(for: LibraryStorageDestination.self) { _ in
+                    LibraryStorageView(
+                        downloadManager: downloadManager,
+                        downloads: downloads
+                    )
+                }
         }
         .task(id: source?.id) { await load() }
     }
@@ -85,6 +91,11 @@ struct LibraryBrowseView: View {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 heroHeader
 
+                if hasAnyDownloads {
+                    storageRow
+                    downloadedRail
+                }
+
                 if !feed.continueWatching.isEmpty {
                     continueWatchingRail
                 }
@@ -100,6 +111,108 @@ struct LibraryBrowseView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// `true` once the user has at least one completed download.
+    /// The Downloaded rail and the Manage row only appear after that —
+    /// no "empty downloads row" before the user has tried it.
+    private var hasAnyDownloads: Bool {
+        !(downloads?.snapshot.completed.isEmpty ?? true)
+    }
+
+    /// One-tap path to the Storage detail screen. Reads the total size
+    /// from the live snapshot so it ticks as downloads complete.
+    private var storageRow: some View {
+        NavigationLink(value: LibraryStorageDestination()) {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                Image(systemName: "internaldrive")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .frame(width: 28)
+                Text("Manage downloads")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Text(formatBytes(totalDownloadBytes))
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .fill(AetherDesign.Materials.card)
+            )
+            .padding(.horizontal, AetherDesign.Spacing.l)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var totalDownloadBytes: Int64 {
+        downloads?.snapshot.statusByJobID.values.reduce(0) { acc, status in
+            if case let .completed(_, size) = status { return acc + size }
+            return acc
+        } ?? 0
+    }
+
+    /// "Downloaded" rail — cross-source completed items, newest first.
+    /// Each card is a `NavigationLink` to the original DetailView (the
+    /// download job carries `MediaID`, so the existing destination
+    /// registration handles routing); offline override in PlaybackSession
+    /// makes Play use the local file.
+    private var downloadedRail: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Downloaded")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(downloads?.snapshot.completed ?? []) { job in
+                        downloadedCard(job)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
+    }
+
+    /// Card for a downloaded job. We don't have the live `MediaItem` (it's
+    /// in the source's library snapshot, which may not be loaded), so we
+    /// render directly from the job's captured snapshot — title +
+    /// posterURL stay valid offline. Tapping pushes a `MediaItemRef` that
+    /// `mediaNavigationDestinations` routes to Detail.
+    @ViewBuilder
+    private func downloadedCard(_ job: DownloadJob) -> some View {
+        // Find the live MediaItem (from any loaded library section) to
+        // get the full metadata. Falls back to a synthetic item built
+        // from the job snapshot so the card is tappable even before the
+        // source has finished loading.
+        let item = feed.libraries
+            .flatMap { $0.items }
+            .first { $0.id == job.mediaID }
+            ?? MediaItem(
+                id: job.mediaID,
+                title: job.title,
+                kind: .movie,
+                posterURL: job.posterURL
+            )
+
+        NavigationLink(value: item) {
+            AetherCard.poster(title: item.title, posterURL: item.posterURL)
+                .frame(width: posterWidth)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 
     // MARK: - Hero header (branded)

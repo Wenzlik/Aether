@@ -211,11 +211,15 @@ final class AppSession {
         //    disk; the manager rebinds any in-flight URLSession tasks from
         //    a previous launch. Both are idempotent. The observer is a
         //    `@MainActor`-bound mirror SwiftUI views can read directly.
+        //    Attaching the store to PlaybackSession is what enables the
+        //    offline override: completed downloads play from disk without
+        //    touching the source layer.
         let store = await DownloadStore()
         let manager = await DownloadManager(store: store)
         downloadStore = store
         downloadManager = manager
         downloads = DownloadObserver(store: store)
+        await playback.attachDownloadStore(store)
 
         // 5. If Plex is signed in but no server is on file, run discovery so
         //    Home doesn't sit at the empty state forever.

@@ -104,10 +104,24 @@ public actor PlaybackSession {
     /// seeks to the absolute time, so `currentTime()` is already absolute).
     private var baseOffsetSeconds: Double = 0
 
+    /// Optional offline catalogue. When set, `prepare(item:source:startAt:)`
+    /// checks for a completed download before asking the source for a
+    /// network URL — so a downloaded title plays from `Caches/` even when
+    /// the user is online. `nil` keeps the legacy "always go through the
+    /// source" path (used by tests / sources without a downloads pipeline).
+    private var downloadStore: DownloadStore?
+
     public init(resumeStore: ResumeStore, resumeWriteInterval: Duration = .seconds(5)) {
         self.state = PlaybackState()
         self.resumeStore = resumeStore
         self.resumeWriteInterval = resumeWriteInterval
+    }
+
+    /// Attach the downloads catalogue so prepare can intercept items that
+    /// already exist on disk. Idempotent — `AppSession.start()` calls this
+    /// after the store is initialised.
+    public func attachDownloadStore(_ store: DownloadStore) {
+        self.downloadStore = store
     }
 
     // MARK: - Commands
@@ -153,19 +167,40 @@ public actor PlaybackSession {
             resumeSeconds = await persistedResumeSeconds(for: item.id)
         }
 
-        // Resolve a FRESH, warmed-up URL through the source — a new transcode
-        // session at the resume offset, confirmed readable. This is what stops a
-        // reaped / not-yet-ready Plex session surfacing as NSURLError -1008.
+        // Offline override: if the item has a completed download on disk,
+        // play from there — no source call, no transcode session, no warm-
+        // up. The player gets a `file://` URL and seeks client-side just
+        // like any direct-play. Works equally well online and offline; we
+        // prefer the local copy in both cases (no point burning the user's
+        // bandwidth when they already have the bytes).
         let resolved: ResolvedPlayback
-        do {
-            resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
-        } catch {
-            state = PlaybackState(
-                status: .failed,
-                item: item,
-                error: Self.resolveErrorDetail(error)
+        if let store = downloadStore,
+           case let .completed(localURL, _) = await store.status(for: item.id),
+           FileManager.default.fileExists(atPath: localURL.path) {
+            resolved = ResolvedPlayback(
+                url: localURL,
+                isServerTranscode: false,
+                baseOffsetSeconds: 0,
+                clientSeekSeconds: resumeSeconds > 0 ? resumeSeconds : nil,
+                transcodeSessionID: nil,
+                decision: .directPlay
             )
-            return
+            Self.log.notice("offline play #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) file=\(localURL.lastPathComponent, privacy: .public)")
+        } else {
+            // Resolve a FRESH, warmed-up URL through the source — a new
+            // transcode session at the resume offset, confirmed readable.
+            // This is what stops a reaped / not-yet-ready Plex session
+            // surfacing as NSURLError -1008.
+            do {
+                resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
+            } catch {
+                state = PlaybackState(
+                    status: .failed,
+                    item: item,
+                    error: Self.resolveErrorDetail(error)
+                )
+                return
+            }
         }
 
         activeTranscodeSessionID = resolved.transcodeSessionID
