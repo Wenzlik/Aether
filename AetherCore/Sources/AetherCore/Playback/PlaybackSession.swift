@@ -168,15 +168,24 @@ public actor PlaybackSession {
         }
 
         // Offline override: if the item has a completed download on disk,
-        // play from there — no source call, no transcode session, no warm-
-        // up. The player gets a `file://` URL and seeks client-side just
-        // like any direct-play. Works equally well online and offline; we
-        // prefer the local copy in both cases (no point burning the user's
+        // **and** AVPlayer can actually decode it, play from there —
+        // no source call, no transcode session, no warm-up. The player
+        // gets a `file://` URL and seeks client-side just like any
+        // direct-play. Works equally well online and offline; we prefer
+        // the local copy in both cases (no point burning the user's
         // bandwidth when they already have the bytes).
+        //
+        // The `isPlayable` pre-flight is what protects us from MKV / DV
+        // / DTS containers that iOS can't decode locally even though
+        // Plex would happily transcode them for streaming. Without it
+        // the user sees "Cannot Open (AVFoundationErrorDomain -11828)"
+        // on Play — same downloaded file that streams fine plays not at
+        // all locally. The fallback below transparently goes back to
+        // the source layer, so the user gets streaming playback instead
+        // of a hard error.
         let resolved: ResolvedPlayback
-        if let store = downloadStore,
-           case let .completed(localURL, _) = await store.status(for: item.id),
-           FileManager.default.fileExists(atPath: localURL.path) {
+        let localPlayableURL = await offlinePlayableURL(for: item)
+        if let localURL = localPlayableURL {
             resolved = ResolvedPlayback(
                 url: localURL,
                 isServerTranscode: false,
@@ -394,6 +403,37 @@ public actor PlaybackSession {
         let position = Duration.seconds(baseOffsetSeconds + elapsed)
         state.position = position
         await resumeStore.record(.init(mediaID: item.id, position: position))
+    }
+
+    /// Return the local file URL for `item` **only if AVPlayer can decode
+    /// it**. The on-disk file existing isn't enough — Plex's raw Part
+    /// download may be an MKV with HEVC 10-bit + Dolby Vision (and / or
+    /// DTS / TrueHD audio) which iOS recognises as a container but
+    /// can't decode. In that case we want playback to fall back to the
+    /// server's HLS transcode, which iOS *can* play.
+    ///
+    /// `AVURLAsset.load(.isPlayable)` is the supported way to ask
+    /// AVFoundation up-front. It's a fast metadata probe (no decode);
+    /// the call returns once headers + first sample tables are read.
+    /// Returns `nil` when the file doesn't exist, isn't recorded, or
+    /// fails the probe.
+    private func offlinePlayableURL(for item: MediaItem) async -> URL? {
+        guard let store = downloadStore else { return nil }
+        guard case let .completed(localURL, _) = await store.status(for: item.id) else { return nil }
+        guard FileManager.default.fileExists(atPath: localURL.path) else { return nil }
+        let asset = AVURLAsset(url: localURL)
+        let isPlayable: Bool
+        do {
+            isPlayable = try await asset.load(.isPlayable)
+        } catch {
+            Self.log.error("offline isPlayable probe failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        guard isPlayable else {
+            Self.log.notice("offline file present but not playable (codec / container unsupported); falling back to streaming")
+            return nil
+        }
+        return localURL
     }
 
     private func persistedResumeSeconds(for id: MediaID) async -> Double {
