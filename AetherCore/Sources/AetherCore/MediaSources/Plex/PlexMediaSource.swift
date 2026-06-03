@@ -638,17 +638,41 @@ public actor PlexMediaSource: MediaSource {
     /// order. The first success is cached for the rest of the session.
     /// Throws `PlexConnectionError.noReachableConnection` when every candidate
     /// fails (e.g. server offline, or off-network with no remote connection).
+    ///
+    /// Logs every candidate's verdict to the playback log so off-LAN issues
+    /// can be diagnosed without a debugger: if the user's resource list has
+    /// only LAN (no relay / no remote), the log shows that explicitly —
+    /// the fix is server-side (enable Plex Remote Access).
     func resolveBaseURL() async throws -> URL {
         if let resolvedBaseURL { return resolvedBaseURL }
 
+        Self.log.notice(
+            "resolveBaseURL probing candidates=\(self.connections.count, privacy: .public) local=\(self.connections.filter { $0.isLocal }.count, privacy: .public) relay=\(self.connections.filter { $0.isRelay }.count, privacy: .public)"
+        )
+
         for connection in connections {
             guard let base = connection.url else { continue }
-            if await isReachable(base) {
+            let kind = connection.isLocal ? "lan" : (connection.isRelay ? "relay" : "remote")
+            let host = base.host ?? "?"
+            let reachable = await isReachable(base)
+            Self.log.notice(
+                "  candidate kind=\(kind, privacy: .public) host=\(host, privacy: .public) reachable=\(reachable, privacy: .public)"
+            )
+            if reachable {
                 resolvedBaseURL = base
                 resolvedIsLocal = connection.isLocal
                 return base
             }
         }
+
+        // No candidate worked. Diagnose for the user: an "only LAN" list
+        // means Remote Access isn't enabled on the server — we can't fix
+        // that from the client.
+        let hasRemote = connections.contains { !$0.isLocal && !$0.isRelay }
+        let hasRelay = connections.contains { $0.isRelay }
+        Self.log.error(
+            "no reachable connection. lanOnly=\(!hasRemote && !hasRelay, privacy: .public) hasRelay=\(hasRelay, privacy: .public) hasRemote=\(hasRemote, privacy: .public)"
+        )
         throw PlexConnectionError.noReachableConnection
     }
 
