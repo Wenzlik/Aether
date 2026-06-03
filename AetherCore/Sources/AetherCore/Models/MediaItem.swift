@@ -26,6 +26,18 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// asking Plex for a decision — the canonical way to set the active
     /// streams, instead of jamming ids onto the start.m3u8 URL.
     public let partID: String?
+    /// Tokenised URL of the source file itself — for Plex this is the
+    /// full Part path (`/library/parts/{partId}/{ts}/{filename}`) with
+    /// `X-Plex-Token` appended. Independent of `streamURL`: that field
+    /// holds the URL Aether plays from (file URL for direct-play
+    /// containers, transcode placeholder for others), whereas
+    /// `originalFileURL` is *always* the raw file URL — used by the
+    /// download pipeline at Original quality so the server doesn't
+    /// transcode (which fails with HTTP 400 on remote endpoints when
+    /// using `protocol=http`). `nil` for items without a downloadable
+    /// raw file (Mock, future Local Library where streamURL already is
+    /// the file).
+    public let originalFileURL: URL?
     /// Pre-playback media info shown on Detail (source codec, resolution,
     /// bitrate, HDR badge). Filled by the source layer from server metadata.
     public let mediaInfo: MediaInfo?
@@ -48,6 +60,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         subtitleTracks: [MediaSubtitleTrack] = [],
         selectedSubtitleTrackID: String? = nil,
         partID: String? = nil,
+        originalFileURL: URL? = nil,
         mediaInfo: MediaInfo? = nil,
         selectedQuality: PlaybackQuality = .original
     ) {
@@ -65,6 +78,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.subtitleTracks = subtitleTracks
         self.selectedSubtitleTrackID = selectedSubtitleTrackID ?? subtitleTracks.first(where: \.isSelected)?.id
         self.partID = partID
+        self.originalFileURL = originalFileURL
         self.mediaInfo = mediaInfo
         self.selectedQuality = selectedQuality
     }
@@ -103,6 +117,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             subtitleTracks: subtitleTracks ?? self.subtitleTracks,
             selectedSubtitleTrackID: selectedSubtitleTrackID ?? self.selectedSubtitleTrackID,
             partID: partID,
+            originalFileURL: originalFileURL,
             mediaInfo: mediaInfo,
             selectedQuality: selectedQuality ?? self.selectedQuality
         )

@@ -545,6 +545,18 @@ public actor PlexMediaSource: MediaSource {
         // connection list (typically 3-5 candidates).
         invalidateConnectionForFreshProbe()
         let base = try await resolveBaseURL()
+
+        // Prefer the raw Part file URL for Original quality — same path
+        // Plex Web's Download button uses (`?download=1` flag turns the
+        // response into a Content-Disposition attachment). This avoids
+        // the universal-transcoder endpoint entirely; the server just
+        // serves the file from disk. Critically, this works through
+        // Plex's remote endpoints where `/transcode/universal/start?
+        // protocol=http` returns HTTP 400.
+        if quality == .original, let fileURL = item.originalFileURL,
+           let rebased = rebaseTokenisedURL(fileURL, to: base) {
+            return appendingQueryItem(rebased, name: "download", value: "1")
+        }
         var components = URLComponents(
             url: base.appendingPathComponent("/video/:/transcode/universal/start"),
             resolvingAgainstBaseURL: false
@@ -732,6 +744,11 @@ public actor PlexMediaSource: MediaSource {
             subtitleTracks: subtitleTracks,
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
             partID: dto.firstPartID,
+            // Always the raw Part file URL — the source-of-truth file the
+            // server has on disk. Same shape Plex Web uses for its download
+            // button. Independent of `streamURL`, which may be a transcode
+            // placeholder for unfriendly containers.
+            originalFileURL: tokenisedURL(base: base, path: dto.firstPartKey),
             mediaInfo: dto.sourceMediaInfo,
             selectedQuality: .original
         )
@@ -877,6 +894,37 @@ public actor PlexMediaSource: MediaSource {
         var query = components.queryItems ?? []
         query.append(URLQueryItem(name: "X-Plex-Token", value: accessToken))
         components.queryItems = query
+        return components.url
+    }
+
+    /// Re-anchor a tokenised URL onto a different base (host + scheme +
+    /// port). The path and query items survive; only the host moves. Used
+    /// when `MediaItem.originalFileURL` was tokenised against a LAN base
+    /// during library load, but the download needs to go through the
+    /// currently-reachable connection (e.g. remote). Falls back to the
+    /// original URL if URLComponents can't parse anything.
+    nonisolated func rebaseTokenisedURL(_ url: URL, to newBase: URL) -> URL? {
+        guard
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let newBaseComponents = URLComponents(url: newBase, resolvingAgainstBaseURL: false)
+        else { return url }
+        components.scheme = newBaseComponents.scheme
+        components.host = newBaseComponents.host
+        components.port = newBaseComponents.port
+        return components.url
+    }
+
+    /// Append or override a single query item on a URL. Plex's
+    /// `?download=1` flag is the canonical example — flip from "stream"
+    /// to "download" behaviour without rebuilding the URL from scratch.
+    nonisolated func appendingQueryItem(_ url: URL, name: String, value: String) -> URL? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == name }
+        items.append(URLQueryItem(name: name, value: value))
+        components.queryItems = items
         return components.url
     }
 }
