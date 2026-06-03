@@ -1436,9 +1436,13 @@ struct PlexMediaSourceLibrariesTests {
         await api.enqueue(.init(data: Data(decisionJSON.utf8), statusCode: 200, headers: [:]))
 
         let source = makeSource(api: api)
+        // An `audioStreamID` is supplied so `applyStreamSelection` actually
+        // PUTs — without any stream ids it skips the PUT entirely (nothing to
+        // set on the Part) and the recorded-request count drops to 2. We want
+        // the realistic three-step trace (identity + PUT + decision).
         let request = PlaybackRequest(
             itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
-            mode: .transcode, partID: "17905", quality: .original
+            mode: .transcode, partID: "17905", audioStreamID: "41619", quality: .original
         )
         let resolved = try await source.resolvePlayback(request)
 
