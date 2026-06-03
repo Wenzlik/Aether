@@ -324,24 +324,16 @@ private struct WelcomeView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: AetherDesign.Spacing.l) {
-                // Cinematic violet-→-gold gradient on the welcome glyph nods
-                // to the app icon's neon "A" mark — the first place the
-                // brand identity meets the user.
-                Image(systemName: "play.circle")
-                    .font(.system(size: 64, weight: .thin))
-                    .foregroundStyle(AetherDesign.Gradients.cinematic)
+                // The wordmark IS the welcome — first surface where the user
+                // meets the brand inside the app, so the mark takes the hero
+                // slot. The tagline + CTA support it underneath.
+                AetherWordmark(.large)
 
-                VStack(spacing: AetherDesign.Spacing.s) {
-                    Text("Welcome to Aether")
-                        .font(AetherDesign.Typography.heroTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-
-                    Text("Your media, beautifully organized. Connect a Plex or Synology source to begin.")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text("Your media, beautifully organized. Connect a Plex or Synology source to begin.")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 AetherButton("Add a source", systemImage: "plus", action: onAddSource)
                     .padding(.top, AetherDesign.Spacing.s)
