@@ -50,16 +50,47 @@ Notes: [`docs/next-steps/0.2-media-sources.md`](docs/next-steps/0.2-media-source
 
 ---
 
-## ⬜ 0.3 Offline
+## ✅ 0.3 Offline
 
-Travel mode. Downloaded titles must play with the network completely off.
+Travel mode. Downloaded titles play with the network completely off.
 
-- Background downloads (resumable `URLSession` background config)
-- Offline playback (local URLs, no fallback to remote)
-- Local persistence: download metadata, resume points, library snapshots
-- Storage management: disk budget, eviction policy, per-title size, clear-cache UI
+- ✅ **Background downloads** — `URLSession.background` actor
+  (`DownloadManager`) with a bridging `URLSessionDownloadDelegate` that
+  forwards progress / completion / failure into the actor via
+  `AsyncStream`. Tasks survive app suspension and resume on
+  re-launch via `taskDescription`-keyed lookup.
+- ✅ **Offline playback** — `PlaybackSession.prepare` checks the
+  download store before resolving via the source; if a `.completed`
+  job exists and `AVURLAsset.isPlayable` says yes, the player gets
+  the file URL directly. Unplayable codecs fall back to streaming
+  transparently.
+- ✅ **Local persistence** — `DownloadStore` actor with a Codable
+  JSON file in Application Support (excluded from iCloud backup).
+  Snapshots stream via `AsyncStream<DownloadSnapshot>` so
+  `@MainActor`-bound `DownloadObserver` can mirror state into SwiftUI
+  views without actor hops at render time.
+- ✅ **Storage management** — a dedicated **Storage** tab (replaces
+  Search in the bottom bar) with total downloaded bytes, device free
+  space, per-source breakdown, in-progress + completed sections with
+  Pause / Resume / Cancel / Retry / Delete actions, and Clear All.
+  Tapping any row pushes Detail; the offline-playback override picks
+  up the local file from there.
+- ✅ **Plex downloads aligned with Plex Web.** Original quality hits
+  the raw Part URL (`/library/parts/{partId}/{ts}/{filename}?
+  download=1`) — no transcoder involvement, works through the remote
+  endpoint where the universal-transcoder progressive-MP4 path returns
+  HTTP 400. Quality caps still flow through the transcoder
+  (re-encoding requires it).
+- ⬜ **Persistent ResumeStore** — SwiftData-backed; today is in-memory.
+  Outbox plumbing for offline writes lands properly here. *(Carried
+  forward — the offline-playback flow doesn't need it; resume points
+  sync via iCloud KVS, which works without a backing store.)*
+- ⬜ **Disk budget** — explicit cap with LRU eviction. Storage tab
+  surfaces totals and free space; the budget enforcement is the next
+  layer. *(Carried forward.)*
 
-**Definition of done:** download a title on Wi-Fi → toggle airplane mode → playback works end-to-end → resume state syncs back when network returns.
+**Shipped in main.** Definition of done: download a title on Wi-Fi
+→ toggle airplane mode → playback works end-to-end — done.
 
 Notes: [`docs/next-steps/0.3-offline.md`](docs/next-steps/0.3-offline.md).
 

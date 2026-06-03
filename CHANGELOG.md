@@ -4,8 +4,54 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-03
+
+Phase 2 — offline downloads and a top-level Storage manager. Aether
+becomes useful on the plane.
+
 ### Added
 
+- **Offline downloads — start to finish.** A new Download button on
+  movie / episode Detail kicks off a background `URLSession` job
+  through the new `DownloadManager` actor (`AetherCore/Downloads/`),
+  with a quality picker that re-uses the same eight-step
+  `PlaybackQuality` ladder Detail's Playback section uses. The pipeline
+  has six runtime pieces: `DownloadStatus` enum (queued /
+  downloading(fraction) / paused / completed / failed / expired),
+  `DownloadJob` (uuid + mediaID + snapshot of title / poster / series
+  context / quality / createdAt), `DownloadStore` (actor-isolated
+  Codable JSON file in Application Support), `DownloadManager` (single
+  `URLSession.background` instance, one per app process), a
+  `URLSessionDownloadDelegate` bridge class, and `DownloadObserver`
+  (`@MainActor` `@Observable` mirror SwiftUI views read synchronously).
+  Background URL session events get released via a singleton
+  `BackgroundDownloadCompletions` + a minimal `UIApplicationDelegate`
+  adapter on `AetherApp`. Tasks already in flight from a previous
+  launch are re-bound on startup via `taskDescription = jobID`.
+- **Storage tab — top-level download manager.** Replaces the Search
+  tab in the bottom bar (`Home · Library · Storage · Settings`).
+  Surfaces total downloaded bytes, device free space, per-source
+  breakdown (Plex / Jellyfin, ready for Local / Synology), an
+  **In Progress** section with state-specific actions (Pause / Resume
+  / Cancel / Retry), a **Downloaded** section with per-item Delete,
+  and a destructive Clear All. Tapping a row pushes the same
+  `DetailView` the rest of the app uses — the offline-playback
+  override in `PlaybackSession` then plays from the local file.
+- **Library "Downloaded" rail.** Cross-source completed downloads as
+  a horizontal rail on the Library tab. Posters fall back to the
+  job's captured snapshot so the rail still renders offline.
+- **Episode context end-to-end.** `MediaItem` gets `seriesTitle` /
+  `seasonNumber` / `episodeNumber` populated from Plex's
+  `grandparentTitle` / `parentIndex` / `index`. The new
+  `displayTitle` computed property renders
+  `"Breaking Bad · S1E1 · Pilot"` for episodes and falls back to
+  `title` for movies. `DownloadJob` snapshots the same fields at
+  enqueue time so the Storage row stays informative even when the
+  source is unreachable.
+- **Search lives in Home + Library tabs.** Both gain a
+  `.searchable(text:)` modifier; the rails / hub swap for a shared
+  `MediaSearchResults` view when the user types. Same client-side
+  title filter the old Search tab ran, lifted out as a reusable view.
 - **Playback quality picker — Plex Web's eight-step ladder.** A new section on
   Detail lets the user pick the playback quality before pressing Play, mirroring
   Plex Web exactly: **Original** (Direct Play priority — preserves the source
@@ -76,6 +122,66 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   and system controls pick up the violet tint automatically.
 
 ### Fixed
+
+- **Plex downloads off-LAN — re-probe the connection list per request.** A
+  Plex base URL cached from when the user was on LAN went stale when they
+  walked out of Wi-Fi range, and downloads then aimed `URLSession.background`
+  at a dead `192.168.x.x` host. `PlexMediaSource.downloadURL(for:quality:)`
+  now invalidates the cached connection before resolving, so the ranked
+  candidate list is re-evaluated and a reachable remote / relay endpoint
+  picks up the work.
+- **Plex Original-quality downloads — HTTP 400 from the remote transcoder
+  endpoint.** Plex's `/video/:/transcode/universal/start?protocol=http`
+  refuses the request shape over the remote connection (the LAN's local
+  transcoder allows it, but remote requests need a different path). Mirrored
+  Plex Web's download behaviour: for `.original` quality the request now
+  hits the raw Part file URL (`/library/parts/{partId}/{ts}/{filename}?
+  download=1`) — no transcoder involvement, single GET, works through
+  remote. Bitrate-capped qualities still flow through the transcode
+  endpoint (the server has to re-encode, no shortcut).
+- **Downloads "couldn't move temp file" race.** The bridge yielded the
+  URLSession temp URL into an `AsyncStream` and the actor handler moved
+  the file from there — by then iOS had already deleted the temp file
+  from the system daemon's container. Moved the
+  `FileManager.moveItem(at:to:)` inside the
+  `didFinishDownloadingTo` delegate callback itself, before the bridge
+  yields, so we stay inside URLSession's guaranteed window.
+- **Wrong file extension on downloads — `AVPlayer "Cannot Open"`
+  `-11829`.** Downloads were saved as `{jobID}.mp4` regardless of the
+  actual container. AVPlayer reads the path extension before sniffing
+  bytes, so an MKV at `.mp4` failed with
+  `AVErrorCodeFileFormatNotRecognized`. Extension now derives from
+  `URLResponse.suggestedFilename` (URLSession parses the server's
+  `Content-Disposition: attachment; filename="…ext"` header) →
+  download URL path extension → `.mp4` fallback.
+- **Pause immediately Failed.** `task.cancel(byProducingResumeData:)`
+  triggers `didCompleteWithError(NSURLErrorCancelled)`; the
+  `.failed` event then overwrote the `.paused` state set by the same
+  public method. A new `expectedCancellations: Set<UUID>` on the
+  actor records ids we're about to cancel ourselves, and the
+  `.failed` handler drops events for those ids.
+- **Non-2xx download responses landing as "Completed."** URLSession
+  fires `didFinishDownloadingTo` even for HTTP 4xx/5xx — the
+  response body becomes the "downloaded" file (a user saw an 89-byte
+  `.mp4` reported as completed). The bridge now reads
+  `(downloadTask.response as? HTTPURLResponse)?.statusCode` and
+  yields `.failed(DownloadHTTPError(statusCode:))` for non-2xx; the
+  Failed row shows `"HTTP 401 — server rejected the request (auth)"`
+  or similar.
+- **Local playback of unsupported containers.** A downloaded MKV
+  whose codecs iOS can't decode (HEVC 10-bit + DV, DTS, TrueHD, …)
+  failed with `AVFoundationErrorDomain -11828` even though it would
+  stream fine via Plex's HLS transcode. `PlaybackSession`'s offline
+  branch now runs `AVURLAsset.load(.isPlayable)` before committing to
+  the local file URL; on failure the resolver falls through to the
+  source layer, so playback transparently switches to streaming
+  without an error screen.
+- **Detail's first sheet tap rendered empty.** `.sheet(item:)`'s
+  content builder discarded the closure parameter and re-read the
+  `@State` value inside the body — on first presentation the state
+  hadn't propagated yet and the switch fell through to `EmptyView`.
+  Sheet body now takes the non-optional selector as a parameter so
+  the value is the snapshot at presentation time.
 
 - **Plex audio-switch unreliability + pause/resume `400` — by mirroring Plex
   Web's PUT-then-decide flow.** Audio-switching often kept playing the original
@@ -165,6 +271,19 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   technical detail sits behind a **Details** disclosure.
 
 ### Changed
+
+- **Tab bar reshuffle — `Home · Library · Storage · Settings`.** Search
+  moves out of the tab bar and into a `.searchable` modifier on both
+  Home and Library (iOS-native "search lives in the tab that owns the
+  content" pattern). The freed slot goes to the new Storage tab.
+- **Playback layer attaches the downloads catalogue.** `PlaybackSession`
+  gains `attachDownloadStore(_:)`, wired by `AppSession.start()` after
+  the manager + observer come up. `prepare(item:source:startAt:)`
+  checks the store before the source layer — completed downloads play
+  from disk with no transcode session, no warm-up, no network call.
+- **`MediaSource.supportsDownloads`** capability flag — synchronous so
+  Detail's Download button visibility decides at render time without
+  an actor hop. Plex returns `true`; the protocol default is `false`.
 
 - **Detail playback options collapse into compact rows + bottom sheet.** The
   Detail screen no longer scrolls through four expanded settings groups —

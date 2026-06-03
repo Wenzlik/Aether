@@ -234,7 +234,7 @@ final class AppSession {
         let identifier = await ensurePlexClientIdentifier()
         let config = PlexConfiguration(
             product: "Aether",
-            version: "0.2.0",
+            version: "0.3.0",
             clientIdentifier: identifier,
             deviceName: currentDeviceName,
             platform: currentPlatform,
@@ -411,7 +411,7 @@ final class AppSession {
         let deviceID = await ensureJellyfinDeviceID()
         let config = JellyfinConfiguration(
             client: "Aether",
-            version: "0.2.0",
+            version: "0.3.0",
             deviceName: currentDeviceName,
             deviceID: deviceID
         )
