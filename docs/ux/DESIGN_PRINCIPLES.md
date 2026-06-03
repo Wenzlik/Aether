@@ -136,14 +136,14 @@ Concrete colors, gradients, and materials are in `DesignSystem/Tokens` (`AetherD
 
 Aether uses **native top navigation** (`RootTabView` → SwiftUI `TabView`), not a custom shell. The system renders it as the **tvOS 26 top tab bar**, the **bottom bar on iOS / iPadOS**, and the **ornament on visionOS** — one structure, no per-platform layout code, no sidebar. This is the Apple-native pattern (Apple TV / Music / Photos on tvOS).
 
-Four tabs, in order: **Home / Library / Search / Settings**.
+Four tabs, in order: **Home / Library / Storage / Settings**.
 
-- **Home** — cinematic, content-first. The top of the page carries an `AetherWordmark(.large, tagline: "Your media, beautifully organized.")` so Home reads as Aether's landing page, not a generic rail browser. Below: Featured, Continue Watching, then a rail per library. Signed-out it shows the **Welcome** hero (also wordmark-led), not a dashboard.
-- **Library** — branded browse hub. An `AetherWordmark(.large)` hero + page label, a Continue Watching rail (cross-library), a Recently Added rail (round-robin merge across libraries), and a section per library — title with inline count `"Movies (1,234)"`, horizontal poster rail, `See all` link that pushes the full `LibraryView` grid.
-- **Search** — `.searchable` client-side title search across the source's libraries.
+- **Home** — cinematic, content-first. The top of the page carries an `AetherWordmark(.large, tagline: "Your media, beautifully organized.")` so Home reads as Aether's landing page, not a generic rail browser. Below: Featured, Continue Watching, then a rail per library. Signed-out it shows the **Welcome** hero (also wordmark-led), not a dashboard. A `.searchable` modifier on the NavigationStack swaps the rails for `MediaSearchResults` when the user types — search lives in the tab that owns the content, the iOS-native pattern Music / Photos / TV+ use.
+- **Library** — branded browse hub. An `AetherWordmark(.large)` hero + page label, an optional `Downloaded` rail (cross-source completed downloads, only when there are any), a Continue Watching rail (cross-library), a Recently Added rail (round-robin merge across libraries), and a section per library — title with inline count `"Movies (1,234)"`, horizontal poster rail, `See all` link that pushes the full `LibraryView` grid. Same `.searchable` integration as Home.
+- **Storage** — the download manager. Total downloaded bytes + device free space, a per-source breakdown, an **In Progress** section (queued / downloading / paused / failed with state-specific Pause / Resume / Cancel / Retry actions), a **Downloaded** section with per-item Delete and a destructive Clear All. Tapping any row pushes `DetailView` — the offline-playback override in `PlaybackSession` then picks the local file.
 - **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet). Header pairs `AetherWordmark(.medium)` with the page label + a calm tagline; version lives in the About section, not the header.
 
-Each content tab (Home / Library / Search) owns its own `NavigationStack`; the shared `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` pushes once so the three stacks stay identical.
+Each content tab (Home / Library / Storage) owns its own `NavigationStack`; the shared `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` pushes once so the three stacks stay identical.
 
 Rules that follow from this:
 

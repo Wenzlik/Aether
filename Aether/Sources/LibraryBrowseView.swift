@@ -21,6 +21,10 @@ struct LibraryBrowseView: View {
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
     let onAddSource: () -> Void
+    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
+    /// Download button. Optional — `nil` before `AppSession.start()`.
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     @State private var feed: HomeFeed = .empty
     @State private var isLoading = false
@@ -29,23 +33,40 @@ struct LibraryBrowseView: View {
     /// per-library `LibraryView` grid. Card taps push via `NavigationLink`.
     @State private var navigationPath = NavigationPath()
 
+    /// Bound to the system search bar (`.searchable` modifier). When
+    /// non-empty, the library swaps its rails content for
+    /// `MediaSearchResults`. Same surface Home uses.
+    @State private var searchQuery = ""
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
                 .background(AetherDesign.Gradients.background.ignoresSafeArea())
+                .searchable(text: $searchQuery, prompt: "Search your library")
                 .mediaNavigationDestinations(
                     source: source,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences
+                    libraryPreferences: libraryPreferences,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
         }
         .task(id: source?.id) { await load() }
     }
 
+    /// True when the user has typed something in the search bar. The
+    /// rails get replaced with search results in this state — same
+    /// content surface, different filter.
+    private var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @ViewBuilder
     private var content: some View {
-        if source == nil {
+        if isSearching {
+            MediaSearchResults(source: source, query: searchQuery)
+        } else if source == nil {
             AetherEmptyState(
                 glyph: "rectangle.stack",
                 title: "No library yet",
@@ -79,6 +100,10 @@ struct LibraryBrowseView: View {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 heroHeader
 
+                if hasAnyDownloads {
+                    downloadedRail
+                }
+
                 if !feed.continueWatching.isEmpty {
                     continueWatchingRail
                 }
@@ -94,6 +119,69 @@ struct LibraryBrowseView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// `true` once the user has at least one completed download — gates
+    /// the Downloaded rail. Management of those downloads (size totals,
+    /// per-item delete, Clear All) lives in the dedicated **Storage**
+    /// tab; Library only surfaces them as content (a rail of posters
+    /// alongside Continue Watching and Recently Added).
+    private var hasAnyDownloads: Bool {
+        !(downloads?.snapshot.completed.isEmpty ?? true)
+    }
+
+    /// "Downloaded" rail — cross-source completed items, newest first.
+    /// Each card is a `NavigationLink` to the original DetailView (the
+    /// download job carries `MediaID`, so the existing destination
+    /// registration handles routing); offline override in PlaybackSession
+    /// makes Play use the local file.
+    private var downloadedRail: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Downloaded")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(downloads?.snapshot.completed ?? []) { job in
+                        downloadedCard(job)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
+    }
+
+    /// Card for a downloaded job. We don't have the live `MediaItem` (it's
+    /// in the source's library snapshot, which may not be loaded), so we
+    /// render directly from the job's captured snapshot — title +
+    /// posterURL stay valid offline. Tapping pushes a `MediaItemRef` that
+    /// `mediaNavigationDestinations` routes to Detail.
+    @ViewBuilder
+    private func downloadedCard(_ job: DownloadJob) -> some View {
+        // Find the live MediaItem (from any loaded library section) to
+        // get the full metadata. Falls back to a synthetic item built
+        // from the job snapshot — including the episode-context fields
+        // — so the card reads "Breaking Bad · S1E1 · Pilot" even when
+        // the source is offline.
+        let item = feed.libraries
+            .flatMap { $0.items }
+            .first { $0.id == job.mediaID }
+            ?? MediaItem(
+                id: job.mediaID,
+                title: job.title,
+                kind: job.kind,
+                posterURL: job.posterURL,
+                seriesTitle: job.seriesTitle,
+                seasonNumber: job.seasonNumber,
+                episodeNumber: job.episodeNumber
+            )
+
+        NavigationLink(value: item) {
+            AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL)
+                .frame(width: posterWidth)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Hero header (branded)

@@ -24,7 +24,9 @@ struct RootTabView: View {
                     plexServerName: session.plexServer?.name,
                     plexDiscoveryState: session.discoveryState,
                     onAddSource: { session.presentSignIn() },
-                    onRetryDiscovery: { Task { await session.discoverPlexServers() } }
+                    onRetryDiscovery: { Task { await session.discoverPlexServers() } },
+                    downloadManager: session.downloadManager,
+                    downloads: session.downloads
                 )
             }
 
@@ -34,16 +36,20 @@ struct RootTabView: View {
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
-                    onAddSource: { session.presentSignIn() }
+                    onAddSource: { session.presentSignIn() },
+                    downloadManager: session.downloadManager,
+                    downloads: session.downloads
                 )
             }
 
-            Tab("Search", systemImage: "magnifyingglass") {
-                SearchView(
+            Tab("Storage", systemImage: "internaldrive") {
+                StorageView(
                     source: session.source,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
-                    libraryPreferences: session.libraryPreferences
+                    libraryPreferences: session.libraryPreferences,
+                    downloadManager: session.downloadManager,
+                    downloads: session.downloads
                 )
             }
 
@@ -96,6 +102,11 @@ private struct MediaNavigationDestinations: ViewModifier {
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
+    /// Optional — `nil` before `AppSession.start()` has booted the
+    /// downloads pipeline, which is the only window where DetailView
+    /// can be reached without it (cold-launch deep link, theoretically).
+    let downloadManager: DownloadManager?
+    let downloads: DownloadObserver?
 
     func body(content: Content) -> some View {
         content
@@ -104,7 +115,9 @@ private struct MediaNavigationDestinations: ViewModifier {
                     item: item,
                     source: source,
                     resumeStore: resumeStore,
-                    playbackSession: playbackSession
+                    playbackSession: playbackSession,
+                    downloadManager: downloadManager,
+                    downloads: downloads
                 )
             }
             .navigationDestination(for: Library.self) { library in
@@ -124,13 +137,17 @@ extension View {
         source: (any MediaSource)?,
         resumeStore: ResumeStore,
         playbackSession: PlaybackSession,
-        libraryPreferences: LibraryPreferencesStore
+        libraryPreferences: LibraryPreferencesStore,
+        downloadManager: DownloadManager? = nil,
+        downloads: DownloadObserver? = nil
     ) -> some View {
         modifier(MediaNavigationDestinations(
             source: source,
             resumeStore: resumeStore,
             playbackSession: playbackSession,
-            libraryPreferences: libraryPreferences
+            libraryPreferences: libraryPreferences,
+            downloadManager: downloadManager,
+            downloads: downloads
         ))
     }
 }

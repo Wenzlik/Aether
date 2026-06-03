@@ -6,6 +6,14 @@ struct DetailView: View {
     let source: (any MediaSource)?
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
+    /// `nil` until `AppSession.start()` has booted the downloads pipeline.
+    /// Views guard with `if let manager` so a pre-boot Detail still works
+    /// (Play / Resume) — just no Download button.
+    let downloadManager: DownloadManager?
+    /// `@MainActor`-bound mirror of the store. Reads
+    /// `downloads.snapshot.status(for:)` synchronously in `body`. `nil`
+    /// until boot completes for the same reason as `downloadManager`.
+    let downloads: DownloadObserver?
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
@@ -27,22 +35,36 @@ struct DetailView: View {
     /// `.presentationDetents([.medium])` so the picker takes about half the
     /// screen and the Detail backdrop is still visible behind.
     @State private var presentedSelector: PlaybackSelector?
+    /// True while a Download is being prepared (quality picker → enqueue) so
+    /// the button can read "Starting…" and disable.
+    @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Which playback option is being changed by the user right now.
+    /// Which selector sheet is open. Audio / Subtitles / Quality are the
+    /// playback configuration triplet; `downloadQuality` reuses the same
+    /// sheet pattern but enqueues a download instead of recording a
+    /// selection on the item.
     private enum PlaybackSelector: Identifiable {
-        case audio, subtitles, quality
+        case audio, subtitles, quality, downloadQuality
         var id: String {
             switch self {
             case .audio: return "audio"
             case .subtitles: return "subtitles"
             case .quality: return "quality"
+            case .downloadQuality: return "downloadQuality"
             }
         }
     }
 
     /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? item }
+
+    /// Download status for this item. `.notDownloaded` when the pipeline
+    /// hasn't booted yet — same surface as "no job recorded" so the UI
+    /// renders identically.
+    private var downloadStatus: DownloadStatus {
+        downloads?.status(for: item.id) ?? .notDownloaded
+    }
 
     var body: some View {
         ZStack {
@@ -75,8 +97,17 @@ struct DetailView: View {
             await loadChildrenIfNeeded()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
-        .sheet(item: $presentedSelector) { _ in
-            playbackSelectorSheet
+        .sheet(item: $presentedSelector) { selector in
+            // Use the closure parameter, not the @State again. On first
+            // presentation SwiftUI evaluates the sheet body before the
+            // @State write has propagated through, so reading
+            // `presentedSelector` inside `playbackSelectorSheet` hits
+            // the stale `nil` value, the switch falls into `case .none`,
+            // and the user sees an empty sheet. Reopening works because
+            // by then @State is settled. The closure parameter is the
+            // snapshot at presentation — always non-nil, always
+            // correct.
+            playbackSelectorSheet(for: selector)
         }
     }
 
@@ -248,14 +279,127 @@ struct DetailView: View {
     @ViewBuilder
     private var actionRow: some View {
         if current.streamURL != nil {
-            if resume != nil {
-                resumeButtons
-            } else {
-                playButton
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                if resume != nil {
+                    resumeButtons
+                } else {
+                    playButton
+                }
+                if shouldShowDownloadControl {
+                    downloadControl
+                }
             }
         } else {
             unavailableState
         }
+    }
+
+    /// True when a Download surface should appear below the play buttons —
+    /// only for Plex / Jellyfin items (the only sources that implement
+    /// `downloadURL`), and only once the pipeline has booted.
+    private var shouldShowDownloadControl: Bool {
+        guard downloadManager != nil, source?.supportsDownloads == true else { return false }
+        return true
+    }
+
+    /// The state-driven Download surface. Renders as a primary "Download"
+    /// button when nothing's recorded; otherwise morphs into a disclosure
+    /// row that shows the current status and acts as the primary in-line
+    /// action for that state (Pause / Resume / Delete / Retry).
+    @ViewBuilder
+    private var downloadControl: some View {
+        switch downloadStatus {
+        case .notDownloaded:
+            AetherButton(
+                isEnqueuingDownload ? "Starting…" : "Download",
+                systemImage: "arrow.down.circle",
+                role: .secondary
+            ) {
+                presentedSelector = .downloadQuality
+            }
+            .disabled(isEnqueuingDownload)
+
+        case .queued:
+            downloadStatusRow(
+                value: "Queued",
+                actionLabel: "Cancel"
+            ) { Task { await cancelDownload() } }
+
+        case let .downloading(fraction):
+            downloadStatusRow(
+                value: "Downloading · \(percentString(fraction))",
+                actionLabel: "Pause"
+            ) { Task { await pauseDownload() } }
+
+        case let .paused(fraction):
+            downloadStatusRow(
+                value: "Paused at \(percentString(fraction))",
+                actionLabel: "Resume"
+            ) { Task { await resumeDownload() } }
+
+        case let .completed(_, size):
+            downloadStatusRow(
+                value: "Downloaded · \(formatBytes(size))",
+                actionLabel: "Delete"
+            ) { Task { await removeDownload() } }
+
+        case let .failed(reason):
+            downloadStatusRow(
+                value: "Failed · \(reason)",
+                actionLabel: "Retry"
+            ) { Task { await retryDownload() } }
+
+        case .expired:
+            downloadStatusRow(
+                value: "Expired",
+                actionLabel: "Re-download"
+            ) { Task { await retryDownload() } }
+        }
+    }
+
+    /// One-row layout: status text on the left, single trailing action on
+    /// the right. Each transient download state collapses to this so
+    /// the row's geometry doesn't shift as progress ticks.
+    private func downloadStatusRow(
+        value: String,
+        actionLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.accent)
+                .frame(width: 28)
+            Text(value)
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: AetherDesign.Spacing.s)
+            Button(actionLabel, action: action)
+                .buttonStyle(.plain)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.accent)
+        }
+        .padding(.vertical, AetherDesign.Spacing.m)
+        .padding(.horizontal, AetherDesign.Spacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Materials.card)
+        )
+    }
+
+    /// "47%" — keeps the row stable as progress ticks (no decimals,
+    /// always two digits at most).
+    private func percentString(_ fraction: Double) -> String {
+        "\(Int((fraction * 100).rounded()))%"
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 
     /// Single "Play" button — shown when there's no saved resume point.
@@ -377,25 +521,30 @@ struct DetailView: View {
         }
     }
 
-    /// The bottom sheet behind the disclosure rows. Half-height on iOS, full
-    /// modal on tvOS / visionOS. Driven by `presentedSelector`.
-    private var playbackSelectorSheet: some View {
-        Group {
-            switch presentedSelector {
-            case .audio:
-                playbackSelectorContent(title: "Audio") {
-                    audioSelectorList
-                }
-            case .subtitles:
-                playbackSelectorContent(title: "Subtitles") {
-                    subtitleSelectorList
-                }
-            case .quality:
-                playbackSelectorContent(title: "Quality") {
-                    qualitySelectorList
-                }
-            case .none:
-                EmptyView()
+    /// The bottom sheet behind the disclosure rows. Half-height on iOS,
+    /// full modal on tvOS / visionOS. Takes the `selector` as a
+    /// parameter (passed by `.sheet(item:)` at presentation time) so it
+    /// always renders the right content — see the comment at the
+    /// `.sheet` call site for why reading `presentedSelector` directly
+    /// here was the source of the "empty sheet on first open" bug.
+    @ViewBuilder
+    private func playbackSelectorSheet(for selector: PlaybackSelector) -> some View {
+        switch selector {
+        case .audio:
+            playbackSelectorContent(title: "Audio") {
+                audioSelectorList
+            }
+        case .subtitles:
+            playbackSelectorContent(title: "Subtitles") {
+                subtitleSelectorList
+            }
+        case .quality:
+            playbackSelectorContent(title: "Quality") {
+                qualitySelectorList
+            }
+        case .downloadQuality:
+            playbackSelectorContent(title: "Download Quality") {
+                downloadQualitySelectorList
             }
         }
     }
@@ -474,6 +623,79 @@ struct DetailView: View {
                 configuredItem = current.selectingQuality(quality)
                 presentedSelector = nil
             }
+        }
+    }
+
+    /// Quality picker for the **Download** path. Same options as
+    /// `qualitySelectorList`, different action: pick → close sheet →
+    /// enqueue download with that quality. No selection state to
+    /// "remember" — the user picks once per download, and the choice is
+    /// recorded on the `DownloadJob`.
+    private var downloadQualitySelectorList: some View {
+        ForEach(PlaybackQuality.allCases, id: \.self) { quality in
+            AetherSelectionRow(
+                title: quality.displayName,
+                isSelected: false
+            ) {
+                presentedSelector = nil
+                Task { await startDownload(quality: quality) }
+            }
+        }
+    }
+
+    // MARK: - Download actions
+
+    private func startDownload(quality: PlaybackQuality) async {
+        guard let manager = downloadManager, let source else { return }
+        isEnqueuingDownload = true
+        defer { isEnqueuingDownload = false }
+        do {
+            _ = try await manager.enqueue(item: current, source: source, quality: quality)
+        } catch {
+            // Surface failure via the row's next render (DownloadStatus
+            // moves to .failed in the store) — no toast / alert chrome
+            // for Phase 2.1.
+        }
+    }
+
+    private func pauseDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: item.id) else { return }
+        await manager.pause(job.id)
+    }
+
+    private func resumeDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: item.id) else { return }
+        await manager.resume(job.id)
+    }
+
+    private func cancelDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: item.id) else { return }
+        await manager.cancel(job.id)
+    }
+
+    private func removeDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: item.id) else { return }
+        await manager.remove(job.id)
+    }
+
+    /// Retry path: drop the existing record + start a fresh enqueue at
+    /// the same quality. Cleaner than trying to in-place revive a
+    /// `.failed` URLSession task (URLSession's resumeData for that task
+    /// is gone by then).
+    private func retryDownload() async {
+        guard let manager = downloadManager,
+              let source,
+              let job = downloads?.job(for: item.id) else { return }
+        let quality = job.quality
+        await manager.remove(job.id)
+        do {
+            _ = try await manager.enqueue(item: current, source: source, quality: quality)
+        } catch {
+            // Same swallow as `startDownload` — store status will reflect.
         }
     }
 

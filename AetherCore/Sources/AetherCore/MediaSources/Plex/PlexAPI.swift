@@ -206,9 +206,52 @@ public enum PlexAPI {
         public let thumb: String?
         /// Relative path to the backdrop / art.
         public let art: String?
+        /// For episodes: the parent series's title (Plex sends it as
+        /// `grandparentTitle`). `nil` for movies / shows / seasons.
+        public let grandparentTitle: String?
+        /// For episodes: the parent season's number (Plex's `parentIndex`).
+        /// Combined with `index` to render "S1E1" in UI.
+        public let parentIndex: Int?
+        /// For episodes: this episode's number within its season (Plex's
+        /// `index`). Also doubles as season number on a season DTO, but
+        /// we only read it from episodes today.
+        public let index: Int?
         /// Playable media. Present on movies + episodes; absent on containers
         /// like shows and seasons (you play their children, not them).
         public let media: [Media]?
+
+        /// Explicit init with defaults for every optional field, so the
+        /// test fixtures that build `Metadata` synthetically don't have
+        /// to enumerate the full optional tail each time a new field
+        /// lands (e.g. episode context). New episode fields default to
+        /// `nil` so existing test call sites compile unchanged.
+        public init(
+            ratingKey: String,
+            type: String,
+            title: String,
+            summary: String? = nil,
+            year: Int? = nil,
+            duration: Int? = nil,
+            thumb: String? = nil,
+            art: String? = nil,
+            grandparentTitle: String? = nil,
+            parentIndex: Int? = nil,
+            index: Int? = nil,
+            media: [Media]? = nil
+        ) {
+            self.ratingKey = ratingKey
+            self.type = type
+            self.title = title
+            self.summary = summary
+            self.year = year
+            self.duration = duration
+            self.thumb = thumb
+            self.art = art
+            self.grandparentTitle = grandparentTitle
+            self.parentIndex = parentIndex
+            self.index = index
+            self.media = media
+        }
 
         public var kind: MediaItem.Kind {
             switch type {
@@ -328,6 +371,7 @@ public enum PlexAPI {
 
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
+            case grandparentTitle, parentIndex, index
             case media = "Media"
         }
 
