@@ -33,10 +33,16 @@ struct LibraryBrowseView: View {
     /// per-library `LibraryView` grid. Card taps push via `NavigationLink`.
     @State private var navigationPath = NavigationPath()
 
+    /// Bound to the system search bar (`.searchable` modifier). When
+    /// non-empty, the library swaps its rails content for
+    /// `MediaSearchResults`. Same surface Home uses.
+    @State private var searchQuery = ""
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
                 .background(AetherDesign.Gradients.background.ignoresSafeArea())
+                .searchable(text: $searchQuery, prompt: "Search your library")
                 .mediaNavigationDestinations(
                     source: source,
                     resumeStore: resumeStore,
@@ -45,19 +51,22 @@ struct LibraryBrowseView: View {
                     downloadManager: downloadManager,
                     downloads: downloads
                 )
-                .navigationDestination(for: LibraryStorageDestination.self) { _ in
-                    LibraryStorageView(
-                        downloadManager: downloadManager,
-                        downloads: downloads
-                    )
-                }
         }
         .task(id: source?.id) { await load() }
     }
 
+    /// True when the user has typed something in the search bar. The
+    /// rails get replaced with search results in this state — same
+    /// content surface, different filter.
+    private var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @ViewBuilder
     private var content: some View {
-        if source == nil {
+        if isSearching {
+            MediaSearchResults(source: source, query: searchQuery)
+        } else if source == nil {
             AetherEmptyState(
                 glyph: "rectangle.stack",
                 title: "No library yet",
@@ -92,7 +101,6 @@ struct LibraryBrowseView: View {
                 heroHeader
 
                 if hasAnyDownloads {
-                    storageRow
                     downloadedRail
                 }
 
@@ -113,49 +121,13 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// `true` once the user has at least one completed download.
-    /// The Downloaded rail and the Manage row only appear after that —
-    /// no "empty downloads row" before the user has tried it.
+    /// `true` once the user has at least one completed download — gates
+    /// the Downloaded rail. Management of those downloads (size totals,
+    /// per-item delete, Clear All) lives in the dedicated **Storage**
+    /// tab; Library only surfaces them as content (a rail of posters
+    /// alongside Continue Watching and Recently Added).
     private var hasAnyDownloads: Bool {
         !(downloads?.snapshot.completed.isEmpty ?? true)
-    }
-
-    /// One-tap path to the Storage detail screen. Reads the total size
-    /// from the live snapshot so it ticks as downloads complete.
-    private var storageRow: some View {
-        NavigationLink(value: LibraryStorageDestination()) {
-            HStack(spacing: AetherDesign.Spacing.m) {
-                Image(systemName: "internaldrive")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.accent)
-                    .frame(width: 28)
-                Text("Manage downloads")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Spacer(minLength: AetherDesign.Spacing.s)
-                Text(formatBytes(totalDownloadBytes))
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-            }
-            .padding(.vertical, AetherDesign.Spacing.m)
-            .padding(.horizontal, AetherDesign.Spacing.m)
-            .background(
-                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                    .fill(AetherDesign.Materials.card)
-            )
-            .padding(.horizontal, AetherDesign.Spacing.l)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var totalDownloadBytes: Int64 {
-        downloads?.snapshot.statusByJobID.values.reduce(0) { acc, status in
-            if case let .completed(_, size) = status { return acc + size }
-            return acc
-        } ?? 0
     }
 
     /// "Downloaded" rail — cross-source completed items, newest first.
@@ -206,13 +178,6 @@ struct LibraryBrowseView: View {
                 .frame(width: posterWidth)
         }
         .buttonStyle(.plain)
-    }
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
     }
 
     // MARK: - Hero header (branded)

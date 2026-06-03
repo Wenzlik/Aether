@@ -1,44 +1,32 @@
 import SwiftUI
 import AetherCore
 
-/// The Search tab. Client-side title search over the items Aether has already
-/// loaded — no new backend, just `.searchable` filtering across the source's
-/// libraries. Results push the same `DetailView` as everywhere else.
-struct SearchView: View {
+/// Search-results body shared by `HomeView` and `LibraryBrowseView`.
+///
+/// Both tabs carry a `.searchable` modifier — when the user starts
+/// typing, the host view swaps its normal content (rails / Library
+/// grid) for this view, scoped to the same source. Same logic that
+/// used to live in the dedicated Search tab; lifted out so removing
+/// the tab didn't mean losing search.
+///
+/// **Data:** the host owns the `query` binding and the source. This
+/// view loads one page of items per library on appear, dedupes by
+/// `MediaID`, and filters client-side by `title.localizedCaseInsensitiveContains`.
+/// No new endpoint, no pagination beyond what the source already
+/// returns — the same trade-off the previous SearchView made.
+struct MediaSearchResults: View {
     let source: (any MediaSource)?
-    let resumeStore: ResumeStore
-    let playbackSession: PlaybackSession
-    let libraryPreferences: LibraryPreferencesStore
-    /// Forwarded to `mediaNavigationDestinations` so Detail can wire the
-    /// Download button. Optional — `nil` before `AppSession.start()`.
-    let downloadManager: DownloadManager?
-    let downloads: DownloadObserver?
+    let query: String
 
     @State private var allItems: [MediaItem] = []
     @State private var isLoading = false
-    @State private var query = ""
 
     var body: some View {
-        NavigationStack {
-            content
-                .background(AetherDesign.Gradients.background.ignoresSafeArea())
-                .searchable(text: $query, prompt: "Search your library")
-                .mediaNavigationDestinations(
-                    source: source,
-                    resumeStore: resumeStore,
-                    playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences,
-                    downloadManager: downloadManager,
-                    downloads: downloads
-                )
-        }
-        .task(id: source?.id) { await load() }
-    }
-
-    private var results: [MediaItem] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        return allItems.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        content
+            // Load lazily — first time the search results appear, pull
+            // one page per library and cache for the rest of the
+            // session. Source change (sign out / switch) re-loads.
+            .task(id: source?.id) { await load() }
     }
 
     @ViewBuilder
@@ -49,12 +37,9 @@ struct SearchView: View {
                 title: "Nothing to search yet",
                 message: "Connect a source and your movies and shows become searchable here."
             )
-        } else if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            AetherEmptyState(
-                glyph: "magnifyingglass",
-                title: "Search your library",
-                message: "Find any movie or show by title across your connected source."
-            )
+        } else if isLoading && allItems.isEmpty {
+            AetherLoadingState(.inline)
+                .padding(.top, AetherDesign.Spacing.l)
         } else if results.isEmpty {
             AetherEmptyState(
                 glyph: "questionmark.circle",
@@ -76,6 +61,12 @@ struct SearchView: View {
         }
     }
 
+    private var results: [MediaItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return allItems.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+    }
+
     private var columns: [GridItem] {
         #if os(tvOS)
         [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: AetherDesign.Spacing.l)]
@@ -84,9 +75,9 @@ struct SearchView: View {
         #endif
     }
 
-    /// Pull one page of items from every library and flatten into a single
-    /// searchable set. Deduped by id in case a title appears in more than one
-    /// library response.
+    /// One page of items per library, deduped. Triggered by the
+    /// `.task(id: source?.id)` modifier in `body`. Cheap on small
+    /// libraries, bounded by the source's default page size on big ones.
     private func load() async {
         guard let source else {
             allItems = []

@@ -42,12 +42,8 @@ struct RootTabView: View {
                 )
             }
 
-            Tab("Search", systemImage: "magnifyingglass") {
-                SearchView(
-                    source: session.source,
-                    resumeStore: session.resumeStore,
-                    playbackSession: session.playback,
-                    libraryPreferences: session.libraryPreferences,
+            Tab("Storage", systemImage: "internaldrive") {
+                StorageView(
                     downloadManager: session.downloadManager,
                     downloads: session.downloads
                 )

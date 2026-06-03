@@ -1,22 +1,26 @@
 import SwiftUI
 import AetherCore
 
-/// Marker type for the `NavigationStack` route that pushes the Storage
-/// detail screen. Hashable + Codable shape doesn't carry data — we
-/// register `navigationDestination(for: LibraryStorageDestination.self)`
-/// to build the view from the parent's environment.
-struct LibraryStorageDestination: Hashable, Sendable {}
-
-/// Storage management — total downloads, device free space, per-item
-/// list with Delete actions, Clear All. Reached from `LibraryBrowseView`'s
-/// "Manage downloads" disclosure row when at least one completed
-/// download exists.
+/// Storage — Aether's download manager tab.
+///
+/// A **top-level tab** next to Home / Library / Settings in
+/// `RootTabView`. Replaces what used to be the Search tab; search moved
+/// into the `.searchable` modifier on Home + Library (the iOS-native
+/// "search lives in the tab that owns the content" pattern that Music /
+/// Photos / TV+ use).
+///
+/// Surfaces total downloaded bytes, device free space, per-source
+/// breakdown, per-item list with Delete actions, and a destructive
+/// Clear All. The empty state is the first thing a new user sees here
+/// (no downloads yet → "Tap Download on a movie or episode to save it
+/// here"), so the tab does double duty as feature discovery for users
+/// who haven't tried downloads.
 ///
 /// Read-mostly view: `DownloadObserver` provides the live snapshot, the
 /// view does its own free-space probe at appear. No bespoke state
 /// store; everything derives from values the rest of the app already
 /// has.
-struct LibraryStorageView: View {
+struct StorageView: View {
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
 
@@ -27,27 +31,29 @@ struct LibraryStorageView: View {
     @State private var isClearingAll = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                header
-                breakdown
-                downloadsList
-                if !(downloads?.snapshot.completed.isEmpty ?? true) {
-                    clearAllButton
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                    header
+                    breakdown
+                    downloadsList
+                    if !(downloads?.snapshot.completed.isEmpty ?? true) {
+                        clearAllButton
+                    }
                 }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.top, AetherDesign.Spacing.l)
+                .padding(.bottom, AetherDesign.Spacing.xxl)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, AetherDesign.Spacing.l)
-            .padding(.top, AetherDesign.Spacing.l)
-            .padding(.bottom, AetherDesign.Spacing.xxl)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .navigationTitle("Storage")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
+            #endif
+            .task { await refreshCapacity() }
         }
-        .background(AetherDesign.Gradients.background.ignoresSafeArea())
-        .navigationTitle("Storage")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .task { await refreshCapacity() }
     }
 
     // MARK: - Header (total + free)
