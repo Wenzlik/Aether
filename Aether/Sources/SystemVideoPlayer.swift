@@ -78,8 +78,6 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         // runtime fatal error).
         #endif
 
-        controller.delegate = context.coordinator
-
         return controller
     }
 
@@ -122,30 +120,24 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         #endif
     }
 
-    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+    /// Small holder for the dismiss closure (used by the visionOS "Back"
+    /// contextual action) and the one-shot expand guard. We don't implement
+    /// `AVPlayerViewControllerDelegate`: its dismissal-transition callback is
+    /// unavailable across iOS / tvOS / visionOS in this SDK, and the exit paths
+    /// are already covered (Back action, `.onExitCommand`, `PlayerView`'s
+    /// end-of-playback observer, and `onDisappear`).
+    final class Coordinator {
         var onDismiss: () -> Void
         /// Guards the one-shot expand transition (Cinema Mode).
         var didRequestExpand = false
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss
-            super.init()
         }
 
         @MainActor
         func dismiss() {
             onDismiss()
         }
-
-        #if os(iOS)
-        /// Fires when the system player's fullscreen presentation is dismissed
-        /// by the user. **iOS only** — this delegate method is unavailable on
-        /// tvOS and visionOS. tvOS dismisses via `.onExitCommand`; visionOS via
-        /// `PlayerView`'s end-of-playback observer and the "Back" contextual
-        /// action.
-        func playerViewControllerDidEndDismissalTransition(_ playerViewController: AVPlayerViewController) {
-            onDismiss()
-        }
-        #endif
     }
 }
