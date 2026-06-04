@@ -1,5 +1,8 @@
 import SwiftUI
 import AetherCore
+#if os(visionOS)
+import os
+#endif
 
 /// The app's root. A native `TabView` renders as the tvOS 26 top tab bar (and
 /// the bottom bar / ornament on iOS / iPadOS / visionOS) — one structure, no
@@ -32,6 +35,17 @@ struct RootTabView: View {
         session.downloads
         #endif
     }
+
+    #if os(visionOS)
+    // Cinema Mode bridge. `CinemaManager` is the single source of truth; the
+    // open/dismiss-immersive-space actions are only reachable from a view, so
+    // the space transition happens here on the manager's intent. The native
+    // player (DetailView's `PlayerView`) docks into the open space.
+    // See `docs/next-steps/visionos-cinema.md` → Part 2.
+    @Environment(CinemaManager.self) private var cinema
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    #endif
 
     var body: some View {
         TabView {
@@ -105,6 +119,30 @@ struct RootTabView: View {
                 JellyfinSignInView(session: session)
             }
         }
+        #if os(visionOS)
+        .onChange(of: cinema.openRequestID) { _, id in
+            guard id != nil else { return }
+            let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
+            Task {
+                // Open the Dark Theater. DetailView presents the native player;
+                // the system docks it into this space.
+                let result = await openImmersiveSpace(id: CinemaManager.spaceID)
+                log.debug("openImmersiveSpace result=\(String(describing: result), privacy: .public)")
+                if case .opened = result {
+                    // Docked — nothing more to do here.
+                } else {
+                    // Failed / cancelled — leave cinema state so we don't strand.
+                    cinema.end()
+                }
+            }
+        }
+        .onChange(of: cinema.closeRequestID) { _, id in
+            guard id != nil else { return }
+            let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
+            log.debug("closeRequestID → dismissImmersiveSpace")
+            Task { await dismissImmersiveSpace() }
+        }
+        #endif
     }
 }
 

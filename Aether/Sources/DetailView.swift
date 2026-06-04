@@ -28,6 +28,9 @@ struct DetailView: View {
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
+    /// visionOS: the current player presentation was launched via "Watch in
+    /// Cinema" → auto-expand so it docks into the Dark Theater without a tap.
+    @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
     /// The item with full metadata (audio + subtitle streams, partID,
@@ -45,6 +48,11 @@ struct DetailView: View {
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(visionOS)
+    /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
+    /// app root; always present inside the windowed view tree on visionOS.
+    @Environment(CinemaManager.self) private var cinema
+    #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
     /// playback configuration triplet; `downloadQuality` reuses the same
@@ -83,6 +91,7 @@ struct DetailView: View {
                     source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
+                    preferExpanded: launchingInCinema,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)
@@ -115,6 +124,18 @@ struct DetailView: View {
             // correct.
             playbackSelectorSheet(for: selector)
         }
+        #if os(visionOS)
+        .onChange(of: cinema.isActive) { _, active in
+            // Cinema ended (movie finished or the Dark Theater was dismissed) —
+            // drop the player overlay so we don't leave a stale player behind.
+            guard !active, isPlayerPresented else { return }
+            withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+                isPlayerPresented = false
+            }
+            playbackItem = nil
+            Task { resume = await resumeStore.point(for: item.id) }
+        }
+        #endif
     }
 
     // MARK: - Detail content
@@ -291,6 +312,9 @@ struct DetailView: View {
                 } else {
                     playButton
                 }
+                #if os(visionOS)
+                watchInCinemaButton
+                #endif
                 if shouldShowDownloadControl {
                     downloadControl
                 }
@@ -419,6 +443,23 @@ struct DetailView: View {
         }
         .disabled(isPreparingPlayback)
     }
+
+    #if os(visionOS)
+    /// visionOS-only: enter Cinema Mode — the same title on a cinematic screen
+    /// in a dedicated immersive space, driven by the same `PlaybackSession`.
+    /// Resumes from the saved point when one exists, else starts from the top,
+    /// matching the Play / Resume button above it.
+    private var watchInCinemaButton: some View {
+        AetherButton(
+            "Watch in Cinema",
+            systemImage: "visionpro",
+            role: .secondary
+        ) {
+            Task { await watchInCinema() }
+        }
+        .disabled(isPreparingPlayback)
+    }
+    #endif
 
     /// Resume exists: **Resume** (primary, with a resume-from caption) and
     /// **Restart** (secondary) sitting side-by-side, each expanding to
@@ -885,6 +926,7 @@ struct DetailView: View {
         // `0` forces a restart; `nil` lets the session resume from the
         // persisted point.
         playbackStartAt = fromStart ? 0 : nil
+        launchingInCinema = false   // windowed playback stays embedded
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
@@ -896,8 +938,36 @@ struct DetailView: View {
             isPlayerPresented = false
         }
         playbackItem = nil
+        #if os(visionOS)
+        // No-op unless this was a cinema session; tears down the Dark Theater.
+        cinema.end()
+        #endif
         Task { resume = await resumeStore.point(for: item.id) }
     }
+
+    #if os(visionOS)
+    /// Enter Cinema Mode: present the native player (same `PlayerView` /
+    /// `AVPlayerViewController` as windowed playback) **and** ask `CinemaManager`
+    /// to open the Dark Theater. The system then docks the fullscreen player
+    /// into the immersive space — native controls, native sizing. `nil` startAt
+    /// resumes from the saved point, mirroring the Resume button.
+    private func watchInCinema() async {
+        guard !isPreparingPlayback else { return }
+        isPreparingPlayback = true
+        defer { isPreparingPlayback = false }
+
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+            configuredItem = hydrated
+        }
+        playbackItem = current
+        playbackStartAt = resume != nil ? nil : 0
+        launchingInCinema = true   // auto-expand so it docks into the theater
+        cinema.present(current, source: source, startAt: playbackStartAt)
+        withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+            isPlayerPresented = true
+        }
+    }
+    #endif
 
     // MARK: - Formatting helpers
 
