@@ -12,6 +12,27 @@ import AetherCore
 struct RootTabView: View {
     @Bindable var session: AppSession
 
+    /// tvOS deliberately has no downloads / local library — large-screen
+    /// "lean back" consumption assumes a persistent network, and the device
+    /// has no swipe gesture for managing rows anyway. Passing `nil` here
+    /// makes every DetailView / Library-rail download surface gate itself
+    /// out (`shouldShowDownloadControl`, `hasAnyDownloads`) on this platform.
+    private var dlManager: DownloadManager? {
+        #if os(tvOS)
+        nil
+        #else
+        session.downloadManager
+        #endif
+    }
+
+    private var dlObserver: DownloadObserver? {
+        #if os(tvOS)
+        nil
+        #else
+        session.downloads
+        #endif
+    }
+
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house.fill") {
@@ -25,8 +46,8 @@ struct RootTabView: View {
                     plexDiscoveryState: session.discoveryState,
                     onAddSource: { session.presentSignIn() },
                     onRetryDiscovery: { Task { await session.discoverPlexServers() } },
-                    downloadManager: session.downloadManager,
-                    downloads: session.downloads
+                    downloadManager: dlManager,
+                    downloads: dlObserver
                 )
             }
 
@@ -37,11 +58,12 @@ struct RootTabView: View {
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
                     onAddSource: { session.presentSignIn() },
-                    downloadManager: session.downloadManager,
-                    downloads: session.downloads
+                    downloadManager: dlManager,
+                    downloads: dlObserver
                 )
             }
 
+            #if !os(tvOS)
             Tab("Storage", systemImage: "internaldrive") {
                 StorageView(
                     source: session.source,
@@ -52,6 +74,7 @@ struct RootTabView: View {
                     downloads: session.downloads
                 )
             }
+            #endif
 
             Tab("Settings", systemImage: "gearshape.fill") {
                 SettingsView(viewModel: SettingsViewModel(session: session))
