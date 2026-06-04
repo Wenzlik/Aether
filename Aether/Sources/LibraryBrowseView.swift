@@ -187,19 +187,16 @@ struct LibraryBrowseView: View {
     // MARK: - Hero header (branded)
 
     /// The branded library header: the large wordmark on top, then a smaller
-    /// "Library" page label, then the tagline. The wordmark carries identity;
-    /// "Library" tells the user where they are without competing with the
-    /// brand.
+    /// "Library" page label. The wordmark carries identity; "Library" tells
+    /// the user where they are without competing with the brand. The
+    /// marketing tagline was dropped — the artwork carries identity by
+    /// itself and the line was burning vertical space on every Library load.
     private var heroHeader: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             AetherWordmark(.large)
             Text("Library")
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
-            Text("Your media, beautifully organized.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .padding(.top, AetherDesign.Spacing.xxs)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
     }

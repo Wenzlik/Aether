@@ -64,15 +64,17 @@ public struct AetherWordmark: View {
     }
 
     /// Lockup height in points. Width follows the artwork's aspect ratio
-    /// (~1.5:1), so a `.large` mark renders ~120pt wide. Tuned so the
+    /// (~3:1 after the dark vertical padding was cropped out of the
+    /// source PNG), so a `.large` mark renders ~180pt wide. Tuned so the
     /// embedded "AETHER" wordmark stays comfortably legible at each tier
-    /// (the small variant's wordmark is still readable at standard
-    /// reading distance on iPhone).
+    /// without dominating the surface horizontally — at 60pt tall × 180pt
+    /// wide, the large variant occupies about half an iPhone's content
+    /// width, leaving room for "Library" / "Settings" labels beside it.
     private var logoHeight: CGFloat {
         switch variant {
-        case .small:  return 28
-        case .medium: return 48
-        case .large:  return 80
+        case .small:  return 22
+        case .medium: return 36
+        case .large:  return 60
         }
     }
 

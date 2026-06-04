@@ -106,14 +106,12 @@ struct HomeView: View {
     /// The Home wordmark block — replaces the previous "rails open straight
     /// into artwork" pattern. With the brand identity now visible at the top
     /// of the page, Home reads as Aether's product landing surface rather
-    /// than a generic media browser. Layout follows the brief:
-    ///
-    /// ```
-    /// [logo]  Aether
-    ///         Your media, beautifully organized.
-    /// ```
+    /// than a generic media browser. The lockup is shown bare; the marketing
+    /// tagline was dropped because the artwork (icon + AETHER wordmark)
+    /// already carries identity and the line was burning vertical space on
+    /// every Home / Library load.
     private var heroHeader: some View {
-        AetherWordmark(.large, tagline: "Your media, beautifully organized.")
+        AetherWordmark(.large)
             .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
@@ -364,10 +362,10 @@ private struct WelcomeView: View {
             VStack(spacing: AetherDesign.Spacing.l) {
                 // The wordmark IS the welcome — first surface where the user
                 // meets the brand inside the app, so the mark takes the hero
-                // slot. The tagline + CTA support it underneath.
+                // slot. A single actionable line + CTA support it underneath.
                 AetherWordmark(.large)
 
-                Text("Your media, beautifully organized. Connect a Plex or Synology source to begin.")
+                Text("Connect a Plex or Synology source to begin.")
                     .font(AetherDesign.Typography.body)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
                     .multilineTextAlignment(.center)
