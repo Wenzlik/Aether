@@ -37,21 +37,57 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            content
-                .background(AetherDesign.Gradients.background.ignoresSafeArea())
-                .searchable(text: $searchQuery, prompt: "Search your library")
-                .mediaNavigationDestinations(
-                    source: source,
-                    resumeStore: resumeStore,
-                    playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences,
-                    downloadManager: downloadManager,
-                    downloads: downloads
-                )
+            Group {
+                if shouldShowBrandedChrome {
+                    VStack(spacing: 0) {
+                        brandedHeader
+                        content
+                    }
+                } else {
+                    content
+                }
+            }
+            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .mediaNavigationDestinations(
+                source: source,
+                resumeStore: resumeStore,
+                playbackSession: playbackSession,
+                libraryPreferences: libraryPreferences,
+                downloadManager: downloadManager,
+                downloads: downloads
+            )
         }
         // Reload whenever the source changes (nil → Plex after discovery, or
         // Plex → nil on sign-out). Without id:, .task fires once.
         .task(id: source?.id) { await load() }
+    }
+
+    /// The branded header (centered Aether lockup + search field) sits
+    /// above the content on the rails and during search. Loading / error /
+    /// welcome / library-empty states own their full-screen layout — the
+    /// header would compete with their own brand presence (the welcome
+    /// surface already renders an `AetherWordmark`) and a search field is
+    /// meaningless when there's nothing yet to search.
+    private var shouldShowBrandedChrome: Bool {
+        if isSearching { return true }
+        if loadError != nil { return false }
+        if isLoading && feed == .empty { return false }
+        if feedIsEmpty { return false }
+        return true
+    }
+
+    /// Centered Aether mark on top, search field beneath. Replaces the
+    /// system `.searchable` modifier so the lockup gets the prime spot
+    /// instead of the search bar.
+    private var brandedHeader: some View {
+        VStack(spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.large)
+                .frame(maxWidth: .infinity)
+            AetherSearchField(text: $searchQuery, prompt: "Search your library")
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.l)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
 
     /// True when the user is searching from Home. Drives the swap from
@@ -80,8 +116,6 @@ struct HomeView: View {
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                heroHeader
-
                 if !feed.featured.isEmpty {
                     featuredSection
                 }
@@ -98,21 +132,8 @@ struct HomeView: View {
                     )
                 }
             }
-            .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
-    }
-
-    /// The Home wordmark block — replaces the previous "rails open straight
-    /// into artwork" pattern. With the brand identity now visible at the top
-    /// of the page, Home reads as Aether's product landing surface rather
-    /// than a generic media browser. The lockup is shown bare; the marketing
-    /// tagline was dropped because the artwork (icon + AETHER wordmark)
-    /// already carries identity and the line was burning vertical space on
-    /// every Home / Library load.
-    private var heroHeader: some View {
-        AetherWordmark(.large)
-            .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     // MARK: - Section (generic horizontal poster rail)
