@@ -25,6 +25,9 @@ struct LibraryBrowseView: View {
     /// Download button. Optional — `nil` before `AppSession.start()`.
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
+    /// Forwarded so DetailView can seed Audio / Subtitle / Quality pickers
+    /// from the user's Settings defaults.
+    let playbackPreferences: PlaybackPreferencesStore?
 
     @State private var feed: HomeFeed = .empty
     @State private var isLoading = false
@@ -57,7 +60,8 @@ struct LibraryBrowseView: View {
                 playbackSession: playbackSession,
                 libraryPreferences: libraryPreferences,
                 downloadManager: downloadManager,
-                downloads: downloads
+                downloads: downloads,
+                playbackPreferences: playbackPreferences
             )
         }
         .task(id: source?.id) { await load() }

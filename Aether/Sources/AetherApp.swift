@@ -21,7 +21,7 @@ struct AetherApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView(session: session)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
         }
@@ -89,6 +89,8 @@ final class AppSession {
     let keychain: KeychainStore
     let api: any APIClient
     let libraryPreferences: LibraryPreferencesStore
+    let playbackPreferences: PlaybackPreferencesStore
+    let appearance: AppearancePreferenceStore
 
     // MARK: - Downloads
 
@@ -183,6 +185,8 @@ final class AppSession {
         self.keychain = keychain
         self.api = api
         self.libraryPreferences = LibraryPreferencesStore(keychain: keychain)
+        self.playbackPreferences = PlaybackPreferencesStore()
+        self.appearance = AppearancePreferenceStore()
     }
 
     // MARK: - Lifecycle
