@@ -30,15 +30,15 @@ struct DarkTheaterView: View {
         RealityView { content in
             content.add(Self.makeEnvironment())
         }
-        .onAppear { Self.log.notice("DarkTheater appeared (space open)") }
-        .onDisappear { Self.log.notice("DarkTheater disappeared (space closed)") }
+        .onAppear { Self.log.debug("DarkTheater appeared (space open)") }
+        .onDisappear { Self.log.debug("DarkTheater disappeared (space closed)") }
         // Authoritative exit: this view lives for as long as the immersive space
         // is open (it *is* the space's scene), so its end-of-playback observer
         // fires reliably even when the docked player detaches the window's view
         // tree. When the movie ends, close the space and reset cinema state;
         // `DetailView` reacts to `cinema` going idle by dropping the player.
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { _ in
-            Self.log.notice("DarkTheater: didPlayToEnd → dismiss space + cinema.end()")
+            Self.log.debug("DarkTheater: didPlayToEnd → dismiss space + cinema.end()")
             Task { @MainActor in
                 await dismissImmersiveSpace()
                 cinema.end()
@@ -46,19 +46,21 @@ struct DarkTheaterView: View {
         }
     }
 
-    /// Build the procedural Dark Theater: a dark floor for grounding plus two
-    /// dim violet accent lights. `@MainActor` because RealityKit entity /
-    /// component initialisers are main-actor-isolated.
+    /// Build the procedural Dark Theater: a dark, slightly glossy floor; a very
+    /// dim neutral fill so the room reads as a space rather than a void; and a
+    /// restrained Aether-violet accent (two side glows + a faint floor line).
+    /// `@MainActor` because RealityKit entity / component initialisers are
+    /// main-actor-isolated. Values are a first pass — tune on device.
     @MainActor
     private static func makeEnvironment() -> Entity {
         let root = Entity()
         root.name = "DarkTheater"
 
-        // A large, near-black floor so the space reads as a room with a ground,
-        // and so the docked screen's glow has somewhere to fall.
+        // Floor — near-black with a touch of gloss so the docked screen's light
+        // pools faintly on it (the "luxury screening room" cue).
         var floorMaterial = PhysicallyBasedMaterial()
-        floorMaterial.baseColor = .init(tint: color(0x0E0E11))
-        floorMaterial.roughness = .init(floatLiteral: 0.55)
+        floorMaterial.baseColor = .init(tint: color(0x101014))
+        floorMaterial.roughness = .init(floatLiteral: 0.45)
         floorMaterial.metallic = .init(floatLiteral: 0.0)
         let floor = ModelEntity(
             mesh: .generatePlane(width: 60, depth: 60),
@@ -67,12 +69,37 @@ struct DarkTheaterView: View {
         floor.name = "Floor"
         root.addChild(floor)
 
-        // Restrained violet accent — two low, dim point lights either side,
-        // toward the front where the screen docks. Calm, not neon.
-        root.addChild(makeAccentLight(name: "AccentLightL", at: [-5, 1.0, -3.5]))
-        root.addChild(makeAccentLight(name: "AccentLightR", at: [5, 1.0, -3.5]))
+        // Very dim neutral fill from above-front, angled down, so the floor is
+        // *just* readable — keeps the space from being a flat black void without
+        // competing with the screen (which is the real key light).
+        let fill = Entity()
+        fill.name = "FillLight"
+        fill.components.set(DirectionalLightComponent(color: color(0xFFF4E6), intensity: 320))
+        fill.orientation = simd_quatf(angle: -.pi * 0.32, axis: [1, 0, 0])
+        root.addChild(fill)
+
+        // Restrained violet accent — two low side glows toward the front where
+        // the screen docks, plus a faint emissive line on the floor. Calm, not
+        // neon (spec: avoid neon / cyberpunk).
+        root.addChild(makeAccentLight(name: "AccentLightL", at: [-5.5, 0.8, -4.0]))
+        root.addChild(makeAccentLight(name: "AccentLightR", at: [5.5, 0.8, -4.0]))
+        root.addChild(makeAccentLine())
 
         return root
+    }
+
+    /// A thin, dim violet emissive line on the floor toward the screen — the one
+    /// restrained graphic accent. Unlit so it glows softly regardless of the
+    /// room lighting.
+    @MainActor
+    private static func makeAccentLine() -> Entity {
+        let line = ModelEntity(
+            mesh: .generatePlane(width: 10, depth: 0.04),
+            materials: [UnlitMaterial(color: color(0x3B2A6B))]
+        )
+        line.name = "AccentLine"
+        line.position = [0, 0.01, -4.2]
+        return line
     }
 
     @MainActor
@@ -82,8 +109,8 @@ struct DarkTheaterView: View {
         entity.components.set(
             PointLightComponent(
                 color: color(0x8B5CF6),   // Aether Violet
-                intensity: 1800,
-                attenuationRadius: 14
+                intensity: 2200,
+                attenuationRadius: 16
             )
         )
         entity.position = position

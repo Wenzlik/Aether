@@ -28,6 +28,9 @@ struct DetailView: View {
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
+    /// visionOS: the current player presentation was launched via "Watch in
+    /// Cinema" → auto-expand so it docks into the Dark Theater without a tap.
+    @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
     /// The item with full metadata (audio + subtitle streams, partID,
@@ -88,6 +91,7 @@ struct DetailView: View {
                     source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
+                    preferExpanded: launchingInCinema,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)
@@ -922,6 +926,7 @@ struct DetailView: View {
         // `0` forces a restart; `nil` lets the session resume from the
         // persisted point.
         playbackStartAt = fromStart ? 0 : nil
+        launchingInCinema = false   // windowed playback stays embedded
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
@@ -956,6 +961,7 @@ struct DetailView: View {
         }
         playbackItem = current
         playbackStartAt = resume != nil ? nil : 0
+        launchingInCinema = true   // auto-expand so it docks into the theater
         cinema.present(current, source: source, startAt: playbackStartAt)
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true

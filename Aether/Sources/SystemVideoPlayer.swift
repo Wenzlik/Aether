@@ -28,9 +28,15 @@ import AVKit
 struct SystemVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     let onDismiss: () -> Void
+    /// visionOS only: when `true`, request the **expanded** experience once the
+    /// controller is in the hierarchy, so the player auto-docks into the open
+    /// immersive space without the user tapping the expand control. Used by
+    /// Cinema Mode; windowed playback leaves it `false`.
+    let preferExpanded: Bool
 
-    init(player: AVPlayer, onDismiss: @escaping () -> Void = {}) {
+    init(player: AVPlayer, preferExpanded: Bool = false, onDismiss: @escaping () -> Void = {}) {
         self.player = player
+        self.preferExpanded = preferExpanded
         self.onDismiss = onDismiss
     }
 
@@ -65,14 +71,11 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
                 coordinator?.dismiss()
             }
         ]
-        // NOTE on Cinema auto-expand: the player comes up in the embedded
-        // (inline) experience; the user taps the expand control to go
-        // fullscreen, which docks it into the open immersive space. We do NOT
-        // force this via `experienceController.allowedExperiences` —
-        // `.allowedExperiences` MUST include `.embedded` (excluding it is a
-        // runtime fatal error). Auto-expanding without a tap needs the
-        // `AVExperienceController` *transition* API (visionOS 26); deferred
-        // until verified on device.
+        // Cinema auto-expand (when `preferExpanded`) is requested in
+        // `updateUIViewController` via `experienceController.transition(to:)`,
+        // once the controller is in the hierarchy. We never touch
+        // `allowedExperiences` — it MUST include `.embedded` (excluding it is a
+        // runtime fatal error).
         #endif
 
         controller.delegate = context.coordinator
@@ -104,10 +107,25 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         if controller.player !== player {
             controller.player = player
         }
+        #if os(visionOS)
+        // Auto-expand once, after the controller is in the hierarchy: transition
+        // to the expanded experience so it docks into the open immersive space
+        // without a manual tap on the system expand control. (Documented AVKit
+        // API — `transition(to:)`; does NOT touch `allowedExperiences`, which
+        // must always include `.embedded`.)
+        if preferExpanded, !context.coordinator.didRequestExpand {
+            context.coordinator.didRequestExpand = true
+            Task { @MainActor in
+                _ = await controller.experienceController.transition(to: .expanded)
+            }
+        }
+        #endif
     }
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         var onDismiss: () -> Void
+        /// Guards the one-shot expand transition (Cinema Mode).
+        var didRequestExpand = false
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss

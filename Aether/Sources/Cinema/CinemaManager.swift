@@ -61,7 +61,7 @@ final class CinemaManager {
     /// a double-tap mid-transition).
     func present(_ item: MediaItem, source: (any MediaSource)?, startAt: Double?) {
         guard phase == .idle else {
-            Self.log.notice("present IGNORED (already active) item=\(item.id.rawValue, privacy: .public)")
+            Self.log.debug("present IGNORED (already active) item=\(item.id.rawValue, privacy: .public)")
             return
         }
         self.item = item
@@ -69,14 +69,14 @@ final class CinemaManager {
         self.startAt = startAt
         phase = .active
         openRequestID = UUID()
-        Self.log.notice("present item=\(item.id.rawValue, privacy: .public) → request open space")
+        Self.log.debug("present item=\(item.id.rawValue, privacy: .public) → request open space")
     }
 
     /// Leave the cinema. Idempotent — safe to call from a player dismissal that
     /// may or may not have been a cinema session.
     func end() {
         guard phase == .active else {
-            Self.log.notice("end (no-op, already idle)")
+            Self.log.debug("end (no-op, already idle)")
             return
         }
         phase = .idle
@@ -84,7 +84,7 @@ final class CinemaManager {
         source = nil
         startAt = nil
         closeRequestID = UUID()
-        Self.log.notice("end → request close space")
+        Self.log.debug("end → request close space")
     }
 }
 #endif

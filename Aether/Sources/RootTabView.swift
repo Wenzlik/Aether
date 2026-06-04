@@ -127,7 +127,7 @@ struct RootTabView: View {
                 // Open the Dark Theater. DetailView presents the native player;
                 // the system docks it into this space.
                 let result = await openImmersiveSpace(id: CinemaManager.spaceID)
-                log.notice("openImmersiveSpace result=\(String(describing: result), privacy: .public)")
+                log.debug("openImmersiveSpace result=\(String(describing: result), privacy: .public)")
                 if case .opened = result {
                     // Docked — nothing more to do here.
                 } else {
@@ -139,7 +139,7 @@ struct RootTabView: View {
         .onChange(of: cinema.closeRequestID) { _, id in
             guard id != nil else { return }
             let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
-            log.notice("closeRequestID → dismissImmersiveSpace")
+            log.debug("closeRequestID → dismissImmersiveSpace")
             Task { await dismissImmersiveSpace() }
         }
         #endif

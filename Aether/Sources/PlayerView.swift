@@ -33,16 +33,22 @@ struct PlayerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #endif
 
+    /// visionOS only: auto-expand the system player so it docks into an open
+    /// immersive space without a manual expand tap. Set by Cinema Mode.
+    let preferExpanded: Bool
+
     init(
         item: MediaItem,
         source: (any MediaSource)?,
         session: PlaybackSession,
         startAt: Double? = nil,
+        preferExpanded: Bool = false,
         onDismiss: @escaping () -> Void
     ) {
         self.item = item
         self.source = source
         self.startAt = startAt
+        self.preferExpanded = preferExpanded
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
     }
@@ -56,6 +62,7 @@ struct PlayerView: View {
             } else if let player = viewModel.player {
                 SystemVideoPlayer(
                     player: player,
+                    preferExpanded: preferExpanded,
                     onDismiss: {
                         Task { await dismissPlayer() }
                     }
