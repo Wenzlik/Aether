@@ -4,6 +4,99 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-04
+
+Premium polish pass on the 0.3.x foundation. Settings is now a true
+preferences panel (not a capability brochure), playback defaults
+follow the user across every title, the brand mark anchors a
+centred header on Home and Library, and **Apple TV gets a dedicated
+Discover tab** in place of the Storage tab that didn't belong there.
+
+### Added
+
+- **`PlaybackPreferencesStore`** — app-wide defaults for Quality,
+  Audio Language, and Subtitle Language. `@Observable`, UserDefaults
+  persisted, plumbed through `AppSession` and consumed by
+  `DetailView.hydrateForPlayback` to pre-select matching tracks at
+  every open. "Source default" / "Off" sentinels for the language
+  preferences; the user's per-title picker tap still wins for that
+  session — defaults are the seed, not a lock.
+- **`AppearancePreferenceStore`** — System / Dark / Light picker
+  surfaced in Settings under a new Appearance section. Applied at
+  the app root via `.preferredColorScheme(_:)`. The previous
+  hard-coded `.dark` is gone. Full Light visuals follow when the
+  Palette migration completes; the picker is wired today.
+- **Adaptive Palette tokens** — Light-mode foundation: `background`,
+  `surface`, `surfaceElevated`, `separator`, `textPrimary`,
+  `textSecondary`, `textTertiary` all carry per-mode variants via
+  the new `Color(light:dark:)` helper. Accent colours (violet,
+  indigo, aurora, gold) and semantic statuses (success, warning,
+  error) stay single-value — brand identity / semantic meaning is
+  the same in either appearance.
+- **`AetherSearchField`** — shared inline search capsule with
+  magnifying-glass icon, placeholder, and clear button. Lives in
+  `AetherCore/DesignSystem`. Replaces the system `.searchable`
+  modifier on Home and Library so the brand mark gets the top of
+  the screen back.
+- **Discover tab (tvOS)** — replaces the Storage tab on Apple TV.
+  Three rails: a single random **hero pick** (16:9 backdrop),
+  **Random Picks** (12 shuffled titles cross-library), and
+  **Recently Added** (round-robin interleave of each library's
+  newest). New `DiscoverFeed` model + `DiscoverFeedBuilder` reuse
+  the existing `MediaSource` APIs — no new endpoints. Picks
+  re-shuffle per build, cache per session.
+- **`PlaybackLanguage`** — curated shortlist of 15 BCP-47 codes
+  exposed in the language pickers, plus a `displayName(for:)`
+  fallback that uppercases an unknown code instead of rendering
+  blank.
+- **About → What's New** — the About section now compacts the
+  Version + Build pair into one tappable row; tapping expands a
+  cumulative bullet list of shipped highlights. On tvOS the
+  expand pattern flips to a **side-by-side** layout (version
+  left, bullets always-on right) because vertical scroll-off
+  hides expanded disclosure content on the leanback surface.
+
+### Changed
+
+- **Settings header** — centred `AetherWordmark(.large)` replaces
+  the leading-padded wordmark + "Settings" page title + "Manage
+  your media sources and playback." subtitle. The tab bar already
+  says where the user is; Settings opens straight into content.
+- **Settings Playback section is now actual preferences**. The
+  old capability badges (Direct Play available / Transcoding
+  coming soon / Offline Downloads coming soon) are gone — those
+  were product facts, not configurable choices, and "Offline
+  Downloads coming soon" was lying since 0.3.0. The section now
+  holds three `AetherDisclosureRow` pickers driven by
+  `PlaybackPreferencesStore`.
+- **Home rail order — Continue Watching first**. Active content
+  takes priority over discovery — same pattern Apple TV, Netflix,
+  Disney+ use. Sequence is now `CW → Featured → libraries`.
+- **`Gradients.background`** — single linear 12 % violet wash from
+  the top is replaced with a near-black base + two faint cosmic
+  blooms (cool aurora upper-left, warm violet upper-right) at
+  3–5 % opacity. Adaptive: bloom opacity halves on Light so the
+  accent tints don't read as marketing material on white.
+  Inspired by Apple TV+, Disney+, and visionOS backdrops.
+- **`AetherBrandMark.imageset`** ships at all three scales (1×, 2×,
+  3×) instead of `@3x`-only. tvOS doesn't have `@3x` displays, so
+  the previous configuration left the brand mark unresolved on
+  Apple TV.
+
+### Removed
+
+- **"Your media, beautifully organized." tagline** — duplicated
+  identity the new brand artwork already carries; was burning
+  vertical space on every Home / Library load. Removed from
+  HomeView heroHeader, LibraryBrowseView heroHeader, and the
+  no-source Welcome state (trimmed to the actionable "Connect a
+  Plex or Synology source to begin.").
+- **Library "Library" subtitle** — disambiguation that the tab
+  bar already provides.
+- **`.searchable` modifier** on Home and Library — replaced with
+  the inline `AetherSearchField` so the brand mark can sit above
+  the search field instead of below it.
+
 ## [0.3.2] — 2026-06-04
 
 Brand identity refresh and the in-app polish that came with it.
