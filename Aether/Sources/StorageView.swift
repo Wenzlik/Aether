@@ -1,6 +1,11 @@
 import SwiftUI
 import AetherCore
 
+// tvOS has no downloads UI (see RootTabView's `dlManager` rationale), so the
+// whole Storage screen — built on `List` + `listRowSeparator(.hidden)` which
+// is unavailable on tvOS — compiles out for that platform.
+#if !os(tvOS)
+
 /// Storage — Aether's download manager tab.
 ///
 /// A **top-level tab** next to Home / Library / Settings in
@@ -583,3 +588,5 @@ struct StorageView: View {
         return "about \(Int(hours.rounded())) hr left"
     }
 }
+
+#endif // !os(tvOS)
