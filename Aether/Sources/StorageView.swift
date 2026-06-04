@@ -37,6 +37,8 @@ struct StorageView: View {
     let libraryPreferences: LibraryPreferencesStore
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
+    /// Forwarded to DetailView via `mediaNavigationDestinations`.
+    let playbackPreferences: PlaybackPreferencesStore?
 
     /// Bytes available + total bytes on the device's main volume.
     /// Refreshed at appear and after every destructive action so the
@@ -70,7 +72,8 @@ struct StorageView: View {
                 playbackSession: playbackSession,
                 libraryPreferences: libraryPreferences,
                 downloadManager: downloadManager,
-                downloads: downloads
+                downloads: downloads,
+                playbackPreferences: playbackPreferences
             )
         }
     }

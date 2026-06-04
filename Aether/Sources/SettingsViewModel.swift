@@ -16,6 +16,16 @@ final class SettingsViewModel {
         self.session = session
     }
 
+    // MARK: - Stores (exposed for direct SwiftUI binding)
+
+    /// The app-wide playback defaults store. Exposed straight through so
+    /// SettingsView can `@Bindable` it and the picker writes propagate
+    /// without round-tripping through the view model.
+    var playbackPreferences: PlaybackPreferencesStore { session.playbackPreferences }
+
+    /// The app-wide appearance store (System / Dark / Light).
+    var appearance: AppearancePreferenceStore { session.appearance }
+
     // MARK: - Account
 
     var isPlexSignedIn: Bool { session.isPlexSignedIn }
@@ -67,12 +77,6 @@ final class SettingsViewModel {
         session.setActiveSource(kind)
     }
 
-    // MARK: - Playback
-
-    let directPlayStatus: AetherStatus = .available
-    let transcodingStatus: AetherStatus = .comingSoon
-    let offlineDownloadsStatus: AetherStatus = .comingSoon
-
     // MARK: - About
 
     let appName = "Aether"
@@ -85,6 +89,24 @@ final class SettingsViewModel {
     var buildString: String {
         infoString("CFBundleVersion") ?? "—"
     }
+
+    /// One-line label for the About section's tappable Version row.
+    /// "Version 0.3.2 (1)" — collapses two rows (version + build) into one.
+    var versionRowLabel: String {
+        "Version \(versionString) (\(buildString))"
+    }
+
+    /// Headline features shipped to date, surfaced in the About section's
+    /// "What's New" disclosure. Cumulative — the section showcases what
+    /// Aether actually does today rather than churning per-release notes;
+    /// the full per-version log lives in `CHANGELOG.md`.
+    let whatsNewBullets: [String] = [
+        "Plex and Jellyfin sign-in",
+        "Continue Watching across libraries",
+        "Audio · Subtitle · Quality picker on Detail",
+        "Offline downloads with auto-resume",
+        "Storage manager with swipe-to-delete"
+    ]
 
     private func infoString(_ key: String) -> String? {
         guard let value = Bundle.main.infoDictionary?[key] as? String, !value.isEmpty else {

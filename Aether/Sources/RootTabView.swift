@@ -47,7 +47,8 @@ struct RootTabView: View {
                     onAddSource: { session.presentSignIn() },
                     onRetryDiscovery: { Task { await session.discoverPlexServers() } },
                     downloadManager: dlManager,
-                    downloads: dlObserver
+                    downloads: dlObserver,
+                    playbackPreferences: session.playbackPreferences
                 )
             }
 
@@ -59,11 +60,26 @@ struct RootTabView: View {
                     libraryPreferences: session.libraryPreferences,
                     onAddSource: { session.presentSignIn() },
                     downloadManager: dlManager,
-                    downloads: dlObserver
+                    downloads: dlObserver,
+                    playbackPreferences: session.playbackPreferences
                 )
             }
 
-            #if !os(tvOS)
+            #if os(tvOS)
+            // Discover replaces Storage on Apple TV — downloads make no
+            // sense on a lean-back surface, but content discovery does.
+            Tab("Discover", systemImage: "sparkles") {
+                DiscoverView(
+                    source: session.source,
+                    resumeStore: session.resumeStore,
+                    playbackSession: session.playback,
+                    libraryPreferences: session.libraryPreferences,
+                    downloadManager: dlManager,
+                    downloads: dlObserver,
+                    playbackPreferences: session.playbackPreferences
+                )
+            }
+            #else
             Tab("Storage", systemImage: "internaldrive") {
                 StorageView(
                     source: session.source,
@@ -71,7 +87,8 @@ struct RootTabView: View {
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
                     downloadManager: session.downloadManager,
-                    downloads: session.downloads
+                    downloads: session.downloads,
+                    playbackPreferences: session.playbackPreferences
                 )
             }
             #endif
@@ -130,6 +147,8 @@ private struct MediaNavigationDestinations: ViewModifier {
     /// can be reached without it (cold-launch deep link, theoretically).
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
+    /// App-wide playback defaults seeded into DetailView's pickers.
+    let playbackPreferences: PlaybackPreferencesStore?
 
     func body(content: Content) -> some View {
         content
@@ -140,7 +159,8 @@ private struct MediaNavigationDestinations: ViewModifier {
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
                     downloadManager: downloadManager,
-                    downloads: downloads
+                    downloads: downloads,
+                    playbackPreferences: playbackPreferences
                 )
             }
             .navigationDestination(for: Library.self) { library in
@@ -162,7 +182,8 @@ extension View {
         playbackSession: PlaybackSession,
         libraryPreferences: LibraryPreferencesStore,
         downloadManager: DownloadManager? = nil,
-        downloads: DownloadObserver? = nil
+        downloads: DownloadObserver? = nil,
+        playbackPreferences: PlaybackPreferencesStore? = nil
     ) -> some View {
         modifier(MediaNavigationDestinations(
             source: source,
@@ -170,7 +191,8 @@ extension View {
             playbackSession: playbackSession,
             libraryPreferences: libraryPreferences,
             downloadManager: downloadManager,
-            downloads: downloads
+            downloads: downloads,
+            playbackPreferences: playbackPreferences
         ))
     }
 }

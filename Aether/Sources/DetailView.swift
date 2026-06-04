@@ -14,6 +14,12 @@ struct DetailView: View {
     /// `downloads.snapshot.status(for:)` synchronously in `body`. `nil`
     /// until boot completes for the same reason as `downloadManager`.
     let downloads: DownloadObserver?
+    /// App-wide playback defaults (Default Quality / Audio Language /
+    /// Subtitle Language). When the user opens a title, the Audio /
+    /// Subtitles / Quality pickers pre-select matching values from these
+    /// defaults so playback starts how the user said they want it.
+    /// `nil` only in test fixtures or pre-boot paths.
+    let playbackPreferences: PlaybackPreferencesStore?
 
     @State private var resume: ResumePoint?
     @State private var isPlayerPresented = false
@@ -816,8 +822,48 @@ struct DetailView: View {
     private func hydrateForPlayback() async {
         guard !item.kind.isContainer, let source else { return }
         if let hydrated = try? await source.item(for: item.id) {
-            configuredItem = hydrated
+            configuredItem = applyingPreferences(to: hydrated)
         }
+    }
+
+    /// Seeds the user's app-wide playback defaults onto a freshly hydrated
+    /// item. Each preference is applied only when it points at a track that
+    /// actually exists on the title — a Czech-audio default doesn't force
+    /// English-only content into silence — and only when set; `nil` means
+    /// "follow the source default" and falls through to whatever the source
+    /// (Plex / Jellyfin) already picked. The user's per-title picker tap
+    /// later still wins for that session.
+    private func applyingPreferences(to hydrated: MediaItem) -> MediaItem {
+        guard let prefs = playbackPreferences else { return hydrated }
+        var result = hydrated
+
+        // Audio: match by language code (case-insensitive). Only override
+        // when the title has a track in the preferred language.
+        if let preferred = prefs.defaultAudioLanguage?.lowercased(),
+           let track = result.audioTracks.first(where: {
+               $0.languageCode?.lowercased() == preferred
+           }) {
+            result = result.selectingAudioTrack(track)
+        }
+
+        // Subtitles: "off" disables subs entirely; nil leaves whatever the
+        // source picked; a language code selects the first matching track.
+        if let preferred = prefs.defaultSubtitleLanguage {
+            if preferred == "off" {
+                result = result.selectingSubtitleTrack(nil)
+            } else if let track = result.subtitleTracks.first(where: {
+                $0.languageCode?.lowercased() == preferred.lowercased()
+            }) {
+                result = result.selectingSubtitleTrack(track)
+            }
+        }
+
+        // Quality: always applied. The MediaItem default is `.original`,
+        // but most users want the picker to open on whatever they chose
+        // last as their everywhere-default.
+        result = result.selectingQuality(prefs.defaultQuality)
+
+        return result
     }
 
     // MARK: - Player dismiss
