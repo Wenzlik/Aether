@@ -58,16 +58,46 @@ public enum AetherDesign {
         /// and the bottom anchor of `cinematic` gradients.
         public static let accentAmber = Color(hex: 0xF59E0B)
 
-        // Surfaces (near-black zinc)
-        public static let background = Color(hex: 0x09090B)
-        public static let surface = Color(hex: 0x18181B)
-        public static let surfaceElevated = Color(hex: 0x27272A)
-        public static let separator = Color.white.opacity(0.10)
+        // Surfaces — adaptive. Dark side keeps the OLED-friendly near-black
+        // zinc tones the app shipped on for 0.3.x; light side mirrors the
+        // tints Apple uses in the System / Music / TV apps under a light
+        // appearance (near-white base, white cards, subtle elevated stripe).
+        public static let background = Color(
+            light: Color(hex: 0xF6F6F6),
+            dark: Color(hex: 0x09090B)
+        )
+        public static let surface = Color(
+            light: Color(hex: 0xFFFFFF),
+            dark: Color(hex: 0x18181B)
+        )
+        public static let surfaceElevated = Color(
+            light: Color(hex: 0xFAFAFA),
+            dark: Color(hex: 0x27272A)
+        )
+        /// Hairline divider colour — uses the standard "ink at 10 %" on
+        /// dark surfaces and a soft zinc stroke on light. Resolved by the
+        /// trait collection, so cards keep their outline in both modes.
+        public static let separator = Color(
+            light: Color.black.opacity(0.10),
+            dark: Color.white.opacity(0.10)
+        )
 
-        // Text
-        public static let textPrimary = Color(hex: 0xFAFAFA)
-        public static let textSecondary = Color(hex: 0xA1A1AA)
-        public static let textTertiary = Color(hex: 0x71717A)
+        // Text — adaptive. Dark mode keeps `#FAFAFA / #A1A1AA / #71717A`
+        // (the original zinc ramp). Light flips primary to near-black,
+        // pulls secondary closer to mid-zinc for legibility on a white
+        // surface, and reuses zinc-500 for tertiary (works in both).
+        public static let textPrimary = Color(
+            light: Color(hex: 0x0A0A0A),
+            dark: Color(hex: 0xFAFAFA)
+        )
+        public static let textSecondary = Color(
+            light: Color(hex: 0x52525B),
+            dark: Color(hex: 0xA1A1AA)
+        )
+        public static let textTertiary = Color(
+            light: Color(hex: 0x71717A),
+            dark: Color(hex: 0x71717A)
+        )
 
         // Semantic
         public static let success = Color(hex: 0x22C55E)
@@ -106,18 +136,43 @@ public enum AetherDesign {
             )
         }
 
-        /// Whole-screen atmosphere: a faint violet glow at the top fading into
-        /// the near-black background. Calm, not loud.
-        public static var background: LinearGradient {
-            LinearGradient(
-                stops: [
-                    .init(color: Palette.accent.opacity(0.12), location: 0.0),
-                    .init(color: Palette.background, location: 0.45),
-                    .init(color: Palette.background, location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+        /// Whole-screen atmosphere — two faint cosmic blooms (cool aurora
+        /// upper-left, warm violet upper-right) over the adaptive
+        /// `Palette.background`. On the dark side the blooms sit at
+        /// 3–5 % opacity and read like distant nebula light; on the light
+        /// side they're swapped for the same accents at half the opacity
+        /// (so the screen still has subtle structure on white) — strong
+        /// brand tints on a white background look like marketing
+        /// material, so the light variant pulls way back. Inspired by
+        /// Apple TV+, Disney+, and visionOS surfaces.
+        public static var background: some View {
+            ZStack {
+                Palette.background
+                RadialGradient(
+                    colors: [
+                        Color(
+                            light: Palette.accentAurora.opacity(0.025),
+                            dark: Palette.accentAurora.opacity(0.05)
+                        ),
+                        Color.clear
+                    ],
+                    center: UnitPoint(x: 0.15, y: 0.10),
+                    startRadius: 0,
+                    endRadius: 520
+                )
+                RadialGradient(
+                    colors: [
+                        Color(
+                            light: Palette.accent.opacity(0.02),
+                            dark: Palette.accent.opacity(0.04)
+                        ),
+                        Color.clear
+                    ],
+                    center: UnitPoint(x: 0.88, y: 0.18),
+                    startRadius: 0,
+                    endRadius: 600
+                )
+            }
         }
 
         /// Radial violet bloom used behind hero / welcome content.
@@ -175,5 +230,28 @@ public extension Color {
         let g = Double((hex >> 8) & 0xFF) / 255.0
         let b = Double(hex & 0xFF) / 255.0
         self.init(.sRGB, red: r, green: g, blue: b, opacity: opacity)
+    }
+
+    /// Builds a colour that automatically resolves to one of two values
+    /// based on the host trait collection's `userInterfaceStyle`. The
+    /// foundation for the Appearance picker's System / Dark / Light
+    /// triplet — every Palette surface / text token resolves through
+    /// this so the UI tracks the system (or the user's explicit
+    /// override via `.preferredColorScheme(_:)`).
+    ///
+    /// Uses `UIColor(dynamicProvider:)` under the hood, which Apple's
+    /// SwiftUI bridges to a "resolve on read" `Color` — same machinery
+    /// the system uses for `Color.systemBackground` and friends, so
+    /// the value reacts to live trait changes without the view having
+    /// to re-create it. Available on every platform Aether ships to
+    /// (iOS / iPadOS / tvOS / visionOS).
+    init(light: Color, dark: Color) {
+        #if canImport(UIKit)
+        self.init(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+        #else
+        self = dark
+        #endif
     }
 }

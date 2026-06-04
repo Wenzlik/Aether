@@ -1,10 +1,12 @@
 {
   "images" : [
     {
+      "filename" : "AetherBrandMark.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
+      "filename" : "AetherBrandMark@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },

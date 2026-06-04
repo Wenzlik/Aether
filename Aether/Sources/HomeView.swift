@@ -21,6 +21,9 @@ struct HomeView: View {
     /// booted the downloads pipeline.
     let downloadManager: DownloadManager?
     let downloads: DownloadObserver?
+    /// Forwarded so DetailView can seed Audio / Subtitle / Quality pickers
+    /// from the user's Settings defaults.
+    let playbackPreferences: PlaybackPreferencesStore?
 
     @State private var feed: HomeFeed = .empty
     @State private var loadError: String?
@@ -54,7 +57,8 @@ struct HomeView: View {
                 playbackSession: playbackSession,
                 libraryPreferences: libraryPreferences,
                 downloadManager: downloadManager,
-                downloads: downloads
+                downloads: downloads,
+                playbackPreferences: playbackPreferences
             )
         }
         // Reload whenever the source changes (nil → Plex after discovery, or
@@ -113,15 +117,22 @@ struct HomeView: View {
 
     // MARK: - Rails
 
+    /// Rails order: **Continue Watching** first when present, then
+    /// Featured, then a section per library. The active-content-first
+    /// pattern matches Netflix / Apple TV / Disney+ — the user's
+    /// in-progress titles take priority over the discovery rail because
+    /// resuming is the most common reason a returning user lands on
+    /// Home. Featured stays prominent (second slot, hero artwork)
+    /// rather than getting pushed below library sections.
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                if !feed.featured.isEmpty {
-                    featuredSection
-                }
-
                 if !feed.continueWatching.isEmpty {
                     continueWatchingSection
+                }
+
+                if !feed.featured.isEmpty {
+                    featuredSection
                 }
 
                 ForEach(feed.libraries) { librarySection in
