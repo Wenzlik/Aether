@@ -56,6 +56,25 @@ public actor DownloadManager {
     /// Cleared once the matching event has been consumed.
     private var expectedCancellations: Set<UUID> = []
 
+    /// Last progress sample per job (bytes + monotonic timestamp), used to
+    /// derive transfer speed from successive `didWriteData` callbacks.
+    private var lastProgressSample: [UUID: (bytes: Int64, at: ContinuousClock.Instant)] = [:]
+
+    /// Exponentially-smoothed bytes/sec per job, so the displayed speed doesn't
+    /// jitter wildly between ticks.
+    private var smoothedBytesPerSecond: [UUID: Double] = [:]
+
+    /// How many times we've auto-resumed a job *this process launch* after an
+    /// unexpected interruption. Bounded by `maxAutoResumeAttempts` so a hard
+    /// failure (dead server, gone file) can't spin in a resume loop. Reset per
+    /// launch — reopening the app gives each download a fresh auto-resume.
+    private var autoResumeAttempts: [UUID: Int] = [:]
+    private static let maxAutoResumeAttempts = 1
+
+    /// Monotonic clock for speed sampling. Wall-clock isn't needed and would be
+    /// wrong across system time changes mid-download.
+    private let clock = ContinuousClock()
+
     /// Public init. Async because we recover any in-flight tasks from
     /// the URLSession (relaunch case) and need to wait for the system.
     public init(store: DownloadStore, downloadsDirectory: URL = DownloadManager.defaultDownloadsDirectory()) async {
@@ -177,15 +196,16 @@ public actor DownloadManager {
             throw DownloadError.sourceDoesNotSupportDownloads
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        let task = session.downloadTask(with: request)
-        task.taskDescription = job.id.uuidString
-        tasksByJobID[job.id] = task
-        await store.updateStatus(job.id, status: .downloading(fractionCompleted: 0))
-        task.resume()
-        Self.log.notice("enqueued job=\(job.id, privacy: .public) item=\(item.id.rawValue, privacy: .public) quality=\(quality.rawValue, privacy: .public)")
-        return job
+        // Persist the resolved URL on the job so a relaunch can restart the
+        // download from scratch when resume data is unavailable, without a
+        // live source. Same id → replaces the record, preserving its status.
+        let resolvedJob = job.withSourceURL(url)
+        await store.record(resolvedJob)
+
+        startFreshTask(jobID: resolvedJob.id, url: url)
+        await store.updateStatus(resolvedJob.id, status: .downloading(fractionCompleted: 0))
+        Self.log.notice("enqueued job=\(resolvedJob.id, privacy: .public) item=\(item.id.rawValue, privacy: .public) quality=\(quality.rawValue, privacy: .public)")
+        return resolvedJob
     }
 
     /// Pause an active download. Captures URLSession's resume data so
@@ -206,29 +226,22 @@ public actor DownloadManager {
             task.cancel(byProducingResumeData: { data in cont.resume(returning: data) })
         }
         tasksByJobID[jobID] = nil
+        clearSpeedTracking(jobID)
         if let resumeData {
-            resumeDataByJobID[jobID] = resumeData
+            storeResumeData(resumeData, for: jobID)
         }
         await store.updateStatus(jobID, status: .paused(fractionCompleted: progress))
         Self.log.notice("paused job=\(jobID, privacy: .public) progress=\(progress, privacy: .public)")
     }
 
-    /// Resume a paused download. Needs the resume data captured at
-    /// pause time; if it's gone (process died, RAM evicted), falls back
-    /// to a fresh start by leaving the status alone — UI shows Failed
-    /// and lets the user retry with a new enqueue.
+    /// Resume a paused (or interrupted) download. Prefers URLSession's resume
+    /// data — now persisted to disk, so it survives relaunch — and falls back
+    /// to a fresh restart from the job's stored URL when the resume data is
+    /// gone (RAM evicted, never produced). Only marks `.failed` when neither a
+    /// blob nor a URL is available to restart from.
     public func resume(_ jobID: UUID) async {
-        guard let resumeData = resumeDataByJobID[jobID] else {
-            Self.log.warning("resume job=\(jobID, privacy: .public) but no resume data — needs re-enqueue")
-            return
-        }
-        let task = session.downloadTask(withResumeData: resumeData)
-        task.taskDescription = jobID.uuidString
-        tasksByJobID[jobID] = task
-        resumeDataByJobID[jobID] = nil
-        let progress = task.progress.fractionCompleted
-        await store.updateStatus(jobID, status: .downloading(fractionCompleted: progress))
-        task.resume()
+        guard tasksByJobID[jobID] == nil else { return }  // already running
+        await startOrRestart(jobID)
     }
 
     /// Cancel a download — kills the task, drops the resume data,
@@ -245,28 +258,30 @@ public actor DownloadManager {
             task.cancel()
             tasksByJobID[jobID] = nil
         }
-        resumeDataByJobID[jobID] = nil
+        discardResumeData(for: jobID)
+        clearSpeedTracking(jobID)
         await store.updateStatus(jobID, status: .failed(reason: "Cancelled"))
         Self.log.notice("cancelled job=\(jobID, privacy: .public)")
     }
 
-    /// Fully remove a download — cancels task, deletes the on-disk
-    /// file, drops the store record. The user used the Delete action
-    /// on Detail or Storage settings.
+    /// Fully remove a download — cancels any task, deletes the on-disk file
+    /// **and any partial / resume-data files**, drops the store record. Backs
+    /// the Delete action and swipe-to-delete on Detail + Storage, for finished
+    /// *and* in-progress downloads.
     public func remove(_ jobID: UUID) async {
         if let task = tasksByJobID[jobID] {
             expectedCancellations.insert(jobID)
             task.cancel()
             tasksByJobID[jobID] = nil
         }
-        resumeDataByJobID[jobID] = nil
-        // If the file landed on disk, remove it.
-        if let job = await store.all().first(where: { $0.id == jobID }) {
-            let status = await store.status(for: job.mediaID)
-            if case let .completed(localURL, _) = status {
-                try? FileManager.default.removeItem(at: localURL)
-            }
-        }
+        discardResumeData(for: jobID)
+        clearSpeedTracking(jobID)
+        autoResumeAttempts[jobID] = nil
+        // Remove every file we own for this job: the finished media file
+        // (`{jobID}.{ext}`) and the resume-data blob (`{jobID}.resumedata`).
+        // Globbing on the id prefix covers both without needing to know the
+        // extension a completed file landed with.
+        removeFiles(for: jobID)
         await store.delete(jobID)
         Self.log.notice("removed job=\(jobID, privacy: .public)")
     }
@@ -276,8 +291,15 @@ public actor DownloadManager {
     private func handle(_ event: DownloadEvent) async {
         guard let jobID = UUID(uuidString: event.taskDescription) else { return }
         switch event.kind {
-        case let .progress(fractionCompleted):
-            await store.updateStatus(jobID, status: .downloading(fractionCompleted: fractionCompleted))
+        case let .progress(fractionCompleted, receivedBytes, totalBytes):
+            let bps = updateSpeed(jobID: jobID, receivedBytes: receivedBytes)
+            await store.recordProgress(
+                jobID,
+                fractionCompleted: fractionCompleted,
+                receivedBytes: receivedBytes,
+                totalBytes: totalBytes,
+                bytesPerSecond: bps
+            )
 
         case let .finished(localURL, sizeBytes):
             // The bridge already moved the file into place
@@ -285,29 +307,52 @@ public actor DownloadManager {
             // just records the destination + size in the store.
             await store.updateStatus(jobID, status: .completed(localURL: localURL, sizeBytes: sizeBytes))
             tasksByJobID[jobID] = nil
+            clearSpeedTracking(jobID)
+            discardResumeData(for: jobID)
             Self.log.notice("completed job=\(jobID, privacy: .public) size=\(sizeBytes, privacy: .public)B at=\(localURL.lastPathComponent, privacy: .public)")
 
         case let .failed(error):
-            // Was this *our* cancellation (pause / cancel / remove)? If
-            // so the matching public method already updated the store
-            // to `.paused` or `.failed("Cancelled")`; URLSession's
-            // delegate event would only overwrite it with the same
-            // (or a less useful) state. Drop the event.
-            if expectedCancellations.remove(jobID) != nil {
-                tasksByJobID[jobID] = nil
+            // The task is done either way — drop our handle to it.
+            tasksByJobID[jobID] = nil
+            clearSpeedTracking(jobID)
+
+            // Was this *our* cancellation (pause / cancel / remove)? If so the
+            // matching public method already set the right status; URLSession's
+            // delegate event would only overwrite it. Drop the event.
+            if expectedCancellations.remove(jobID) != nil { return }
+
+            // Don't clobber a success: URLSession can fire both
+            // didFinishDownloading and didCompleteWithError(nil).
+            if let mediaID = await jobMediaID(for: jobID),
+               case .completed = await store.status(for: mediaID) {
                 return
             }
-            // Only mark `.failed` if the task didn't already complete via
-            // `.finished` — URLSession can fire both didFinishDownloading
-            // and didCompleteWithError(nil) in the success path.
-            if let mediaID = await jobMediaID(for: jobID) {
-                let current = await store.status(for: mediaID)
-                if case .completed = current { return }
+
+            // Recoverable interruption (app killed mid-download, transient
+            // network drop): iOS hands back resume data in the error. Persist
+            // it and auto-resume — bounded so a hard failure can't loop. This
+            // is what continues a download after the user reopens the app.
+            let resumeData = (error as NSError)
+                .userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+            if let resumeData { storeResumeData(resumeData, for: jobID) }
+
+            let attempts = autoResumeAttempts[jobID, default: 0]
+            let sourceURL = await jobSourceURL(jobID)
+            let canRestart = resumeData != nil || sourceURL != nil
+            if attempts < Self.maxAutoResumeAttempts, canRestart {
+                autoResumeAttempts[jobID] = attempts + 1
+                Self.log.notice("auto-resuming job=\(jobID, privacy: .public) attempt=\(attempts + 1, privacy: .public)")
+                await startOrRestart(jobID)
+                return
             }
+
             await store.updateStatus(jobID, status: .failed(reason: Self.userFacing(error: error)))
-            tasksByJobID[jobID] = nil
             Self.log.error("failed job=\(jobID, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }
+    }
+
+    private func jobSourceURL(_ jobID: UUID) async -> URL? {
+        await store.all().first(where: { $0.id == jobID })?.sourceURL
     }
 
     private func jobMediaID(for jobID: UUID) async -> MediaID? {
@@ -316,9 +361,17 @@ public actor DownloadManager {
 
     // MARK: - Relaunch recovery
 
-    /// On launch, find every task already in the session and re-bind it
-    /// to a job. URLSession persists tasks across launches with a
-    /// background config — we just need to remember them locally.
+    /// On launch, re-bind tasks the background session kept alive across the
+    /// relaunch. A background-config session continues (and persists) its tasks
+    /// while the app is gone, so a surviving download just gets re-bound and
+    /// keeps reporting progress.
+    ///
+    /// Downloads that did *not* survive (app force-quit, task terminated while
+    /// suspended) are auto-resumed instead by the `.failed` handler: iOS
+    /// redelivers their `didCompleteWithError` — with resume data — once we
+    /// recreate the session here. Driving auto-resume from that single place
+    /// (not also here) avoids racing a late-delivered event into a second,
+    /// duplicate download task for the same job.
     private func recoverExistingTasks() async {
         let tasks = await session.allTasks
         for task in tasks {
@@ -330,6 +383,113 @@ public actor DownloadManager {
         if !tasks.isEmpty {
             Self.log.notice("recovered \(tasks.count, privacy: .public) in-flight tasks on launch")
         }
+    }
+
+    // MARK: - Task starting + restart
+
+    /// Start a brand-new download task from a URL (initial enqueue / restart
+    /// from scratch when there's no resume data).
+    private func startFreshTask(jobID: UUID, url: URL) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let task = session.downloadTask(with: request)
+        task.taskDescription = jobID.uuidString
+        tasksByJobID[jobID] = task
+        task.resume()
+    }
+
+    /// Continue a download from persisted resume data if we have it, otherwise
+    /// restart fresh from the job's stored URL. Marks `.failed` only when there
+    /// is nothing to start from. Sets the status to `.downloading` so the row
+    /// flips out of Paused/Failed immediately.
+    private func startOrRestart(_ jobID: UUID) async {
+        guard tasksByJobID[jobID] == nil else { return }
+
+        if let data = loadResumeData(for: jobID) {
+            let task = session.downloadTask(withResumeData: data)
+            task.taskDescription = jobID.uuidString
+            tasksByJobID[jobID] = task
+            discardResumeData(for: jobID)  // consumed; a fresh blob arrives on the next pause
+            await store.updateStatus(jobID, status: .downloading(fractionCompleted: task.progress.fractionCompleted))
+            task.resume()
+            return
+        }
+
+        if let url = await jobSourceURL(jobID) {
+            startFreshTask(jobID: jobID, url: url)
+            await store.updateStatus(jobID, status: .downloading(fractionCompleted: 0))
+            return
+        }
+
+        await store.updateStatus(
+            jobID,
+            status: .failed(reason: "Couldn't resume — re-download from the title's page.")
+        )
+    }
+
+    // MARK: - Resume-data persistence
+
+    /// `{downloadsDirectory}/{jobID}.resumedata` — the blob URLSession hands us
+    /// at pause / interruption, persisted so resume survives relaunch.
+    private func resumeDataURL(for jobID: UUID) -> URL {
+        downloadsDirectory.appendingPathComponent("\(jobID.uuidString).resumedata")
+    }
+
+    private func storeResumeData(_ data: Data, for jobID: UUID) {
+        resumeDataByJobID[jobID] = data
+        try? data.write(to: resumeDataURL(for: jobID), options: .atomic)
+    }
+
+    /// In-memory blob if present, else the on-disk one (relaunch case).
+    private func loadResumeData(for jobID: UUID) -> Data? {
+        if let data = resumeDataByJobID[jobID] { return data }
+        return try? Data(contentsOf: resumeDataURL(for: jobID))
+    }
+
+    private func discardResumeData(for jobID: UUID) {
+        resumeDataByJobID[jobID] = nil
+        try? FileManager.default.removeItem(at: resumeDataURL(for: jobID))
+    }
+
+    /// Delete every file we own for a job — the finished media file and the
+    /// resume-data blob — by matching the `{jobID}.` filename prefix.
+    private func removeFiles(for jobID: UUID) {
+        let prefix = "\(jobID.uuidString)."
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: downloadsDirectory, includingPropertiesForKeys: nil
+        ) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix(prefix) {
+            try? FileManager.default.removeItem(at: entry)
+        }
+    }
+
+    // MARK: - Speed tracking
+
+    /// Fold a new byte count into the smoothed transfer rate. Returns bytes/sec
+    /// (0 until the first interval elapses).
+    private func updateSpeed(jobID: UUID, receivedBytes: Int64) -> Double {
+        let now = clock.now
+        defer { lastProgressSample[jobID] = (receivedBytes, now) }
+        guard let last = lastProgressSample[jobID] else { return smoothedBytesPerSecond[jobID] ?? 0 }
+        let seconds = Self.seconds(from: last.at, to: now)
+        guard seconds > 0 else { return smoothedBytesPerSecond[jobID] ?? 0 }
+        let delta = Double(max(0, receivedBytes - last.bytes))
+        let instant = delta / seconds
+        // Exponential moving average — weight history 0.7 so the readout is
+        // steady but still tracks real changes within a couple of ticks.
+        let smoothed = smoothedBytesPerSecond[jobID].map { 0.7 * $0 + 0.3 * instant } ?? instant
+        smoothedBytesPerSecond[jobID] = smoothed
+        return smoothed
+    }
+
+    private func clearSpeedTracking(_ jobID: UUID) {
+        lastProgressSample[jobID] = nil
+        smoothedBytesPerSecond[jobID] = nil
+    }
+
+    private static func seconds(from start: ContinuousClock.Instant, to end: ContinuousClock.Instant) -> Double {
+        let comps = start.duration(to: end).components
+        return Double(comps.seconds) + Double(comps.attoseconds) / 1e18
     }
 
     // MARK: - Error helpers
@@ -399,7 +559,14 @@ private final class URLSessionEventBridge: NSObject, URLSessionDownloadDelegate,
         let fraction: Double = totalBytesExpectedToWrite > 0
             ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
             : 0
-        continuation.yield(DownloadEvent(taskDescription: id, kind: .progress(fractionCompleted: fraction)))
+        continuation.yield(DownloadEvent(
+            taskDescription: id,
+            kind: .progress(
+                fractionCompleted: fraction,
+                receivedBytes: totalBytesWritten,
+                totalBytes: max(0, totalBytesExpectedToWrite)
+            )
+        ))
     }
 
     func urlSession(_ session: URLSession,
@@ -531,7 +698,7 @@ private struct DownloadEvent: @unchecked Sendable {
     let kind: Kind
 
     enum Kind {
-        case progress(fractionCompleted: Double)
+        case progress(fractionCompleted: Double, receivedBytes: Int64, totalBytes: Int64)
         /// Fired AFTER the bridge has synchronously moved the file into
         /// place. `localURL` is the on-disk destination, not a temp path —
         /// the actor handler just needs to record it in the store.
