@@ -16,10 +16,9 @@ import AetherCore
 /// here"), so the tab does double duty as feature discovery for users
 /// who haven't tried downloads.
 ///
-/// Read-mostly view: `DownloadObserver` provides the live snapshot, the
-/// view does its own free-space probe at appear. No bespoke state
-/// store; everything derives from values the rest of the app already
-/// has.
+/// Built on a `List` so both in-progress and completed rows get native
+/// **swipe-to-delete**; the gradient background and clear row styling
+/// keep the card look the rest of the app uses.
 struct StorageView: View {
     /// Plumbed in from `RootTabView` so a Storage row can push a real
     /// `DetailView` (which needs the same dependencies any other
@@ -42,22 +41,18 @@ struct StorageView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                    header
-                    inProgressList
-                    breakdown
-                    downloadsList
-                    if !(downloads?.snapshot.completed.isEmpty ?? true) {
-                        clearAllButton
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.top, AetherDesign.Spacing.l)
-                .padding(.bottom, AetherDesign.Spacing.xxl)
-                .frame(maxWidth: 720, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            List {
+                Section { header.listRowSeparator(.hidden) }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(rowInsets)
+
+                inProgressSection
+                breakdownSection
+                downloadedSection
+                clearAllSection
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .navigationTitle("Storage")
             #if os(iOS)
@@ -73,6 +68,17 @@ struct StorageView: View {
                 downloads: downloads
             )
         }
+    }
+
+    /// Uniform insets that make List rows sit like the app's free-standing
+    /// cards (full-bleed horizontally within the 720pt reading column).
+    private var rowInsets: EdgeInsets {
+        EdgeInsets(
+            top: AetherDesign.Spacing.xs,
+            leading: AetherDesign.Spacing.l,
+            bottom: AetherDesign.Spacing.xs,
+            trailing: AetherDesign.Spacing.l
+        )
     }
 
     // MARK: - Header (total + free + in-progress count)
@@ -92,6 +98,7 @@ struct StorageView: View {
                     .padding(.top, AetherDesign.Spacing.xs)
             }
         }
+        .padding(.top, AetherDesign.Spacing.s)
     }
 
     /// "Used by Aether downloads" — or with an "N in progress" suffix when
@@ -106,92 +113,32 @@ struct StorageView: View {
         return "Used by Aether downloads · \(activeCount) \(unit) in progress"
     }
 
-    // MARK: - Per-source breakdown
+    // MARK: - In Progress section
 
-    /// Per-source split of the downloads — at MVP only Plex and Jellyfin
-    /// surface, but the shape is ready for Local Library / Synology when
-    /// they land. Sources with zero downloads are hidden.
+    /// Every job that's not yet `.completed`. Hidden when there are none.
+    /// Each row swipes left to delete (cancels the task + removes partial
+    /// files); the trailing button is the state's primary next step.
     @ViewBuilder
-    private var breakdown: some View {
-        let groups = perSourceGroups
-        if !groups.isEmpty {
-            AetherSettingsSection("By source") {
-                ForEach(groups, id: \.label) { group in
-                    AetherSettingsRow(
-                        label: group.label,
-                        systemImage: group.glyph,
-                        value: "\(group.count) · \(formatBytes(group.bytes))"
-                    )
-                }
-            }
-        }
-    }
-
-    // MARK: - Per-item list
-
-    @ViewBuilder
-    private var downloadsList: some View {
-        let completed = downloads?.snapshot.completed ?? []
-        let inProgress = downloads?.snapshot.inProgress ?? []
-        if !completed.isEmpty {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text("Downloaded")
-                    .font(AetherDesign.Typography.caption)
-                    .tracking(0.6)
-                    .textCase(.uppercase)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-
-                VStack(spacing: AetherDesign.Spacing.xs) {
-                    ForEach(completed) { job in
-                        downloadRow(job)
-                    }
-                }
-            }
-        } else if inProgress.isEmpty {
-            // Only show the "No downloads yet" prompt when there's
-            // truly nothing — completed *or* in-flight. An active
-            // download with no completed siblings would otherwise read
-            // as both "In Progress" *and* "no downloads yet", which
-            // contradicts itself.
-            Text("No downloads yet. Tap Download on a movie or episode to save it here.")
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .frame(maxWidth: 520, alignment: .leading)
-        }
-    }
-
-    /// "In Progress" section — every job that's not yet `.completed`.
-    /// Hidden when there are no active jobs; otherwise sits between the
-    /// header and the per-source breakdown so the user sees their
-    /// running download right at the top of the tab.
-    @ViewBuilder
-    private var inProgressList: some View {
+    private var inProgressSection: some View {
         let inProgress = downloads?.snapshot.inProgress ?? []
         if !inProgress.isEmpty {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text("In Progress")
-                    .font(AetherDesign.Typography.caption)
-                    .tracking(0.6)
-                    .textCase(.uppercase)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-
-                VStack(spacing: AetherDesign.Spacing.xs) {
-                    ForEach(inProgress) { job in
-                        inProgressRow(job)
-                    }
+            Section {
+                ForEach(inProgress) { job in
+                    deletable(inProgressRow(job), job: job)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(rowInsets)
                 }
+            } header: {
+                sectionHeader("In Progress")
             }
         }
     }
 
-    /// Active-download row: poster + title + status text + a trailing
-    /// action button whose label depends on the state (Pause / Resume /
-    /// Retry / Cancel). Source label sits under the title so the user
-    /// knows which server this is downloading from when multiple are
-    /// connected.
     @ViewBuilder
     private func inProgressRow(_ job: DownloadJob) -> some View {
         let status = downloads?.snapshot.statusByJobID[job.id] ?? .notDownloaded
+        let live = downloads?.snapshot.liveProgress(for: job.id)
         NavigationLink(value: syntheticMediaItem(for: job)) {
             HStack(spacing: AetherDesign.Spacing.m) {
                 CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
@@ -203,13 +150,21 @@ struct StorageView: View {
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                         .lineLimit(1)
-                    Text(inProgressDetail(for: status, job: job))
+                    Text(inProgressDetail(for: status, live: live, job: job))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                    if let fraction = progressFraction(for: status) {
+                        ProgressView(value: fraction)
+                            .tint(AetherDesign.Palette.accent)
+                            .padding(.top, AetherDesign.Spacing.xxs)
+                    }
                 }
                 Spacer(minLength: AetherDesign.Spacing.s)
                 inProgressAction(for: status, job: job)
+                #if os(tvOS)
+                deleteButton(job)
+                #endif
             }
             .padding(.vertical, AetherDesign.Spacing.s)
             .padding(.horizontal, AetherDesign.Spacing.m)
@@ -222,71 +177,181 @@ struct StorageView: View {
         .buttonStyle(.plain)
     }
 
-    /// One-line status text for the in-progress row. Combines source
-    /// label + state-specific detail so the second line is always
-    /// informative: "Plex · Downloading 47%" / "Plex · Paused at 47%" /
-    /// "Plex · Failed · HTTP 401".
-    private func inProgressDetail(for status: DownloadStatus, job: DownloadJob) -> String {
-        let prefix = sourceLabel(for: job.mediaID.source)
-        let state: String
+    /// Progress fraction for the row's bar — downloading + paused only.
+    private func progressFraction(for status: DownloadStatus) -> Double? {
         switch status {
-        case .queued:
-            state = "Queued"
-        case let .downloading(fraction):
-            state = fraction > 0
-                ? "Downloading \(Int((fraction * 100).rounded()))%"
-                : "Downloading"
-        case let .paused(fraction):
-            state = "Paused at \(Int((fraction * 100).rounded()))%"
-        case let .failed(reason):
-            state = "Failed · \(reason)"
-        case .expired:
-            state = "Expired"
-        case .completed, .notDownloaded:
-            state = ""
+        case let .downloading(fraction), let .paused(fraction):
+            return min(max(fraction, 0), 1)
+        default:
+            return nil
         }
-        return state.isEmpty ? prefix : "\(prefix) · \(state)"
     }
 
-    /// Primary action for an in-progress row, picked by status:
-    /// Downloading → Pause, Paused → Resume, Failed/Expired → Retry,
-    /// Queued → Cancel. Each state has one obvious next step; we never
-    /// show two buttons (would compete for attention) — Delete is on
-    /// the completed row instead.
+    /// Status line for an in-progress row. While downloading, packs the live
+    /// detail the user asked for: "Plex · 1.2 of 3.4 GB · 12 MB/s · 4 min
+    /// left". Falls back to coarser text for the other states.
+    private func inProgressDetail(
+        for status: DownloadStatus,
+        live: DownloadLiveProgress?,
+        job: DownloadJob
+    ) -> String {
+        let prefix = sourceLabel(for: job.mediaID.source)
+        switch status {
+        case .queued:
+            return "\(prefix) · Queued"
+        case let .downloading(fraction):
+            var parts: [String] = [prefix]
+            if let live, live.totalBytes > 0 {
+                parts.append("\(formatBytes(live.receivedBytes)) of \(formatBytes(live.totalBytes))")
+            } else {
+                parts.append("Downloading \(Int((fraction * 100).rounded()))%")
+            }
+            if let live, live.bytesPerSecond > 0 {
+                parts.append("\(formatBytes(Int64(live.bytesPerSecond)))/s")
+            }
+            if let live, let eta = live.estimatedSecondsRemaining {
+                parts.append(formatETA(eta))
+            }
+            return parts.joined(separator: " · ")
+        case let .paused(fraction):
+            return "\(prefix) · Paused at \(Int((fraction * 100).rounded()))%"
+        case let .failed(reason):
+            return "\(prefix) · Failed · \(reason)"
+        case .expired:
+            return "\(prefix) · Expired"
+        case .completed, .notDownloaded:
+            return prefix
+        }
+    }
+
+    /// Primary action for an in-progress row, picked by status. Delete is
+    /// always available via swipe, so this stays a single, obvious next step.
     @ViewBuilder
     private func inProgressAction(for status: DownloadStatus, job: DownloadJob) -> some View {
         switch status {
-        case .queued:
-            Button("Cancel") { Task { await cancelDownload(job) } }
-                .buttonStyle(.plain)
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.accent)
         case .downloading:
-            Button("Pause") { Task { await pauseDownload(job) } }
-                .buttonStyle(.plain)
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.accent)
+            rowActionButton("Pause") { await pauseDownload(job) }
         case .paused:
-            Button("Resume") { Task { await resumeDownload(job) } }
-                .buttonStyle(.plain)
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.accent)
+            rowActionButton("Resume") { await resumeDownload(job) }
         case .failed, .expired:
-            Button("Retry") { Task { await retryDownload(job) } }
-                .buttonStyle(.plain)
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.accent)
-        case .completed, .notDownloaded:
+            rowActionButton("Retry") { await retryDownload(job) }
+        case .queued, .completed, .notDownloaded:
             EmptyView()
+        }
+    }
+
+    private func rowActionButton(_ title: String, _ action: @escaping () async -> Void) -> some View {
+        Button(title) { Task { await action() } }
+            .buttonStyle(.plain)
+            .font(AetherDesign.Typography.metadata)
+            .foregroundStyle(AetherDesign.Palette.accent)
+    }
+
+    /// Apply native swipe-to-delete where the platform supports it. tvOS has no
+    /// swipe gesture, so rows there carry a visible trash button instead (added
+    /// in the row body under `#if os(tvOS)`).
+    @ViewBuilder
+    private func deletable(_ content: some View, job: DownloadJob) -> some View {
+        #if os(tvOS)
+        content
+        #else
+        content.swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                Task { await delete(job) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        #endif
+    }
+
+    #if os(tvOS)
+    /// tvOS delete affordance — a focusable trash button, since there's no
+    /// swipe gesture on the platform.
+    private func deleteButton(_ job: DownloadJob) -> some View {
+        Button { Task { await delete(job) } } label: {
+            Image(systemName: "trash")
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.error)
+                .padding(AetherDesign.Spacing.s)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Delete \(job.title)")
+    }
+    #endif
+
+    // MARK: - Per-source breakdown
+
+    /// Per-source split of the downloads — at MVP only Plex and Jellyfin
+    /// surface, but the shape is ready for Local Library / Synology when
+    /// they land. Sources with zero downloads are hidden.
+    @ViewBuilder
+    private var breakdownSection: some View {
+        let groups = perSourceGroups
+        if !groups.isEmpty {
+            Section {
+                ForEach(groups, id: \.label) { group in
+                    HStack {
+                        Label(group.label, systemImage: group.glyph)
+                            .font(AetherDesign.Typography.body)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        Spacer()
+                        Text("\(group.count) · \(formatBytes(group.bytes))")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    }
+                    .padding(.vertical, AetherDesign.Spacing.s)
+                    .padding(.horizontal, AetherDesign.Spacing.m)
+                    .background(
+                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                            .fill(AetherDesign.Materials.card)
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets)
+                }
+            } header: {
+                sectionHeader("By source")
+            }
+        }
+    }
+
+    // MARK: - Downloaded section
+
+    @ViewBuilder
+    private var downloadedSection: some View {
+        let completed = downloads?.snapshot.completed ?? []
+        let inProgress = downloads?.snapshot.inProgress ?? []
+        if !completed.isEmpty {
+            Section {
+                ForEach(completed) { job in
+                    deletable(downloadRow(job), job: job)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(rowInsets)
+                }
+            } header: {
+                sectionHeader("Downloaded")
+            }
+        } else if inProgress.isEmpty {
+            // Only show the "No downloads yet" prompt when there's truly
+            // nothing — completed *or* in-flight.
+            Section {
+                Text("No downloads yet. Tap Download on a movie or episode to save it here.")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .frame(maxWidth: 520, alignment: .leading)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets)
+            }
         }
     }
 
     @ViewBuilder
     private func downloadRow(_ job: DownloadJob) -> some View {
         let size = jobSizeBytes(job)
-        // Whole row is a NavigationLink — tap navigates to Detail.
-        // Delete button sits as an overlay button so its tap doesn't
-        // bubble through to the row's link.
         NavigationLink(value: syntheticMediaItem(for: job)) {
             HStack(spacing: AetherDesign.Spacing.m) {
                 CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
@@ -315,21 +380,9 @@ struct StorageView: View {
                     }
                 }
                 Spacer(minLength: AetherDesign.Spacing.s)
-                Button {
-                    Task { await delete(job) }
-                } label: {
-                    Image(systemName: "trash")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.error)
-                        .padding(AetherDesign.Spacing.s)
-                        .contentShape(Rectangle())
-                }
-                // `.plain` button style + the explicit hit area stops
-                // the trash tap from also triggering the row's
-                // NavigationLink (without `.plain` SwiftUI would treat
-                // both as one tappable region).
-                .buttonStyle(.plain)
-                .accessibilityLabel("Delete \(job.title)")
+                #if os(tvOS)
+                deleteButton(job)
+                #endif
             }
             .padding(.vertical, AetherDesign.Spacing.s)
             .padding(.horizontal, AetherDesign.Spacing.m)
@@ -342,13 +395,20 @@ struct StorageView: View {
         .buttonStyle(.plain)
     }
 
+    /// Section header styled like the app's other uppercase rail labels,
+    /// minus List's default inset/casing.
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(AetherDesign.Typography.caption)
+            .tracking(0.6)
+            .textCase(.uppercase)
+            .foregroundStyle(AetherDesign.Palette.textTertiary)
+            .listRowInsets(rowInsets)
+    }
+
     /// Build a minimal `MediaItem` from a download job. `mediaNavigationDestinations`
     /// then routes it to `DetailView`, which uses the live source to
-    /// hydrate full metadata + audio/sub/quality tracks. Until that
-    /// hydrate completes the offline snapshot fields (title, poster,
-    /// series context) still render correctly — and offline override
-    /// in PlaybackSession reads from the store at Play time, so the
-    /// local file plays even if the source is unreachable.
+    /// hydrate full metadata + audio/sub/quality tracks.
     private func syntheticMediaItem(for job: DownloadJob) -> MediaItem {
         MediaItem(
             id: job.mediaID,
@@ -363,15 +423,23 @@ struct StorageView: View {
 
     // MARK: - Clear all
 
-    private var clearAllButton: some View {
-        AetherButton(
-            isClearingAll ? "Clearing…" : "Clear All Downloads",
-            systemImage: "trash",
-            role: .destructive
-        ) {
-            Task { await clearAll() }
+    @ViewBuilder
+    private var clearAllSection: some View {
+        if !(downloads?.snapshot.completed.isEmpty ?? true) {
+            Section {
+                AetherButton(
+                    isClearingAll ? "Clearing…" : "Clear All Downloads",
+                    systemImage: "trash",
+                    role: .destructive
+                ) {
+                    Task { await clearAll() }
+                }
+                .disabled(isClearingAll)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(rowInsets)
+            }
         }
-        .disabled(isClearingAll)
     }
 
     // MARK: - Derived totals
@@ -482,28 +550,36 @@ struct StorageView: View {
         await downloadManager?.resume(job.id)
     }
 
-    private func cancelDownload(_ job: DownloadJob) async {
-        await downloadManager?.cancel(job.id)
-    }
-
-    /// Drop the failed/expired record and re-enqueue with the same
-    /// quality. URLSession's resume-data for the failed task is gone by
-    /// then; a fresh start is the only path. The source lookup goes
-    /// through `mediaID.source` — we don't have a live MediaSource
-    /// reference here, but the user can also Retry from Detail (which
-    /// does have one). For Storage tab we drop the failed record
-    /// silently and let the user re-trigger from Detail; that's the
-    /// simplest path that doesn't require plumbing a source resolver
-    /// into Storage just for retries.
+    /// Restart a failed/expired download. The manager resumes from persisted
+    /// resume data when it has it, otherwise re-downloads from the job's stored
+    /// URL — so Retry works straight from Storage without a live source.
     private func retryDownload(_ job: DownloadJob) async {
-        await downloadManager?.remove(job.id)
+        await downloadManager?.resume(job.id)
         await refreshCapacity()
     }
 
+    // MARK: - Formatting
+
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
+    }
+
+    /// "4 min left" / "about 1 hr left" / "12 sec left" — rounded coarsely so
+    /// it doesn't jitter every tick.
+    private func formatETA(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 {
+            return "\(max(total, 1)) sec left"
+        }
+        if total < 3600 {
+            let minutes = Int((Double(total) / 60).rounded())
+            return "\(minutes) min left"
+        }
+        let hours = Double(total) / 3600
+        if hours < 1.5 { return "about 1 hr left" }
+        return "about \(Int(hours.rounded())) hr left"
     }
 }
