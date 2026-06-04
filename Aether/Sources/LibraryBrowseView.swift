@@ -40,19 +40,51 @@ struct LibraryBrowseView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            content
-                .background(AetherDesign.Gradients.background.ignoresSafeArea())
-                .searchable(text: $searchQuery, prompt: "Search your library")
-                .mediaNavigationDestinations(
-                    source: source,
-                    resumeStore: resumeStore,
-                    playbackSession: playbackSession,
-                    libraryPreferences: libraryPreferences,
-                    downloadManager: downloadManager,
-                    downloads: downloads
-                )
+            Group {
+                if shouldShowBrandedChrome {
+                    VStack(spacing: 0) {
+                        brandedHeader
+                        content
+                    }
+                } else {
+                    content
+                }
+            }
+            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .mediaNavigationDestinations(
+                source: source,
+                resumeStore: resumeStore,
+                playbackSession: playbackSession,
+                libraryPreferences: libraryPreferences,
+                downloadManager: downloadManager,
+                downloads: downloads
+            )
         }
         .task(id: source?.id) { await load() }
+    }
+
+    /// Show the centered Aether lockup + search field above content on the
+    /// rails and during search. The library-empty / no-source / loading /
+    /// error states own their own full-screen layout, so the header sits
+    /// out for those — a search bar over "No library yet" reads as noise.
+    private var shouldShowBrandedChrome: Bool {
+        if isSearching { return true }
+        if source == nil { return false }
+        if loadError != nil, feed.libraries.isEmpty { return false }
+        if isLoading && feed.libraries.isEmpty { return false }
+        if feed.libraries.isEmpty { return false }
+        return true
+    }
+
+    private var brandedHeader: some View {
+        VStack(spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.large)
+                .frame(maxWidth: .infinity)
+            AetherSearchField(text: $searchQuery, prompt: "Search your library")
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.l)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
 
     /// True when the user has typed something in the search bar. The
@@ -98,8 +130,6 @@ struct LibraryBrowseView: View {
     private var rails: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                heroHeader
-
                 if hasAnyDownloads {
                     downloadedRail
                 }
@@ -182,26 +212,6 @@ struct LibraryBrowseView: View {
                 .frame(width: posterWidth)
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - Hero header (branded)
-
-    /// The branded library header: the large wordmark on top, then a smaller
-    /// "Library" page label, then the tagline. The wordmark carries identity;
-    /// "Library" tells the user where they are without competing with the
-    /// brand.
-    private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            AetherWordmark(.large)
-            Text("Library")
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-            Text("Your media, beautifully organized.")
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .padding(.top, AetherDesign.Spacing.xxs)
-        }
-        .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     // MARK: - Cross-library rails

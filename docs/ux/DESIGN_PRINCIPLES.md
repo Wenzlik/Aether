@@ -113,7 +113,7 @@ Aether's identity is **personal cinema**: a violet brand over near-black surface
 
 - **Near-black backgrounds** (`#09090B`), OLED-friendly, with a faint violet wash at the top of primary screens (`AetherDesign.Gradients.background`). Surfaces are zinc (`#18181B` / elevated `#27272A`).
 - **Aether Violet** `#8B5CF6` is the primary accent — focus, selection, primary action. **Aether Indigo** `#6366F1` and **Aether Aurora** `#A855F7` are its gradient partners (`Gradients.aurora` on the hero CTA + progress). Accent appears on focus glow, progress, selected tracks, key CTAs — nowhere decorative.
-- **Aether Gold** `#F5B524` and **Aether Amber** `#F59E0B` are the **secondary** accent — the warm cinematic partner extracted from the app icon's neon "A" mark. Only used on the leading "A" of the `AetherWordmark` (via `Gradients.cinematic` violet → aurora → gold) and on hero glyphs that pair with the wordmark. **Never for selection, focus, or interactive primary actions** — violet still owns those.
+- **Aether Gold** `#F5B524` and **Aether Amber** `#F59E0B` are the **secondary** accent — the warm cinematic partner extracted from the app icon's gold→blue light-ribbon "A" mark. Carried into the app primarily through the `AetherBrandMark` artwork itself (the lockup bakes the gold-to-blue gradient into the wordmark and the under-mark glow line). May also tint hero glyphs that pair with the brand mark. **Never for selection, focus, or interactive primary actions** — violet still owns those.
 - **Type uses grayscale** — primary `#FAFAFA`, secondary `#A1A1AA`, tertiary `#71717A`.
 - **Status colors** — success `#22C55E`, warning `#F59E0B`, error `#EF4444` — used only when status *is* the message (the colour-coded settings/source values), never decorative.
 - **Focus** uses scale + depth + brightness + a soft violet glow. **Never thick white borders.**
@@ -138,10 +138,12 @@ Aether uses **native top navigation** (`RootTabView` → SwiftUI `TabView`), not
 
 Four tabs, in order: **Home / Library / Storage / Settings**.
 
-- **Home** — cinematic, content-first. The top of the page carries an `AetherWordmark(.large, tagline: "Your media, beautifully organized.")` so Home reads as Aether's landing page, not a generic rail browser. Below: Featured, Continue Watching, then a rail per library. Signed-out it shows the **Welcome** hero (also wordmark-led), not a dashboard. A `.searchable` modifier on the NavigationStack swaps the rails for `MediaSearchResults` when the user types — search lives in the tab that owns the content, the iOS-native pattern Music / Photos / TV+ use.
-- **Library** — branded browse hub. An `AetherWordmark(.large)` hero + page label, an optional `Downloaded` rail (cross-source completed downloads, only when there are any), a Continue Watching rail (cross-library), a Recently Added rail (round-robin merge across libraries), and a section per library — title with inline count `"Movies (1,234)"`, horizontal poster rail, `See all` link that pushes the full `LibraryView` grid. Same `.searchable` integration as Home.
-- **Storage** — the download manager. Total downloaded bytes + device free space, a per-source breakdown, an **In Progress** section (queued / downloading / paused / failed with state-specific Pause / Resume / Cancel / Retry actions), a **Downloaded** section with per-item Delete and a destructive Clear All. Tapping any row pushes `DetailView` — the offline-playback override in `PlaybackSession` then picks the local file.
-- **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet). Header pairs `AetherWordmark(.medium)` with the page label + a calm tagline; version lives in the About section, not the header.
+- **Home** — cinematic, content-first. A **branded header** sits above the rails: a centred `AetherWordmark(.large)` with an `AetherSearchField` beneath it. Below: Featured, Continue Watching, then a rail per library. Signed-out it shows the **Welcome** hero (wordmark-led, with a CTA) instead of the rails. The branded header is only drawn on the rails and during search — loading / error / welcome / library-empty states own their own full-screen layout and would compete with a duplicate brand mark.
+- **Library** — branded browse hub. Same branded header pattern as Home (centred `AetherWordmark(.large)` + `AetherSearchField`), then an optional `Downloaded` rail (cross-source completed downloads, only when there are any), a Continue Watching rail (cross-library), a Recently Added rail (round-robin merge across libraries), and a section per library — title with inline count `"Movies (1,234)"`, horizontal poster rail, `See all` link that pushes the full `LibraryView` grid.
+- **Storage** — the download manager. Total downloaded bytes + device free space, a per-source breakdown, an **In Progress** section (queued / downloading / paused / failed with state-specific Pause / Resume / Cancel / Retry actions), a **Downloaded** section with per-item Delete and a destructive Clear All. Tapping any row pushes `DetailView` — the offline-playback override in `PlaybackSession` then picks the local file. **iOS / iPadOS / visionOS only** — tvOS doesn't get the Storage tab (no swipe gesture, system-shared storage, persistent-network "lean back" surface).
+- **Settings** — a full-screen destination of grouped focusable cards (no longer a sheet). Header pairs `AetherWordmark(.large)` with the page label + a calm subtitle ("Manage your media sources and playback."); version lives in the About section, not the header.
+
+Search uses `AetherSearchField` rather than the system `.searchable` modifier on Home and Library so the brand mark gets the top of the screen back — `.searchable` insists on placing its bar above any scroll content. The `@State searchQuery` binding still drives the same swap to `MediaSearchResults`; only the field's render position changed.
 
 Each content tab (Home / Library / Storage) owns its own `NavigationStack`; the shared `mediaNavigationDestinations` modifier registers the `MediaItem → DetailView` and `Library → LibraryView` pushes once so the three stacks stay identical.
 
@@ -171,7 +173,7 @@ Every reusable view primitive in `AetherCore/DesignSystem/` shares the `Aether*`
 
 And the brand identity component (in the **app target**, not `AetherCore` — it carries an app-bundled image asset and isn't reusable outside this project):
 
-- **`AetherWordmark`** — the brand mark glyph paired with the "Aether" wordmark. Three variants (`.small` / `.medium` / `.large`), an optional `tagline:` parameter for the landing-page block (`[logo] Aether / tagline`). SF Pro Display Semibold, white text, only the leading "A" wears the violet → aurora gradient. No outer glow, no bevel, no outline — visionOS-friendly. Used at the top of Home (signed-in + welcome), Library, Settings, and Plex / Jellyfin sign-in / discovery sheets. Don't put it in every nav bar — over-application would dilute the mark.
+- **`AetherWordmark`** — the brand mark lockup (icon + "AETHER" wordmark + under-mark glow line) baked into a single transparent PNG (`AetherBrandMark@3x`). Three variants (`.small` / `.medium` / `.large` → 22 / 36 / 60 pt tall; width follows the artwork's ~3:1 aspect), an optional `tagline:` parameter that stacks beneath the lockup. The view simply renders the artwork — no runtime `Text` composition, no per-letter gradients, no rounded-rectangle clip — so the lockup's colour and proportion stay designer-controlled. Used at the top of Home, Library, Settings, the Welcome hero, and Plex / Jellyfin sign-in / discovery sheets. Don't put it in every nav bar — over-application dilutes the mark.
 
 If a view needs an "ad-hoc" empty / loading / error / selection surface, it's almost certainly missing one of these. Extend the primitive before reaching for a one-off.
 
@@ -303,7 +305,7 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 | `Palette.accent` | `#8B5CF6` | **Aether Violet** — focus glow, selection, primary action |
 | `Palette.accentIndigo` | `#6366F1` | secondary accent / gradient partner |
 | `Palette.accentAurora` | `#A855F7` | hero accent (brightest brand tone) |
-| `Palette.accentGold` | `#F5B524` | **Aether Gold** — wordmark tail of `Gradients.cinematic`; secondary accent only |
+| `Palette.accentGold` | `#F5B524` | **Aether Gold** — warm sibling extracted from the brand-mark artwork; reserved for code that needs to pair with the mark (hero glyphs); secondary accent only |
 | `Palette.accentAmber` | `#F59E0B` | warm amber sibling of gold; also reused for `warning` status |
 | `Palette.background` | `#09090B` | near-black base (OLED) |
 | `Palette.surface` | `#18181B` | cards, chrome |
@@ -315,7 +317,7 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 | `Palette.warning` | `#F59E0B` | warnings |
 | `Palette.error` | `#EF4444` | "Not connected" status, destructive |
 
-Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero), `Gradients.cinematic` (violet → aurora → gold — used only on the `AetherWordmark`'s leading "A" and paired hero glyphs; once per screen at most). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
+Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero), `Gradients.cinematic` (violet → aurora → gold — kept available for paired hero glyphs that need to echo the brand mark; once per screen at most). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
 
 ### Typography
 

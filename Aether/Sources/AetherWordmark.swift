@@ -1,32 +1,20 @@
 import SwiftUI
 import AetherCore
 
-/// Aether's brand mark composed of the app-icon glyph and the "Aether"
-/// wordmark, designed to read as a single recognisable identity wherever it
-/// appears in the app.
+/// Aether's brand mark — the symbol-plus-wordmark lockup that identifies the
+/// app inside its own UI (welcome / sign-in / hero headers).
 ///
-/// Lives in the **app target** (not `AetherCore`) because it depends on the
-/// `AetherBrandMark` asset that's shipped with the app's xcassets — the
-/// AetherCore package is intentionally brand-asset-free so it can be lifted
-/// into other personal-cinema projects without dragging this identity along.
+/// Backed by a single artwork file (`AetherBrandMark` in the app's xcassets)
+/// that already bakes the glyph + the "AETHER" wordmark + the gold→blue
+/// gradient + the under-mark glow line into one image. Previously this view
+/// composed the icon and the wordmark in SwiftUI (`Image` + per-letter
+/// `Text` with a gradient on "A"); the artwork upgrade lets us render the
+/// mark as a single, designer-controlled lockup instead of a code-built
+/// approximation. The variant sizes below are tuned by *height*, not type
+/// scale — the artwork's intrinsic aspect ratio (~3:2) carries width.
 ///
-/// Visual rules (kept deliberately Apple-restrained):
-/// - The wordmark is **SF Pro Display, Semibold**, white. Only the leading
-///   "A" wears the violet→aurora gradient — every other letter stays white,
-///   so the mark reads as text first, brand accent second.
-/// - Letter spacing is increased slightly via `.kerning(_:)`. The kerning
-///   value scales with the variant so the wordmark stays balanced at any
-///   size (more kerning on the large display variant, less on small).
-/// - The brand icon is rendered with the iOS-app-icon corner radius
-///   (~22% of the side length, `style: .continuous`) so it reads as the
-///   same mark users see on their home screen, just inline.
-/// - **No outer glow, no bevel, no outline.** visionOS surfaces and dark
-///   detail screens already provide their own depth; an extra glow would
-///   read as garish next to system materials. The icon's own internal glow
-///   (baked into the artwork) is the only luminance in the component.
-///
-/// Use it at the top of hero / welcome / onboarding surfaces, not in every
-/// nav bar — over-application would dilute the mark.
+/// Use at the top of welcome / onboarding / sign-in surfaces. Don't repeat
+/// in every nav bar; over-application dilutes the mark.
 public struct AetherWordmark: View {
     public enum Variant: Sendable {
         /// Inline / small-header use — about as tall as a callout-sized line of
@@ -42,16 +30,10 @@ public struct AetherWordmark: View {
     }
 
     public let variant: Variant
-    /// Optional supporting line displayed under "Aether" on the right side of
-    /// the mark. When set, the layout becomes a landing-page-style brand block:
-    ///
-    /// ```
-    /// [logo]  Aether
-    ///         tagline
-    /// ```
-    ///
-    /// When `nil` the wordmark stays single-line next to the mark — the
-    /// original inline pattern used on sign-in / discovery screens.
+    /// Optional supporting line displayed beneath the lockup. The artwork
+    /// is intentionally self-contained (icon + "AETHER" in one image), so a
+    /// tagline now stacks **below** the mark instead of sitting next to the
+    /// wordmark text — there is no separate wordmark to sit next to anymore.
     public let tagline: String?
 
     public init(_ variant: Variant = .medium, tagline: String? = nil) {
@@ -60,108 +42,45 @@ public struct AetherWordmark: View {
     }
 
     public var body: some View {
-        HStack(alignment: .center, spacing: spacing) {
-            brandMark
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+            logo
             if let tagline {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                    wordmarkText
-                    Text(tagline)
-                        .font(taglineFont)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                wordmarkText
+                Text(tagline)
+                    .font(taglineFont)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tagline.map { "Aether. \($0)" } ?? "Aether")
     }
 
-    // MARK: - Mark
-
-    private var brandMark: some View {
+    private var logo: some View {
         Image("AetherBrandMark")
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(width: markSize, height: markSize)
-            .clipShape(RoundedRectangle(cornerRadius: markSize * 0.22, style: .continuous))
+            .frame(height: logoHeight)
     }
 
-    // MARK: - Wordmark
-
-    /// "Aether" with a single-letter gradient on "A" and the rest in white.
-    /// Uses iOS 26's `Text` string interpolation (the `Text + Text` `+`
-    /// operator was deprecated in iOS 26) — embedding a styled `Text` via
-    /// `\(...)` keeps per-segment foregroundStyle while the outer modifiers
-    /// (font, kerning) flow through both halves so the letterforms stay
-    /// perfectly tracked.
-    private var wordmarkText: some View {
-        let gradient = LinearGradient(
-            colors: [
-                AetherDesign.Palette.accent,
-                AetherDesign.Palette.accentAurora
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        return Text("\(Text("A").foregroundStyle(gradient))ether")
-            .foregroundStyle(AetherDesign.Palette.textPrimary)
-            .font(.system(size: typeSize, weight: .semibold, design: .default))
-            .kerning(kerning)
-            .lineLimit(1)
-            .fixedSize()
-    }
-
-    // MARK: - Variant metrics
-
-    /// Mark size, in points. Tuned so the wordmark stays the primary focal
-    /// point (the type carries identity; the mark anchors it) — the mark is
-    /// roughly 1.4× the type size at large, narrowing to 1.2× at small so
-    /// the inline variant doesn't feel logo-led.
-    private var markSize: CGFloat {
+    /// Lockup height in points. Width follows the artwork's aspect ratio
+    /// (~3:1 after the dark vertical padding was cropped out of the
+    /// source PNG), so a `.large` mark renders ~180pt wide. Tuned so the
+    /// embedded "AETHER" wordmark stays comfortably legible at each tier
+    /// without dominating the surface horizontally — at 60pt tall × 180pt
+    /// wide, the large variant occupies about half an iPhone's content
+    /// width, leaving room for "Library" / "Settings" labels beside it.
+    private var logoHeight: CGFloat {
         switch variant {
         case .small:  return 22
         case .medium: return 36
-        case .large:  return 56
+        case .large:  return 60
         }
     }
 
-    /// Type size. The wordmark width (5 characters of display-weight text)
-    /// already exceeds the mark width at every variant, so "Aether" reads as
-    /// the focal point even when the mark is slightly taller.
-    private var typeSize: CGFloat {
-        switch variant {
-        case .small:  return 18
-        case .medium: return 26
-        case .large:  return 40
-        }
-    }
-
-    /// Increased letter spacing scales with the type size. Apple's display
-    /// fonts already tighten optical kerning automatically; we add a touch
-    /// more so the wordmark reads as a "display" mark, not running text.
-    private var kerning: CGFloat {
-        switch variant {
-        case .small:  return 0.4
-        case .medium: return 0.6
-        case .large:  return 1.0
-        }
-    }
-
-    /// Gap between mark and wordmark. Tuned visually so the mark feels paired
-    /// with the wordmark, not floating ahead of it.
-    private var spacing: CGFloat {
-        switch variant {
-        case .small:  return AetherDesign.Spacing.xs
-        case .medium: return AetherDesign.Spacing.s
-        case .large:  return AetherDesign.Spacing.m
-        }
-    }
-
-    /// Tagline typography — supporting role, smaller than the wordmark so the
-    /// brand block reads `Aether` first, supporting copy second.
+    /// Tagline typography. Caption at small, metadata at medium, body at
+    /// large — keeps the supporting copy a step below the lockup's
+    /// visual weight at every tier.
     private var taglineFont: Font {
         switch variant {
         case .small:  return AetherDesign.Typography.caption

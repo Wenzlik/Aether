@@ -414,11 +414,16 @@ struct DetailView: View {
         .disabled(isPreparingPlayback)
     }
 
-    /// Resume exists: Resume (primary, with a resume-from caption) plus Play
-    /// From Beginning (secondary). Resume uses Plex's stored `viewOffset`.
+    /// Resume exists: **Resume** (primary, with a resume-from caption) and
+    /// **Restart** (secondary) sitting side-by-side, each expanding to
+    /// equal width. "Restart" is the Apple-TV-app's name for the same
+    /// action — short enough to fit alongside Resume on iPhone without
+    /// the row wrapping to two lines. The "Resume from 1:23" caption
+    /// stays beneath the row, leading-aligned, so it pairs with Resume
+    /// (which is on the left).
     private var resumeButtons: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+            HStack(spacing: AetherDesign.Spacing.s) {
                 AetherButton(
                     isPreparingPlayback ? "Preparing…" : "Resume",
                     systemImage: "play.fill",
@@ -426,22 +431,24 @@ struct DetailView: View {
                 ) {
                     Task { await presentPlayer(fromStart: false) }
                 }
+                .frame(maxWidth: .infinity)
                 .disabled(isPreparingPlayback)
 
-                Text("Resume from \(formatPosition(resume?.position ?? .zero))")
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                    .padding(.leading, AetherDesign.Spacing.xs)
+                AetherButton(
+                    "Restart",
+                    systemImage: "backward.end.fill",
+                    role: .secondary
+                ) {
+                    Task { await presentPlayer(fromStart: true) }
+                }
+                .frame(maxWidth: .infinity)
+                .disabled(isPreparingPlayback)
             }
 
-            AetherButton(
-                "Play From Beginning",
-                systemImage: "backward.end.fill",
-                role: .secondary
-            ) {
-                Task { await presentPlayer(fromStart: true) }
-            }
-            .disabled(isPreparingPlayback)
+            Text("Resume from \(formatPosition(resume?.position ?? .zero))")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .padding(.leading, AetherDesign.Spacing.xs)
         }
     }
 

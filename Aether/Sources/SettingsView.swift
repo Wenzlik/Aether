@@ -34,12 +34,14 @@ struct SettingsView: View {
 
     // MARK: - Header
 
-    /// Settings hero: the medium wordmark, the page label, a single
-    /// actionable tagline. The version moved to the About section at the
-    /// bottom — keeping the header focused on identity + intent, not facts.
+    /// Settings hero: the large wordmark (matching Home / Library so the
+    /// brand reads at the same weight across tabs), the page label, a
+    /// single actionable subtitle. The version moved to the About section
+    /// at the bottom — keeping the header focused on identity + intent,
+    /// not facts.
     private var header: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            AetherWordmark(.medium)
+            AetherWordmark(.large)
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
                 Text("Settings")
                     .font(AetherDesign.Typography.sectionTitle)

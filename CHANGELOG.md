@@ -4,6 +4,119 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-06-04
+
+Brand identity refresh and the in-app polish that came with it.
+
+### Added
+
+- **New brand artwork.** Three designer-supplied PNGs replace the
+  previous icon set: a square symbol-only mark for iOS / iPadOS /
+  visionOS (`AppIcon.appiconset`), a wide symbol + AETHER wordmark
+  for tvOS (Home Screen imagestack, App Store imagestack, Top Shelf
+  + Top Shelf Wide at all required sizes), and a transparent
+  icon + AETHER lockup for in-app use (`AetherBrandMark`). Alpha is
+  preserved on the in-app mark so it sits on whatever surface hosts
+  it; stripped from every App Icon asset per Apple's validator
+  rules. visionOS `Front` / `Middle` layers, previously 4 kB
+  placeholders, now carry the full artwork.
+- **`AetherSearchField`** — new `AetherCore/DesignSystem` component.
+  A regular SwiftUI capsule (magnifying-glass icon, placeholder,
+  clear button) that can sit anywhere in a layout, unlike
+  `.searchable` which forces the system search bar to the top of
+  the screen. Used on Home and Library beneath the centred brand
+  mark; the bound `@State searchQuery` still drives the existing
+  `isSearching` swap to `MediaSearchResults`, so the search code
+  path is unchanged.
+
+### Changed
+
+- **Brand mark is now image-backed, not code-composed.**
+  `AetherWordmark` previously composed the icon and the wordmark in
+  SwiftUI (`Image` + `Text` with a per-letter gradient on the
+  leading "A"). The new artwork bakes that lockup into a single PNG,
+  so the view just renders the asset at the variant height (22 /
+  36 / 60 pt; width follows the artwork's ~3:1 aspect after the
+  vertical padding crop). Tagline now stacks beneath the lockup
+  instead of next to it.
+- **Centred lockup above search on Home + Library.** `.searchable`
+  is gone from both screens — it forced the search bar to the very
+  top, which fought the brief that the Aether wordmark is the first
+  thing the user sees in the app. The branded header (centred
+  wordmark + `AetherSearchField` beneath) is shown only on the rails
+  and during search; loading / error / welcome / empty states keep
+  their own full-screen layouts to avoid duplicating the brand mark
+  (the Welcome surface already renders one).
+- **Tagline lines removed.** "Your media, beautifully organized."
+  was burning vertical space on every Home + Library load and
+  duplicating identity the artwork now carries. Removed from
+  `HomeView.heroHeader`, `LibraryBrowseView.heroHeader`, and the
+  no-source Welcome state (left with the actionable
+  "Connect a Plex or Synology source to begin."). Settings keeps
+  its own page-specific subtitle ("Manage your media sources and
+  playback.") — that one is functional, not promotional.
+- **Library "Library" subtitle dropped.** The centred wordmark
+  replaces it; the tab bar already says where the user is.
+- **Settings wordmark bumped `.medium` → `.large`.** Matches Home
+  and Library so the brand reads at the same weight across every
+  top-level tab.
+- **Resume + Restart side-by-side on `DetailView`.** The two
+  playback CTAs (Resume / Play From Beginning) used to stack
+  vertically. Now they sit on one row, each `.frame(maxWidth: .infinity)`
+  so they split the width evenly. "Play From Beginning" renamed to
+  **Restart** — same name Apple's TV app uses for the same action,
+  short enough to fit alongside Resume on iPhone. The icon
+  (`backward.end.fill`) carries the rest of the meaning. The
+  "Resume from 1:23" caption stays beneath the row, leading-aligned,
+  pairing visually with Resume on the left.
+
+## [0.3.1] — 2026-06-04
+
+Download management hardening on top of 0.3.0, plus a tvOS build
+fix that unblocked Xcode Cloud.
+
+### Added
+
+- **Swipe-left to delete** any download row — in-progress or
+  completed — on iOS / visionOS. tvOS gets an explicit trash
+  button instead (`swipeActions` is unavailable there).
+  `DownloadManager.remove()` cleans up partial + resume-data files,
+  not just the finished file.
+- **Rich progress detail** on Storage rows: "1.2 of 3.4 GB · 12 MB/s
+  · 4 min left" plus a progress bar. Live byte / speed values are a
+  new transient `DownloadLiveProgress` on `DownloadSnapshot` —
+  never persisted, so existing `downloads.json` decodes unchanged
+  across the upgrade (no history wipe).
+- **Resume after relaunch.** Resume data persists to disk
+  (`{jobID}.resumedata`), so URLSession's resume blob survives the
+  process exit; `DownloadJob.sourceURL` carries a restart-from-URL
+  fallback for when resume data isn't available. Auto-resume fires
+  once per launch.
+
+### Fixed
+
+- **Pause now actually pauses.** URLSession's buffered
+  `didWriteData` events arriving while `pause()` was suspended
+  waiting for `cancel(byProducingResumeData:)` overwrote the
+  just-set `.paused` state back to `.downloading`. The actor's
+  event handler now drops progress events for jobs it no longer
+  owns (`guard tasksByJobID[jobID] != nil`) — pause / cancel /
+  remove all clear that entry first.
+- **No more progress flicker.** URLSession ticks ~10 ×/sec on a
+  fast connection, which the Storage row re-rendered 10 ×/sec —
+  speed, bytes, ETA flashed unreadably. The store now emits at most
+  every 1.5 s per job; the speed EMA still samples on every tick so
+  the displayed value stays accurate.
+- **tvOS build.** Xcode Cloud's tvOS lane was failing on
+  `'listRowSeparator(_:edges:)' is unavailable in tvOS`. Rather than
+  re-skin the Storage screen for a fourth platform, downloads are
+  dropped from tvOS entirely — Apple TV is a "lean back" surface
+  with a persistent network, no swipe gesture for managing rows,
+  and shared system storage users can't act on. `RootTabView`
+  returns `nil` for `downloadManager` / `downloads` on tvOS so
+  every download surface gates itself out via existing nil-checks;
+  the Storage tab and `StorageView.swift` are `#if !os(tvOS)` gated.
+
 ## [0.3.0] — 2026-06-03
 
 Phase 2 — offline downloads and a top-level Storage manager. Aether
