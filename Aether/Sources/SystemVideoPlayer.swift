@@ -137,11 +137,12 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
             onDismiss()
         }
 
-        #if !os(visionOS)
+        #if os(iOS)
         /// Fires when the system player's fullscreen presentation is dismissed
-        /// by the user (iOS / tvOS — unavailable on visionOS). On visionOS the
-        /// teardown comes from `PlayerView`'s end-of-playback observer and the
-        /// "Back" contextual action.
+        /// by the user. **iOS only** — this delegate method is unavailable on
+        /// tvOS and visionOS. tvOS dismisses via `.onExitCommand`; visionOS via
+        /// `PlayerView`'s end-of-playback observer and the "Back" contextual
+        /// action.
         func playerViewControllerDidEndDismissalTransition(_ playerViewController: AVPlayerViewController) {
             onDismiss()
         }
