@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Combine
 import AetherCore
 
 /// Full-screen player. Deliberately bare: `AVPlayerViewController`'s native
@@ -99,9 +100,26 @@ struct PlayerView: View {
         }
         .onDisappear {
             Task { await viewModel.close() }
+            // `onDisappear` is the reliable "player is gone" signal — it fires
+            // even when the system dismisses a *docked* player without our Back
+            // action or an end-of-playback event. Route it through `onDismiss`
+            // so the host tears down too; in Cinema Mode that's what closes the
+            // Dark Theater (otherwise the immersive space stays open → black
+            // screen). `onDismiss` (DetailView.dismissPlayer / cinema.end) is
+            // idempotent, so the normal Back / end paths calling it first is fine.
+            onDismiss()
             #if os(iOS)
             hideTask?.cancel()
             #endif
+        }
+        // When the movie plays to its end, dismiss — so windowed playback
+        // returns to Detail and, in Cinema Mode (visionOS), the immersive Dark
+        // Theater closes instead of leaving the user in a black void. Runs on
+        // the main actor (SwiftUI `onReceive`), so no data-race plumbing.
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            guard let current = viewModel.player?.currentItem,
+                  (note.object as? AVPlayerItem) === current else { return }
+            Task { await dismissPlayer() }
         }
         #if os(tvOS)
         .onExitCommand { Task { await dismissPlayer() } }

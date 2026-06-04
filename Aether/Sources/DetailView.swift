@@ -46,10 +46,9 @@ struct DetailView: View {
     @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(visionOS)
-    /// Cinema Mode coordinator — drives the "Watch in Cinema" entry. Injected
-    /// at the app root; always present inside the windowed view tree on
-    /// visionOS.
-    @Environment(CinemaCoordinator.self) private var cinema
+    /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
+    /// app root; always present inside the windowed view tree on visionOS.
+    @Environment(CinemaManager.self) private var cinema
     #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
@@ -121,6 +120,18 @@ struct DetailView: View {
             // correct.
             playbackSelectorSheet(for: selector)
         }
+        #if os(visionOS)
+        .onChange(of: cinema.isActive) { _, active in
+            // Cinema ended (movie finished or the Dark Theater was dismissed) —
+            // drop the player overlay so we don't leave a stale player behind.
+            guard !active, isPlayerPresented else { return }
+            withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+                isPlayerPresented = false
+            }
+            playbackItem = nil
+            Task { resume = await resumeStore.point(for: item.id) }
+        }
+        #endif
     }
 
     // MARK: - Detail content
@@ -922,13 +933,18 @@ struct DetailView: View {
             isPlayerPresented = false
         }
         playbackItem = nil
+        #if os(visionOS)
+        // No-op unless this was a cinema session; tears down the Dark Theater.
+        cinema.end()
+        #endif
         Task { resume = await resumeStore.point(for: item.id) }
     }
 
     #if os(visionOS)
-    /// Hand the (hydrated) item to the cinema coordinator. `RootTabView` opens
-    /// the immersive space; `CinemaImmersiveView` then opens the same item
-    /// through the same view model the windowed player uses. `nil` startAt
+    /// Enter Cinema Mode: present the native player (same `PlayerView` /
+    /// `AVPlayerViewController` as windowed playback) **and** ask `CinemaManager`
+    /// to open the Dark Theater. The system then docks the fullscreen player
+    /// into the immersive space — native controls, native sizing. `nil` startAt
     /// resumes from the saved point, mirroring the Resume button.
     private func watchInCinema() async {
         guard !isPreparingPlayback else { return }
@@ -938,7 +954,12 @@ struct DetailView: View {
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
             configuredItem = hydrated
         }
-        cinema.watch(current, source: source, startAt: resume != nil ? nil : 0)
+        playbackItem = current
+        playbackStartAt = resume != nil ? nil : 0
+        cinema.present(current, source: source, startAt: playbackStartAt)
+        withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+            isPlayerPresented = true
+        }
     }
     #endif
 

@@ -19,19 +19,23 @@ struct AetherApp: App {
     #endif
 
     #if os(visionOS)
-    // Cinema Mode (visionOS only). The coordinator owns the immersive-space
-    // lifecycle intent + live screen/environment config; `RootTabView` opens
-    // the space, `CinemaImmersiveView` dismisses it on Leave. `immersionStyle`
-    // defaults to `.full` (true blacks, IMAX feel) with `.progressive`
-    // available so the Digital Crown can blend the room back in.
+    // Cinema Mode (visionOS only). `CinemaManager` is the single source of
+    // truth for cinema state; `RootTabView` opens/closes the immersive space and
+    // presents the native player on its intent. The space renders only the Dark
+    // Theater environment — the system docks the native `AVPlayerViewController`
+    // into it. `immersionStyle` defaults to `.full` (true OLED black) with
+    // `.progressive` so the Digital Crown can blend the room back in.
     // See `docs/next-steps/visionos-cinema.md`.
-    @State private var cinema = CinemaCoordinator()
+    @State private var cinema = CinemaManager()
     @State private var immersionStyle: any ImmersionStyle = .full
     #endif
 
     var body: some Scene {
         #if os(visionOS)
-        WindowGroup(id: CinemaCoordinator.mainWindowID) {
+        // No window dismiss/reopen: the native player docks *out of* this
+        // window into the immersive space, so the window stays put (avoids the
+        // re-launch churn the earlier design hit).
+        WindowGroup {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
@@ -48,8 +52,8 @@ struct AetherApp: App {
         #endif
 
         #if os(visionOS)
-        ImmersiveSpace(id: CinemaCoordinator.spaceID) {
-            CinemaImmersiveView(session: session.playback, cinema: cinema)
+        ImmersiveSpace(id: CinemaManager.spaceID) {
+            DarkTheaterView(cinema: cinema)
         }
         .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
         #endif

@@ -65,7 +65,17 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
                 coordinator?.dismiss()
             }
         ]
+        // NOTE on Cinema auto-expand: the player comes up in the embedded
+        // (inline) experience; the user taps the expand control to go
+        // fullscreen, which docks it into the open immersive space. We do NOT
+        // force this via `experienceController.allowedExperiences` —
+        // `.allowedExperiences` MUST include `.embedded` (excluding it is a
+        // runtime fatal error). Auto-expanding without a tap needs the
+        // `AVExperienceController` *transition* API (visionOS 26); deferred
+        // until verified on device.
         #endif
+
+        controller.delegate = context.coordinator
 
         return controller
     }
@@ -96,16 +106,27 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         }
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         var onDismiss: () -> Void
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss
+            super.init()
         }
 
         @MainActor
         func dismiss() {
             onDismiss()
         }
+
+        #if !os(visionOS)
+        /// Fires when the system player's fullscreen presentation is dismissed
+        /// by the user (iOS / tvOS — unavailable on visionOS). On visionOS the
+        /// teardown comes from `PlayerView`'s end-of-playback observer and the
+        /// "Back" contextual action.
+        func playerViewControllerDidEndDismissalTransition(_ playerViewController: AVPlayerViewController) {
+            onDismiss()
+        }
+        #endif
     }
 }
