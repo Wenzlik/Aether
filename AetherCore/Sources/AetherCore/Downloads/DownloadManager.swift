@@ -64,6 +64,19 @@ public actor DownloadManager {
     /// jitter wildly between ticks.
     private var smoothedBytesPerSecond: [UUID: Double] = [:]
 
+    /// Last time we forwarded a progress update to the store (and through to
+    /// the UI), keyed by job id. URLSession's `didWriteData` fires ~10× a
+    /// second on a fast connection; without this throttle the Storage row's
+    /// speed / bytes / ETA flicker so fast they're unreadable. Speed sampling
+    /// still happens on every tick (the EMA needs continuous samples to stay
+    /// accurate) — only the store write is gated.
+    private var lastProgressEmit: [UUID: ContinuousClock.Instant] = [:]
+
+    /// Minimum gap between UI-visible progress updates. 1.5s is slow enough
+    /// that "12 MB/s · 4 min left" stays readable, fast enough that the
+    /// progress bar still feels alive.
+    private static let progressEmitIntervalSeconds: Double = 1.5
+
     /// How many times we've auto-resumed a job *this process launch* after an
     /// unexpected interruption. Bounded by `maxAutoResumeAttempts` so a hard
     /// failure (dead server, gone file) can't spin in a resume loop. Reset per
@@ -292,7 +305,28 @@ public actor DownloadManager {
         guard let jobID = UUID(uuidString: event.taskDescription) else { return }
         switch event.kind {
         case let .progress(fractionCompleted, receivedBytes, totalBytes):
+            // Drop stale ticks. URLSession can deliver a couple of buffered
+            // progress events *after* `pause()` / `cancel()` has nil'd our
+            // task reference; recording them would overwrite the .paused
+            // status we just set with .downloading again — which is exactly
+            // the "pause does nothing" bug the user reported.
+            guard tasksByJobID[jobID] != nil else { return }
+
+            // Update the EMA on every tick — the smoothed speed depends on a
+            // steady sample stream. Throttling only the *emit* keeps the
+            // speed accurate while making the UI readable.
             let bps = updateSpeed(jobID: jobID, receivedBytes: receivedBytes)
+
+            // Throttle the store write to once per `progressEmitIntervalSeconds`.
+            // First event for a job emits immediately so the row flips from
+            // "queued" to "downloading" without a 1.5-second wait.
+            let now = clock.now
+            if let last = lastProgressEmit[jobID],
+               Self.seconds(from: last, to: now) < Self.progressEmitIntervalSeconds {
+                return
+            }
+            lastProgressEmit[jobID] = now
+
             await store.recordProgress(
                 jobID,
                 fractionCompleted: fractionCompleted,
@@ -485,6 +519,10 @@ public actor DownloadManager {
     private func clearSpeedTracking(_ jobID: UUID) {
         lastProgressSample[jobID] = nil
         smoothedBytesPerSecond[jobID] = nil
+        // Drop the emit timestamp too — without this, a resumed download
+        // would skip its first 1.5s of progress because the gate still
+        // remembers the old value.
+        lastProgressEmit[jobID] = nil
     }
 
     private static func seconds(from start: ContinuousClock.Instant, to end: ContinuousClock.Instant) -> Double {
