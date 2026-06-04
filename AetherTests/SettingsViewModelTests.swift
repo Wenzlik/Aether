@@ -68,13 +68,16 @@ struct SettingsViewModelTests {
         #expect(viewModel.plexSourceStatus == .connected)
     }
 
-    @Test("Coming-soon / available statuses are constant")
+    @Test("Synology source still reads 'Coming soon'")
     func staticStatuses() {
+        // The old Direct Play / Transcoding / Offline Downloads capability
+        // badges retired in 0.4.0 — they were product facts, not user
+        // preferences, and the Settings → Playback section now holds
+        // configurable defaults instead. Synology is the only static
+        // status row left on Settings (it stays "Coming soon" until the
+        // Synology source actually ships).
         let viewModel = SettingsViewModel(session: makeSession())
         #expect(viewModel.synologyStatus == .comingSoon)
-        #expect(viewModel.transcodingStatus == .comingSoon)
-        #expect(viewModel.offlineDownloadsStatus == .comingSoon)
-        #expect(viewModel.directPlayStatus == .available)
     }
 
     @Test("versionString reads CFBundleShortVersionString from Bundle.main and is non-empty")
