@@ -51,6 +51,13 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
     /// Storage section can later report "Inception · 8 Mbps · 1.4 GB".
     public let quality: PlaybackQuality
 
+    /// The resolved download URL captured at enqueue time. Persisted so a
+    /// download can be **restarted from scratch** after relaunch when
+    /// URLSession's resume data is gone (RAM evicted / never produced) —
+    /// without needing a live `MediaSource` to re-resolve it. `nil` for jobs
+    /// recorded before this field existed (they fall back to Retry-from-Detail).
+    public let sourceURL: URL?
+
     /// `Date` the job was first recorded. Used for stable sort order in
     /// the Library "Downloaded" rail (newest first).
     public let createdAt: Date
@@ -65,6 +72,7 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         seasonNumber: Int? = nil,
         episodeNumber: Int? = nil,
         quality: PlaybackQuality,
+        sourceURL: URL? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -76,7 +84,27 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
         self.quality = quality
+        self.sourceURL = sourceURL
         self.createdAt = createdAt
+    }
+
+    /// Copy carrying the resolved download URL, set once the source resolves
+    /// it (the job is recorded immediately for instant UI feedback, before the
+    /// URL is known). Same `id`, so re-recording replaces in place.
+    public func withSourceURL(_ url: URL?) -> DownloadJob {
+        DownloadJob(
+            id: id,
+            mediaID: mediaID,
+            title: title,
+            posterURL: posterURL,
+            kind: kind,
+            seriesTitle: seriesTitle,
+            seasonNumber: seasonNumber,
+            episodeNumber: episodeNumber,
+            quality: quality,
+            sourceURL: url,
+            createdAt: createdAt
+        )
     }
 
     /// Same `displayTitle` semantics as `MediaItem`, but resolved from

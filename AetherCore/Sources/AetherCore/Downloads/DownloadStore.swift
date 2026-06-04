@@ -33,6 +33,14 @@ public actor DownloadStore {
     /// Stream of snapshots so UI observers can re-render without polling.
     private var observers: [UUID: AsyncStream<DownloadSnapshot>.Continuation] = [:]
 
+    /// Transient, **never persisted** live-progress detail (bytes + speed) for
+    /// actively-downloading jobs. Lives outside `Persisted` on purpose: speed
+    /// and byte counts are meaningful only while a task is running, recompute
+    /// within a second of resuming, and writing them to disk on every progress
+    /// tick would be churn for no benefit. Cleared whenever a job leaves the
+    /// `.downloading` state.
+    private var liveProgress: [UUID: DownloadLiveProgress] = [:]
+
     /// Async init so we can read disk during setup. Failing to read leaves
     /// us with an empty store — we never crash the app for a corrupt /
     /// missing file; the worst case is one redownload.
@@ -93,7 +101,8 @@ public actor DownloadStore {
             jobsByMediaID: Dictionary(
                 uniqueKeysWithValues: state.jobs.values.map { ($0.mediaID, $0) }
             ),
-            statusByJobID: state.statuses
+            statusByJobID: state.statuses,
+            liveProgressByJobID: liveProgress
         )
     }
 
@@ -135,6 +144,32 @@ public actor DownloadStore {
     public func updateStatus(_ jobID: UUID, status: DownloadStatus) {
         guard state.jobs[jobID] != nil else { return }
         state.statuses[jobID] = status
+        // Live byte/speed detail only makes sense while actively downloading.
+        // Drop it the moment a job pauses, finishes, or fails so the UI doesn't
+        // show a stale "12 MB/s" next to a paused row.
+        if case .downloading = status {} else {
+            liveProgress[jobID] = nil
+        }
+        persistAndPublish()
+    }
+
+    /// Record live progress for an active download: persisted fraction plus the
+    /// transient byte/speed detail. One write per progress tick (same cadence
+    /// the manager already used for fraction-only updates).
+    public func recordProgress(
+        _ jobID: UUID,
+        fractionCompleted: Double,
+        receivedBytes: Int64,
+        totalBytes: Int64,
+        bytesPerSecond: Double
+    ) {
+        guard state.jobs[jobID] != nil else { return }
+        state.statuses[jobID] = .downloading(fractionCompleted: fractionCompleted)
+        liveProgress[jobID] = DownloadLiveProgress(
+            receivedBytes: receivedBytes,
+            totalBytes: totalBytes,
+            bytesPerSecond: bytesPerSecond
+        )
         persistAndPublish()
     }
 
@@ -144,6 +179,7 @@ public actor DownloadStore {
     public func delete(_ jobID: UUID) {
         state.jobs.removeValue(forKey: jobID)
         state.statuses.removeValue(forKey: jobID)
+        liveProgress.removeValue(forKey: jobID)
         persistAndPublish()
     }
 
@@ -199,11 +235,30 @@ public actor DownloadStore {
 public struct DownloadSnapshot: Sendable, Equatable {
     public let jobsByMediaID: [MediaID: DownloadJob]
     public let statusByJobID: [UUID: DownloadStatus]
+    /// Transient live detail (bytes + speed) for actively-downloading jobs.
+    /// Absent for paused/queued/completed/failed jobs — read it only to enrich
+    /// a `.downloading` row with "12 MB/s · 1.2 of 3.4 GB · 4 min left".
+    public let liveProgressByJobID: [UUID: DownloadLiveProgress]
+
+    public init(
+        jobsByMediaID: [MediaID: DownloadJob],
+        statusByJobID: [UUID: DownloadStatus],
+        liveProgressByJobID: [UUID: DownloadLiveProgress] = [:]
+    ) {
+        self.jobsByMediaID = jobsByMediaID
+        self.statusByJobID = statusByJobID
+        self.liveProgressByJobID = liveProgressByJobID
+    }
 
     /// The status for a media id — `.notDownloaded` when no job exists.
     public func status(for mediaID: MediaID) -> DownloadStatus {
         guard let job = jobsByMediaID[mediaID] else { return .notDownloaded }
         return statusByJobID[job.id] ?? .notDownloaded
+    }
+
+    /// Live progress detail for a job, if it's actively downloading.
+    public func liveProgress(for jobID: UUID) -> DownloadLiveProgress? {
+        liveProgressByJobID[jobID]
     }
 
     /// The job behind a media id, if any.
@@ -239,4 +294,38 @@ public struct DownloadSnapshot: Sendable, Equatable {
     }
 
     public static let empty = DownloadSnapshot(jobsByMediaID: [:], statusByJobID: [:])
+}
+
+// MARK: - DownloadLiveProgress
+
+/// Transient byte/speed detail for an active download. Not persisted — the
+/// manager recomputes it from URLSession progress callbacks while a task runs.
+public struct DownloadLiveProgress: Sendable, Equatable {
+    /// Bytes written to disk so far.
+    public let receivedBytes: Int64
+    /// Server-advertised total bytes, or `0` when the server didn't send a
+    /// content length (chunked transfer) — callers should treat `0` as unknown.
+    public let totalBytes: Int64
+    /// Smoothed transfer rate in bytes per second, or `0` before the first
+    /// sample interval elapses.
+    public let bytesPerSecond: Double
+
+    public init(receivedBytes: Int64, totalBytes: Int64, bytesPerSecond: Double) {
+        self.receivedBytes = receivedBytes
+        self.totalBytes = totalBytes
+        self.bytesPerSecond = bytesPerSecond
+    }
+
+    /// Bytes still to download, or `nil` when the total is unknown.
+    public var remainingBytes: Int64? {
+        guard totalBytes > 0 else { return nil }
+        return max(0, totalBytes - receivedBytes)
+    }
+
+    /// Estimated seconds remaining, or `nil` when the total or rate is unknown
+    /// (so the UI can omit "x left" rather than show a bogus estimate).
+    public var estimatedSecondsRemaining: Double? {
+        guard let remainingBytes, bytesPerSecond > 0 else { return nil }
+        return Double(remainingBytes) / bytesPerSecond
+    }
 }
