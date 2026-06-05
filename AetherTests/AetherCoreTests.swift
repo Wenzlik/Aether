@@ -447,3 +447,62 @@ struct MediaGuidsTests {
         #expect(MediaGuids().isEmpty)
     }
 }
+
+@Suite("AetherCore — UnifiedLibrary merge")
+struct UnifiedLibraryTests {
+    private func plex(_ id: String, _ title: String, year: Int? = nil,
+                      tmdb: String? = nil, imdb: String? = nil, stream: Bool = true) -> MediaItem {
+        MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: id), title: title, kind: .movie,
+                  year: year, streamURL: stream ? URL(string: "http://p/\(id)") : nil,
+                  guids: MediaGuids(tmdb: tmdb, imdb: imdb))
+    }
+    private func jelly(_ id: String, _ title: String, year: Int? = nil,
+                       tmdb: String? = nil, imdb: String? = nil) -> MediaItem {
+        MediaItem(id: .init(source: .jellyfin(serverID: "j1"), rawValue: id), title: title, kind: .movie,
+                  year: year, streamURL: URL(string: "http://j/\(id)"),
+                  guids: MediaGuids(tmdb: tmdb, imdb: imdb))
+    }
+
+    @Test("same TMDB → one item, two sources, priority-sorted")
+    func mergeByTmdb() {
+        let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603"), jelly("9", "Matrix", tmdb: "603")])
+        #expect(u.count == 1)
+        #expect(u[0].sources.map(\.kind) == [.plex, .jellyfin])
+        #expect(u[0].preferredSource?.kind == .plex)
+    }
+
+    @Test("cross-provider: merges on a shared IMDB even when one lacks TMDB")
+    func crossProvider() {
+        let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603", imdb: "tt0133093"),
+                                      jelly("9", "Matrix", imdb: "tt0133093")])
+        #expect(u.count == 1)
+        #expect(u[0].sources.count == 2)
+    }
+
+    @Test("title+year fallback merges; different year does not")
+    func titleYearFallback() {
+        let same = UnifiedLibrary.merge([plex("1", "The Matrix", year: 1999),
+                                         jelly("9", "the matrix!", year: 1999)])
+        #expect(same.count == 1)
+        let diff = UnifiedLibrary.merge([plex("1", "The Matrix", year: 1999),
+                                         jelly("9", "The Matrix", year: 2000)])
+        #expect(diff.count == 2)
+    }
+
+    @Test("no external id and no year → never merges")
+    func noIdNoYear() {
+        let u = UnifiedLibrary.merge([plex("1", "Untitled"), jelly("9", "Untitled")])
+        #expect(u.count == 2)
+    }
+
+    @Test("downloaded item gains an offline source and is preferred")
+    func offlineSource() {
+        let item = plex("1", "Matrix", tmdb: "603")
+        let u = UnifiedLibrary.merge([item, jelly("9", "Matrix", tmdb: "603")],
+                                     downloaded: [item.id])
+        #expect(u.count == 1)
+        #expect(u[0].isDownloaded)
+        #expect(u[0].preferredSource?.kind == .offline)
+        #expect(u[0].sources.map(\.kind) == [.offline, .plex, .jellyfin])
+    }
+}
