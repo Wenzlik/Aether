@@ -77,6 +77,13 @@ public protocol MediaSource: Sendable {
     /// stay valid for the lifetime of the download (Plex tokens are good
     /// for hours; the Part URL is stable for years).
     func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL?
+
+    /// Mark an item **watched on the server**, so the play state syncs back to
+    /// Plex / Jellyfin (and every other client), not just inside Aether. Called
+    /// when a title plays to the end. Best-effort + non-throwing: a failed
+    /// scrobble must never disrupt playback teardown. Default: no-op for sources
+    /// without server-side watch state (Mock, offline).
+    func markWatched(_ id: MediaID) async
 }
 
 public extension MediaSource {
@@ -102,6 +109,9 @@ public extension MediaSource {
 
     /// Default: no download capability. Plex / Jellyfin override.
     func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? { nil }
+
+    /// Default: no server-side watch state to update. Plex / Jellyfin override.
+    func markWatched(_ id: MediaID) async {}
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }

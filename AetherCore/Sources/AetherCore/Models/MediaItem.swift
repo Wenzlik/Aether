@@ -61,6 +61,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Plex, Jellyfin, and offline shares these. Empty when the source didn't
     /// provide any (then dedup falls back to title + year).
     public let guids: MediaGuids
+    /// Whether the user has already watched this item, per the *source's* play
+    /// state (Plex `viewCount > 0`, Jellyfin `UserData.Played`). Drives the
+    /// "watched" checkmark on posters / episode rows; reflects watched-anywhere,
+    /// not just in-Aether playback.
+    public let isWatched: Bool
 
     public init(
         id: MediaID,
@@ -83,7 +88,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         seasonNumber: Int? = nil,
         episodeNumber: Int? = nil,
         selectedQuality: PlaybackQuality = .original,
-        guids: MediaGuids = MediaGuids()
+        guids: MediaGuids = MediaGuids(),
+        isWatched: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -106,6 +112,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.episodeNumber = episodeNumber
         self.selectedQuality = selectedQuality
         self.guids = guids
+        self.isWatched = isWatched
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -165,7 +172,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             seasonNumber: seasonNumber,
             episodeNumber: episodeNumber,
             selectedQuality: selectedQuality ?? self.selectedQuality,
-            guids: guids
+            guids: guids,
+            isWatched: isWatched
         )
     }
 

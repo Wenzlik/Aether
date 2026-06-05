@@ -762,8 +762,28 @@ public actor PlexMediaSource: MediaSource {
             seasonNumber: dto.parentIndex,
             episodeNumber: dto.index,
             selectedQuality: .original,
-            guids: dto.guids
+            guids: dto.guids,
+            // Plex marks an item watched via `viewCount` (>= 1 play).
+            isWatched: (dto.viewCount ?? 0) > 0
         )
+    }
+
+    // MARK: - Watch state
+
+    /// Mark watched on the server via Plex's scrobble endpoint, so the play
+    /// state syncs to Plex (and every other client). Best-effort: a failed
+    /// scrobble is swallowed so it never disrupts playback teardown.
+    public func markWatched(_ id: MediaID) async {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return }
+        let request = request(
+            base: base,
+            path: "/:/scrobble",
+            queryItems: [
+                URLQueryItem(name: "key", value: id.rawValue),
+                URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
+            ]
+        )
+        _ = try? await api.data(for: request)
     }
 
     // MARK: - Stream URL resolution (direct play vs transcode)

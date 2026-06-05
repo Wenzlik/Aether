@@ -103,6 +103,12 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
     public var isDownloaded: Bool {
         sources.contains { $0.kind == .offline }
     }
+
+    /// `true` when the title is watched on **any** of its sources (the source's
+    /// own play state). Drives the watched checkmark on unified cards.
+    public var isWatched: Bool {
+        sources.contains { $0.item.isWatched }
+    }
 }
 
 /// The unified Home feed: deduplicated rails across all connected sources.

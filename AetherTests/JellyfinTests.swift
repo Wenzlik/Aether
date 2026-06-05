@@ -263,3 +263,27 @@ struct JellyfinProviderIdsTests {
         #expect(dto.guids.isEmpty)
     }
 }
+
+@Suite("Jellyfin — watched state")
+struct JellyfinWatchedTests {
+    @Test("UserData.Played == true → isWatched")
+    func playedTrue() throws {
+        let json = #"{"Id":"42","Name":"X","Type":"Movie","UserData":{"Played":true}}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.isWatched)
+    }
+
+    @Test("UserData.Played == false → not watched")
+    func playedFalse() throws {
+        let json = #"{"Id":"42","Name":"X","Type":"Movie","UserData":{"Played":false}}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(!dto.isWatched)
+    }
+
+    @Test("No UserData → not watched")
+    func noUserData() throws {
+        let json = #"{"Id":"42","Name":"X","Type":"Movie"}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(!dto.isWatched)
+    }
+}

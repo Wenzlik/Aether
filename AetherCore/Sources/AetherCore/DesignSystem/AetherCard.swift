@@ -15,6 +15,8 @@ public struct AetherCard: View {
     public let posterURL: URL?
     public let aspectRatio: CGFloat
     public let progress: Double?
+    /// Shows a "watched" checkmark badge over the artwork when `true`.
+    public let isWatched: Bool
 
     @Environment(\.isFocused) private var isFocused
 
@@ -23,13 +25,15 @@ public struct AetherCard: View {
         subtitle: String? = nil,
         posterURL: URL? = nil,
         aspectRatio: CGFloat = 2.0 / 3.0,
-        progress: Double? = nil
+        progress: Double? = nil,
+        isWatched: Bool = false
     ) {
         self.title = title
         self.subtitle = subtitle
         self.posterURL = posterURL
         self.aspectRatio = aspectRatio
         self.progress = progress
+        self.isWatched = isWatched
     }
 
     public var body: some View {
@@ -37,6 +41,7 @@ public struct AetherCard: View {
             artwork
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 .overlay(alignment: .bottom) { progressBar }
+                .overlay(alignment: .topTrailing) { watchedBadge }
                 // Violet brand glow when focused — a soft bloom, not a hard
                 // white border.
                 .overlay {
@@ -67,6 +72,21 @@ public struct AetherCard: View {
 
     private var artwork: some View {
         CachedAsyncImage(url: posterURL, aspectRatio: aspectRatio)
+    }
+
+    /// "Watched" badge — a filled checkmark in the top-trailing corner. Palette
+    /// rendering: white check on the brand accent, with a soft shadow so it
+    /// reads over any artwork.
+    @ViewBuilder
+    private var watchedBadge: some View {
+        if isWatched {
+            Image(systemName: "checkmark.circle.fill")
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(Color.white, AetherDesign.Palette.accent)
+                .font(.system(size: 22, weight: .bold))
+                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                .padding(AetherDesign.Spacing.xs)
+        }
     }
 
     @ViewBuilder
@@ -102,9 +122,10 @@ extension AetherCard {
     public static func poster(
         title: String,
         posterURL: URL?,
-        progress: Double? = nil
+        progress: Double? = nil,
+        isWatched: Bool = false
     ) -> AetherCard {
-        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress)
+        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched)
     }
 
     /// 16:9 hero card — used for the featured rail and continue-watching, where

@@ -126,6 +126,10 @@ struct PlayerView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
             guard let current = viewModel.player?.currentItem,
                   (note.object as? AVPlayerItem) === current else { return }
+            // Played to the end → mark watched on the source server (Plex
+            // scrobble / Jellyfin PlayedItems) so the state syncs everywhere,
+            // not just in Aether. Best-effort; independent of teardown.
+            if let source { Task { await source.markWatched(item.id) } }
             Task { await dismissPlayer() }
         }
         #if os(tvOS)
