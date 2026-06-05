@@ -370,11 +370,7 @@ final class AppSession {
     /// A `UnifiedLibrary` over the connected sources + downloads. Built on
     /// demand (cheap) so it always reflects the current connection set.
     func makeUnifiedLibrary() -> UnifiedLibrary {
-        UnifiedLibrary(
-            sources: connectedSources,
-            downloads: downloadStore,
-            serverNames: sourceDisplayNames
-        )
+        UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
     }
 
     /// Make `kind` the active source (persisted) and re-point `source`.

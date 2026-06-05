@@ -18,16 +18,16 @@ import Foundation
 public actor UnifiedLibrary {
     private let sources: [any MediaSource]
     private let downloads: DownloadStore?
-    private let serverNames: [MediaSourceID: String]
 
-    public init(
-        sources: [any MediaSource],
-        downloads: DownloadStore? = nil,
-        serverNames: [MediaSourceID: String] = [:]
-    ) {
+    public init(sources: [any MediaSource], downloads: DownloadStore? = nil) {
         self.sources = sources
         self.downloads = downloads
-        self.serverNames = serverNames
+    }
+
+    /// Server display names keyed by source id, derived from the sources
+    /// themselves (for the unified "Available Sources" rows).
+    private var serverNames: [MediaSourceID: String] {
+        Dictionary(sources.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// All unified titles of `kind` across connected sources. Fault-tolerant: a
