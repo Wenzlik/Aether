@@ -183,6 +183,9 @@ struct UnifiedLibraryGridView: View {
         isLoading = true
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        items = await library.unifiedItems(kind: kind)
+        let fetched = await library.unifiedItems(kind: kind)
+        items = fetched
+        // Warm the artwork cache for the first screenful of the grid.
+        AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
     }
 }
