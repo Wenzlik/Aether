@@ -6,6 +6,8 @@ import AetherCore
 /// Continue Watching, then a rail per library). When no source is connected it
 /// shows a welcoming hero instead of a utility dashboard.
 struct HomeView: View {
+    /// Lifted from `RootTabView` so re-selecting the Home tab can pop to root.
+    @Binding var navigationPath: NavigationPath
     /// `nil` when no source is configured yet — Home shows its welcome state.
     let source: (any MediaSource)?
     let resumeStore: ResumeStore
@@ -34,9 +36,6 @@ struct HomeView: View {
     @State private var rails: UnifiedRails = .empty
     @State private var loadError: String?
     @State private var isLoading = false
-    /// Drives the `NavigationStack` so a library rail's "See all" accessory can
-    /// push `LibraryView`. Card taps push onto the same path via `NavigationLink`.
-    @State private var navigationPath = NavigationPath()
     /// Bound to the system search bar (`.searchable` modifier). When
     /// non-empty, Home swaps its rails for `MediaSearchResults`. Same
     /// search surface Library offers — both tabs let the user reach the

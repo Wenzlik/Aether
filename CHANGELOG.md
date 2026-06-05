@@ -4,6 +4,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.4.2] — Unreleased · "Andromeda"
+
+Continues the Andromeda line with navigation polish.
+
+### Added
+
+- **Tab pop-to-root** — re-selecting the active tab resets its navigation stack
+  to the root (the iOS-standard behaviour), so tapping Home / Library / Discover
+  / Search while drilled in returns to the top.
+
 ## [0.4.1] — Unreleased · "Andromeda"
 
 The Unified Library era: the *source* becomes an implementation detail across
