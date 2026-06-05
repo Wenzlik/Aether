@@ -8,6 +8,18 @@ import AetherCore
 /// only destructive action. See `docs/ux/DESIGN_PRINCIPLES.md` → *Settings*.
 struct SettingsView: View {
     @State var viewModel: SettingsViewModel
+    /// Dependencies for the **Settings → Downloads** destination (non-tvOS).
+    /// Threaded through so the pushed download manager can resolve fresh URLs
+    /// and drill into Detail. The three stores are always supplied by the app
+    /// root; `source` / download pipeline are optional (nil pre-boot or when
+    /// nothing is connected). Unused on tvOS (no downloads there).
+    var source: (any MediaSource)?
+    var resumeStore: ResumeStore
+    var playbackSession: PlaybackSession
+    var libraryPreferences: LibraryPreferencesStore
+    var downloadManager: DownloadManager? = nil
+    var downloads: DownloadObserver? = nil
+
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
     @State private var isWhatsNewExpanded = false
@@ -20,25 +32,57 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
 
-    var body: some View {
-        ZStack {
-            AetherDesign.Gradients.background.ignoresSafeArea()
+    /// Push targets inside the Settings stack.
+    private enum SettingsRoute: Hashable {
+        case downloads
+    }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                    header
-                    accountSection
-                    sourcesSection
-                    playbackSection
-                    appearanceSection
-                    aboutSection
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AetherDesign.Gradients.background.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                        header
+                        accountSection
+                        sourcesSection
+                        #if !os(tvOS)
+                        downloadsSection
+                        #endif
+                        playbackSection
+                        appearanceSection
+                        aboutSection
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                    .frame(maxWidth: 820, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.top, AetherDesign.Spacing.l)
-                .padding(.bottom, AetherDesign.Spacing.xxl)
-                .frame(maxWidth: 820, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // The root Settings surface carries its own wordmark, so suppress the
+            // empty navigation bar; pushed screens (Downloads) show their own.
+            #if os(iOS) || os(visionOS)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
+            #if !os(tvOS)
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .downloads:
+                    StorageView(
+                        source: source,
+                        resumeStore: resumeStore,
+                        playbackSession: playbackSession,
+                        libraryPreferences: libraryPreferences,
+                        downloadManager: downloadManager,
+                        downloads: downloads,
+                        playbackPreferences: viewModel.playbackPreferences,
+                        embedded: true
+                    )
+                }
+            }
+            #endif
         }
         .sheet(item: $openPicker) { picker in
             preferenceSheet(for: picker)
@@ -155,6 +199,36 @@ struct SettingsView: View {
 
         return AetherSettingsRow(label: label, systemImage: glyph, status: status, action: action)
     }
+
+    // MARK: - Downloads
+
+    /// Entry point to the download manager — moved here from a top-level tab.
+    /// Downloads are part of the source ecosystem now (an Offline source), not a
+    /// separate area. tvOS has no downloads, so the section compiles out there.
+    #if !os(tvOS)
+    private var downloadsSection: some View {
+        AetherSettingsSection("Downloads") {
+            NavigationLink(value: SettingsRoute.downloads) {
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                        .frame(width: 28)
+                    Text("Manage Downloads")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Spacer(minLength: AetherDesign.Spacing.s)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+                .padding(AetherDesign.Spacing.m)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    #endif
 
     // MARK: - Playback prefs
 

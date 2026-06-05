@@ -107,24 +107,18 @@ struct RootTabView: View {
                 )
             }
 
-            #if !os(tvOS)
-            // Storage stays a top-level tab for now; Phase 4a-2 folds it into
-            // Settings → Downloads.
-            Tab("Storage", systemImage: "internaldrive") {
-                StorageView(
+            Tab("Settings", systemImage: "gearshape.fill") {
+                // Downloads now lives inside Settings (→ Downloads), not a tab.
+                // The download-pipeline deps are threaded in for that destination.
+                SettingsView(
+                    viewModel: SettingsViewModel(session: session),
                     source: session.source,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
-                    downloadManager: session.downloadManager,
-                    downloads: session.downloads,
-                    playbackPreferences: session.playbackPreferences
+                    downloadManager: dlManager,
+                    downloads: dlObserver
                 )
-            }
-            #endif
-
-            Tab("Settings", systemImage: "gearshape.fill") {
-                SettingsView(viewModel: SettingsViewModel(session: session))
             }
         }
         .sheet(isPresented: $session.isSignInPresented) {
