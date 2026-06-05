@@ -159,9 +159,17 @@ struct DetailView: View {
                         .padding(.bottom, AetherDesign.Spacing.s)
                     }
 
+                // Layout order (Apple-TV / Infuse style): Hero → Actions →
+                // Playback → Overview → Media Information → (children).
                 if !item.kind.isContainer {
                     actionRow
                         .padding(.horizontal, AetherDesign.Spacing.l)
+                }
+
+                if !item.kind.isContainer, current.streamURL != nil {
+                    playbackSection
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                        .frame(maxWidth: 720, alignment: .leading)
                 }
 
                 if let summary = item.summary {
@@ -172,8 +180,8 @@ struct DetailView: View {
                         .frame(maxWidth: 720, alignment: .leading)
                 }
 
-                if !item.kind.isContainer, current.streamURL != nil {
-                    playbackOptions
+                if !item.kind.isContainer, current.mediaInfo != nil {
+                    mediaSection
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -545,25 +553,6 @@ struct DetailView: View {
 
     // MARK: - Playback options (compact selectors + media info)
 
-    /// Everything the user can see and change *before* pressing Play.
-    ///
-    /// Audio / Subtitles / Quality each collapse to a single `AetherDisclosureRow`
-    /// showing the current choice; tapping opens a bottom-sheet picker that
-    /// reuses `AetherSelectionRow` for the option list. This keeps the long
-    /// Detail screen calm even for items with many audio / subtitle tracks
-    /// and an eight-step quality ladder.
-    ///
-    /// The Media section stays expanded — it's read-only info about the source
-    /// file (codecs, resolution, bitrate, HDR badge) plus the projected
-    /// playback mode.
-    @ViewBuilder
-    private var playbackOptions: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            playbackSection
-            mediaSection
-        }
-    }
-
     /// Compact Audio / Subtitles / Quality rows. Each row shows the current
     /// selection in muted text and a chevron; tap opens a bottom sheet.
     private var playbackSection: some View {
@@ -795,7 +784,7 @@ struct DetailView: View {
     @ViewBuilder
     private var mediaSection: some View {
         let info = current.mediaInfo
-        AetherSettingsSection("Media") {
+        AetherSettingsSection("Media Information") {
             if let video = videoLine(info) {
                 AetherSettingsRow(label: "Video", value: video)
             }
