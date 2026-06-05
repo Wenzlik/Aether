@@ -427,3 +427,154 @@ struct HomeFeedBuilderTests {
         #expect(entry.progress == 0.25)
     }
 }
+
+@Suite("AetherCore — MediaGuids")
+struct MediaGuidsTests {
+    @Test("parses tmdb/imdb/tvdb provider-prefixed strings, ignores unknown")
+    func parseGuidStrings() {
+        let g = MediaGuids(guidStrings: [
+            "tmdb://603", "imdb://tt0133093", "tvdb://1234", "plex://movie/abc"
+        ])
+        #expect(g.tmdb == "603")
+        #expect(g.imdb == "tt0133093")
+        #expect(g.tvdb == "1234")
+        #expect(g.isEmpty == false)
+    }
+
+    @Test("empty when nothing matches")
+    func empty() {
+        #expect(MediaGuids(guidStrings: ["plex://movie/abc"]).isEmpty)
+        #expect(MediaGuids().isEmpty)
+    }
+}
+
+@Suite("AetherCore — UnifiedLibrary merge")
+struct UnifiedLibraryTests {
+    private func plex(_ id: String, _ title: String, year: Int? = nil,
+                      tmdb: String? = nil, imdb: String? = nil, stream: Bool = true) -> MediaItem {
+        MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: id), title: title, kind: .movie,
+                  year: year, streamURL: stream ? URL(string: "http://p/\(id)") : nil,
+                  guids: MediaGuids(tmdb: tmdb, imdb: imdb))
+    }
+    private func jelly(_ id: String, _ title: String, year: Int? = nil,
+                       tmdb: String? = nil, imdb: String? = nil) -> MediaItem {
+        MediaItem(id: .init(source: .jellyfin(serverID: "j1"), rawValue: id), title: title, kind: .movie,
+                  year: year, streamURL: URL(string: "http://j/\(id)"),
+                  guids: MediaGuids(tmdb: tmdb, imdb: imdb))
+    }
+
+    @Test("same TMDB → one item, two sources, priority-sorted")
+    func mergeByTmdb() {
+        let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603"), jelly("9", "Matrix", tmdb: "603")])
+        #expect(u.count == 1)
+        #expect(u[0].sources.map(\.kind) == [.plex, .jellyfin])
+        #expect(u[0].preferredSource?.kind == .plex)
+    }
+
+    @Test("cross-provider: merges on a shared IMDB even when one lacks TMDB")
+    func crossProvider() {
+        let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603", imdb: "tt0133093"),
+                                      jelly("9", "Matrix", imdb: "tt0133093")])
+        #expect(u.count == 1)
+        #expect(u[0].sources.count == 2)
+    }
+
+    @Test("title+year fallback merges; different year does not")
+    func titleYearFallback() {
+        let same = UnifiedLibrary.merge([plex("1", "The Matrix", year: 1999),
+                                         jelly("9", "the matrix!", year: 1999)])
+        #expect(same.count == 1)
+        let diff = UnifiedLibrary.merge([plex("1", "The Matrix", year: 1999),
+                                         jelly("9", "The Matrix", year: 2000)])
+        #expect(diff.count == 2)
+    }
+
+    @Test("no external id and no year → never merges")
+    func noIdNoYear() {
+        let u = UnifiedLibrary.merge([plex("1", "Untitled"), jelly("9", "Untitled")])
+        #expect(u.count == 2)
+    }
+
+    @Test("downloaded item gains an offline source and is preferred")
+    func offlineSource() {
+        let item = plex("1", "Matrix", tmdb: "603")
+        let u = UnifiedLibrary.merge([item, jelly("9", "Matrix", tmdb: "603")],
+                                     downloaded: [item.id])
+        #expect(u.count == 1)
+        #expect(u[0].isDownloaded)
+        #expect(u[0].preferredSource?.kind == .offline)
+        #expect(u[0].sources.map(\.kind) == [.offline, .plex, .jellyfin])
+    }
+}
+
+@Suite("AetherCore — UnifiedLibrary aggregator")
+struct UnifiedLibraryAggregatorTests {
+    private struct StubSource: MediaSource {
+        let id: MediaSourceID
+        let displayName: String
+        let libs: [Library]
+        let itemsByLib: [Library.ID: [MediaItem]]
+        let failsLibraries: Bool
+
+        func libraries() async throws -> [Library] {
+            if failsLibraries { throw URLError(.badServerResponse) }
+            return libs
+        }
+        func items(in id: Library.ID) async throws -> [MediaItem] { itemsByLib[id] ?? [] }
+    }
+
+    @Test("fans out across sources, merges by id, tolerates a failing source")
+    func aggregate() async {
+        let plexLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "m"), title: "Movies", kind: .movie)
+        let jellyLib = Library(id: .init(source: .jellyfin(serverID: "j1"), rawValue: "m"), title: "Movies", kind: .movie)
+        let plexItem = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+                                 kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        let jellyItem = MediaItem(id: .init(source: .jellyfin(serverID: "j1"), rawValue: "9"), title: "Matrix",
+                                  kind: .movie, streamURL: URL(string: "http://j/9"), guids: MediaGuids(tmdb: "603"))
+
+        let plex = StubSource(id: .plex(serverID: "s1"), displayName: "Plex",
+                              libs: [plexLib], itemsByLib: [plexLib.id: [plexItem]], failsLibraries: false)
+        let jelly = StubSource(id: .jellyfin(serverID: "j1"), displayName: "Den",
+                               libs: [jellyLib], itemsByLib: [jellyLib.id: [jellyItem]], failsLibraries: false)
+        let dead = StubSource(id: .plex(serverID: "dead"), displayName: "Dead",
+                              libs: [], itemsByLib: [:], failsLibraries: true)
+
+        let library = UnifiedLibrary(sources: [plex, jelly, dead])
+        let movies = await library.unifiedItems(kind: .movie)
+
+        #expect(movies.count == 1)
+        #expect(movies[0].sources.map(\.kind) == [.plex, .jellyfin])
+        #expect(movies[0].sources.first?.serverName == "Plex")
+    }
+}
+
+@Suite("AetherCore — UnifiedLibrary home rails")
+struct UnifiedHomeRailsTests {
+    private struct Stub: MediaSource {
+        let id: MediaSourceID
+        let displayName: String
+        let libs: [Library]
+        let itemsByLib: [Library.ID: [MediaItem]]
+        func libraries() async throws -> [Library] { libs }
+        func items(in id: Library.ID) async throws -> [MediaItem] { itemsByLib[id] ?? [] }
+    }
+
+    @Test("splits unified items into Movies / TV Shows rails")
+    func split() async {
+        let movieLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "mov"), title: "Movies", kind: .movie)
+        let showLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "tv"), title: "Shows", kind: .show)
+        let movie = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+                              kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        let show = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "2"), title: "Severance",
+                             kind: .show, streamURL: URL(string: "http://p/2"), guids: MediaGuids(tvdb: "999"))
+        let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
+                        libs: [movieLib, showLib],
+                        itemsByLib: [movieLib.id: [movie], showLib.id: [show]])
+
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        #expect(rails.movies.count == 1)
+        #expect(rails.shows.count == 1)
+        #expect(rails.movies.first?.title == "Matrix")
+        #expect(rails.shows.first?.title == "Severance")
+    }
+}

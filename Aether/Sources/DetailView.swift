@@ -3,7 +3,11 @@ import AetherCore
 
 struct DetailView: View {
     let item: MediaItem
-    let source: (any MediaSource)?
+    /// Every connected source. The connector this screen uses is derived from
+    /// the *shown item's* source (see `source`), so a title opened from the
+    /// unified Home/Search plays through the right server even when it isn't the
+    /// app's active source.
+    let connectedSources: [any MediaSource]
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     /// `nil` until `AppSession.start()` has booted the downloads pipeline.
@@ -28,6 +32,9 @@ struct DetailView: View {
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
     @State private var isPreparingPlayback = false
+    /// visionOS: the current player presentation was launched via "Watch in
+    /// Cinema" → auto-expand so it docks into the Dark Theater without a tap.
+    @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
     /// The item with full metadata (audio + subtitle streams, partID,
@@ -45,6 +52,14 @@ struct DetailView: View {
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
+    /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    #if os(visionOS)
+    /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
+    /// app root; always present inside the windowed view tree on visionOS.
+    @Environment(CinemaManager.self) private var cinema
+    #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
     /// playback configuration triplet; `downloadQuality` reuses the same
@@ -65,6 +80,14 @@ struct DetailView: View {
     /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? item }
 
+    /// The connector for the shown item — matched by the item's source id, so
+    /// playback / hydration / downloads use the correct server even when the
+    /// item came from the unified feed and isn't the app's active source. Falls
+    /// back to the first connected source.
+    private var source: (any MediaSource)? {
+        connectedSources.first { $0.id == item.id.source } ?? connectedSources.first
+    }
+
     /// Download status for this item. `.notDownloaded` when the pipeline
     /// hasn't booted yet — same surface as "no job recorded" so the UI
     /// renders identically.
@@ -83,6 +106,7 @@ struct DetailView: View {
                     source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
+                    preferExpanded: launchingInCinema,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)
@@ -115,6 +139,18 @@ struct DetailView: View {
             // correct.
             playbackSelectorSheet(for: selector)
         }
+        #if os(visionOS)
+        .onChange(of: cinema.isActive) { _, active in
+            // Cinema ended (movie finished or the Dark Theater was dismissed) —
+            // drop the player overlay so we don't leave a stale player behind.
+            guard !active, isPlayerPresented else { return }
+            withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+                isPlayerPresented = false
+            }
+            playbackItem = nil
+            Task { resume = await resumeStore.point(for: item.id) }
+        }
+        #endif
     }
 
     // MARK: - Detail content
@@ -122,24 +158,36 @@ struct DetailView: View {
     private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                BackdropImage(url: item.backdropURL ?? item.posterURL)
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: backdropMaxHeight)
-                    .clipped()
-                    .overlay(alignment: .bottomLeading) {
-                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                            Text(item.title)
-                                .font(AetherDesign.Typography.heroTitle)
-                                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            metadataRow
-                        }
-                        .padding(AetherDesign.Spacing.l)
-                        .padding(.bottom, AetherDesign.Spacing.s)
-                    }
+                // Hero: edge-to-edge backdrop with the title + metadata + badges
+                // stacked *below* it (not overlaid), so wide layouts don't push
+                // the text into a side gutter beside a letterboxed image.
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                    BackdropImage(
+                        url: item.backdropURL ?? item.posterURL,
+                        height: hSizeClass == .regular ? backdropMaxHeight : nil
+                    )
 
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                        Text(item.title)
+                            .font(AetherDesign.Typography.heroTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        metadataRow
+                        mediaBadges
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                }
+
+                // Layout order (Apple-TV / Infuse style): Hero → Actions →
+                // Playback → Overview → Media Information → (children).
                 if !item.kind.isContainer {
                     actionRow
                         .padding(.horizontal, AetherDesign.Spacing.l)
+                }
+
+                if !item.kind.isContainer, current.streamURL != nil {
+                    playbackSection
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                        .frame(maxWidth: 720, alignment: .leading)
                 }
 
                 if let summary = item.summary {
@@ -150,8 +198,8 @@ struct DetailView: View {
                         .frame(maxWidth: 720, alignment: .leading)
                 }
 
-                if !item.kind.isContainer, current.streamURL != nil {
-                    playbackOptions
+                if !item.kind.isContainer, current.mediaInfo != nil {
+                    mediaSection
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -280,6 +328,40 @@ struct DetailView: View {
         .foregroundStyle(AetherDesign.Palette.textSecondary)
     }
 
+    /// Compact technical chips under the metadata — resolution, HDR / Dolby
+    /// Vision, video codec, audio. Quality at a glance instead of buried in a
+    /// table. Only shown once `MediaInfo` is hydrated.
+    @ViewBuilder
+    private var mediaBadges: some View {
+        let labels = mediaBadgeLabels
+        if !labels.isEmpty {
+            HStack(spacing: AetherDesign.Spacing.xs) {
+                ForEach(labels, id: \.self) { AetherBadge($0) }
+            }
+            .padding(.top, AetherDesign.Spacing.xxs)
+        }
+    }
+
+    private var mediaBadgeLabels: [String] {
+        guard let info = current.mediaInfo else { return [] }
+        var labels: [String] = []
+        if let resolution = info.videoResolution { labels.append(resolution) }
+        if info.isDolbyVision {
+            labels.append("Dolby Vision")
+        } else if info.isHDR {
+            labels.append("HDR")
+        }
+        if let codec = info.videoCodec?.uppercased() { labels.append(codec) }
+        if let audio = info.audioCodec?.uppercased() {
+            if let channels = info.audioChannels {
+                labels.append("\(audio) \(channelLabel(channels))")
+            } else {
+                labels.append(audio)
+            }
+        }
+        return labels
+    }
+
     // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
 
     @ViewBuilder
@@ -291,6 +373,9 @@ struct DetailView: View {
                 } else {
                     playButton
                 }
+                #if os(visionOS)
+                watchInCinemaButton
+                #endif
                 if shouldShowDownloadControl {
                     downloadControl
                 }
@@ -420,6 +505,23 @@ struct DetailView: View {
         .disabled(isPreparingPlayback)
     }
 
+    #if os(visionOS)
+    /// visionOS-only: enter Cinema Mode — the same title on a cinematic screen
+    /// in a dedicated immersive space, driven by the same `PlaybackSession`.
+    /// Resumes from the saved point when one exists, else starts from the top,
+    /// matching the Play / Resume button above it.
+    private var watchInCinemaButton: some View {
+        AetherButton(
+            "Watch in Cinema",
+            systemImage: "visionpro",
+            role: .secondary
+        ) {
+            Task { await watchInCinema() }
+        }
+        .disabled(isPreparingPlayback)
+    }
+    #endif
+
     /// Resume exists: **Resume** (primary, with a resume-from caption) and
     /// **Restart** (secondary) sitting side-by-side, each expanding to
     /// equal width. "Restart" is the Apple-TV-app's name for the same
@@ -468,25 +570,6 @@ struct DetailView: View {
     }
 
     // MARK: - Playback options (compact selectors + media info)
-
-    /// Everything the user can see and change *before* pressing Play.
-    ///
-    /// Audio / Subtitles / Quality each collapse to a single `AetherDisclosureRow`
-    /// showing the current choice; tapping opens a bottom-sheet picker that
-    /// reuses `AetherSelectionRow` for the option list. This keeps the long
-    /// Detail screen calm even for items with many audio / subtitle tracks
-    /// and an eight-step quality ladder.
-    ///
-    /// The Media section stays expanded — it's read-only info about the source
-    /// file (codecs, resolution, bitrate, HDR badge) plus the projected
-    /// playback mode.
-    @ViewBuilder
-    private var playbackOptions: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            playbackSection
-            mediaSection
-        }
-    }
 
     /// Compact Audio / Subtitles / Quality rows. Each row shows the current
     /// selection in muted text and a chevron; tap opens a bottom sheet.
@@ -719,7 +802,7 @@ struct DetailView: View {
     @ViewBuilder
     private var mediaSection: some View {
         let info = current.mediaInfo
-        AetherSettingsSection("Media") {
+        AetherSettingsSection("Media Information") {
             if let video = videoLine(info) {
                 AetherSettingsRow(label: "Video", value: video)
             }
@@ -885,6 +968,7 @@ struct DetailView: View {
         // `0` forces a restart; `nil` lets the session resume from the
         // persisted point.
         playbackStartAt = fromStart ? 0 : nil
+        launchingInCinema = false   // windowed playback stays embedded
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
@@ -896,8 +980,36 @@ struct DetailView: View {
             isPlayerPresented = false
         }
         playbackItem = nil
+        #if os(visionOS)
+        // No-op unless this was a cinema session; tears down the Dark Theater.
+        cinema.end()
+        #endif
         Task { resume = await resumeStore.point(for: item.id) }
     }
+
+    #if os(visionOS)
+    /// Enter Cinema Mode: present the native player (same `PlayerView` /
+    /// `AVPlayerViewController` as windowed playback) **and** ask `CinemaManager`
+    /// to open the Dark Theater. The system then docks the fullscreen player
+    /// into the immersive space — native controls, native sizing. `nil` startAt
+    /// resumes from the saved point, mirroring the Resume button.
+    private func watchInCinema() async {
+        guard !isPreparingPlayback else { return }
+        isPreparingPlayback = true
+        defer { isPreparingPlayback = false }
+
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+            configuredItem = hydrated
+        }
+        playbackItem = current
+        playbackStartAt = resume != nil ? nil : 0
+        launchingInCinema = true   // auto-expand so it docks into the theater
+        cinema.present(current, source: source, startAt: playbackStartAt)
+        withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+            isPlayerPresented = true
+        }
+    }
+    #endif
 
     // MARK: - Formatting helpers
 

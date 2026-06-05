@@ -214,4 +214,52 @@ struct JellyfinMediaSourceTests {
         #expect(resolved.url == fileURL)
         #expect(resolved.isServerTranscode == false)
     }
+
+    @Test("supports downloads; Original uses /Items/{id}/Download, caps use a progressive mp4")
+    func downloads() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        #expect(source.supportsDownloads == true)
+
+        let item = MediaItem(
+            id: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "42"),
+            title: "Movie",
+            kind: .movie
+        )
+
+        // Original → raw-file download endpoint, with the token.
+        let original = try #require(try await source.downloadURL(for: item, quality: .original))
+        #expect(original.path.contains("/Items/42/Download"))
+        let originalQuery = try #require(URLComponents(url: original, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(originalQuery.contains { $0.name == "api_key" && $0.value == "tok" })
+
+        // A bitrate cap → progressive mp4 transcode with bitrate + height caps.
+        let capped = try #require(try await source.downloadURL(for: item, quality: .bitrate8Mbps1080p))
+        #expect(capped.path.contains("/Videos/42/stream.mp4"))
+        let cappedQuery = try #require(URLComponents(url: capped, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(cappedQuery.contains { $0.name == "VideoBitrate" && $0.value == "8000000" })
+        #expect(cappedQuery.contains { $0.name == "MaxHeight" && $0.value == "1080" })
+        #expect(cappedQuery.contains { $0.name == "static" && $0.value == "false" })
+    }
+}
+
+@Suite("Jellyfin — ProviderIds decoding")
+struct JellyfinProviderIdsTests {
+    @Test("BaseItemDto maps ProviderIds (case-insensitive) into typed external IDs")
+    func providerIds() throws {
+        let json = #"""
+        {"Id":"42","Name":"The Matrix","Type":"Movie",
+         "ProviderIds":{"Tmdb":"603","Imdb":"tt0133093","Tvdb":"1234"}}
+        """#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.guids.tmdb == "603")
+        #expect(dto.guids.imdb == "tt0133093")
+        #expect(dto.guids.tvdb == "1234")
+    }
+
+    @Test("BaseItemDto without ProviderIds yields empty external IDs")
+    func noProviderIds() throws {
+        let json = #"{"Id":"42","Name":"X","Type":"Movie"}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.guids.isEmpty)
+    }
 }

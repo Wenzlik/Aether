@@ -18,13 +18,45 @@ struct AetherApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
 
+    #if os(visionOS)
+    // Cinema Mode (visionOS only). `CinemaManager` is the single source of
+    // truth for cinema state; `RootTabView` opens/closes the immersive space and
+    // presents the native player on its intent. The space renders only the Dark
+    // Theater environment — the system docks the native `AVPlayerViewController`
+    // into it. `immersionStyle` defaults to `.full` (true OLED black) with
+    // `.progressive` so the Digital Crown can blend the room back in.
+    // See `docs/next-steps/visionos-cinema.md`.
+    @State private var cinema = CinemaManager()
+    @State private var immersionStyle: any ImmersionStyle = .full
+    #endif
+
     var body: some Scene {
+        #if os(visionOS)
+        // No window dismiss/reopen: the native player docks *out of* this
+        // window into the immersive space, so the window stays put (avoids the
+        // re-launch churn the earlier design hit).
+        WindowGroup {
+            RootTabView(session: session)
+                .preferredColorScheme(session.appearance.preference.colorScheme)
+                .tint(AetherDesign.Palette.accent)
+                .task { await session.start() }
+                .environment(cinema)
+        }
+        #else
         WindowGroup {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
         }
+        #endif
+
+        #if os(visionOS)
+        ImmersiveSpace(id: CinemaManager.spaceID) {
+            DarkTheaterView(cinema: cinema)
+        }
+        .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
+        #endif
     }
 }
 
@@ -191,7 +223,17 @@ final class AppSession {
 
     // MARK: - Lifecycle
 
+    /// Guards `start()` against re-running. `RootTabView.task` calls it on
+    /// every window appearance — and on visionOS the main window is dismissed
+    /// when entering the cinema and reopened on exit, which re-creates
+    /// `RootTabView` and would otherwise re-run discovery / rebuild the active
+    /// source mid-session (which surfaced as a black cinema on re-entry).
+    private var hasStarted = false
+
     func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+
         // 0. Hydrate resume points from disk + a one-shot iCloud read, then
         //    start listening for external iCloud changes (other devices on
         //    the same iCloud account writing). Must run before Home / Library
@@ -299,6 +341,36 @@ final class AppSession {
         case nil:
             source = plexSource ?? jellyfinSource
         }
+    }
+
+    // MARK: - Unified Library (all connected sources)
+
+    /// Every currently-connected source (Plex + Jellyfin). Distinct from
+    /// `source`, the single active one the not-yet-unified Library / Detail
+    /// paths still use. Unified surfaces (Home / Search, Phase 2b+) read this.
+    var connectedSources: [any MediaSource] {
+        var list: [any MediaSource] = []
+        if let plexSource { list.append(plexSource) }
+        if let jellyfinSource { list.append(jellyfinSource) }
+        return list
+    }
+
+    /// Display names keyed by source id — for the unified "Available Sources"
+    /// rows on Detail. Read through the `any MediaSource` existentials (the
+    /// protocol witness for `id`/`displayName` is synchronous; the concrete
+    /// actor properties are isolated).
+    var sourceDisplayNames: [MediaSourceID: String] {
+        var names: [MediaSourceID: String] = [:]
+        for source in connectedSources {
+            names[source.id] = source.displayName
+        }
+        return names
+    }
+
+    /// A `UnifiedLibrary` over the connected sources + downloads. Built on
+    /// demand (cheap) so it always reflects the current connection set.
+    func makeUnifiedLibrary() -> UnifiedLibrary {
+        UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
     }
 
     /// Make `kind` the active source (persisted) and re-point `source`.

@@ -2,18 +2,24 @@ import SwiftUI
 
 /// Full-bleed cinematic backdrop used on Detail screens.
 ///
-/// Loads via `CachedAsyncImage`, applies a 16:9 frame, and adds a soft bottom
-/// gradient so type laid over the lower portion stays legible regardless of
-/// what the artwork is doing.
+/// Adapts to width so it's edge-to-edge on every device:
+/// - `height == nil` (compact / iPhone): a full-width **16:9** image (no crop).
+/// - `height` set (regular / iPad · tvOS · visionOS): **fill** the full width at
+///   that fixed height, cropping — so a wide screen gets an edge-to-edge band
+///   instead of a small letterboxed image with side gutters.
+///
+/// A soft bottom gradient fades the artwork into the page below it.
 public struct BackdropImage: View {
     public let url: URL?
+    public let height: CGFloat?
 
-    public init(url: URL?) {
+    public init(url: URL?, height: CGFloat? = nil) {
         self.url = url
+        self.height = height
     }
 
     public var body: some View {
-        CachedAsyncImage(url: url, aspectRatio: 16.0 / 9.0)
+        backdrop
             .overlay(alignment: .bottom) {
                 LinearGradient(
                     colors: [
@@ -24,10 +30,21 @@ public struct BackdropImage: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(maxHeight: .infinity)
-                .frame(height: nil)
                 .allowsHitTesting(false)
             }
+    }
+
+    @ViewBuilder
+    private var backdrop: some View {
+        if let height {
+            CachedAsyncImage(url: url)
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .clipped()
+        } else {
+            CachedAsyncImage(url: url, aspectRatio: 16.0 / 9.0)
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 

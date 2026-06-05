@@ -96,6 +96,42 @@ Notes: [`docs/next-steps/0.3-offline.md`](docs/next-steps/0.3-offline.md).
 
 ---
 
+## 🚧 Vision Pro Cinema
+
+Immersive, native cinema playback on Apple Vision Pro (visionOS only).
+
+- ✅ **V1 — Dark Theater foundation** *(shipped to staging)* — native
+  `AVPlayerViewController` docked into an immersive Dark Theater via the system
+  docking pattern; single-source-of-truth `CinemaManager`; reliable enter/exit.
+  No custom rendering or controls.
+- ⬜ **Phase 2 — Enhanced Cinema** — authored Dark Theater + custom
+  `DockingRegion` (real Medium/Large/IMAX/Wall presets), floor media
+  reflections, smoother transitions, lighting tuning.
+- ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
+- ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
+
+Notes: [`docs/next-steps/visionos-cinema.md`](docs/next-steps/visionos-cinema.md).
+
+---
+
+## ⬜ Unified Library (next major milestone — proposed 0.5.0)
+
+Make the *source* an implementation detail. Users stop thinking Plex /
+Jellyfin / offline and think **Movies / TV Shows / Downloads**. A single
+`UnifiedMediaItem` aggregates every source behind a title (dedup by external
+IDs), with source priority and automatic best-source playback; downloads
+become just another source. Includes a navigation refactor, Settings cleanup,
+and an Emby connector, and is designed so future catalog-only connectors slot
+in.
+
+Notes: [`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-library.md).
+
+> Numbering: the user designates this **0.5.0**. The "0.4 Premium UX" /
+> "0.5 Distribution" entries below predate the shipped 0.4.0 and need
+> reconciling — left as-is for now.
+
+---
+
 ## ⬜ 0.4 Premium UX
 
 The polish milestone. This is where Aether earns the "premium" label.
