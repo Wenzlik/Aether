@@ -153,6 +153,7 @@ struct DetailView: View {
                                 .font(AetherDesign.Typography.heroTitle)
                                 .foregroundStyle(AetherDesign.Palette.textPrimary)
                             metadataRow
+                            mediaBadges
                         }
                         .padding(AetherDesign.Spacing.l)
                         .padding(.bottom, AetherDesign.Spacing.s)
@@ -299,6 +300,40 @@ struct DetailView: View {
         }
         .font(AetherDesign.Typography.metadata)
         .foregroundStyle(AetherDesign.Palette.textSecondary)
+    }
+
+    /// Compact technical chips under the metadata — resolution, HDR / Dolby
+    /// Vision, video codec, audio. Quality at a glance instead of buried in a
+    /// table. Only shown once `MediaInfo` is hydrated.
+    @ViewBuilder
+    private var mediaBadges: some View {
+        let labels = mediaBadgeLabels
+        if !labels.isEmpty {
+            HStack(spacing: AetherDesign.Spacing.xs) {
+                ForEach(labels, id: \.self) { AetherBadge($0) }
+            }
+            .padding(.top, AetherDesign.Spacing.xxs)
+        }
+    }
+
+    private var mediaBadgeLabels: [String] {
+        guard let info = current.mediaInfo else { return [] }
+        var labels: [String] = []
+        if let resolution = info.videoResolution { labels.append(resolution) }
+        if info.isDolbyVision {
+            labels.append("Dolby Vision")
+        } else if info.isHDR {
+            labels.append("HDR")
+        }
+        if let codec = info.videoCodec?.uppercased() { labels.append(codec) }
+        if let audio = info.audioCodec?.uppercased() {
+            if let channels = info.audioChannels {
+                labels.append("\(audio) \(channelLabel(channels))")
+            } else {
+                labels.append(audio)
+            }
+        }
+        return labels
     }
 
     // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
