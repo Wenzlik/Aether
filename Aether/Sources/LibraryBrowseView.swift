@@ -52,7 +52,7 @@ struct LibraryBrowseView: View {
                     VStack(spacing: 0) {
                         brandedHeader
                         content
-                            .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
+                            .dismissSearchKeyboardOnTap { searchFocused = false }
                     }
                 } else {
                     content
@@ -324,6 +324,18 @@ private extension View {
     func aetherFocusSection() -> some View {
         #if os(tvOS)
         self.focusSection()
+        #else
+        self
+        #endif
+    }
+
+    /// Tap-to-dismiss the search keyboard — iOS / visionOS only. On tvOS there's
+    /// no software keyboard, and a `TapGesture` there would intercept the Select
+    /// button and disrupt the focus engine, so it's a no-op.
+    @ViewBuilder
+    func dismissSearchKeyboardOnTap(_ action: @escaping () -> Void) -> some View {
+        #if os(iOS) || os(visionOS)
+        simultaneousGesture(TapGesture().onEnded(action))
         #else
         self
         #endif

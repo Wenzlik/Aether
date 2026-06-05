@@ -36,10 +36,10 @@ struct SearchView: View {
                 header
                 content
                     // Tap anywhere in the results (empty space or a result) ends
-                    // editing; `simultaneousGesture` so a result tap still
-                    // navigates. The field lives in the header, so focusing it
-                    // isn't caught here.
-                    .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
+                    // editing; a result tap still navigates. The field lives in
+                    // the header, so focusing it isn't caught here. iOS/visionOS
+                    // only — see helper.
+                    .dismissSearchKeyboardOnTap { searchFocused = false }
                     // `scrollDismissesKeyboard` is unavailable on visionOS;
                     // tap-outside + Search/Done still dismiss there.
                     #if os(iOS)
@@ -89,5 +89,19 @@ struct SearchView: View {
 
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private extension View {
+    /// Tap-to-dismiss the search keyboard — iOS / visionOS only. On tvOS there's
+    /// no software keyboard, and a `TapGesture` there would intercept the Select
+    /// button and disrupt the focus engine, so it's a no-op.
+    @ViewBuilder
+    func dismissSearchKeyboardOnTap(_ action: @escaping () -> Void) -> some View {
+        #if os(iOS) || os(visionOS)
+        simultaneousGesture(TapGesture().onEnded(action))
+        #else
+        self
+        #endif
     }
 }

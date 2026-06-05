@@ -302,6 +302,11 @@ struct DetailView: View {
             }
             .padding(.vertical, AetherDesign.Spacing.xs)
         }
+        // tvOS: mark the horizontal rail as a focus section so Up escapes it
+        // back to the tab bar (there's no focusable element above it on a show
+        // detail). Without this, focus is trapped in the rail. Matches the
+        // Home / Library rails; the episodes list is vertical so it doesn't need it.
+        .aetherDetailFocusSection()
     }
 
     private var episodesList: some View {
@@ -1179,5 +1184,19 @@ struct DetailView: View {
     private func durationSeconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+}
+
+private extension View {
+    /// Apply `.focusSection()` on tvOS so the focus engine can move into and
+    /// **out of** this region (e.g. Up from the seasons rail back to the tab
+    /// bar). No-op elsewhere — the API is tvOS-only.
+    @ViewBuilder
+    func aetherDetailFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
     }
 }
