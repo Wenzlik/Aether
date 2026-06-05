@@ -818,7 +818,8 @@ struct PlexMediaSourceLibrariesTests {
 
         // Dedup fix: the /all request must request external IDs.
         let recorded = await api.requests
-        let comps = try #require(URLComponents(url: try #require(recorded[1].url), resolvingAgainstBaseURL: false))
+        let allURL = try #require(recorded[1].url)
+        let comps = try #require(URLComponents(url: allURL, resolvingAgainstBaseURL: false))
         #expect(comps.queryItems?.contains { $0.name == "includeGuids" && $0.value == "1" } == true)
 
         // viewCount → isWatched (>=1 watched; 0 or missing → not).
