@@ -34,16 +34,29 @@ public actor UnifiedLibrary {
     /// source that fails to list libraries or items is skipped, not fatal, so a
     /// slow/down server never blanks the feed.
     public func unifiedItems(kind: MediaItem.Kind) async -> [UnifiedMediaItem] {
-        var items: [MediaItem] = []
-        for source in sources {
-            guard let libraries = try? await source.libraries() else { continue }
-            for library in libraries where library.kind == kind {
-                if let fetched = try? await source.items(in: library.id) {
-                    items += fetched
+        // Fan out across sources concurrently (and each source's libraries
+        // concurrently) instead of serially — the serial version made Home /
+        // Library wait for the slowest server's last library before first paint.
+        async let downloadedTask = downloadedIDs()
+        let items = await withTaskGroup(of: [MediaItem].self) { group in
+            for source in sources {
+                group.addTask {
+                    guard let libraries = try? await source.libraries() else { return [] }
+                    return await withTaskGroup(of: [MediaItem].self) { inner in
+                        for library in libraries where library.kind == kind {
+                            inner.addTask { (try? await source.items(in: library.id)) ?? [] }
+                        }
+                        var acc: [MediaItem] = []
+                        for await chunk in inner { acc += chunk }
+                        return acc
+                    }
                 }
             }
+            var all: [MediaItem] = []
+            for await chunk in group { all += chunk }
+            return all
         }
-        let downloaded = await downloadedIDs()
+        let downloaded = await downloadedTask
         return Self.merge(items, downloaded: downloaded, serverNames: serverNames)
     }
 
@@ -56,8 +69,12 @@ public actor UnifiedLibrary {
     /// cross-source Continue Watching (best resume across a title's sources) and
     /// the Downloaded titles. Fault-tolerant via `unifiedItems`.
     public func homeRails(resumeStore: ResumeStore, limit: Int = 30) async -> UnifiedRails {
-        let movies = await unifiedItems(kind: .movie)
-        let shows = await unifiedItems(kind: .show)
+        // Movies and shows aggregate concurrently (each already fans out in
+        // parallel internally).
+        async let moviesTask = unifiedItems(kind: .movie)
+        async let showsTask = unifiedItems(kind: .show)
+        let movies = await moviesTask
+        let shows = await showsTask
 
         var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
         for unified in movies + shows {
