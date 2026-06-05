@@ -26,12 +26,23 @@ struct SearchView: View {
 
     @State private var query = ""
     @State private var navigationPath = NavigationPath()
+    /// Owns keyboard focus so taps outside the field, scrolling the results, or
+    /// selecting a result all dismiss the keyboard — the native search feel.
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
                 header
                 content
+                    // Tap anywhere in the results (empty space or a result) ends
+                    // editing; `simultaneousGesture` so a result tap still
+                    // navigates. The field lives in the header, so focusing it
+                    // isn't caught here.
+                    .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
+                    #if os(iOS) || os(visionOS)
+                    .scrollDismissesKeyboard(.immediately)
+                    #endif
             }
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .mediaNavigationDestinations(
@@ -53,7 +64,7 @@ struct SearchView: View {
         VStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
-            AetherSearchField(text: $query, prompt: "Search your library")
+            AetherSearchField(text: $query, prompt: "Search your library", focus: $searchFocused)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)

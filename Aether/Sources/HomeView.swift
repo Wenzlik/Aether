@@ -43,6 +43,9 @@ struct HomeView: View {
     /// same client-side title filter so search isn't trapped behind a
     /// dedicated tab anymore.
     @State private var searchQuery = ""
+    /// Owns keyboard focus so tapping outside / scrolling / selecting a result
+    /// dismisses the keyboard.
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -51,11 +54,15 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         brandedHeader
                         content
+                            .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
                     }
                 } else {
                     content
                 }
             }
+            #if os(iOS) || os(visionOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .mediaNavigationDestinations(
                 source: source,
@@ -105,7 +112,7 @@ struct HomeView: View {
         VStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library")
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
