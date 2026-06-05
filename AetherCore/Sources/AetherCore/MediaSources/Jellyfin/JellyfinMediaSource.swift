@@ -124,6 +124,14 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Mark unwatched: `DELETE /Users/{userId}/PlayedItems/{itemId}`.
+    public func markUnwatched(_ id: MediaID) async {
+        guard id.source == self.id else { return }
+        var request = makeRequest(path: "/Users/\(userID)/PlayedItems/\(id.rawValue)")
+        request.httpMethod = "DELETE"
+        _ = try? await api.data(for: request)
+    }
+
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
         switch request.mode {
         case .directPlay:

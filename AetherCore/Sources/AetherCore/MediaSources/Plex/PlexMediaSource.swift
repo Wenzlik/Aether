@@ -786,6 +786,20 @@ public actor PlexMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Mark unwatched on the server via Plex's unscrobble endpoint.
+    public func markUnwatched(_ id: MediaID) async {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return }
+        let request = request(
+            base: base,
+            path: "/:/unscrobble",
+            queryItems: [
+                URLQueryItem(name: "key", value: id.rawValue),
+                URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
+            ]
+        )
+        _ = try? await api.data(for: request)
+    }
+
     // MARK: - Stream URL resolution (direct play vs transcode)
 
     /// Containers AVPlayer opens natively. Anything outside this set goes
