@@ -217,6 +217,10 @@ struct DetailView: View {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        // Clamp the overview for shows so the seasons rail surfaces
+                        // sooner (it's the only focusable target on tvOS); movies
+                        // show the full synopsis.
+                        .lineLimit(item.kind.isContainer ? 3 : nil)
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -244,10 +248,17 @@ struct DetailView: View {
     }
 
     private var backdropMaxHeight: CGFloat {
+        // Shows put their seasons rail directly below the hero. On tvOS the only
+        // way to scroll is to move focus onto a focusable element (a season
+        // card), so a tall backdrop that pushes the seasons off-screen traps
+        // focus entirely — the user can't move, and Menu exits the app. Use a
+        // shorter backdrop for containers (shows) so the seasons sit on-screen
+        // and are reachable on first appearance. Movies keep the full hero.
+        let isContainer = item.kind.isContainer
         #if os(tvOS)
-        560
+        return isContainer ? 300 : 560
         #else
-        420
+        return isContainer ? 240 : 420
         #endif
     }
 
