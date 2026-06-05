@@ -27,6 +27,8 @@ struct SettingsView: View {
     /// Device volume stats for the Storage Summary card. `nil` until the probe
     /// runs (and stays nil if it fails) — the free-space row just hides.
     @State private var deviceCapacity: DeviceCapacity?
+    /// Current on-disk artwork cache size, shown next to "Clear Image Cache".
+    @State private var imageCacheBytes: Int = 0
     /// Drives the split: a two-column dashboard on roomy surfaces, a single
     /// column on the phone.
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -63,7 +65,10 @@ struct SettingsView: View {
                     .frame(maxWidth: isWide ? 1100 : 820, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .task { await refreshCapacity() }
+                .task {
+                    await refreshCapacity()
+                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                }
             }
             // The root Settings surface carries its own wordmark, so suppress the
             // empty navigation bar; pushed screens (Downloads) show their own.
@@ -169,6 +174,23 @@ struct SettingsView: View {
         #if !os(tvOS)
         storageSummaryCard
         #endif
+        imageCacheCard
+    }
+
+    /// Artwork disk-cache size + a manual clear. Auto-evicted under a cap too,
+    /// but this gives the user direct control. All platforms (posters cache
+    /// everywhere).
+    private var imageCacheCard: some View {
+        AetherSettingsSection("Cache") {
+            AetherSettingsRow(
+                label: "Clear Image Cache",
+                systemImage: "photo.stack",
+                value: formatBytes(Int64(imageCacheBytes))
+            ) {
+                AetherImageCache.shared.clear()
+                imageCacheBytes = 0
+            }
+        }
     }
 
     // MARK: - Dashboard cards (status, right column)
