@@ -96,6 +96,11 @@ final class SettingsViewModel {
         "Version \(versionString) (\(buildString))"
     }
 
+    /// Codename for the current release, shown in the What's New modal. Theme:
+    /// constellations, alphabetical per release (see AGENTS.md → Release
+    /// process). Update this when `MARKETING_VERSION` bumps to a new version.
+    let releaseCodename = "Andromeda"
+
     /// Headline features shipped to date, surfaced in the About section's
     /// "What's New" disclosure. Cumulative — the section showcases what
     /// Aether actually does today rather than churning per-release notes;
