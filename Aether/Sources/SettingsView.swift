@@ -22,7 +22,7 @@ struct SettingsView: View {
 
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
-    @State private var isWhatsNewExpanded = false
+    @State private var isWhatsNewPresented = false
     @State private var openPicker: PrefPicker?
     /// Device volume stats for the Storage Summary card. `nil` until the probe
     /// runs (and stays nil if it fails) — the free-space row just hides.
@@ -90,6 +90,12 @@ struct SettingsView: View {
         }
         .sheet(item: $openPicker) { picker in
             preferenceSheet(for: picker)
+        }
+        .sheet(isPresented: $isWhatsNewPresented) {
+            WhatsNewSheet(
+                version: viewModel.versionString,
+                bullets: viewModel.whatsNewBullets
+            ) { isWhatsNewPresented = false }
         }
     }
 
@@ -534,74 +540,14 @@ struct SettingsView: View {
         return PlaybackLanguage.displayName(for: code)
     }
 
-    /// Compact About.
-    ///
-    /// **iOS / iPadOS / visionOS:** one tappable Version row that expands
-    /// to show a cumulative "What's New" bullet list of shipped highlights.
-    /// Vertical space is the constraint; collapse-by-default keeps the
-    /// section from dominating the bottom of Settings.
-    ///
-    /// **tvOS:** vertical space is even more constrained (Settings
-    /// scrolls but D-pad focus doesn't move into static text), so the
-    /// disclosure pattern is replaced with a **two-column row** — the
-    /// version label on the left, the What's New bullets always visible
-    /// on the right where Settings' generous trailing whitespace would
-    /// otherwise sit empty.
+    /// About — one tappable Version row that opens the **What's New** modal
+    /// (`WhatsNewSheet`). Same pattern on every platform: the changelog
+    /// highlights live in a sheet rather than expanding inline, so the section
+    /// stays a single calm row no matter how long the list grows.
     private var aboutSection: some View {
         AetherSettingsSection("About") {
-            #if os(tvOS)
-            aboutRow_tvOS
-            #else
-            aboutRow_default
-            #endif
-        }
-    }
-
-    #if os(tvOS)
-    /// tvOS About row: version on the left, bullets always-on on the
-    /// right. Not tappable — there's no expand state to toggle.
-    private var aboutRow_tvOS: some View {
-        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
-            HStack(spacing: AetherDesign.Spacing.m) {
-                Image(systemName: "info.circle.fill")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.accent)
-                    .frame(width: 28)
-                Text(viewModel.versionRowLabel)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Spacer(minLength: AetherDesign.Spacing.s)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text("What's New")
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                ForEach(viewModel.whatsNewBullets, id: \.self) { bullet in
-                    HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AetherDesign.Palette.success)
-                        Text(bullet)
-                            .font(AetherDesign.Typography.metadata)
-                            .foregroundStyle(AetherDesign.Palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(AetherDesign.Spacing.m)
-    }
-    #endif
-
-    private var aboutRow_default: some View {
-        VStack(spacing: 0) {
             Button {
-                withAnimation(.smooth(duration: 0.25)) {
-                    isWhatsNewExpanded.toggle()
-                }
+                isWhatsNewPresented = true
             } label: {
                 HStack(spacing: AetherDesign.Spacing.m) {
                     Image(systemName: "info.circle.fill")
@@ -622,34 +568,13 @@ struct SettingsView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .rotationEffect(.degrees(isWhatsNewExpanded ? 90 : 0))
                 }
                 .padding(AetherDesign.Spacing.m)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(viewModel.versionRowLabel). What's New.")
-            .accessibilityHint(isWhatsNewExpanded ? "Tap to collapse" : "Tap to expand")
-
-            if isWhatsNewExpanded {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-                    ForEach(viewModel.whatsNewBullets, id: \.self) { bullet in
-                        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(AetherDesign.Palette.success)
-                                .frame(width: 28)
-                            Text(bullet)
-                                .font(AetherDesign.Typography.metadata)
-                                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.m)
-                .padding(.bottom, AetherDesign.Spacing.m)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            .accessibilityHint("Opens what's new in this version")
         }
     }
 
@@ -697,6 +622,61 @@ private struct PreferencePickerSheet<Content: View>: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
             }
+        }
+        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// The **What's New** modal opened from the About → Version row. A headline,
+/// the version it covers, and the shipped highlights as a checked bullet list.
+/// Mirrors `PreferencePickerSheet`'s container so the two modals feel identical.
+private struct WhatsNewSheet: View {
+    let version: String
+    let bullets: [String]
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text("What's New")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Version \(version)")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .padding(.top, AetherDesign.Spacing.l)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                    ForEach(bullets, id: \.self) { bullet in
+                        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.success)
+                            Text(bullet)
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .padding(AetherDesign.Spacing.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                        .fill(AetherDesign.Materials.card)
+                )
+                .padding(.horizontal, AetherDesign.Spacing.l)
+            }
+
+            AetherButton("Done", role: .secondary, action: onClose)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.bottom, AetherDesign.Spacing.l)
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
         .presentationDetents([.medium, .large])
