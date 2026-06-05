@@ -270,12 +270,45 @@ struct LibraryBrowseView: View {
                         }
                         .buttonStyle(.plain)
                     }
+
+                    // Prominent, focusable "See all" tile at the end of the rail
+                    // (Apple-TV pattern) — far more visible than the header link,
+                    // and reliably reachable by focus on tvOS.
+                    if items.count > 12 {
+                        NavigationLink(value: UnifiedLibrarySection(kind: kind, title: title)) {
+                            seeAllCard
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
             .aetherFocusSection()
         }
+    }
+
+    /// The trailing "See all" tile — poster-sized so it sits flush in the rail.
+    private var seeAllCard: some View {
+        VStack(spacing: AetherDesign.Spacing.s) {
+            Image(systemName: "arrow.forward.circle.fill")
+                .font(.largeTitle)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            Text("See all")
+                .font(AetherDesign.Typography.cardTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .frame(width: posterWidth)
+        .frame(maxHeight: .infinity)
+        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Materials.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+        )
     }
 
     // MARK: - Sizing
