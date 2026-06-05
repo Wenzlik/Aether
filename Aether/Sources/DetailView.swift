@@ -29,7 +29,9 @@ struct DetailView: View {
     /// `UnifiedMediaItem`). Drives the "Available Sources" section + manual
     /// source override. Empty for single-source contexts (Library / Discover /
     /// Continue Watching), where the section is hidden.
-    let availableSources: [UnifiedSource] = []
+    /// (`var` with a default so it stays in the memberwise init — a `let` with a
+    /// default would be dropped from it.)
+    var availableSources: [UnifiedSource] = []
 
     @State private var resume: ResumePoint?
     /// The source the user manually switched to via "Available Sources". `nil`
