@@ -3,41 +3,43 @@ import AetherCore
 
 /// Search-results body shared by `HomeView` and `LibraryBrowseView`.
 ///
-/// Both tabs carry a `.searchable` modifier — when the user starts
-/// typing, the host view swaps its normal content (rails / Library
-/// grid) for this view, scoped to the same source. Same logic that
-/// used to live in the dedicated Search tab; lifted out so removing
-/// the tab didn't mean losing search.
+/// Both tabs carry a search field — when the user types, the host swaps its
+/// content (rails / grid) for this view. It searches **across every source it's
+/// given** and returns **unified** results: one row per title, deduplicated via
+/// the same external-ID merge as Home. Home passes all connected sources
+/// (unified search); Library passes its single active source (until Library is
+/// unified in a later phase).
 ///
-/// **Data:** the host owns the `query` binding and the source. This
-/// view loads one page of items per library on appear, dedupes by
-/// `MediaID`, and filters client-side by `title.localizedCaseInsensitiveContains`.
-/// No new endpoint, no pagination beyond what the source already
-/// returns — the same trade-off the previous SearchView made.
+/// **Data:** loads one page of items per library per source on appear, merges +
+/// dedupes, and filters client-side by `title.localizedCaseInsensitiveContains`.
+/// Each result navigates through its preferred source's `MediaItem`, so the
+/// existing `DetailView` is unchanged.
 struct MediaSearchResults: View {
-    let source: (any MediaSource)?
+    let sources: [any MediaSource]
     let query: String
 
-    @State private var allItems: [MediaItem] = []
+    @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
     var body: some View {
         content
-            // Load lazily — first time the search results appear, pull
-            // one page per library and cache for the rest of the
-            // session. Source change (sign out / switch) re-loads.
-            .task(id: source?.id) { await load() }
+            .task(id: sourcesKey) { await load() }
+    }
+
+    /// Stable reload key across the given sources.
+    private var sourcesKey: String {
+        sources.map { $0.id.stableKey }.sorted().joined(separator: ",")
     }
 
     @ViewBuilder
     private var content: some View {
-        if source == nil {
+        if sources.isEmpty {
             AetherEmptyState(
                 glyph: "magnifyingglass",
                 title: "Nothing to search yet",
                 message: "Connect a source and your movies and shows become searchable here."
             )
-        } else if isLoading && allItems.isEmpty {
+        } else if isLoading && items.isEmpty {
             AetherLoadingState(.inline)
                 .padding(.top, AetherDesign.Spacing.l)
         } else if results.isEmpty {
@@ -49,11 +51,13 @@ struct MediaSearchResults: View {
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
-                    ForEach(results) { item in
-                        NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL)
+                    ForEach(results) { unified in
+                        if let item = preferredItem(unified) {
+                            NavigationLink(value: item) {
+                                AetherCard.poster(title: unified.title, posterURL: unified.posterURL)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(AetherDesign.Spacing.l)
@@ -61,10 +65,16 @@ struct MediaSearchResults: View {
         }
     }
 
-    private var results: [MediaItem] {
+    private var results: [UnifiedMediaItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return allItems.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        return items.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    /// The MediaItem a unified result navigates to — its highest-priority
+    /// playable source, falling back to any source.
+    private func preferredItem(_ unified: UnifiedMediaItem) -> MediaItem? {
+        unified.preferredSource?.item ?? unified.sources.first?.item
     }
 
     private var columns: [GridItem] {
@@ -75,29 +85,25 @@ struct MediaSearchResults: View {
         #endif
     }
 
-    /// One page of items per library, deduped. Triggered by the
-    /// `.task(id: source?.id)` modifier in `body`. Cheap on small
-    /// libraries, bounded by the source's default page size on big ones.
+    /// One page of items per library across every source, merged + deduped.
+    /// Fault-tolerant: a source that fails to list/fetch is skipped.
     private func load() async {
-        guard let source else {
-            allItems = []
+        guard !sources.isEmpty else {
+            items = []
             return
         }
         isLoading = true
         defer { isLoading = false }
-        do {
-            let libraries = try await source.libraries()
-            var seen = Set<MediaID>()
-            var collected: [MediaItem] = []
+
+        var collected: [MediaItem] = []
+        for source in sources {
+            guard let libraries = try? await source.libraries() else { continue }
             for library in libraries {
-                let items = try await source.items(in: library.id)
-                for item in items where seen.insert(item.id).inserted {
-                    collected.append(item)
+                if let fetched = try? await source.items(in: library.id) {
+                    collected += fetched
                 }
             }
-            allItems = collected
-        } catch {
-            allItems = []
         }
+        items = UnifiedLibrary.merge(collected)
     }
 }

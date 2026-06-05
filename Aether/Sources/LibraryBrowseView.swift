@@ -101,7 +101,9 @@ struct LibraryBrowseView: View {
     @ViewBuilder
     private var content: some View {
         if isSearching {
-            MediaSearchResults(source: source, query: searchQuery)
+            // Library is still single-source (unified browse is a later phase),
+            // so search here scopes to the active source.
+            MediaSearchResults(sources: [source].compactMap { $0 }, query: searchQuery)
         } else if source == nil {
             AetherEmptyState(
                 glyph: "rectangle.stack",
