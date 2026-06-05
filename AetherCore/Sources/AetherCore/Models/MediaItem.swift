@@ -66,6 +66,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// "watched" checkmark on posters / episode rows; reflects watched-anywhere,
     /// not just in-Aether playback.
     public let isWatched: Bool
+    /// For episodes: the parent **season**'s id (Plex `parentRatingKey`,
+    /// Jellyfin `ParentId`). Lets Auto-Play-Next fetch the season's episodes and
+    /// pick the next one. `nil` for movies / when the source didn't provide it.
+    public let parentID: MediaID?
 
     public init(
         id: MediaID,
@@ -89,7 +93,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         episodeNumber: Int? = nil,
         selectedQuality: PlaybackQuality = .original,
         guids: MediaGuids = MediaGuids(),
-        isWatched: Bool = false
+        isWatched: Bool = false,
+        parentID: MediaID? = nil
     ) {
         self.id = id
         self.title = title
@@ -113,6 +118,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.selectedQuality = selectedQuality
         self.guids = guids
         self.isWatched = isWatched
+        self.parentID = parentID
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -173,7 +179,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             episodeNumber: episodeNumber,
             selectedQuality: selectedQuality ?? self.selectedQuality,
             guids: guids,
-            isWatched: isWatched
+            isWatched: isWatched,
+            parentID: parentID
         )
     }
 

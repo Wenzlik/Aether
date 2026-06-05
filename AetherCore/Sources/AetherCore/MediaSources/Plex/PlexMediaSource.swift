@@ -780,7 +780,9 @@ public actor PlexMediaSource: MediaSource {
             selectedQuality: .original,
             guids: dto.guids,
             // Plex marks an item watched via `viewCount` (>= 1 play).
-            isWatched: (dto.viewCount ?? 0) > 0
+            isWatched: (dto.viewCount ?? 0) > 0,
+            // Season ratingKey → the id Auto-Play-Next pulls siblings from.
+            parentID: dto.parentRatingKey.map { MediaID(source: id, rawValue: $0) }
         )
     }
 

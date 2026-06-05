@@ -212,6 +212,9 @@ public enum PlexAPI {
         /// For episodes: the parent season's number (Plex's `parentIndex`).
         /// Combined with `index` to render "S1E1" in UI.
         public let parentIndex: Int?
+        /// For episodes: the parent season's ratingKey — the id Auto-Play-Next
+        /// fetches the season's episodes from. JSON key `parentRatingKey`.
+        public let parentRatingKey: String?
         /// For episodes: this episode's number within its season (Plex's
         /// `index`). Also doubles as season number on a season DTO, but
         /// we only read it from episodes today.
@@ -293,6 +296,7 @@ public enum PlexAPI {
             art: String? = nil,
             grandparentTitle: String? = nil,
             parentIndex: Int? = nil,
+            parentRatingKey: String? = nil,
             index: Int? = nil,
             media: [Media]? = nil,
             externalGuids: [GuidEntry]? = nil,
@@ -309,6 +313,7 @@ public enum PlexAPI {
             self.art = art
             self.grandparentTitle = grandparentTitle
             self.parentIndex = parentIndex
+            self.parentRatingKey = parentRatingKey
             self.index = index
             self.media = media
             self.externalGuids = externalGuids
@@ -434,7 +439,7 @@ public enum PlexAPI {
 
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
-            case grandparentTitle, parentIndex, index, viewCount
+            case grandparentTitle, parentIndex, parentRatingKey, index, viewCount
             case media = "Media"
             case externalGuids = "Guid"
             case markers = "Marker"

@@ -34,7 +34,7 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance
+        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown
         var id: String { rawValue }
     }
 
@@ -415,6 +415,34 @@ struct SettingsView: View {
             ) {
                 openPicker = .subtitles
             }
+            AetherDisclosureRow(
+                label: "Skip Intro",
+                value: viewModel.playbackPreferences.skipIntro.displayName,
+                systemImage: "forward.end.fill"
+            ) {
+                openPicker = .skipIntro
+            }
+            AetherDisclosureRow(
+                label: "Skip Credits",
+                value: viewModel.playbackPreferences.skipCredits.displayName,
+                systemImage: "forward.fill"
+            ) {
+                openPicker = .skipCredits
+            }
+            AetherDisclosureRow(
+                label: "Auto-Play Next Episode",
+                value: viewModel.playbackPreferences.autoPlayNext ? "On" : "Off",
+                systemImage: "play.square.stack.fill"
+            ) {
+                openPicker = .autoPlayNext
+            }
+            AetherDisclosureRow(
+                label: "Next Episode Countdown",
+                value: "\(viewModel.playbackPreferences.nextEpisodeCountdown)s",
+                systemImage: "timer"
+            ) {
+                openPicker = .countdown
+            }
         }
     }
 
@@ -446,6 +474,10 @@ struct SettingsView: View {
         case .audio:          audioLanguagePickerSheet
         case .subtitles:      subtitlePickerSheet
         case .appearance:     appearancePickerSheet
+        case .skipIntro:      skipModePickerSheet(title: "Skip Intro", selection: \.skipIntro)
+        case .skipCredits:    skipModePickerSheet(title: "Skip Credits", selection: \.skipCredits)
+        case .autoPlayNext:   autoPlayNextPickerSheet
+        case .countdown:      countdownPickerSheet
         }
     }
 
@@ -520,6 +552,51 @@ struct SettingsView: View {
                     isSelected: viewModel.appearance.preference == option
                 ) {
                     viewModel.appearance.preference = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private func skipModePickerSheet(
+        title: String,
+        selection keyPath: ReferenceWritableKeyPath<PlaybackPreferencesStore, SkipMode>
+    ) -> some View {
+        PreferencePickerSheet(title: title) {
+            ForEach(SkipMode.allCases, id: \.self) { option in
+                AetherSelectionRow(
+                    title: option.displayName,
+                    isSelected: viewModel.playbackPreferences[keyPath: keyPath] == option
+                ) {
+                    viewModel.playbackPreferences[keyPath: keyPath] = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var autoPlayNextPickerSheet: some View {
+        PreferencePickerSheet(title: "Auto-Play Next Episode") {
+            ForEach([true, false], id: \.self) { on in
+                AetherSelectionRow(
+                    title: on ? "On" : "Off",
+                    isSelected: viewModel.playbackPreferences.autoPlayNext == on
+                ) {
+                    viewModel.playbackPreferences.autoPlayNext = on
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var countdownPickerSheet: some View {
+        PreferencePickerSheet(title: "Next Episode Countdown") {
+            ForEach(PlaybackPreferencesStore.countdownOptions, id: \.self) { seconds in
+                AetherSelectionRow(
+                    title: "\(seconds) seconds",
+                    isSelected: viewModel.playbackPreferences.nextEpisodeCountdown == seconds
+                ) {
+                    viewModel.playbackPreferences.nextEpisodeCountdown = seconds
                     openPicker = nil
                 }
             }

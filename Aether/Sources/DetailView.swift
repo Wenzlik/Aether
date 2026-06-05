@@ -131,6 +131,7 @@ struct DetailView: View {
                     session: playbackSession,
                     startAt: playbackStartAt,
                     preferExpanded: launchingInCinema,
+                    playbackPreferences: playbackPreferences,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)

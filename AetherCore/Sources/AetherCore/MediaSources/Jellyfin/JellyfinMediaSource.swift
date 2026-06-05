@@ -337,7 +337,8 @@ public actor JellyfinMediaSource: MediaSource {
             subtitleTracks: subtitleTracks,
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
             guids: dto.guids,
-            isWatched: dto.isWatched
+            isWatched: dto.isWatched,
+            parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) }
         )
     }
 
