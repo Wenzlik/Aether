@@ -272,19 +272,25 @@ Format:
 
 ### Xcode Cloud trigger
 
-The "Internal TestFlight" workflow's start condition is **Manual** — building
-isn't automatic, it fires when you click *Start Build* in App Store Connect.
-The promotion PR is your cue: merge it, then manually trigger Xcode Cloud.
-Future automation (e.g. branch-change on `main` with a `[release]` commit
-tag) is fine to add later; manual is the safe default while the flow is new.
+The "Internal TestFlight" workflow builds **automatically on every change to
+`main`** (branch-change trigger). So merging a promotion PR *is* the release
+action — there's nothing to click. Don't merge to `main` unless you want a
+TestFlight build to go out.
 
 ### CI gate
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `swift build` on AetherCore
 plus `xcodebuild test` on `AetherTests` against every PR targeting **either**
-`main` **or** `staging`. CI failure blocks merge on both. The promotion PR
-re-runs CI against `main`, which is the last chance to catch a regression
-before it touches the deployable branch.
+`main` **or** `staging`. CI failure blocks merge on both (`main` is branch-
+protected: these checks are *required*, and the rule applies to admins too —
+no direct pushes / force-pushes).
+
+⚠️ **CI only compiles the iOS Simulator.** It does **not** build the visionOS
+or tvOS targets, so a platform-availability mistake behind an `os(visionOS)` /
+`os(tvOS)` gate compiles green in CI and only fails in the Xcode Cloud archive
+(exit 65). When gating a SwiftUI modifier per-platform, verify the API actually
+exists there (e.g. `scrollDismissesKeyboard` is iOS-only; `.focusSection()` is
+tvOS-only). Adding visionOS/tvOS build steps to CI is an open follow-up.
 
 ### Bug-bisect note
 
@@ -293,6 +299,57 @@ inspecting `main`'s merge commit list since the previous promotion (regular
 merges into `main`, so the individual PR commits are still there). Revert
 the specific PR via a new fix branch on `staging`; don't revert the
 promotion as a whole.
+
+---
+
+## Release process & versioning
+
+Three rules, applied **continuously** — not as an end-of-release scramble.
+
+### 1. Bump the version at the START of its work, not the end
+
+The moment the first PR toward a new version lands, bump
+`MARKETING_VERSION` in `project.yml` to that version. So `staging` and `main`
+**always carry the version currently being built**, and every TestFlight build
+is labelled with the version it's actually working toward — never the previous
+one. (Build numbers are separate: `CURRENT_PROJECT_VERSION` is overwritten per
+build by Xcode Cloud.)
+
+- Patch (`0.4.0 → 0.4.1`): bug fixes / small UX.
+- Minor (`0.4.x → 0.5.0`): a named feature milestone (see ROADMAP).
+- The bump is its own tiny commit/PR (or rides the first PR of the version).
+- Tag `vX.Y.Z` on `main` only when the version is **finished** and promoted.
+
+### 2. Keep the in-app "What's New" current
+
+`SettingsViewModel.whatsNewBullets` drives the **What's New** modal (About →
+version row). When a user-visible feature lands in the in-progress version,
+add/adjust a bullet **in the same PR** — so the app always reflects what it
+actually does now. Don't let it drift to a past release. Cumulative highlights,
+not a raw commit log; the full history lives in `CHANGELOG.md`.
+
+### 3. Every release gets a codename
+
+Releases carry a **codename** alongside the number, surfaced in the What's New
+modal (`SettingsViewModel.releaseCodename`) and the `CHANGELOG` heading
+(`## [0.4.1] — <date> · "Andromeda"`).
+
+- **Theme: constellations, alphabetical.** Each release takes the next letter:
+  0.4.1 **Andromeda** → next **Boötes** → **Cassiopeia** → **Draco** → … It's
+  a fun anchor for "which build is this," nothing more — swap the theme freely
+  if you want, just keep it consistent and ordered.
+
+### Cut-a-release checklist
+
+When a version is ready to promote + tag:
+
+1. `MARKETING_VERSION` already bumped (rule 1) — confirm it's right.
+2. `CHANGELOG.md`: the in-progress `## [X.Y.Z] — Unreleased · "Codename"`
+   section is filled in; set its date.
+3. `whatsNewBullets` reflects the shipped highlights (rule 2).
+4. Promotion PR `staging → main` (regular merge) → auto TestFlight build.
+5. Tag `vX.Y.Z` on `main`.
+6. Open the next version's `## [Unreleased]` / bump for the next cycle.
 
 ---
 

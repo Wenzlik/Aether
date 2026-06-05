@@ -26,7 +26,10 @@ settings:
     # CURRENT_PROJECT_VERSION is overwritten by ci_pre_xcodebuild.sh in Xcode
     # Cloud with $CI_BUILD_NUMBER so every distributed archive has a unique
     # build number.
-    MARKETING_VERSION: "0.4.0"
+    # Bumped to the in-progress version at the START of its work (see
+    # AGENTS.md → Release process), not after — so staging/main always carry
+    # the version currently being built.
+    MARKETING_VERSION: "0.4.1"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:

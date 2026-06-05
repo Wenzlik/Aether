@@ -4,6 +4,53 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.4.1] — Unreleased · "Andromeda"
+
+The Unified Library era: the *source* becomes an implementation detail across
+every browse surface, the spatial Cinema lands on Vision Pro, navigation is
+reworked into Home · Library · Discover · Search · Settings with a dashboard-
+style Settings, and a round of tvOS focus/navigation fixes.
+
+### Added
+
+- **Vision Pro Cinema (V1)** — a "Dark Theater" immersive space; the native
+  `AVPlayerViewController` docks into it via a single-source-of-truth
+  `CinemaManager`. visionOS-only.
+- **Unified Library** — Home, Search, **Discover**, and **Library** all
+  aggregate every connected source into deduplicated `UnifiedMediaItem`s
+  (dedup by shared TMDB / IMDB / TVDB ids; offline downloads surface as a
+  source). Source priority offline → plex → jellyfin → emby.
+- **Available Sources on Detail** — a title that exists on more than one source
+  shows them all; tap to switch which source plays / hydrates in place.
+- **Discover + Search as first-class tabs** on every platform (Discover was
+  tvOS-only; Search was an inline field).
+- **Settings dashboard** — split two-column layout on iPad / tvOS / visionOS
+  (controls + Connected Sources / Storage Summary cards with source health);
+  single column on iPhone. **What's New** modal on the version row.
+- **`UnifiedLibraryGridView`** — full "See all" grid per kind with client-side
+  sort (Title A–Z / Z–A, Year newest / oldest) and a prominent focusable
+  "See all" rail tile.
+- **Jellyfin offline downloads** — `supportsDownloads` + download URLs (parity
+  with Plex).
+
+### Changed
+
+- **Storage tab removed** — the download manager now lives at
+  **Settings → Downloads** (downloads are an offline *source*, not a separate
+  area). Final tab set: Home · Library · Discover · Search · Settings.
+- **Search keyboard dismissal** — tap-outside / scroll / select-result /
+  Search-Done all dismiss the keyboard (`@FocusState`).
+- **Show detail** uses a shorter backdrop so the seasons rail is on-screen and
+  reachable; overview clamped on shows.
+
+### Fixed
+
+- visionOS archive failure — `scrollDismissesKeyboard` is iOS-only and must not
+  be gated for visionOS.
+- tvOS focus traps on the show detail — seasons rail is a focus section (Up
+  escapes to the tab bar); the keyboard tap-gesture no longer runs on tvOS
+  (it intercepted Select and corrupted the focus engine).
+
 ## [0.4.0] — 2026-06-04
 
 Premium polish pass on the 0.3.x foundation. Settings is now a true
