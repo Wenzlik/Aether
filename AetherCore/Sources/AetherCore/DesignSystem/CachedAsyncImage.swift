@@ -1,27 +1,25 @@
 import SwiftUI
 
-/// SwiftUI image view that pulls from `AetherCore`'s image cache.
-///
-/// The 0.1 implementation is a thin wrapper around `AsyncImage` so views can be
-/// built against the right call site. A disk-backed LRU cache and downsampling
-/// land with the artwork pipeline issue in 0.2.
+/// SwiftUI image view backed by `AetherImageCache` (memory + disk + downsample
+/// + in-flight de-dup). Replaces the previous raw-`AsyncImage` implementation,
+/// which had no persistent cache, decoded full-size, and re-fetched on every
+/// render and relaunch — the artwork performance regression.
 ///
 /// > Never use raw `AsyncImage` in shipping code. Go through `CachedAsyncImage`
-/// > so every image goes through the same future cache + decode pipeline.
+/// > so every image shares the same cache + decode pipeline.
 ///
 /// ## Sizing
 ///
 /// When `aspectRatio` is provided, the view shapes itself to that ratio using
-/// the canonical `Color.clear → overlay → clipped` pattern. The container
-/// reaches the ratio *first*; the image is then drawn into it via `.scaledToFill`
-/// and clipped to the bounds. Without this pattern, `AsyncImage`'s success
-/// case takes the image's *natural* aspect ratio and the outer modifier can
-/// fail to constrain it — which manifests as cards growing far beyond the
-/// `.frame(width:)` the parent expected.
+/// the canonical `Color.clear → overlay → clipped` pattern: the container
+/// reaches the ratio first; the image is drawn into it with `.scaledToFill`
+/// and clipped. Without this, the success image takes its natural ratio and the
+/// card can grow past the parent's `.frame(width:)`.
 public struct CachedAsyncImage: View {
     public let url: URL?
     public let aspectRatio: CGFloat?
 
+    @State private var image: AetherPlatformImage?
     @State private var isAnimating = false
 
     public init(url: URL?, aspectRatio: CGFloat? = nil) {
@@ -30,33 +28,30 @@ public struct CachedAsyncImage: View {
     }
 
     public var body: some View {
-        if let aspectRatio {
-            Color.clear
-                .aspectRatio(aspectRatio, contentMode: .fit)
-                .overlay { imageContent }
-                .clipped()
-        } else {
-            imageContent
+        Group {
+            if let aspectRatio {
+                Color.clear
+                    .aspectRatio(aspectRatio, contentMode: .fit)
+                    .overlay { imageContent }
+                    .clipped()
+            } else {
+                imageContent
+            }
+        }
+        // Keyed on the url: reloads only when the url changes. A repeat
+        // appearance of the same url is an instant memory-cache hit.
+        .task(id: url) {
+            guard let url else { image = nil; return }
+            image = await AetherImageCache.shared.image(for: url)
         }
     }
 
     @ViewBuilder
     private var imageContent: some View {
-        if let url {
-            AsyncImage(url: url, transaction: Transaction(animation: AetherDesign.Motion.content)) { phase in
-                switch phase {
-                case .empty:
-                    skeleton
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    skeleton
-                @unknown default:
-                    skeleton
-                }
-            }
+        if let image {
+            Image(aetherImage: image)
+                .resizable()
+                .scaledToFill()
         } else {
             skeleton
         }
@@ -86,6 +81,18 @@ public struct CachedAsyncImage: View {
                 isAnimating = true
             }
         }
+    }
+}
+
+extension Image {
+    /// Cross-platform `Image(uiImage:)` / `Image(nsImage:)` from a cached
+    /// platform image.
+    init(aetherImage: AetherPlatformImage) {
+        #if canImport(UIKit)
+        self.init(uiImage: aetherImage)
+        #else
+        self.init(nsImage: aetherImage)
+        #endif
     }
 }
 

@@ -4,15 +4,40 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.4.2] — Unreleased · "Andromeda"
+## [0.4.3] — Unreleased · "Andromeda"
 
-Continues the Andromeda line with navigation polish.
+Performance + control: artwork loads fast again and you can pull to refresh.
+
+### Added
+
+- **Artwork caching pipeline** — `AetherImageCache`: a real two-tier
+  (memory + disk) cache with on-disk persistence, in-flight de-duplication
+  (one download per poster even across rails), and ImageIO downsampling.
+  Posters now appear instantly from cache, relaunch doesn't re-download, and
+  scrolling is smooth. Replaces the placeholder `CachedAsyncImage` that was just
+  raw `AsyncImage` (no cache).
+- **Pull-to-refresh** on Home, Library, and Discover — re-fetches and re-runs
+  the unified aggregation without clearing the (still valid) artwork cache.
+
+### Changed
+
+- **Faster Home/Library first paint** — the unified aggregation now fans out
+  across sources/libraries in parallel instead of sequentially.
+
+## [0.4.2] — "Andromeda"
 
 ### Added
 
 - **Tab pop-to-root** — re-selecting the active tab resets its navigation stack
-  to the root (the iOS-standard behaviour), so tapping Home / Library / Discover
-  / Search while drilled in returns to the top.
+  to the root, so tapping Home / Library / Discover / Search while drilled in
+  returns to the top.
+- **Manual Mark as Watched / Unwatched** on Detail — writes the play state back
+  to Plex (scrobble) / Jellyfin (PlayedItems).
+- **Skip Intro / Skip Credits** — server-marker-driven (Plex markers, Jellyfin
+  MediaSegments); Show Button / Automatically / Off.
+- **Auto-Play Next Episode** — next-episode resolution + an "Up Next" countdown
+  in the credits, with a configurable length.
+- **Watched checkmarks** sourced from the server's own play state.
 
 ## [0.4.1] — Unreleased · "Andromeda"
 

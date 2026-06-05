@@ -106,11 +106,11 @@ final class SettingsViewModel {
     /// Aether actually does today rather than churning per-release notes;
     /// the full per-version log lives in `CHANGELOG.md`.
     let whatsNewBullets: [String] = [
+        "Faster artwork — posters cache to memory + disk and load instantly",
+        "Pull to refresh on Home, Library, and Discover",
+        "Skip Intro / Skip Credits, with Auto-Play Next Episode",
+        "Mark as Watched / Unwatched — synced back to your server",
         "Unified Library — one feed across every connected source",
-        "Pick a title's source on Detail (Available Sources)",
-        "Discover and Search are now tabs on every platform",
-        "Settings dashboard with source health",
-        "Offline downloads (Plex & Jellyfin) with auto-resume",
         "Cinema mode on Apple Vision Pro"
     ]
 
