@@ -1,13 +1,13 @@
 import Foundation
 
-/// The Unified Library merge engine: folds per-source `MediaItem`s (from Plex,
-/// Jellyfin, …) into deduplicated `UnifiedMediaItem`s, with offline copies
+/// Unified Library: fans out across every connected source, fetches its items,
+/// and merges them into deduplicated `UnifiedMediaItem`s with offline copies
 /// surfaced as a source.
 ///
-/// Phase 1b is the **pure merge logic** (no network, fully testable). The
-/// fan-out that fetches from every connected source and feeds this engine wires
-/// into `AppSession` / the views in Phase 2 — keeping the hard part (identity +
-/// merging) isolated and unit-tested first.
+/// The pure merge logic (`merge(...)`, Phase 1b) is `nonisolated static` and
+/// fully unit-tested; the actor adds the fault-tolerant fan-out (Phase 2) that
+/// the views consume. The single hard part — identity + merging — stays
+/// isolated and testable.
 ///
 /// **Deduplication** is union-find over shared external IDs: two items merge if
 /// they share *any* of TMDB / IMDB / TVDB (so a Plex item with TMDB+IMDB merges
@@ -15,9 +15,46 @@ import Foundation
 /// back to normalised title + year, and merge only with others that match
 /// exactly — conservative, to avoid false merges. Items with neither never
 /// merge (one row per source).
-public enum UnifiedLibrary {
+public actor UnifiedLibrary {
+    private let sources: [any MediaSource]
+    private let downloads: DownloadStore?
 
-    public static func merge(
+    public init(sources: [any MediaSource], downloads: DownloadStore? = nil) {
+        self.sources = sources
+        self.downloads = downloads
+    }
+
+    /// Server display names keyed by source id, derived from the sources
+    /// themselves (for the unified "Available Sources" rows).
+    private var serverNames: [MediaSourceID: String] {
+        Dictionary(sources.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// All unified titles of `kind` across connected sources. Fault-tolerant: a
+    /// source that fails to list libraries or items is skipped, not fatal, so a
+    /// slow/down server never blanks the feed.
+    public func unifiedItems(kind: MediaItem.Kind) async -> [UnifiedMediaItem] {
+        var items: [MediaItem] = []
+        for source in sources {
+            guard let libraries = try? await source.libraries() else { continue }
+            for library in libraries where library.kind == kind {
+                if let fetched = try? await source.items(in: library.id) {
+                    items += fetched
+                }
+            }
+        }
+        let downloaded = await downloadedIDs()
+        return Self.merge(items, downloaded: downloaded, serverNames: serverNames)
+    }
+
+    private func downloadedIDs() async -> Set<MediaID> {
+        guard let downloads else { return [] }
+        return Set(await downloads.snapshot().completed.map(\.mediaID))
+    }
+
+    // MARK: - Merge engine (pure, testable)
+
+    public nonisolated static func merge(
         _ items: [MediaItem],
         downloaded: Set<MediaID> = [],
         serverNames: [MediaSourceID: String] = [:]

@@ -506,3 +506,44 @@ struct UnifiedLibraryTests {
         #expect(u[0].sources.map(\.kind) == [.offline, .plex, .jellyfin])
     }
 }
+
+@Suite("AetherCore — UnifiedLibrary aggregator")
+struct UnifiedLibraryAggregatorTests {
+    private struct StubSource: MediaSource {
+        let id: MediaSourceID
+        let displayName: String
+        let libs: [Library]
+        let itemsByLib: [Library.ID: [MediaItem]]
+        let failsLibraries: Bool
+
+        func libraries() async throws -> [Library] {
+            if failsLibraries { throw URLError(.badServerResponse) }
+            return libs
+        }
+        func items(in id: Library.ID) async throws -> [MediaItem] { itemsByLib[id] ?? [] }
+    }
+
+    @Test("fans out across sources, merges by id, tolerates a failing source")
+    func aggregate() async {
+        let plexLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "m"), title: "Movies", kind: .movie)
+        let jellyLib = Library(id: .init(source: .jellyfin(serverID: "j1"), rawValue: "m"), title: "Movies", kind: .movie)
+        let plexItem = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+                                 kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        let jellyItem = MediaItem(id: .init(source: .jellyfin(serverID: "j1"), rawValue: "9"), title: "Matrix",
+                                  kind: .movie, streamURL: URL(string: "http://j/9"), guids: MediaGuids(tmdb: "603"))
+
+        let plex = StubSource(id: .plex(serverID: "s1"), displayName: "Plex",
+                              libs: [plexLib], itemsByLib: [plexLib.id: [plexItem]], failsLibraries: false)
+        let jelly = StubSource(id: .jellyfin(serverID: "j1"), displayName: "Den",
+                               libs: [jellyLib], itemsByLib: [jellyLib.id: [jellyItem]], failsLibraries: false)
+        let dead = StubSource(id: .plex(serverID: "dead"), displayName: "Dead",
+                              libs: [], itemsByLib: [:], failsLibraries: true)
+
+        let library = UnifiedLibrary(sources: [plex, jelly, dead])
+        let movies = await library.unifiedItems(kind: .movie)
+
+        #expect(movies.count == 1)
+        #expect(movies[0].sources.map(\.kind) == [.plex, .jellyfin])
+        #expect(movies[0].sources.first?.serverName == "Plex")
+    }
+}

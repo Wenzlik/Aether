@@ -343,6 +343,36 @@ final class AppSession {
         }
     }
 
+    // MARK: - Unified Library (all connected sources)
+
+    /// Every currently-connected source (Plex + Jellyfin). Distinct from
+    /// `source`, the single active one the not-yet-unified Library / Detail
+    /// paths still use. Unified surfaces (Home / Search, Phase 2b+) read this.
+    var connectedSources: [any MediaSource] {
+        var list: [any MediaSource] = []
+        if let plexSource { list.append(plexSource) }
+        if let jellyfinSource { list.append(jellyfinSource) }
+        return list
+    }
+
+    /// Display names keyed by source id — for the unified "Available Sources"
+    /// rows on Detail. Read through the `any MediaSource` existentials (the
+    /// protocol witness for `id`/`displayName` is synchronous; the concrete
+    /// actor properties are isolated).
+    var sourceDisplayNames: [MediaSourceID: String] {
+        var names: [MediaSourceID: String] = [:]
+        for source in connectedSources {
+            names[source.id] = source.displayName
+        }
+        return names
+    }
+
+    /// A `UnifiedLibrary` over the connected sources + downloads. Built on
+    /// demand (cheap) so it always reflects the current connection set.
+    func makeUnifiedLibrary() -> UnifiedLibrary {
+        UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
+    }
+
     /// Make `kind` the active source (persisted) and re-point `source`.
     func setActiveSource(_ kind: SourceKind) {
         activeSourceKind = kind
