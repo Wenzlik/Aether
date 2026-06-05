@@ -59,6 +59,7 @@ struct HomeView: View {
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .mediaNavigationDestinations(
                 source: source,
+                connectedSources: connectedSources,
                 resumeStore: resumeStore,
                 playbackSession: playbackSession,
                 libraryPreferences: libraryPreferences,

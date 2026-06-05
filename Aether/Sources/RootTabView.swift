@@ -178,7 +178,12 @@ struct PlexOnboardingView: View {
 /// destinations once, so every tab's `NavigationStack` (Home, Library, Search)
 /// pushes the same screens without copying the wiring three times.
 private struct MediaNavigationDestinations: ViewModifier {
+    /// The single active source — still used by `LibraryView` (Library browse is
+    /// single-source until the nav refactor).
     let source: (any MediaSource)?
+    /// All connected sources — `DetailView` picks the connector for the shown
+    /// item from these, so unified-feed items play through the right server.
+    let connectedSources: [any MediaSource]
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
@@ -195,7 +200,7 @@ private struct MediaNavigationDestinations: ViewModifier {
             .navigationDestination(for: MediaItem.self) { item in
                 DetailView(
                     item: item,
-                    source: source,
+                    connectedSources: connectedSources,
                     resumeStore: resumeStore,
                     playbackSession: playbackSession,
                     downloadManager: downloadManager,
@@ -218,6 +223,7 @@ private struct MediaNavigationDestinations: ViewModifier {
 extension View {
     func mediaNavigationDestinations(
         source: (any MediaSource)?,
+        connectedSources: [any MediaSource]? = nil,
         resumeStore: ResumeStore,
         playbackSession: PlaybackSession,
         libraryPreferences: LibraryPreferencesStore,
@@ -227,6 +233,9 @@ extension View {
     ) -> some View {
         modifier(MediaNavigationDestinations(
             source: source,
+            // Default to just the active source when a caller hasn't adopted the
+            // unified set yet (single-source contexts like Library / Discover).
+            connectedSources: connectedSources ?? [source].compactMap { $0 },
             resumeStore: resumeStore,
             playbackSession: playbackSession,
             libraryPreferences: libraryPreferences,
