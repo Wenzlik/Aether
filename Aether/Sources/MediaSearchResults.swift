@@ -12,8 +12,8 @@ import AetherCore
 ///
 /// **Data:** loads one page of items per library per source on appear, merges +
 /// dedupes, and filters client-side by `title.localizedCaseInsensitiveContains`.
-/// Each result navigates through its preferred source's `MediaItem`, so the
-/// existing `DetailView` is unchanged.
+/// Each result navigates the `UnifiedMediaItem` itself, so Detail receives the
+/// full source list for its "Available Sources" section.
 struct MediaSearchResults: View {
     let sources: [any MediaSource]
     let query: String
@@ -52,12 +52,10 @@ struct MediaSearchResults: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                     ForEach(results) { unified in
-                        if let item = preferredItem(unified) {
-                            NavigationLink(value: item) {
-                                AetherCard.poster(title: unified.title, posterURL: unified.posterURL)
-                            }
-                            .buttonStyle(.plain)
+                        NavigationLink(value: unified) {
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(AetherDesign.Spacing.l)
@@ -69,12 +67,6 @@ struct MediaSearchResults: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         return items.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    /// The MediaItem a unified result navigates to — its highest-priority
-    /// playable source, falling back to any source.
-    private func preferredItem(_ unified: UnifiedMediaItem) -> MediaItem? {
-        unified.preferredSource?.item ?? unified.sources.first?.item
     }
 
     private var columns: [GridItem] {

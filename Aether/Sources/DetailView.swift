@@ -24,8 +24,20 @@ struct DetailView: View {
     /// defaults so playback starts how the user said they want it.
     /// `nil` only in test fixtures or pre-boot paths.
     let playbackPreferences: PlaybackPreferencesStore?
+    /// Every source that has this title, sorted by priority — populated only
+    /// when Detail is reached from the unified feed (Home / Search navigate a
+    /// `UnifiedMediaItem`). Drives the "Available Sources" section + manual
+    /// source override. Empty for single-source contexts (Library / Discover /
+    /// Continue Watching), where the section is hidden.
+    let availableSources: [UnifiedSource] = []
 
     @State private var resume: ResumePoint?
+    /// The source the user manually switched to via "Available Sources". `nil`
+    /// = use the title's preferred source (the navigated `item`). Everything
+    /// playback-related (`current`, `source`, hydration, downloads, resume,
+    /// children) follows `activeItem`, so switching swaps the whole screen to
+    /// the chosen server without re-navigating.
+    @State private var overrideItem: MediaItem?
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
@@ -77,22 +89,28 @@ struct DetailView: View {
         }
     }
 
+    /// The source the screen is currently acting on — the manually-selected
+    /// override, or the navigated `item` (the title's preferred source). All
+    /// playback-related state derives from this, so an "Available Sources"
+    /// switch re-points hydration / playback / downloads at the chosen server.
+    private var activeItem: MediaItem { overrideItem ?? item }
+
     /// The item reflecting hydration + the user's track / quality selections.
-    private var current: MediaItem { configuredItem ?? item }
+    private var current: MediaItem { configuredItem ?? activeItem }
 
     /// The connector for the shown item — matched by the item's source id, so
     /// playback / hydration / downloads use the correct server even when the
     /// item came from the unified feed and isn't the app's active source. Falls
     /// back to the first connected source.
     private var source: (any MediaSource)? {
-        connectedSources.first { $0.id == item.id.source } ?? connectedSources.first
+        connectedSources.first { $0.id == activeItem.id.source } ?? connectedSources.first
     }
 
     /// Download status for this item. `.notDownloaded` when the pipeline
     /// hasn't booted yet — same surface as "no job recorded" so the UI
     /// renders identically.
     private var downloadStatus: DownloadStatus {
-        downloads?.status(for: item.id) ?? .notDownloaded
+        downloads?.status(for: activeItem.id) ?? .notDownloaded
     }
 
     var body: some View {
@@ -102,7 +120,7 @@ struct DetailView: View {
 
             if isPlayerPresented {
                 PlayerView(
-                    item: playbackItem ?? item,
+                    item: playbackItem ?? activeItem,
                     source: source,
                     session: playbackSession,
                     startAt: playbackStartAt,
@@ -121,8 +139,11 @@ struct DetailView: View {
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .tabBar)
-        .task {
-            resume = await resumeStore.point(for: item.id)
+        // Keyed on the active item: re-runs when the user switches source via
+        // "Available Sources", re-hydrating + reloading resume/children for the
+        // newly-selected server.
+        .task(id: activeItem.id) {
+            resume = await resumeStore.point(for: activeItem.id)
             await hydrateForPlayback()
             await loadChildrenIfNeeded()
         }
@@ -148,7 +169,7 @@ struct DetailView: View {
                 isPlayerPresented = false
             }
             playbackItem = nil
-            Task { resume = await resumeStore.point(for: item.id) }
+            Task { resume = await resumeStore.point(for: activeItem.id) }
         }
         #endif
     }
@@ -200,6 +221,13 @@ struct DetailView: View {
 
                 if !item.kind.isContainer, current.mediaInfo != nil {
                     mediaSection
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                        .frame(maxWidth: 720, alignment: .leading)
+                }
+
+                // Only meaningful when the title exists on more than one source.
+                if availableSources.count > 1 {
+                    availableSourcesSection
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -302,11 +330,11 @@ struct DetailView: View {
     }
 
     private func loadChildrenIfNeeded() async {
-        guard item.kind.isContainer, let source, children.isEmpty else { return }
+        guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
         isLoadingChildren = true
         defer { isLoadingChildren = false }
         do {
-            children = try await source.children(of: item.id)
+            children = try await source.children(of: activeItem.id)
         } catch {
             children = []
         }
@@ -360,6 +388,100 @@ struct DetailView: View {
             }
         }
         return labels
+    }
+
+    // MARK: - Available Sources (manual source override)
+
+    /// Lists every source that has this title. The active one is checked; the
+    /// preferred one is tagged. Tapping a different (playable) source re-points
+    /// the whole screen at that server. Only rendered when `availableSources`
+    /// has more than one entry.
+    @ViewBuilder
+    private var availableSourcesSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            Text("Available Sources")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+            VStack(spacing: AetherDesign.Spacing.xs) {
+                ForEach(availableSources) { src in
+                    sourceRow(src)
+                }
+            }
+        }
+    }
+
+    private func sourceRow(_ src: UnifiedSource) -> some View {
+        let isActive = src.item.id == activeItem.id
+        let isPreferred = src.item.id == item.id
+        return Button {
+            selectSource(src)
+        } label: {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                Image(systemName: src.kind == .offline ? "arrow.down.circle.fill" : "externaldrive.fill")
+                    .font(.title3)
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                    HStack(spacing: AetherDesign.Spacing.xs) {
+                        Text(src.serverName ?? src.kind.displayName)
+                            .font(AetherDesign.Typography.cardTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        if isPreferred {
+                            AetherBadge("Preferred")
+                        }
+                    }
+                    Text(sourceSubtitle(src))
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+
+                Spacer(minLength: 0)
+
+                if isActive {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                }
+            }
+            .padding(AetherDesign.Spacing.m)
+            .background(
+                AetherDesign.Materials.card,
+                in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .strokeBorder(
+                        isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.separator,
+                        lineWidth: isActive ? 2 : 1
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!src.playable)
+        .opacity(src.playable ? 1 : 0.5)
+    }
+
+    private func sourceSubtitle(_ src: UnifiedSource) -> String {
+        var parts = [src.kind.displayName]
+        if let quality = src.quality { parts.append(quality) }
+        if !src.playable { parts.append("Unavailable") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Switch the screen to a different source. Resets the per-source state
+    /// (hydration / playback / resume / children) so `.task(id:)` reloads it for
+    /// the chosen server. Clearing `overrideItem` (selecting the preferred
+    /// source) returns to the navigated item.
+    private func selectSource(_ src: UnifiedSource) {
+        guard src.playable, src.item.id != activeItem.id else { return }
+        configuredItem = nil
+        playbackItem = nil
+        children = []
+        resume = nil
+        overrideItem = (src.item.id == item.id) ? nil : src.item
     }
 
     // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
@@ -756,25 +878,25 @@ struct DetailView: View {
 
     private func pauseDownload() async {
         guard let manager = downloadManager,
-              let job = downloads?.job(for: item.id) else { return }
+              let job = downloads?.job(for: activeItem.id) else { return }
         await manager.pause(job.id)
     }
 
     private func resumeDownload() async {
         guard let manager = downloadManager,
-              let job = downloads?.job(for: item.id) else { return }
+              let job = downloads?.job(for: activeItem.id) else { return }
         await manager.resume(job.id)
     }
 
     private func cancelDownload() async {
         guard let manager = downloadManager,
-              let job = downloads?.job(for: item.id) else { return }
+              let job = downloads?.job(for: activeItem.id) else { return }
         await manager.cancel(job.id)
     }
 
     private func removeDownload() async {
         guard let manager = downloadManager,
-              let job = downloads?.job(for: item.id) else { return }
+              let job = downloads?.job(for: activeItem.id) else { return }
         await manager.remove(job.id)
     }
 
@@ -785,7 +907,7 @@ struct DetailView: View {
     private func retryDownload() async {
         guard let manager = downloadManager,
               let source,
-              let job = downloads?.job(for: item.id) else { return }
+              let job = downloads?.job(for: activeItem.id) else { return }
         let quality = job.quality
         await manager.remove(job.id)
         do {
@@ -903,8 +1025,8 @@ struct DetailView: View {
     }
 
     private func hydrateForPlayback() async {
-        guard !item.kind.isContainer, let source else { return }
-        if let hydrated = try? await source.item(for: item.id) {
+        guard !activeItem.kind.isContainer, let source else { return }
+        if let hydrated = try? await source.item(for: activeItem.id) {
             configuredItem = applyingPreferences(to: hydrated)
         }
     }
@@ -960,7 +1082,7 @@ struct DetailView: View {
         // audio + subtitle + quality choices, so the player launches exactly
         // what the Detail screen showed. Fall back to a fresh hydrate if it
         // somehow hasn't resolved yet.
-        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
             configuredItem = hydrated
         }
         playbackItem = current
@@ -984,7 +1106,7 @@ struct DetailView: View {
         // No-op unless this was a cinema session; tears down the Dark Theater.
         cinema.end()
         #endif
-        Task { resume = await resumeStore.point(for: item.id) }
+        Task { resume = await resumeStore.point(for: activeItem.id) }
     }
 
     #if os(visionOS)
@@ -998,7 +1120,7 @@ struct DetailView: View {
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
 
-        if configuredItem == nil, let source, let hydrated = try? await source.item(for: item.id) {
+        if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
             configuredItem = hydrated
         }
         playbackItem = current
