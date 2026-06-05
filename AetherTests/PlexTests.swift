@@ -792,6 +792,42 @@ struct PlexMediaSourceLibrariesTests {
         #expect(stream.query?.contains("X-Plex-Token=srv-token") == true)
     }
 
+    @Test("items request asks for includeGuids and maps viewCount to isWatched")
+    func includeGuidsAndWatchedMapping() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {"ratingKey":"1","type":"movie","title":"Watched","viewCount":1,
+               "Media":[{"container":"mp4","Part":[{"key":"/p/1/file.mp4"}]}]},
+              {"ratingKey":"2","type":"movie","title":"Started","viewCount":0,
+               "Media":[{"container":"mp4","Part":[{"key":"/p/2/file.mp4"}]}]},
+              {"ratingKey":"3","type":"movie","title":"NeverPlayed",
+               "Media":[{"container":"mp4","Part":[{"key":"/p/3/file.mp4"}]}]}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let libraryID = Library.ID(source: .plex(serverID: "test-server"), rawValue: "7")
+        let items = try await source.items(in: libraryID)
+
+        // Dedup fix: the /all request must request external IDs.
+        let recorded = await api.requests
+        let comps = try #require(URLComponents(url: try #require(recorded[1].url), resolvingAgainstBaseURL: false))
+        #expect(comps.queryItems?.contains { $0.name == "includeGuids" && $0.value == "1" } == true)
+
+        // viewCount → isWatched (>=1 watched; 0 or missing → not).
+        try #require(items.count == 3)
+        #expect(items[0].isWatched)
+        #expect(!items[1].isWatched)
+        #expect(!items[2].isWatched)
+    }
+
     @Test("item(for:) hydrates a leaf item with Plex audio streams")
     func itemEndpointHydratesAudioStreams() async throws {
         let api = RecordingAPIClient()

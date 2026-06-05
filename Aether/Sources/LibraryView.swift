@@ -221,7 +221,7 @@ struct LibraryView: View {
         LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
             ForEach(items) { item in
                 NavigationLink(value: item) {
-                    AetherCard.poster(title: item.title, posterURL: item.posterURL)
+                    AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isWatched)
                 }
                 .buttonStyle(.plain)
             }
