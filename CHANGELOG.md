@@ -4,6 +4,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.4.4] — Unreleased · "Andromeda"
+
+### Added
+
+- **Bounded artwork disk cache** — the on-disk image cache now has a 256 MB cap
+  with **LRU eviction** (least-recently-used posters dropped first; modification
+  date touched on read), trimmed on launch + periodically. It can no longer grow
+  without bound (it previously relied only on the OS purging `Caches/`).
+- **Clear Image Cache** — a Settings → Cache row showing the current on-disk
+  size, clearing memory + disk on tap.
+
 ## [0.4.3] — Unreleased · "Andromeda"
 
 Performance + control: artwork loads fast again and you can pull to refresh.

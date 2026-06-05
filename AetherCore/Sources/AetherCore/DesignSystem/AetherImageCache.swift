@@ -66,11 +66,18 @@ public final class AetherImageCache: @unchecked Sendable {
     /// originals down hard.
     public static let defaultMaxPixel: CGFloat = 1200
 
+    /// Hard cap on the on-disk cache. When exceeded, least-recently-used files
+    /// are evicted down to ~80% of this, so the cache can't grow without bound.
+    public static let maxDiskBytes = 256 * 1024 * 1024   // 256 MB
+
     private let memory = NSCache<NSString, AetherPlatformImage>()
     private let diskDirectory: URL
     private let fileManager = FileManager.default
     private let lock = NSLock()
     private var inFlight: [String: Task<SendableImage?, Never>] = [:]
+    /// Writes since the last disk trim — trims periodically instead of on every
+    /// write (guarded by `lock`).
+    private var writesSinceTrim = 0
     private let log = Logger(subsystem: "cz.zmrhal.aether", category: "images")
 
     /// Wraps a `UIImage` so it can cross `Task`/actor boundaries under Swift 6
@@ -83,6 +90,9 @@ public final class AetherImageCache: @unchecked Sendable {
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         diskDirectory = base.appendingPathComponent("AetherImageCache", isDirectory: true)
         try? fileManager.createDirectory(at: diskDirectory, withIntermediateDirectories: true)
+        // Trim once on launch so a cache that grew in a previous session is
+        // brought back under the cap.
+        Task.detached(priority: .background) { [weak self] in self?.trimDiskIfNeeded() }
     }
 
     // MARK: - Public API
@@ -167,11 +177,73 @@ public final class AetherImageCache: @unchecked Sendable {
     }
 
     private func readDisk(_ key: String) -> Data? {
-        try? Data(contentsOf: diskURL(key))
+        let url = diskURL(key)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        // Touch the modification date so LRU eviction reflects recent use.
+        try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+        return data
     }
 
     private func writeDisk(_ key: String, _ data: Data) {
         try? data.write(to: diskURL(key), options: .atomic)
+        // Trim periodically rather than on every write.
+        let shouldTrim: Bool = lock.withLock {
+            writesSinceTrim += 1
+            if writesSinceTrim >= 40 { writesSinceTrim = 0; return true }
+            return false
+        }
+        if shouldTrim {
+            Task.detached(priority: .background) { [weak self] in self?.trimDiskIfNeeded() }
+        }
+    }
+
+    // MARK: - Eviction / clearing
+
+    /// Evict least-recently-used files when the disk cache exceeds the cap,
+    /// down to ~80% of it. LRU = oldest modification date (touched on read).
+    private func trimDiskIfNeeded() {
+        let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: diskDirectory, includingPropertiesForKeys: keys, options: .skipsHiddenFiles
+        ) else { return }
+
+        var entries: [(url: URL, size: Int, date: Date)] = []
+        var total = 0
+        for file in files {
+            let values = try? file.resourceValues(forKeys: Set(keys))
+            let size = values?.fileSize ?? 0
+            let date = values?.contentModificationDate ?? .distantPast
+            entries.append((file, size, date))
+            total += size
+        }
+        guard total > Self.maxDiskBytes else { return }
+
+        let target = Self.maxDiskBytes * 8 / 10
+        for entry in entries.sorted(by: { $0.date < $1.date }) {   // oldest first
+            guard total > target else { break }
+            try? fileManager.removeItem(at: entry.url)
+            total -= entry.size
+        }
+        log.debug("disk trim → ~\(total / (1024 * 1024))MB")
+    }
+
+    /// Total bytes currently used by the disk cache — for a Settings readout.
+    public func diskUsageBytes() -> Int {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: diskDirectory, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles
+        ) else { return 0 }
+        return files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) }
+    }
+
+    /// Clear everything — memory + disk. Backs the "Clear Image Cache" action.
+    public func clear() {
+        memory.removeAllObjects()
+        if let files = try? fileManager.contentsOfDirectory(
+            at: diskDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
+        ) {
+            for file in files { try? fileManager.removeItem(at: file) }
+        }
+        log.debug("cache cleared")
     }
 
     // MARK: - Helpers
