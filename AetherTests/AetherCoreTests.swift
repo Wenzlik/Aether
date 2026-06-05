@@ -427,3 +427,23 @@ struct HomeFeedBuilderTests {
         #expect(entry.progress == 0.25)
     }
 }
+
+@Suite("AetherCore — MediaGuids")
+struct MediaGuidsTests {
+    @Test("parses tmdb/imdb/tvdb provider-prefixed strings, ignores unknown")
+    func parseGuidStrings() {
+        let g = MediaGuids(guidStrings: [
+            "tmdb://603", "imdb://tt0133093", "tvdb://1234", "plex://movie/abc"
+        ])
+        #expect(g.tmdb == "603")
+        #expect(g.imdb == "tt0133093")
+        #expect(g.tvdb == "1234")
+        #expect(g.isEmpty == false)
+    }
+
+    @Test("empty when nothing matches")
+    func empty() {
+        #expect(MediaGuids(guidStrings: ["plex://movie/abc"]).isEmpty)
+        #expect(MediaGuids().isEmpty)
+    }
+}

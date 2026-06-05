@@ -56,6 +56,12 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// (Direct Play priority) — every other choice biases toward a transcode.
     public let selectedQuality: PlaybackQuality
 
+    /// External catalogue IDs (TMDB / IMDB / TVDB) parsed from the source's
+    /// metadata. The basis for Unified Library deduplication — the same title on
+    /// Plex, Jellyfin, and offline shares these. Empty when the source didn't
+    /// provide any (then dedup falls back to title + year).
+    public let guids: MediaGuids
+
     public init(
         id: MediaID,
         title: String,
@@ -76,7 +82,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         seriesTitle: String? = nil,
         seasonNumber: Int? = nil,
         episodeNumber: Int? = nil,
-        selectedQuality: PlaybackQuality = .original
+        selectedQuality: PlaybackQuality = .original,
+        guids: MediaGuids = MediaGuids()
     ) {
         self.id = id
         self.title = title
@@ -98,6 +105,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
         self.selectedQuality = selectedQuality
+        self.guids = guids
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -156,7 +164,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             seriesTitle: seriesTitle,
             seasonNumber: seasonNumber,
             episodeNumber: episodeNumber,
-            selectedQuality: selectedQuality ?? self.selectedQuality
+            selectedQuality: selectedQuality ?? self.selectedQuality,
+            guids: guids
         )
     }
 
@@ -210,6 +219,41 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         /// seasons, a season's episodes) rather than played directly.
         public var isContainer: Bool {
             self == .show || self == .season
+        }
+    }
+}
+
+/// External catalogue identifiers for a title — the basis for recognising the
+/// same movie/show across sources (Plex, Jellyfin, offline) in Unified Library.
+public struct MediaGuids: Hashable, Sendable {
+    public var tmdb: String?
+    public var imdb: String?
+    public var tvdb: String?
+
+    public init(tmdb: String? = nil, imdb: String? = nil, tvdb: String? = nil) {
+        self.tmdb = tmdb
+        self.imdb = imdb
+        self.tvdb = tvdb
+    }
+
+    /// `true` when there's no external ID to match on (dedup falls back to
+    /// title + year).
+    public var isEmpty: Bool { tmdb == nil && imdb == nil && tvdb == nil }
+
+    /// Build from provider-prefixed strings like `tmdb://12345`,
+    /// `imdb://tt0083658`, `tvdb://78874` (Plex `Guid` entries). Unknown schemes
+    /// are ignored; the first value per provider wins.
+    public init(guidStrings: [String]) {
+        for raw in guidStrings {
+            let lower = raw.lowercased()
+            func value(_ scheme: String) -> String? {
+                guard lower.hasPrefix(scheme) else { return nil }
+                let v = String(raw.dropFirst(scheme.count))
+                return v.isEmpty ? nil : v
+            }
+            if tmdb == nil, let v = value("tmdb://") { tmdb = v }
+            if imdb == nil, let v = value("imdb://") { imdb = v }
+            if tvdb == nil, let v = value("tvdb://") { tvdb = v }
         }
     }
 }

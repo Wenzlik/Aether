@@ -220,6 +220,21 @@ public enum PlexAPI {
         /// like shows and seasons (you play their children, not them).
         public let media: [Media]?
 
+        /// External-ID tags Plex attaches per item, e.g. `tmdb://12345`,
+        /// `imdb://tt0083658`, `tvdb://78874`. The basis for Unified Library
+        /// dedup. JSON key is capital `Guid`; see `CodingKeys`.
+        public let externalGuids: [GuidEntry]?
+
+        public struct GuidEntry: Decodable, Sendable, Equatable {
+            public let id: String
+            public init(id: String) { self.id = id }
+        }
+
+        /// External IDs parsed into a typed `MediaGuids`.
+        public var guids: MediaGuids {
+            MediaGuids(guidStrings: (externalGuids ?? []).map(\.id))
+        }
+
         /// Explicit init with defaults for every optional field, so the
         /// test fixtures that build `Metadata` synthetically don't have
         /// to enumerate the full optional tail each time a new field
@@ -237,7 +252,8 @@ public enum PlexAPI {
             grandparentTitle: String? = nil,
             parentIndex: Int? = nil,
             index: Int? = nil,
-            media: [Media]? = nil
+            media: [Media]? = nil,
+            externalGuids: [GuidEntry]? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -251,6 +267,7 @@ public enum PlexAPI {
             self.parentIndex = parentIndex
             self.index = index
             self.media = media
+            self.externalGuids = externalGuids
         }
 
         public var kind: MediaItem.Kind {
@@ -373,6 +390,7 @@ public enum PlexAPI {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case grandparentTitle, parentIndex, index
             case media = "Media"
+            case externalGuids = "Guid"
         }
 
         public struct Media: Decodable, Sendable, Equatable {

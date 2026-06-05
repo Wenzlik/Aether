@@ -241,3 +241,25 @@ struct JellyfinMediaSourceTests {
         #expect(cappedQuery.contains { $0.name == "static" && $0.value == "false" })
     }
 }
+
+@Suite("Jellyfin — ProviderIds decoding")
+struct JellyfinProviderIdsTests {
+    @Test("BaseItemDto maps ProviderIds (case-insensitive) into typed external IDs")
+    func providerIds() throws {
+        let json = #"""
+        {"Id":"42","Name":"The Matrix","Type":"Movie",
+         "ProviderIds":{"Tmdb":"603","Imdb":"tt0133093","Tvdb":"1234"}}
+        """#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.guids.tmdb == "603")
+        #expect(dto.guids.imdb == "tt0133093")
+        #expect(dto.guids.tvdb == "1234")
+    }
+
+    @Test("BaseItemDto without ProviderIds yields empty external IDs")
+    func noProviderIds() throws {
+        let json = #"{"Id":"42","Name":"X","Type":"Movie"}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.guids.isEmpty)
+    }
+}
