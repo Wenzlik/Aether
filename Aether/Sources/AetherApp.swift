@@ -356,11 +356,14 @@ final class AppSession {
     }
 
     /// Display names keyed by source id — for the unified "Available Sources"
-    /// rows on Detail.
+    /// rows on Detail. Read through the `any MediaSource` existentials (the
+    /// protocol witness for `id`/`displayName` is synchronous; the concrete
+    /// actor properties are isolated).
     var sourceDisplayNames: [MediaSourceID: String] {
         var names: [MediaSourceID: String] = [:]
-        if let plexSource { names[plexSource.id] = plexSource.displayName }
-        if let jellyfinSource { names[jellyfinSource.id] = jellyfinSource.displayName }
+        for source in connectedSources {
+            names[source.id] = source.displayName
+        }
         return names
     }
 
