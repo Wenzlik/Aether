@@ -24,6 +24,12 @@ struct SettingsView: View {
     @State private var isSigningOutJellyfin = false
     @State private var isWhatsNewExpanded = false
     @State private var openPicker: PrefPicker?
+    /// Device volume stats for the Storage Summary card. `nil` until the probe
+    /// runs (and stays nil if it fails) — the free-space row just hides.
+    @State private var deviceCapacity: DeviceCapacity?
+    /// Drives the split: a two-column dashboard on roomy surfaces, a single
+    /// column on the phone.
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
@@ -45,21 +51,19 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         header
-                        accountSection
-                        sourcesSection
-                        #if !os(tvOS)
-                        downloadsSection
-                        #endif
-                        playbackSection
-                        appearanceSection
-                        aboutSection
+                        if isWide {
+                            wideDashboard
+                        } else {
+                            compactColumn
+                        }
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
-                    .frame(maxWidth: 820, alignment: .leading)
+                    .frame(maxWidth: isWide ? 1100 : 820, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .task { await refreshCapacity() }
             }
             // The root Settings surface carries its own wordmark, so suppress the
             // empty navigation bar; pushed screens (Downloads) show their own.
@@ -100,6 +104,149 @@ struct SettingsView: View {
     private var header: some View {
         AetherWordmark(.large)
             .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Layout
+
+    /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
+    /// the two-column dashboard. iPhone (compact) stays single-column.
+    private var isWide: Bool {
+        #if os(tvOS) || os(visionOS)
+        return true
+        #else
+        return hSizeClass == .regular
+        #endif
+    }
+
+    /// iPad / tvOS / visionOS: controls on the left, an at-a-glance status
+    /// dashboard (Connected Sources · Storage Summary) on the right — using the
+    /// space instead of centring a phone-width list.
+    private var wideDashboard: some View {
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                controlSections
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                dashboardCards
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    /// iPhone: a single column. Source health lives inline in the Sources
+    /// section (the Offline row), so the phone doesn't need the separate status
+    /// cards the wide dashboard shows.
+    private var compactColumn: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            controlSections
+        }
+    }
+
+    @ViewBuilder
+    private var controlSections: some View {
+        accountSection
+        sourcesSection
+        #if !os(tvOS)
+        downloadsSection
+        #endif
+        playbackSection
+        appearanceSection
+        aboutSection
+    }
+
+    @ViewBuilder
+    private var dashboardCards: some View {
+        connectedSourcesCard
+        #if !os(tvOS)
+        storageSummaryCard
+        #endif
+    }
+
+    // MARK: - Dashboard cards (status, right column)
+
+    /// At-a-glance health for every source — Library shows *media*, Settings
+    /// shows *sources*. Plex / Jellyfin read Online or Not connected; Offline
+    /// reports the downloaded size (non-tvOS).
+    private var connectedSourcesCard: some View {
+        AetherSettingsSection("Connected Sources") {
+            AetherSettingsRow(
+                label: "Plex",
+                systemImage: "play.circle.fill",
+                status: viewModel.isPlexSignedIn ? .positive("Online") : .notConnected
+            )
+            AetherSettingsRow(
+                label: "Jellyfin",
+                systemImage: "rectangle.stack.badge.play.fill",
+                status: viewModel.isJellyfinSignedIn ? .positive("Online") : .notConnected
+            )
+            #if !os(tvOS)
+            AetherSettingsRow(
+                label: "Offline",
+                systemImage: "arrow.down.circle.fill",
+                value: hasDownloads ? formatBytes(totalDownloadBytes) : "Empty"
+            )
+            #endif
+        }
+    }
+
+    #if !os(tvOS)
+    /// Device-level storage at a glance: how much Aether's downloads use, and
+    /// how much room is left on the volume.
+    private var storageSummaryCard: some View {
+        AetherSettingsSection("Storage Summary") {
+            AetherSettingsRow(
+                label: "Downloads",
+                systemImage: "internaldrive.fill",
+                value: formatBytes(totalDownloadBytes)
+            )
+            if let capacity = deviceCapacity {
+                AetherSettingsRow(
+                    label: "Free Space",
+                    systemImage: "externaldrive.badge.checkmark",
+                    value: formatBytes(capacity.free)
+                )
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Storage data
+
+    private struct DeviceCapacity: Sendable {
+        let free: Int64
+        let total: Int64
+    }
+
+    /// Total bytes used by completed downloads. Summed from the observer's
+    /// snapshot — same computation the download manager screen uses.
+    private var totalDownloadBytes: Int64 {
+        downloads?.snapshot.statusByJobID.values.reduce(0) { acc, status in
+            if case let .completed(_, size) = status { return acc + size }
+            return acc
+        } ?? 0
+    }
+
+    private var hasDownloads: Bool {
+        !(downloads?.snapshot.completed.isEmpty ?? true)
+    }
+
+    /// Read the volume Aether's downloads live on. Fails silently (capacity
+    /// stays nil and the Free Space row just doesn't render).
+    private func refreshCapacity() async {
+        let path = NSHomeDirectory()
+        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path),
+              let free = attrs[.systemFreeSize] as? NSNumber,
+              let total = attrs[.systemSize] as? NSNumber else { return }
+        deviceCapacity = DeviceCapacity(free: free.int64Value, total: total.int64Value)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useGB, .useMB, .useKB]
+        return formatter.string(fromByteCount: bytes)
     }
 
     // MARK: - Sections
