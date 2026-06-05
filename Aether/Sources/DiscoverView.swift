@@ -1,12 +1,10 @@
-#if os(tvOS)
 import SwiftUI
 import AetherCore
 
-/// **Discover** — the tvOS-exclusive content tab.
+/// **Discover** — a first-class content tab on every platform.
 ///
-/// Replaces the Storage tab on Apple TV (Storage is a download manager;
-/// Apple TV doesn't get downloads). Surfaces a curated *find-something-
-/// new* experience on top of the user's existing library:
+/// Surfaces a curated *find-something-new* experience on top of the user's
+/// existing library:
 ///
 /// - **Hero pick** — a single big artwork at the top, randomly drawn
 ///   from across every library on each build. Reads as the "Featured"
@@ -115,11 +113,27 @@ struct DiscoverView: View {
                     posterURL: item.backdropURL ?? item.posterURL
                 )
                 .frame(maxWidth: .infinity)
-                .frame(height: 480)
+                .frame(height: heroHeight)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, AetherDesign.Spacing.l)
         }
+    }
+
+    private var heroHeight: CGFloat {
+        #if os(tvOS)
+        480
+        #else
+        240
+        #endif
+    }
+
+    private var posterWidth: CGFloat {
+        #if os(tvOS)
+        300
+        #else
+        168
+        #endif
     }
 
     /// Generic horizontal poster rail — same composition Home / Library
@@ -134,7 +148,7 @@ struct DiscoverView: View {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
                             AetherCard.poster(title: item.title, posterURL: item.posterURL)
-                                .frame(width: 300)
+                                .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
                     }
@@ -142,11 +156,7 @@ struct DiscoverView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.xs)
             }
-            // tvOS-only D-pad section. The file is `#if os(tvOS)` gated,
-            // so `focusSection()` is always available — no need for the
-            // `aetherFocusSection` cross-platform wrapper HomeView /
-            // LibraryBrowseView use (those screens compile on iOS too).
-            .focusSection()
+            .aetherDiscoverFocusSection()
         }
     }
 
@@ -173,4 +183,16 @@ struct DiscoverView: View {
         }
     }
 }
-#endif
+
+private extension View {
+    /// `.focusSection()` on tvOS for predictable D-pad movement between rails;
+    /// no-op elsewhere (the API is tvOS-only).
+    @ViewBuilder
+    func aetherDiscoverFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
+    }
+}
