@@ -68,7 +68,7 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "ParentId", value: libraryID.rawValue),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear"),
+            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
             URLQueryItem(name: "SortBy", value: sortBy),
             URLQueryItem(name: "SortOrder", value: sortOrder)
         ]
@@ -87,7 +87,7 @@ public actor JellyfinMediaSource: MediaSource {
             path: "/Users/\(userID)/Items",
             queryItems: [
                 URLQueryItem(name: "ParentId", value: id.rawValue),
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
                 URLQueryItem(name: "SortBy", value: "SortName"),
                 URLQueryItem(name: "SortOrder", value: "Ascending")
             ]
@@ -100,7 +100,7 @@ public actor JellyfinMediaSource: MediaSource {
         guard id.source == self.id else { return nil }
         let request = makeRequest(
             path: "/Users/\(userID)/Items/\(id.rawValue)",
-            queryItems: [URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear")]
+            queryItems: [URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds")]
         )
         // This endpoint returns a single item, not a wrapped list.
         let dto = try await api.decode(JellyfinAPI.BaseItemDto.self, from: request, decoder: decoder)

@@ -117,7 +117,12 @@ public actor PlexMediaSource: MediaSource {
     ) async throws -> [MediaItem] {
         let base = try await resolveBaseURL()
         var queryItems: [URLQueryItem] = [
-            URLQueryItem(name: "sort", value: sort.plexParameter)
+            URLQueryItem(name: "sort", value: sort.plexParameter),
+            // Plex omits the `Guid` array (TMDB/IMDB/TVDB) from list responses
+            // unless asked. Without it, Unified Library can't dedup the same film
+            // across Plex/Jellyfin and falls back to title+year (which breaks on
+            // localized titles) → duplicates. `includeGuids=1` brings the IDs.
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
         if let offset {
             queryItems.append(URLQueryItem(name: "X-Plex-Container-Start", value: String(offset)))
