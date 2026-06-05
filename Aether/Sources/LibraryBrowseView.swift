@@ -63,6 +63,9 @@ struct LibraryBrowseView: View {
             .scrollDismissesKeyboard(.immediately)
             #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            #if !os(tvOS)
+            .refreshable { await load() }
+            #endif
             .mediaNavigationDestinations(
                 source: connectedSources.first,
                 connectedSources: connectedSources,
@@ -108,6 +111,9 @@ struct LibraryBrowseView: View {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
             AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            #if os(tvOS)
+            AetherTVReloadButton { Task { await load() } }
+            #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
@@ -339,7 +345,13 @@ struct LibraryBrowseView: View {
         isLoading = true
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        rails = await library.homeRails(resumeStore: resumeStore)
+        let built = await library.homeRails(resumeStore: resumeStore)
+        rails = built
+        AetherImageCache.shared.prefetch(
+            built.movies.map(\.posterURL)
+                + built.shows.map(\.posterURL)
+                + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+        )
     }
 }
 
