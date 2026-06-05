@@ -48,6 +48,9 @@ struct DetailView: View {
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
+    /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     #if os(visionOS)
     /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
     /// app root; always present inside the windowed view tree on visionOS.
@@ -143,21 +146,24 @@ struct DetailView: View {
     private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                BackdropImage(url: item.backdropURL ?? item.posterURL)
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: backdropMaxHeight)
-                    .clipped()
-                    .overlay(alignment: .bottomLeading) {
-                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                            Text(item.title)
-                                .font(AetherDesign.Typography.heroTitle)
-                                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            metadataRow
-                            mediaBadges
-                        }
-                        .padding(AetherDesign.Spacing.l)
-                        .padding(.bottom, AetherDesign.Spacing.s)
+                // Hero: edge-to-edge backdrop with the title + metadata + badges
+                // stacked *below* it (not overlaid), so wide layouts don't push
+                // the text into a side gutter beside a letterboxed image.
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                    BackdropImage(
+                        url: item.backdropURL ?? item.posterURL,
+                        height: hSizeClass == .regular ? backdropMaxHeight : nil
+                    )
+
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                        Text(item.title)
+                            .font(AetherDesign.Typography.heroTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        metadataRow
+                        mediaBadges
                     }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                }
 
                 // Layout order (Apple-TV / Infuse style): Hero → Actions →
                 // Playback → Overview → Media Information → (children).
