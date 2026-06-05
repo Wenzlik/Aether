@@ -84,7 +84,8 @@ struct RootTabView: View {
             // Discover + Search are first-class on every platform now.
             Tab("Discover", systemImage: "sparkles") {
                 DiscoverView(
-                    source: session.source,
+                    connectedSources: session.connectedSources,
+                    downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
