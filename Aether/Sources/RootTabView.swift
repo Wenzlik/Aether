@@ -208,6 +208,23 @@ private struct MediaNavigationDestinations: ViewModifier {
                     playbackPreferences: playbackPreferences
                 )
             }
+            // Unified-feed titles (Home / Search) navigate the aggregated item so
+            // Detail can show "Available Sources" + let the user switch servers.
+            // Base item = the preferred source; falls back to any source.
+            .navigationDestination(for: UnifiedMediaItem.self) { unified in
+                if let base = unified.preferredSource?.item ?? unified.sources.first?.item {
+                    DetailView(
+                        item: base,
+                        connectedSources: connectedSources,
+                        resumeStore: resumeStore,
+                        playbackSession: playbackSession,
+                        downloadManager: downloadManager,
+                        downloads: downloads,
+                        playbackPreferences: playbackPreferences,
+                        availableSources: unified.sources
+                    )
+                }
+            }
             .navigationDestination(for: Library.self) { library in
                 LibraryView(
                     library: library,
