@@ -86,6 +86,18 @@ public enum JellyfinAPI {
         public let imageTags: [String: String]?
         public let backdropImageTags: [String]?
         public let mediaSources: [MediaSourceInfo]?
+        /// External-ID map, e.g. `{"Tmdb":"12345","Imdb":"tt0083658"}`. Basis
+        /// for Unified Library dedup.
+        public let providerIds: [String: String]?
+
+        /// External IDs as a typed `MediaGuids` (case-insensitive provider keys).
+        public var guids: MediaGuids {
+            guard let ids = providerIds else { return MediaGuids() }
+            func value(_ provider: String) -> String? {
+                ids.first { $0.key.caseInsensitiveCompare(provider) == .orderedSame }?.value
+            }
+            return MediaGuids(tmdb: value("Tmdb"), imdb: value("Imdb"), tvdb: value("Tvdb"))
+        }
 
         public var kind: MediaItem.Kind? {
             switch type {
@@ -150,6 +162,7 @@ public enum JellyfinAPI {
             case imageTags = "ImageTags"
             case backdropImageTags = "BackdropImageTags"
             case mediaSources = "MediaSources"
+            case providerIds = "ProviderIds"
         }
     }
 

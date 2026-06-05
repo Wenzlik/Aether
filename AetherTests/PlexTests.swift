@@ -1868,3 +1868,25 @@ struct PlexResolveWarmUpTests {
         #expect(diag.contains("host=lan.example"))
     }
 }
+
+@Suite("Plex — Guid decoding")
+struct PlexGuidTests {
+    @Test("Metadata decodes the Guid array into typed external IDs")
+    func metadataGuids() throws {
+        let json = #"""
+        {"ratingKey":"1","type":"movie","title":"The Matrix",
+         "Guid":[{"id":"imdb://tt0133093"},{"id":"tmdb://603"},{"id":"tvdb://1234"}]}
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.guids.tmdb == "603")
+        #expect(dto.guids.imdb == "tt0133093")
+        #expect(dto.guids.tvdb == "1234")
+    }
+
+    @Test("Metadata without Guid yields empty external IDs")
+    func metadataNoGuids() throws {
+        let json = #"{"ratingKey":"1","type":"movie","title":"X"}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.guids.isEmpty)
+    }
+}

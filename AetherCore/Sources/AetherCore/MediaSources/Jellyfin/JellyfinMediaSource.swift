@@ -290,7 +290,8 @@ public actor JellyfinMediaSource: MediaSource {
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
             subtitleTracks: subtitleTracks,
-            selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id
+            selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
+            guids: dto.guids
         )
     }
 

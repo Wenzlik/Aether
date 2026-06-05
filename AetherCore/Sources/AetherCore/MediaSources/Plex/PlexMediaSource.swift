@@ -756,7 +756,8 @@ public actor PlexMediaSource: MediaSource {
             seriesTitle: dto.grandparentTitle,
             seasonNumber: dto.parentIndex,
             episodeNumber: dto.index,
-            selectedQuality: .original
+            selectedQuality: .original,
+            guids: dto.guids
         )
     }
 
