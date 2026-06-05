@@ -65,6 +65,11 @@ struct HomeView: View {
             .scrollDismissesKeyboard(.immediately)
             #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            // Pull-to-refresh on iOS/iPadOS/visionOS; tvOS uses the explicit
+            // Reload button in the header (pull-to-refresh isn't available).
+            #if !os(tvOS)
+            .refreshable { await load() }
+            #endif
             .mediaNavigationDestinations(
                 source: source,
                 connectedSources: connectedSources,
@@ -114,6 +119,9 @@ struct HomeView: View {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
             AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            #if os(tvOS)
+            AetherTVReloadButton { Task { await load() } }
+            #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
@@ -453,6 +461,13 @@ struct HomeView: View {
             rails = built
             // Mirror Continue Watching into `feed` so the shared section renders.
             feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
+            // Warm the artwork cache for the rails we're about to show.
+            AetherImageCache.shared.prefetch(
+                built.movies.map(\.posterURL)
+                    + built.shows.map(\.posterURL)
+                    + built.downloaded.map(\.posterURL)
+                    + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+            )
             return
         }
 

@@ -40,7 +40,7 @@ Carried forward to 0.3 / 0.4 — not blockers for this milestone but worth track
 
 - ⬜ **Synology connector** — auth (DSM session or Video Station, spike first), shares + collections + items, stream URLs (direct play + server transcode fallback). *(Lower priority now that Jellyfin covers the "second source" goal; Synology stays optional.)*
 - ⬜ **Plex Web parity for the Quality picker** — `X-Plex-Client-Profile-Extra` so Plex can evaluate true direct play on the decision endpoint without the client falling back to direct stream. Currently we always send `directPlay=0` to avoid HTTP 400; sending a real client profile would unlock direct play for MKV/HEVC content that AVPlayer can actually decode.
-- ⬜ **Artwork pipeline upgrade** — disk-backed LRU + downsampling inside `CachedAsyncImage` (today is a thin wrapper around `AsyncImage`).
+- ✅ **Artwork pipeline upgrade** *(0.4.3)* — `AetherImageCache`: memory (`NSCache`) + disk cache, in-flight de-duplication (one download per poster across rails), ImageIO downsampling, stable token-stripped cache keys, prefetching, and `os.Logger` instrumentation. `CachedAsyncImage` now goes through it instead of raw `AsyncImage`. Fixed the Unified-Library poster-load regression.
 - ⬜ **Persistent ResumeStore** — SwiftData-backed; today is in-memory. Outbox plumbing for offline writes lands properly in 0.3.
 - ⬜ **Accurate library counts** — display `Plex MediaContainer.totalSize` on `LibraryBrowseView` per-library headers instead of `items.count` (which is a best-effort lower bound on libraries that exceed one page).
 

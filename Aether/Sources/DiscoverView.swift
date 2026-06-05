@@ -39,6 +39,9 @@ struct DiscoverView: View {
         NavigationStack(path: $navigationPath) {
             content
                 .background(AetherDesign.Gradients.background.ignoresSafeArea())
+                #if !os(tvOS)
+                .refreshable { await load() }
+                #endif
                 .mediaNavigationDestinations(
                     source: connectedSources.first,
                     connectedSources: connectedSources,
@@ -93,6 +96,11 @@ struct DiscoverView: View {
     private var rails: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                #if os(tvOS)
+                AetherTVReloadButton { Task { await load() } }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                #endif
                 if let hero {
                     heroSection(hero)
                 }
@@ -204,6 +212,13 @@ struct DiscoverView: View {
             interleave(movies, shows)
                 .filter { $0.id != pick?.id }
                 .prefix(12)
+        )
+
+        // Warm the artwork cache for the rails we're about to show.
+        AetherImageCache.shared.prefetch(
+            [pick?.backdropURL ?? pick?.posterURL]
+                + randomPicks.map(\.posterURL)
+                + recentlyAdded.map(\.posterURL)
         )
     }
 
