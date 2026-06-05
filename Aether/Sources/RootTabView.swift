@@ -81,9 +81,7 @@ struct RootTabView: View {
                 )
             }
 
-            #if os(tvOS)
-            // Discover replaces Storage on Apple TV — downloads make no
-            // sense on a lean-back surface, but content discovery does.
+            // Discover + Search are first-class on every platform now.
             Tab("Discover", systemImage: "sparkles") {
                 DiscoverView(
                     source: session.source,
@@ -95,7 +93,23 @@ struct RootTabView: View {
                     playbackPreferences: session.playbackPreferences
                 )
             }
-            #else
+
+            Tab("Search", systemImage: "magnifyingglass") {
+                SearchView(
+                    connectedSources: session.connectedSources,
+                    source: session.source,
+                    resumeStore: session.resumeStore,
+                    playbackSession: session.playback,
+                    libraryPreferences: session.libraryPreferences,
+                    downloadManager: dlManager,
+                    downloads: dlObserver,
+                    playbackPreferences: session.playbackPreferences
+                )
+            }
+
+            #if !os(tvOS)
+            // Storage stays a top-level tab for now; Phase 4a-2 folds it into
+            // Settings → Downloads.
             Tab("Storage", systemImage: "internaldrive") {
                 StorageView(
                     source: session.source,
