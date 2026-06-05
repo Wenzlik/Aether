@@ -3,7 +3,11 @@ import AetherCore
 
 struct DetailView: View {
     let item: MediaItem
-    let source: (any MediaSource)?
+    /// Every connected source. The connector this screen uses is derived from
+    /// the *shown item's* source (see `source`), so a title opened from the
+    /// unified Home/Search plays through the right server even when it isn't the
+    /// app's active source.
+    let connectedSources: [any MediaSource]
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     /// `nil` until `AppSession.start()` has booted the downloads pipeline.
@@ -75,6 +79,14 @@ struct DetailView: View {
 
     /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? item }
+
+    /// The connector for the shown item — matched by the item's source id, so
+    /// playback / hydration / downloads use the correct server even when the
+    /// item came from the unified feed and isn't the app's active source. Falls
+    /// back to the first connected source.
+    private var source: (any MediaSource)? {
+        connectedSources.first { $0.id == item.id.source } ?? connectedSources.first
+    }
 
     /// Download status for this item. `.notDownloaded` when the pipeline
     /// hasn't booted yet — same surface as "no job recorded" so the UI
