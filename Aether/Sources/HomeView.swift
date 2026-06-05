@@ -43,6 +43,9 @@ struct HomeView: View {
     /// same client-side title filter so search isn't trapped behind a
     /// dedicated tab anymore.
     @State private var searchQuery = ""
+    /// Owns keyboard focus so tapping outside / scrolling / selecting a result
+    /// dismisses the keyboard.
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -51,11 +54,15 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         brandedHeader
                         content
+                            .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
                     }
                 } else {
                     content
                 }
             }
+            #if os(iOS) || os(visionOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .mediaNavigationDestinations(
                 source: source,
@@ -105,7 +112,7 @@ struct HomeView: View {
         VStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library")
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
@@ -151,25 +158,41 @@ struct HomeView: View {
                     continueWatchingSection
                 }
                 if !rails.movies.isEmpty {
-                    section(title: "Movies", items: preferredItems(rails.movies))
+                    unifiedSection(title: "Movies", items: rails.movies)
                 }
                 if !rails.shows.isEmpty {
-                    section(title: "TV Shows", items: preferredItems(rails.shows))
+                    unifiedSection(title: "TV Shows", items: rails.shows)
                 }
                 if !rails.downloaded.isEmpty {
-                    section(title: "Downloaded", items: preferredItems(rails.downloaded))
+                    unifiedSection(title: "Downloaded", items: rails.downloaded)
                 }
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
     }
 
-    /// The MediaItem each unified title navigates to / renders as — its
-    /// highest-priority playable source (falling back to any source). Keeps the
-    /// cards + Detail on the existing `MediaItem` path; "Available Sources" on
-    /// Detail is a later phase.
-    private func preferredItems(_ items: [UnifiedMediaItem]) -> [MediaItem] {
-        items.compactMap { $0.preferredSource?.item ?? $0.sources.first?.item }
+    /// A horizontal poster rail of **unified** titles. Each card navigates the
+    /// `UnifiedMediaItem` itself (not a per-source `MediaItem`), so Detail gets
+    /// the full source list for its "Available Sources" section.
+    private func unifiedSection(title: String, items: [UnifiedMediaItem]) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: title)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(items) { unified in
+                        NavigationLink(value: unified) {
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL)
+                                .frame(width: posterWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherFocusSection()
+        }
     }
 
     // MARK: - Rails

@@ -17,24 +17,27 @@ import SwiftUI
 public struct AetherSearchField: View {
     @Binding public var text: String
     public let prompt: String
+    /// Optional focus binding owned by the host (`@FocusState`). When provided,
+    /// the field becomes programmatically focus-controllable so the host can
+    /// dismiss the keyboard (tap-outside / scroll / select-result), and pressing
+    /// Search/Done resigns focus here. Pass `nil` to keep the old behaviour.
+    private let focusBinding: FocusState<Bool>.Binding?
 
-    public init(text: Binding<String>, prompt: String) {
+    public init(
+        text: Binding<String>,
+        prompt: String,
+        focus: FocusState<Bool>.Binding? = nil
+    ) {
         self._text = text
         self.prompt = prompt
+        self.focusBinding = focus
     }
 
     public var body: some View {
         HStack(spacing: AetherDesign.Spacing.s) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
-            TextField(prompt, text: $text)
-                .textFieldStyle(.plain)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-            #if os(iOS) || os(visionOS)
-                .textInputAutocapitalization(.never)
-            #endif
+            field
             if !text.isEmpty {
                 Button {
                     text = ""
@@ -52,6 +55,28 @@ public struct AetherSearchField: View {
             Capsule()
                 .fill(AetherDesign.Palette.surface)
         )
+    }
+
+    /// The text field, with the host's focus binding applied when present.
+    /// Pressing Search/Done resigns focus so the keyboard dismisses.
+    @ViewBuilder
+    private var field: some View {
+        let base = TextField(prompt, text: $text)
+            .textFieldStyle(.plain)
+            .foregroundStyle(AetherDesign.Palette.textPrimary)
+            .submitLabel(.search)
+            .autocorrectionDisabled()
+        #if os(iOS) || os(visionOS)
+            .textInputAutocapitalization(.never)
+        #endif
+
+        if let focusBinding {
+            base
+                .focused(focusBinding)
+                .onSubmit { focusBinding.wrappedValue = false }
+        } else {
+            base
+        }
     }
 }
 

@@ -81,9 +81,7 @@ struct RootTabView: View {
                 )
             }
 
-            #if os(tvOS)
-            // Discover replaces Storage on Apple TV — downloads make no
-            // sense on a lean-back surface, but content discovery does.
+            // Discover + Search are first-class on every platform now.
             Tab("Discover", systemImage: "sparkles") {
                 DiscoverView(
                     source: session.source,
@@ -95,22 +93,32 @@ struct RootTabView: View {
                     playbackPreferences: session.playbackPreferences
                 )
             }
-            #else
-            Tab("Storage", systemImage: "internaldrive") {
-                StorageView(
+
+            Tab("Search", systemImage: "magnifyingglass") {
+                SearchView(
+                    connectedSources: session.connectedSources,
                     source: session.source,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
-                    downloadManager: session.downloadManager,
-                    downloads: session.downloads,
+                    downloadManager: dlManager,
+                    downloads: dlObserver,
                     playbackPreferences: session.playbackPreferences
                 )
             }
-            #endif
 
             Tab("Settings", systemImage: "gearshape.fill") {
-                SettingsView(viewModel: SettingsViewModel(session: session))
+                // Downloads now lives inside Settings (→ Downloads), not a tab.
+                // The download-pipeline deps are threaded in for that destination.
+                SettingsView(
+                    viewModel: SettingsViewModel(session: session),
+                    source: session.source,
+                    resumeStore: session.resumeStore,
+                    playbackSession: session.playback,
+                    libraryPreferences: session.libraryPreferences,
+                    downloadManager: dlManager,
+                    downloads: dlObserver
+                )
             }
         }
         .sheet(isPresented: $session.isSignInPresented) {
@@ -207,6 +215,23 @@ private struct MediaNavigationDestinations: ViewModifier {
                     downloads: downloads,
                     playbackPreferences: playbackPreferences
                 )
+            }
+            // Unified-feed titles (Home / Search) navigate the aggregated item so
+            // Detail can show "Available Sources" + let the user switch servers.
+            // Base item = the preferred source; falls back to any source.
+            .navigationDestination(for: UnifiedMediaItem.self) { unified in
+                if let base = unified.preferredSource?.item ?? unified.sources.first?.item {
+                    DetailView(
+                        item: base,
+                        connectedSources: connectedSources,
+                        resumeStore: resumeStore,
+                        playbackSession: playbackSession,
+                        downloadManager: downloadManager,
+                        downloads: downloads,
+                        playbackPreferences: playbackPreferences,
+                        availableSources: unified.sources
+                    )
+                }
             }
             .navigationDestination(for: Library.self) { library in
                 LibraryView(

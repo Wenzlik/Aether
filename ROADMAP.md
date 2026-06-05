@@ -132,6 +132,30 @@ Notes: [`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-li
 
 ---
 
+## ⬜ Search & Filtering (proposed 0.6)
+
+Builds on Unified Library: richer, **source-agnostic** filtering that works the
+same whether content comes from Offline / Plex / Jellyfin / Emby. Filter by
+**audio language**, **subtitle language** (+ forced / SDH), **video** (4K · 1080p
+· HDR · Dolby Vision · HEVC · H.264), **audio format** (stereo · 5.1 · 7.1 ·
+Atmos · DTS · DTS-HD MA · TrueHD), and **source** — behind a compact Apple-TV /
+Infuse-style filter UI (a Filters button → expandable chip sheet), not a
+settings-form. Matching runs over `UnifiedMediaItem`: a title matches when any
+one source satisfies all active dimensions.
+
+- ✅ **Search keyboard dismissal** — `@FocusState`; tap-outside / scroll /
+  select / Search-Done all dismiss the keyboard. *(Shipped ahead, PR #107.)*
+- ⬜ **`MediaFilter` model + matching** (AetherCore, unit-tested).
+- ⬜ **Compact filter UI** (button + badge → chip sheet), wired into **Search**,
+  then **Library**.
+- ⬜ **Jellyfin `mediaInfo` backfill** — map Jellyfin `MediaStreams` → `MediaInfo`
+  so **video filters** (4K/HDR/DV/codec) work for Jellyfin too. Until then video
+  filters are **Plex-only** (audio/subtitle/source work everywhere).
+
+Notes: [`docs/next-steps/0.6-search-filtering.md`](docs/next-steps/0.6-search-filtering.md).
+
+---
+
 ## ⬜ 0.4 Premium UX
 
 The polish milestone. This is where Aether earns the "premium" label.

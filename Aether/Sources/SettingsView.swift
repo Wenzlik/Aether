@@ -8,10 +8,28 @@ import AetherCore
 /// only destructive action. See `docs/ux/DESIGN_PRINCIPLES.md` → *Settings*.
 struct SettingsView: View {
     @State var viewModel: SettingsViewModel
+    /// Dependencies for the **Settings → Downloads** destination (non-tvOS).
+    /// Threaded through so the pushed download manager can resolve fresh URLs
+    /// and drill into Detail. The three stores are always supplied by the app
+    /// root; `source` / download pipeline are optional (nil pre-boot or when
+    /// nothing is connected). Unused on tvOS (no downloads there).
+    var source: (any MediaSource)?
+    var resumeStore: ResumeStore
+    var playbackSession: PlaybackSession
+    var libraryPreferences: LibraryPreferencesStore
+    var downloadManager: DownloadManager? = nil
+    var downloads: DownloadObserver? = nil
+
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
-    @State private var isWhatsNewExpanded = false
+    @State private var isWhatsNewPresented = false
     @State private var openPicker: PrefPicker?
+    /// Device volume stats for the Storage Summary card. `nil` until the probe
+    /// runs (and stays nil if it fails) — the free-space row just hides.
+    @State private var deviceCapacity: DeviceCapacity?
+    /// Drives the split: a two-column dashboard on roomy surfaces, a single
+    /// column on the phone.
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
@@ -20,28 +38,64 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
 
-    var body: some View {
-        ZStack {
-            AetherDesign.Gradients.background.ignoresSafeArea()
+    /// Push targets inside the Settings stack.
+    private enum SettingsRoute: Hashable {
+        case downloads
+    }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                    header
-                    accountSection
-                    sourcesSection
-                    playbackSection
-                    appearanceSection
-                    aboutSection
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AetherDesign.Gradients.background.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                        header
+                        if isWide {
+                            wideDashboard
+                        } else {
+                            compactColumn
+                        }
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                    .frame(maxWidth: isWide ? 1100 : 820, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.top, AetherDesign.Spacing.l)
-                .padding(.bottom, AetherDesign.Spacing.xxl)
-                .frame(maxWidth: 820, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .task { await refreshCapacity() }
             }
+            // The root Settings surface carries its own wordmark, so suppress the
+            // empty navigation bar; pushed screens (Downloads) show their own.
+            #if os(iOS) || os(visionOS)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
+            #if !os(tvOS)
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .downloads:
+                    StorageView(
+                        source: source,
+                        resumeStore: resumeStore,
+                        playbackSession: playbackSession,
+                        libraryPreferences: libraryPreferences,
+                        downloadManager: downloadManager,
+                        downloads: downloads,
+                        playbackPreferences: viewModel.playbackPreferences,
+                        embedded: true
+                    )
+                }
+            }
+            #endif
         }
         .sheet(item: $openPicker) { picker in
             preferenceSheet(for: picker)
+        }
+        .sheet(isPresented: $isWhatsNewPresented) {
+            WhatsNewSheet(
+                version: viewModel.versionString,
+                bullets: viewModel.whatsNewBullets
+            ) { isWhatsNewPresented = false }
         }
     }
 
@@ -56,6 +110,149 @@ struct SettingsView: View {
     private var header: some View {
         AetherWordmark(.large)
             .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Layout
+
+    /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
+    /// the two-column dashboard. iPhone (compact) stays single-column.
+    private var isWide: Bool {
+        #if os(tvOS) || os(visionOS)
+        return true
+        #else
+        return hSizeClass == .regular
+        #endif
+    }
+
+    /// iPad / tvOS / visionOS: controls on the left, an at-a-glance status
+    /// dashboard (Connected Sources · Storage Summary) on the right — using the
+    /// space instead of centring a phone-width list.
+    private var wideDashboard: some View {
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                controlSections
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                dashboardCards
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    /// iPhone: a single column. Source health lives inline in the Sources
+    /// section (the Offline row), so the phone doesn't need the separate status
+    /// cards the wide dashboard shows.
+    private var compactColumn: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            controlSections
+        }
+    }
+
+    @ViewBuilder
+    private var controlSections: some View {
+        accountSection
+        sourcesSection
+        #if !os(tvOS)
+        downloadsSection
+        #endif
+        playbackSection
+        appearanceSection
+        aboutSection
+    }
+
+    @ViewBuilder
+    private var dashboardCards: some View {
+        connectedSourcesCard
+        #if !os(tvOS)
+        storageSummaryCard
+        #endif
+    }
+
+    // MARK: - Dashboard cards (status, right column)
+
+    /// At-a-glance health for every source — Library shows *media*, Settings
+    /// shows *sources*. Plex / Jellyfin read Online or Not connected; Offline
+    /// reports the downloaded size (non-tvOS).
+    private var connectedSourcesCard: some View {
+        AetherSettingsSection("Connected Sources") {
+            AetherSettingsRow(
+                label: "Plex",
+                systemImage: "play.circle.fill",
+                status: viewModel.isPlexSignedIn ? .positive("Online") : .notConnected
+            )
+            AetherSettingsRow(
+                label: "Jellyfin",
+                systemImage: "rectangle.stack.badge.play.fill",
+                status: viewModel.isJellyfinSignedIn ? .positive("Online") : .notConnected
+            )
+            #if !os(tvOS)
+            AetherSettingsRow(
+                label: "Offline",
+                systemImage: "arrow.down.circle.fill",
+                value: hasDownloads ? formatBytes(totalDownloadBytes) : "Empty"
+            )
+            #endif
+        }
+    }
+
+    #if !os(tvOS)
+    /// Device-level storage at a glance: how much Aether's downloads use, and
+    /// how much room is left on the volume.
+    private var storageSummaryCard: some View {
+        AetherSettingsSection("Storage Summary") {
+            AetherSettingsRow(
+                label: "Downloads",
+                systemImage: "internaldrive.fill",
+                value: formatBytes(totalDownloadBytes)
+            )
+            if let capacity = deviceCapacity {
+                AetherSettingsRow(
+                    label: "Free Space",
+                    systemImage: "externaldrive.badge.checkmark",
+                    value: formatBytes(capacity.free)
+                )
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Storage data
+
+    private struct DeviceCapacity: Sendable {
+        let free: Int64
+        let total: Int64
+    }
+
+    /// Total bytes used by completed downloads. Summed from the observer's
+    /// snapshot — same computation the download manager screen uses.
+    private var totalDownloadBytes: Int64 {
+        downloads?.snapshot.statusByJobID.values.reduce(0) { acc, status in
+            if case let .completed(_, size) = status { return acc + size }
+            return acc
+        } ?? 0
+    }
+
+    private var hasDownloads: Bool {
+        !(downloads?.snapshot.completed.isEmpty ?? true)
+    }
+
+    /// Read the volume Aether's downloads live on. Fails silently (capacity
+    /// stays nil and the Free Space row just doesn't render).
+    private func refreshCapacity() async {
+        let path = NSHomeDirectory()
+        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path),
+              let free = attrs[.systemFreeSize] as? NSNumber,
+              let total = attrs[.systemSize] as? NSNumber else { return }
+        deviceCapacity = DeviceCapacity(free: free.int64Value, total: total.int64Value)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useGB, .useMB, .useKB]
+        return formatter.string(fromByteCount: bytes)
     }
 
     // MARK: - Sections
@@ -155,6 +352,36 @@ struct SettingsView: View {
 
         return AetherSettingsRow(label: label, systemImage: glyph, status: status, action: action)
     }
+
+    // MARK: - Downloads
+
+    /// Entry point to the download manager — moved here from a top-level tab.
+    /// Downloads are part of the source ecosystem now (an Offline source), not a
+    /// separate area. tvOS has no downloads, so the section compiles out there.
+    #if !os(tvOS)
+    private var downloadsSection: some View {
+        AetherSettingsSection("Downloads") {
+            NavigationLink(value: SettingsRoute.downloads) {
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                        .frame(width: 28)
+                    Text("Manage Downloads")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Spacer(minLength: AetherDesign.Spacing.s)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+                .padding(AetherDesign.Spacing.m)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    #endif
 
     // MARK: - Playback prefs
 
@@ -313,74 +540,14 @@ struct SettingsView: View {
         return PlaybackLanguage.displayName(for: code)
     }
 
-    /// Compact About.
-    ///
-    /// **iOS / iPadOS / visionOS:** one tappable Version row that expands
-    /// to show a cumulative "What's New" bullet list of shipped highlights.
-    /// Vertical space is the constraint; collapse-by-default keeps the
-    /// section from dominating the bottom of Settings.
-    ///
-    /// **tvOS:** vertical space is even more constrained (Settings
-    /// scrolls but D-pad focus doesn't move into static text), so the
-    /// disclosure pattern is replaced with a **two-column row** — the
-    /// version label on the left, the What's New bullets always visible
-    /// on the right where Settings' generous trailing whitespace would
-    /// otherwise sit empty.
+    /// About — one tappable Version row that opens the **What's New** modal
+    /// (`WhatsNewSheet`). Same pattern on every platform: the changelog
+    /// highlights live in a sheet rather than expanding inline, so the section
+    /// stays a single calm row no matter how long the list grows.
     private var aboutSection: some View {
         AetherSettingsSection("About") {
-            #if os(tvOS)
-            aboutRow_tvOS
-            #else
-            aboutRow_default
-            #endif
-        }
-    }
-
-    #if os(tvOS)
-    /// tvOS About row: version on the left, bullets always-on on the
-    /// right. Not tappable — there's no expand state to toggle.
-    private var aboutRow_tvOS: some View {
-        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
-            HStack(spacing: AetherDesign.Spacing.m) {
-                Image(systemName: "info.circle.fill")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.accent)
-                    .frame(width: 28)
-                Text(viewModel.versionRowLabel)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Spacer(minLength: AetherDesign.Spacing.s)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text("What's New")
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
-                ForEach(viewModel.whatsNewBullets, id: \.self) { bullet in
-                    HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AetherDesign.Palette.success)
-                        Text(bullet)
-                            .font(AetherDesign.Typography.metadata)
-                            .foregroundStyle(AetherDesign.Palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(AetherDesign.Spacing.m)
-    }
-    #endif
-
-    private var aboutRow_default: some View {
-        VStack(spacing: 0) {
             Button {
-                withAnimation(.smooth(duration: 0.25)) {
-                    isWhatsNewExpanded.toggle()
-                }
+                isWhatsNewPresented = true
             } label: {
                 HStack(spacing: AetherDesign.Spacing.m) {
                     Image(systemName: "info.circle.fill")
@@ -401,34 +568,13 @@ struct SettingsView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .rotationEffect(.degrees(isWhatsNewExpanded ? 90 : 0))
                 }
                 .padding(AetherDesign.Spacing.m)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(viewModel.versionRowLabel). What's New.")
-            .accessibilityHint(isWhatsNewExpanded ? "Tap to collapse" : "Tap to expand")
-
-            if isWhatsNewExpanded {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-                    ForEach(viewModel.whatsNewBullets, id: \.self) { bullet in
-                        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(AetherDesign.Palette.success)
-                                .frame(width: 28)
-                            Text(bullet)
-                                .font(AetherDesign.Typography.metadata)
-                                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.m)
-                .padding(.bottom, AetherDesign.Spacing.m)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            .accessibilityHint("Opens what's new in this version")
         }
     }
 
@@ -476,6 +622,61 @@ private struct PreferencePickerSheet<Content: View>: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
             }
+        }
+        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// The **What's New** modal opened from the About → Version row. A headline,
+/// the version it covers, and the shipped highlights as a checked bullet list.
+/// Mirrors `PreferencePickerSheet`'s container so the two modals feel identical.
+private struct WhatsNewSheet: View {
+    let version: String
+    let bullets: [String]
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text("What's New")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text("Version \(version)")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .padding(.top, AetherDesign.Spacing.l)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                    ForEach(bullets, id: \.self) { bullet in
+                        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.success)
+                            Text(bullet)
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .padding(AetherDesign.Spacing.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                        .fill(AetherDesign.Materials.card)
+                )
+                .padding(.horizontal, AetherDesign.Spacing.l)
+            }
+
+            AetherButton("Done", role: .secondary, action: onClose)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.bottom, AetherDesign.Spacing.l)
         }
         .background(AetherDesign.Palette.background.ignoresSafeArea())
         .presentationDetents([.medium, .large])
