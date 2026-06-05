@@ -120,7 +120,8 @@ struct HomeView: View {
     @ViewBuilder
     private var content: some View {
         if isSearching {
-            MediaSearchResults(source: source, query: searchQuery)
+            // Unified search across every connected source.
+            MediaSearchResults(sources: connectedSources, query: searchQuery)
         } else if let loadError {
             errorState(loadError)
         } else if isLoading && isContentEmpty {
