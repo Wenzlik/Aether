@@ -62,7 +62,9 @@ struct RootTabView: View {
                     onRetryDiscovery: { Task { await session.discoverPlexServers() } },
                     downloadManager: dlManager,
                     downloads: dlObserver,
-                    playbackPreferences: session.playbackPreferences
+                    playbackPreferences: session.playbackPreferences,
+                    connectedSources: session.connectedSources,
+                    downloadStore: dlManager == nil ? nil : session.downloadStore
                 )
             }
 

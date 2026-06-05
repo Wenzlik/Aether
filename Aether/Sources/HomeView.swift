@@ -24,8 +24,14 @@ struct HomeView: View {
     /// Forwarded so DetailView can seed Audio / Subtitle / Quality pickers
     /// from the user's Settings defaults.
     let playbackPreferences: PlaybackPreferencesStore?
+    /// All connected sources — when non-empty, Home renders **unified**
+    /// (deduplicated) rails across them instead of a single source's libraries.
+    let connectedSources: [any MediaSource]
+    /// Backs the unified aggregator's offline fold-in.
+    let downloadStore: DownloadStore?
 
     @State private var feed: HomeFeed = .empty
+    @State private var rails: UnifiedRails = .empty
     @State private var loadError: String?
     @State private var isLoading = false
     /// Drives the `NavigationStack` so a library rail's "See all" accessory can
@@ -61,9 +67,20 @@ struct HomeView: View {
                 playbackPreferences: playbackPreferences
             )
         }
-        // Reload whenever the source changes (nil → Plex after discovery, or
-        // Plex → nil on sign-out). Without id:, .task fires once.
-        .task(id: source?.id) { await load() }
+        // Reload when the connected set changes (sign-in / discovery / sign-out).
+        .task(id: taskKey) { await load() }
+    }
+
+    /// `true` when at least one source is connected → render unified rails.
+    private var usesUnified: Bool { !connectedSources.isEmpty }
+
+    /// Stable reload key: the connected source ids (unified), else the active
+    /// source id.
+    private var taskKey: String {
+        if usesUnified {
+            return connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+        }
+        return source?.id.stableKey ?? "none"
     }
 
     /// The branded header (centered Aether lockup + search field) sits
@@ -75,8 +92,8 @@ struct HomeView: View {
     private var shouldShowBrandedChrome: Bool {
         if isSearching { return true }
         if loadError != nil { return false }
-        if isLoading && feed == .empty { return false }
-        if feedIsEmpty { return false }
+        if isLoading && isContentEmpty { return false }
+        if isContentEmpty { return false }
         return true
     }
 
@@ -106,13 +123,51 @@ struct HomeView: View {
             MediaSearchResults(source: source, query: searchQuery)
         } else if let loadError {
             errorState(loadError)
-        } else if isLoading && feed == .empty {
+        } else if isLoading && isContentEmpty {
             loadingState
-        } else if feedIsEmpty {
+        } else if isContentEmpty {
             emptyState
+        } else if usesUnified {
+            unifiedRailsContent
         } else {
             railsContent
         }
+    }
+
+    /// Whether the visible feed has nothing to show (unified or single-source).
+    private var isContentEmpty: Bool {
+        if usesUnified { return rails.isEmpty }
+        return feedIsEmpty
+    }
+
+    // MARK: - Unified rails (deduplicated across all connected sources)
+
+    private var unifiedRailsContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                if !rails.continueWatching.isEmpty {
+                    continueWatchingSection
+                }
+                if !rails.movies.isEmpty {
+                    section(title: "Movies", items: preferredItems(rails.movies))
+                }
+                if !rails.shows.isEmpty {
+                    section(title: "TV Shows", items: preferredItems(rails.shows))
+                }
+                if !rails.downloaded.isEmpty {
+                    section(title: "Downloaded", items: preferredItems(rails.downloaded))
+                }
+            }
+            .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+
+    /// The MediaItem each unified title navigates to / renders as — its
+    /// highest-priority playable source (falling back to any source). Keeps the
+    /// cards + Detail on the existing `MediaItem` path; "Available Sources" on
+    /// Detail is a later phase.
+    private func preferredItems(_ items: [UnifiedMediaItem]) -> [MediaItem] {
+        items.compactMap { $0.preferredSource?.item ?? $0.sources.first?.item }
     }
 
     // MARK: - Rails
@@ -362,8 +417,23 @@ struct HomeView: View {
     private func load() async {
         loadError = nil
 
+        // Unified path: aggregate + dedupe across every connected source. The
+        // aggregator is fault-tolerant (no throw) — a down server is skipped.
+        if usesUnified {
+            isLoading = true
+            defer { isLoading = false }
+            let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
+            let built = await library.homeRails(resumeStore: resumeStore)
+            rails = built
+            // Mirror Continue Watching into `feed` so the shared section renders.
+            feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
+            return
+        }
+
+        // Single-source fallback (not connected → welcome/empty states).
         guard let source else {
             feed = .empty
+            rails = .empty
             isLoading = false
             return
         }

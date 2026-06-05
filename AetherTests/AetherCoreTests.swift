@@ -547,3 +547,34 @@ struct UnifiedLibraryAggregatorTests {
         #expect(movies[0].sources.first?.serverName == "Plex")
     }
 }
+
+@Suite("AetherCore — UnifiedLibrary home rails")
+struct UnifiedHomeRailsTests {
+    private struct Stub: MediaSource {
+        let id: MediaSourceID
+        let displayName: String
+        let libs: [Library]
+        let itemsByLib: [Library.ID: [MediaItem]]
+        func libraries() async throws -> [Library] { libs }
+        func items(in id: Library.ID) async throws -> [MediaItem] { itemsByLib[id] ?? [] }
+    }
+
+    @Test("splits unified items into Movies / TV Shows rails")
+    func split() async {
+        let movieLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "mov"), title: "Movies", kind: .movie)
+        let showLib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "tv"), title: "Shows", kind: .show)
+        let movie = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+                              kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        let show = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "2"), title: "Severance",
+                             kind: .show, streamURL: URL(string: "http://p/2"), guids: MediaGuids(tvdb: "999"))
+        let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
+                        libs: [movieLib, showLib],
+                        itemsByLib: [movieLib.id: [movie], showLib.id: [show]])
+
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        #expect(rails.movies.count == 1)
+        #expect(rails.shows.count == 1)
+        #expect(rails.movies.first?.title == "Matrix")
+        #expect(rails.shows.first?.title == "Severance")
+    }
+}

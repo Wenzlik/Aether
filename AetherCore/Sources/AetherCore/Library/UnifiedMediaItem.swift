@@ -104,3 +104,29 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
         sources.contains { $0.kind == .offline }
     }
 }
+
+/// The unified Home feed: deduplicated rails across all connected sources.
+public struct UnifiedRails: Sendable, Equatable {
+    public let continueWatching: [HomeFeed.ContinueWatchingEntry]
+    public let movies: [UnifiedMediaItem]
+    public let shows: [UnifiedMediaItem]
+    public let downloaded: [UnifiedMediaItem]
+
+    public init(
+        continueWatching: [HomeFeed.ContinueWatchingEntry] = [],
+        movies: [UnifiedMediaItem] = [],
+        shows: [UnifiedMediaItem] = [],
+        downloaded: [UnifiedMediaItem] = []
+    ) {
+        self.continueWatching = continueWatching
+        self.movies = movies
+        self.shows = shows
+        self.downloaded = downloaded
+    }
+
+    public static let empty = UnifiedRails()
+
+    public var isEmpty: Bool {
+        continueWatching.isEmpty && movies.isEmpty && shows.isEmpty && downloaded.isEmpty
+    }
+}

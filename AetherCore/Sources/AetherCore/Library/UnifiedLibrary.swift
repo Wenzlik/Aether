@@ -52,6 +52,38 @@ public actor UnifiedLibrary {
         return Set(await downloads.snapshot().completed.map(\.mediaID))
     }
 
+    /// Build the unified Home rails: deduplicated Movies / TV Shows, plus
+    /// cross-source Continue Watching (best resume across a title's sources) and
+    /// the Downloaded titles. Fault-tolerant via `unifiedItems`.
+    public func homeRails(resumeStore: ResumeStore, limit: Int = 30) async -> UnifiedRails {
+        let movies = await unifiedItems(kind: .movie)
+        let shows = await unifiedItems(kind: .show)
+
+        var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
+        for unified in movies + shows {
+            var best: (item: MediaItem, resume: ResumePoint)?
+            for source in unified.sources {
+                guard let resume = await resumeStore.point(for: source.item.id) else { continue }
+                if best == nil || Self.seconds(resume.position) > Self.seconds(best!.resume.position) {
+                    best = (source.item, resume)
+                }
+            }
+            if let best { continueWatching.append(.init(item: best.item, resume: best.resume)) }
+        }
+
+        return UnifiedRails(
+            continueWatching: continueWatching,
+            movies: Array(movies.prefix(limit)),
+            shows: Array(shows.prefix(limit)),
+            downloaded: (movies + shows).filter(\.isDownloaded)
+        )
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
     // MARK: - Merge engine (pure, testable)
 
     public nonisolated static func merge(
