@@ -101,11 +101,12 @@ final class SettingsViewModel {
     /// Aether actually does today rather than churning per-release notes;
     /// the full per-version log lives in `CHANGELOG.md`.
     let whatsNewBullets: [String] = [
-        "Plex and Jellyfin sign-in",
-        "Continue Watching across libraries",
-        "Audio · Subtitle · Quality picker on Detail",
-        "Offline downloads with auto-resume",
-        "Storage manager with swipe-to-delete"
+        "Unified Library — one feed across every connected source",
+        "Pick a title's source on Detail (Available Sources)",
+        "Discover and Search are now tabs on every platform",
+        "Settings dashboard with source health",
+        "Offline downloads (Plex & Jellyfin) with auto-resume",
+        "Cinema mode on Apple Vision Pro"
     ]
 
     private func infoString(_ key: String) -> String? {
