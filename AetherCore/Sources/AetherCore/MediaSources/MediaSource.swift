@@ -89,6 +89,13 @@ public protocol MediaSource: Sendable {
     /// for the manual "Mark as Unwatched" action. Best-effort + non-throwing.
     /// Default: no-op.
     func markUnwatched(_ id: MediaID) async
+
+    /// **Source-provided** skip segments (intro / recap / credits / commercial)
+    /// for an item — Plex markers, Jellyfin MediaSegments. Drives Skip Intro /
+    /// Skip Credits / Auto-Play-Next. Best-effort + non-throwing: returns `[]`
+    /// when the source has no segment data, so skip controls stay hidden.
+    /// Aether never detects these locally. Default: none.
+    func segments(for id: MediaID) async -> [PlaybackSegment]
 }
 
 public extension MediaSource {
@@ -120,6 +127,9 @@ public extension MediaSource {
 
     /// Default: no server-side watch state to update. Plex / Jellyfin override.
     func markUnwatched(_ id: MediaID) async {}
+
+    /// Default: no segment data. Plex / Jellyfin override.
+    func segments(for id: MediaID) async -> [PlaybackSegment] { [] }
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }

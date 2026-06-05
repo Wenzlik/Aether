@@ -227,15 +227,54 @@ public enum PlexAPI {
         /// Number of times the user has played this item. `>= 1` ⇒ watched.
         /// Plex includes it on list + detail by default. JSON key `viewCount`.
         public let viewCount: Int?
+        /// Intro / credits / commercial markers — only returned on the detail
+        /// endpoint with `includeMarkers=1`. JSON key capital `Marker`.
+        public let markers: [MarkerEntry]?
 
         public struct GuidEntry: Decodable, Sendable, Equatable {
             public let id: String
             public init(id: String) { self.id = id }
         }
 
+        /// One Plex marker. `startTimeOffset` / `endTimeOffset` are **milliseconds**.
+        public struct MarkerEntry: Decodable, Sendable, Equatable {
+            public let type: String?
+            public let startTimeOffset: Int?
+            public let endTimeOffset: Int?
+
+            public init(type: String? = nil, startTimeOffset: Int? = nil, endTimeOffset: Int? = nil) {
+                self.type = type
+                self.startTimeOffset = startTimeOffset
+                self.endTimeOffset = endTimeOffset
+            }
+
+            public var segment: PlaybackSegment? {
+                guard let startTimeOffset, let endTimeOffset, let kind = Self.kind(for: type) else { return nil }
+                return PlaybackSegment(
+                    kind: kind,
+                    start: Double(startTimeOffset) / 1000,
+                    end: Double(endTimeOffset) / 1000
+                )
+            }
+
+            static func kind(for type: String?) -> PlaybackSegment.Kind? {
+                switch type?.lowercased() {
+                case "intro":              return .intro
+                case "credits", "credit":  return .credits
+                case "commercial":         return .commercial
+                default:                   return nil
+                }
+            }
+        }
+
         /// External IDs parsed into a typed `MediaGuids`.
         public var guids: MediaGuids {
             MediaGuids(guidStrings: (externalGuids ?? []).map(\.id))
+        }
+
+        /// Markers mapped to source-agnostic `PlaybackSegment`s.
+        public var segments: [PlaybackSegment] {
+            (markers ?? []).compactMap(\.segment)
         }
 
         /// Explicit init with defaults for every optional field, so the
@@ -257,7 +296,8 @@ public enum PlexAPI {
             index: Int? = nil,
             media: [Media]? = nil,
             externalGuids: [GuidEntry]? = nil,
-            viewCount: Int? = nil
+            viewCount: Int? = nil,
+            markers: [MarkerEntry]? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -273,6 +313,7 @@ public enum PlexAPI {
             self.media = media
             self.externalGuids = externalGuids
             self.viewCount = viewCount
+            self.markers = markers
         }
 
         public var kind: MediaItem.Kind {
@@ -396,6 +437,7 @@ public enum PlexAPI {
             case grandparentTitle, parentIndex, index, viewCount
             case media = "Media"
             case externalGuids = "Guid"
+            case markers = "Marker"
         }
 
         public struct Media: Decodable, Sendable, Equatable {

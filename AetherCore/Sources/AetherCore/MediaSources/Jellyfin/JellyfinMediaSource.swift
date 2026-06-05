@@ -132,6 +132,26 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Skip segments via Jellyfin's MediaSegments API (10.10+). Returns `[]` on
+    /// older servers / no data — skip controls then stay hidden.
+    public func segments(for id: MediaID) async -> [PlaybackSegment] {
+        guard id.source == self.id else { return [] }
+        let request = makeRequest(
+            path: "/MediaSegments/\(id.rawValue)",
+            queryItems: [
+                URLQueryItem(name: "includeSegmentTypes", value: "Intro"),
+                URLQueryItem(name: "includeSegmentTypes", value: "Outro"),
+                URLQueryItem(name: "includeSegmentTypes", value: "Recap"),
+                URLQueryItem(name: "includeSegmentTypes", value: "Preview"),
+                URLQueryItem(name: "includeSegmentTypes", value: "Commercial")
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.MediaSegmentsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap(\.segment)
+    }
+
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
         switch request.mode {
         case .directPlay:

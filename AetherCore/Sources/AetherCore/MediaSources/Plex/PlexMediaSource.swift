@@ -175,6 +175,22 @@ public actor PlexMediaSource: MediaSource {
         return response.mediaContainer.metadata?.first.map { mapMetadataToMediaItem($0, base: base) }
     }
 
+    /// Skip segments from Plex intro / credits markers. Markers are only
+    /// returned with `includeMarkers=1` on the detail endpoint. Returns `[]`
+    /// when the server hasn't generated markers — skip controls stay hidden.
+    public func segments(for id: MediaID) async -> [PlaybackSegment] {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return [] }
+        let request = request(
+            base: base,
+            path: "/library/metadata/\(id.rawValue)",
+            queryItems: [URLQueryItem(name: "includeMarkers", value: "1")]
+        )
+        guard let response = try? await api.decode(
+            PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.mediaContainer.metadata?.first?.segments ?? []
+    }
+
     /// Build a fresh playback URL for the request, mirroring Plex Web:
     ///
     /// 1. **PUT** `/library/parts/{partId}?audioStreamID=…&subtitleStreamID=…`
