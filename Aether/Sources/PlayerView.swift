@@ -21,8 +21,14 @@ struct PlayerView: View {
     /// `0` (or any explicit value) starts there, ignoring the saved resume.
     let startAt: Double?
     let onDismiss: () -> Void
+    /// Playback defaults — drives Skip Intro / Skip Credits (Button /
+    /// Automatically / Off). `nil` falls back to "Show Button".
+    let playbackPreferences: PlaybackPreferencesStore?
     @State private var viewModel: PlayerStateViewModel
     @State private var showFailureDetails = false
+    /// Segments already auto-skipped this session, so `.automatically` fires
+    /// once per segment instead of on every time tick.
+    @State private var autoSkipped: Set<String> = []
 
     /// Chrome auto-hide window — short, so controls don't linger over the video.
     private static let chromeIdleHide: Duration = .milliseconds(2500)
@@ -43,12 +49,14 @@ struct PlayerView: View {
         session: PlaybackSession,
         startAt: Double? = nil,
         preferExpanded: Bool = false,
+        playbackPreferences: PlaybackPreferencesStore? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.item = item
         self.source = source
         self.startAt = startAt
         self.preferExpanded = preferExpanded
+        self.playbackPreferences = playbackPreferences
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
     }
@@ -91,7 +99,11 @@ struct PlayerView: View {
                 )
                 .allowsHitTesting(effectiveChromeVisibility)
             #endif
+
+            skipOverlay
+                .zIndex(25)
         }
+        .onChange(of: viewModel.currentSeconds) { _, _ in autoSkipIfNeeded() }
         #if os(iOS)
         // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome intact
         // while letting us mirror its visibility on the Back button. Without the
@@ -135,6 +147,59 @@ struct PlayerView: View {
         #if os(tvOS)
         .onExitCommand { Task { await dismissPlayer() } }
         #endif
+    }
+
+    // MARK: - Skip Intro / Credits
+
+    private var introMode: SkipMode { playbackPreferences?.skipIntro ?? .button }
+    private var creditsMode: SkipMode { playbackPreferences?.skipCredits ?? .button }
+
+    /// The intro/recap segment active right now, unless Skip Intro is Off.
+    private var activeIntro: PlaybackSegment? {
+        guard introMode != .off else { return nil }
+        return viewModel.segments.introSegment(at: viewModel.currentSeconds)
+    }
+
+    /// The credits segment active right now, unless Skip Credits is Off.
+    private var activeCredits: PlaybackSegment? {
+        guard creditsMode != .off else { return nil }
+        return viewModel.segments.creditsSegment(at: viewModel.currentSeconds)
+    }
+
+    /// Bottom-trailing skip button, shown only while inside a segment whose mode
+    /// is "Show Button". Intro takes precedence over credits if they overlap.
+    @ViewBuilder
+    private var skipOverlay: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                if introMode == .button, let intro = activeIntro {
+                    skipButton("Skip Intro", to: intro.end)
+                } else if creditsMode == .button, let credits = activeCredits {
+                    skipButton("Skip Credits", to: credits.end)
+                }
+            }
+        }
+        .padding(AetherDesign.Spacing.xl)
+    }
+
+    private func skipButton(_ title: String, to target: Double) -> some View {
+        AetherButton(title, systemImage: "forward.end.fill", role: .secondary) {
+            Task { await viewModel.skip(toContentSeconds: target) }
+        }
+    }
+
+    /// For the "Automatically" mode: seek past a segment the moment it starts,
+    /// once per segment (`autoSkipped` guards re-firing on every time tick).
+    private func autoSkipIfNeeded() {
+        if introMode == .automatically, let intro = activeIntro, !autoSkipped.contains(intro.id) {
+            autoSkipped.insert(intro.id)
+            Task { await viewModel.skip(toContentSeconds: intro.end) }
+        } else if creditsMode == .automatically, let credits = activeCredits, !autoSkipped.contains(credits.id) {
+            autoSkipped.insert(credits.id)
+            Task { await viewModel.skip(toContentSeconds: credits.end) }
+        }
     }
 
     // MARK: - iOS chrome (Back only)

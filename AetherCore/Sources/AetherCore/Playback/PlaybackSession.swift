@@ -271,6 +271,31 @@ public actor PlaybackSession {
         state.position = position
     }
 
+    /// Seek to an absolute **content** position (seconds), accounting for the
+    /// transcode base offset — `AVPlayer.currentTime()` is relative to the
+    /// transcode start, so the player target is `content − base`. Used by Skip
+    /// Intro / Skip Credits, which work in absolute content time from the
+    /// segment data. (`base` is 0 for direct play, so this is a plain seek.)
+    public func skip(toContentSeconds target: Double) async {
+        guard let avPlayer else { return }
+        let playerSeconds = max(0, target - baseOffsetSeconds)
+        let cmTime = CMTime(seconds: playerSeconds, preferredTimescale: 600)
+        await MainActor.run {
+            avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+        state.position = .seconds(target)
+    }
+
+    /// The live absolute content position in seconds — fresh on demand (the
+    /// resume loop only writes every few seconds, too coarse for the skip
+    /// buttons). Falls back to the last recorded `state.position`.
+    public func currentPositionSeconds() async -> Double {
+        guard let avPlayer else { return Self.durationSeconds(state.position) }
+        let elapsed = await MainActor.run { avPlayer.currentTime().seconds }
+        guard elapsed.isFinite, !elapsed.isNaN else { return Self.durationSeconds(state.position) }
+        return baseOffsetSeconds + elapsed
+    }
+
     public func stop() async {
         resumeTask?.cancel()
         resumeTask = nil
