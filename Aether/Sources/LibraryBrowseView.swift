@@ -1,22 +1,25 @@
 import SwiftUI
 import AetherCore
 
-/// The Library tab root — Aether's browse hub.
+/// The Library tab root — Aether's browse hub, now **unified** across every
+/// connected source.
 ///
-/// Replaces the old "two big empty tiles" picker with a richer layout that
-/// makes the library feel inhabited even before the user drills in:
-/// - a branded hero header ("Aether Library" + tagline),
-/// - a Continue Watching rail (cross-library, only when there's something to
-///   resume),
-/// - a Recently Added rail (interleaved across libraries),
-/// - and a section per library with a horizontal poster rail and a "See all"
-///   link that pushes the existing `LibraryView` grid.
+/// The source is an implementation detail here too: one deduplicated catalog,
+/// not a per-server picker. Layout:
+/// - a branded hero header ("Aether" + search field),
+/// - a Downloaded rail (when there are downloads),
+/// - a Continue Watching rail (cross-source, best resume per title),
+/// - **Movies** and **TV Shows** rails, each with a "See all" link that pushes a
+///   full unified grid (`UnifiedLibraryGridView`).
 ///
-/// Reuses `HomeFeedBuilder` so we don't duplicate the data layer — the same
-/// per-library item fetch powers Home and Library, and the cross-library
-/// resume / recents derive from a single source of truth.
+/// Reuses `UnifiedLibrary.homeRails(...)` — the same aggregator Home uses — so
+/// the data layer isn't duplicated. Cards navigate `UnifiedMediaItem`, so Detail
+/// shows the title's Available Sources.
 struct LibraryBrowseView: View {
-    let source: (any MediaSource)?
+    /// Every connected source — aggregated + deduplicated by `UnifiedLibrary`.
+    let connectedSources: [any MediaSource]
+    /// Backs the unified aggregator's offline fold-in.
+    let downloadStore: DownloadStore?
     let resumeStore: ResumeStore
     let playbackSession: PlaybackSession
     let libraryPreferences: LibraryPreferencesStore
@@ -29,16 +32,14 @@ struct LibraryBrowseView: View {
     /// from the user's Settings defaults.
     let playbackPreferences: PlaybackPreferencesStore?
 
-    @State private var feed: HomeFeed = .empty
+    @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
     @State private var loadError: String?
-    /// Drives the `NavigationStack` so a section's "See all" can push the
-    /// per-library `LibraryView` grid. Card taps push via `NavigationLink`.
+    /// Drives the `NavigationStack` so a rail's "See all" can push the full
+    /// unified grid. Card taps push via `NavigationLink`.
     @State private var navigationPath = NavigationPath()
 
-    /// Bound to the system search bar (`.searchable` modifier). When
-    /// non-empty, the library swaps its rails content for
-    /// `MediaSearchResults`. Same surface Home uses.
+    /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
     @State private var searchQuery = ""
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
@@ -51,7 +52,7 @@ struct LibraryBrowseView: View {
                     VStack(spacing: 0) {
                         brandedHeader
                         content
-                            .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
+                            .dismissSearchKeyboardOnTap { searchFocused = false }
                     }
                 } else {
                     content
@@ -64,7 +65,8 @@ struct LibraryBrowseView: View {
             #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
             .mediaNavigationDestinations(
-                source: source,
+                source: connectedSources.first,
+                connectedSources: connectedSources,
                 resumeStore: resumeStore,
                 playbackSession: playbackSession,
                 libraryPreferences: libraryPreferences,
@@ -72,20 +74,33 @@ struct LibraryBrowseView: View {
                 downloads: downloads,
                 playbackPreferences: playbackPreferences
             )
+            // "See all" → full unified grid for a kind.
+            .navigationDestination(for: UnifiedLibrarySection.self) { section in
+                UnifiedLibraryGridView(
+                    title: section.title,
+                    kind: section.kind,
+                    connectedSources: connectedSources,
+                    downloadStore: downloadStore
+                )
+            }
         }
-        .task(id: source?.id) { await load() }
+        .task(id: sourcesKey) { await load() }
+    }
+
+    /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
+    private var sourcesKey: String {
+        connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
     }
 
     /// Show the centered Aether lockup + search field above content on the
-    /// rails and during search. The library-empty / no-source / loading /
-    /// error states own their own full-screen layout, so the header sits
-    /// out for those — a search bar over "No library yet" reads as noise.
+    /// rails and during search. The empty / no-source / loading / error states
+    /// own their own full-screen layout, so the header sits out for those.
     private var shouldShowBrandedChrome: Bool {
         if isSearching { return true }
-        if source == nil { return false }
-        if loadError != nil, feed.libraries.isEmpty { return false }
-        if isLoading && feed.libraries.isEmpty { return false }
-        if feed.libraries.isEmpty { return false }
+        if connectedSources.isEmpty { return false }
+        if loadError != nil, rails.isEmpty { return false }
+        if isLoading && rails.isEmpty { return false }
+        if rails.isEmpty { return false }
         return true
     }
 
@@ -100,9 +115,8 @@ struct LibraryBrowseView: View {
         .padding(.bottom, AetherDesign.Spacing.m)
     }
 
-    /// True when the user has typed something in the search bar. The
-    /// rails get replaced with search results in this state — same
-    /// content surface, different filter.
+    /// True when the user has typed something — rails get replaced with unified
+    /// search results.
     private var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -110,55 +124,51 @@ struct LibraryBrowseView: View {
     @ViewBuilder
     private var content: some View {
         if isSearching {
-            // Library is still single-source (unified browse is a later phase),
-            // so search here scopes to the active source.
-            MediaSearchResults(sources: [source].compactMap { $0 }, query: searchQuery)
-        } else if source == nil {
+            // Unified search across every connected source (same as Home / Search).
+            MediaSearchResults(sources: connectedSources, query: searchQuery)
+        } else if connectedSources.isEmpty {
             AetherEmptyState(
                 glyph: "rectangle.stack",
                 title: "No library yet",
                 message: "Connect a source and your Aether library appears here.",
                 action: .init(label: "Add a source", run: onAddSource)
             )
-        } else if let loadError, feed.libraries.isEmpty {
+        } else if let loadError, rails.isEmpty {
             AetherErrorState(
-                title: "Couldn't load your libraries",
+                title: "Couldn't load your library",
                 message: loadError,
                 retry: .init { Task { await load() } }
             )
-        } else if isLoading && feed.libraries.isEmpty {
+        } else if isLoading && rails.isEmpty {
             AetherLoadingState(.rails(count: 2))
                 .padding(.top, AetherDesign.Spacing.l)
-        } else if feed.libraries.isEmpty {
+        } else if rails.isEmpty {
             AetherEmptyState(
                 glyph: "tray",
-                title: "No libraries",
-                message: "This source doesn't expose any movie or show libraries Aether can read yet."
+                title: "Library is empty",
+                message: "Add some movies or shows to a connected source and they'll surface here."
             )
         } else {
-            rails
+            railsContent
         }
     }
 
     // MARK: - Rails
 
-    private var rails: some View {
+    private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 if hasAnyDownloads {
                     downloadedRail
                 }
-
-                if !feed.continueWatching.isEmpty {
+                if !rails.continueWatching.isEmpty {
                     continueWatchingRail
                 }
-
-                if !recentlyAdded.isEmpty {
-                    recentlyAddedRail
+                if !rails.movies.isEmpty {
+                    unifiedRail(title: "Movies", kind: .movie, items: rails.movies)
                 }
-
-                ForEach(feed.libraries) { librarySection in
-                    librarySectionRail(librarySection)
+                if !rails.shows.isEmpty {
+                    unifiedRail(title: "TV Shows", kind: .show, items: rails.shows)
                 }
             }
             .padding(.top, AetherDesign.Spacing.l)
@@ -166,20 +176,15 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// `true` once the user has at least one completed download — gates
-    /// the Downloaded rail. Management of those downloads (size totals,
-    /// per-item delete, Clear All) lives in the dedicated **Storage**
-    /// tab; Library only surfaces them as content (a rail of posters
-    /// alongside Continue Watching and Recently Added).
+    /// `true` once there's at least one completed download — gates the
+    /// Downloaded rail. Management lives in Settings → Downloads; Library only
+    /// surfaces them as content.
     private var hasAnyDownloads: Bool {
         !(downloads?.snapshot.completed.isEmpty ?? true)
     }
 
-    /// "Downloaded" rail — cross-source completed items, newest first.
-    /// Each card is a `NavigationLink` to the original DetailView (the
-    /// download job carries `MediaID`, so the existing destination
-    /// registration handles routing); offline override in PlaybackSession
-    /// makes Play use the local file.
+    /// "Downloaded" rail — completed items, newest first, straight from the
+    /// download observer's snapshot (valid offline).
     private var downloadedRail: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(title: "Downloaded")
@@ -197,49 +202,35 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// Card for a downloaded job. We don't have the live `MediaItem` (it's
-    /// in the source's library snapshot, which may not be loaded), so we
-    /// render directly from the job's captured snapshot — title +
-    /// posterURL stay valid offline. Tapping pushes a `MediaItemRef` that
-    /// `mediaNavigationDestinations` routes to Detail.
-    @ViewBuilder
+    /// Card for a downloaded job. Rendered from the job's captured snapshot
+    /// (title + poster + episode context) so it reads correctly offline.
+    /// Tapping pushes a `MediaItem` that `mediaNavigationDestinations` routes.
     private func downloadedCard(_ job: DownloadJob) -> some View {
-        // Find the live MediaItem (from any loaded library section) to
-        // get the full metadata. Falls back to a synthetic item built
-        // from the job snapshot — including the episode-context fields
-        // — so the card reads "Breaking Bad · S1E1 · Pilot" even when
-        // the source is offline.
-        let item = feed.libraries
-            .flatMap { $0.items }
-            .first { $0.id == job.mediaID }
-            ?? MediaItem(
-                id: job.mediaID,
-                title: job.title,
-                kind: job.kind,
-                posterURL: job.posterURL,
-                seriesTitle: job.seriesTitle,
-                seasonNumber: job.seasonNumber,
-                episodeNumber: job.episodeNumber
-            )
+        let item = MediaItem(
+            id: job.mediaID,
+            title: job.title,
+            kind: job.kind,
+            posterURL: job.posterURL,
+            seriesTitle: job.seriesTitle,
+            seasonNumber: job.seasonNumber,
+            episodeNumber: job.episodeNumber
+        )
 
-        NavigationLink(value: item) {
+        return NavigationLink(value: item) {
             AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL)
                 .frame(width: posterWidth)
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Cross-library rails
-
-    /// Cross-library "Continue Watching" — same data as Home, exposed here so
-    /// the Library tab is useful even when the user opens it directly.
+    /// Cross-source "Continue Watching" — best resume per title.
     private var continueWatchingRail: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(title: "Continue Watching")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
-                    ForEach(feed.continueWatching) { entry in
+                    ForEach(rails.continueWatching) { entry in
                         NavigationLink(value: entry.item) {
                             AetherCard.episode(
                                 title: entry.item.title,
@@ -258,69 +249,34 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// Interleaved "Recently Added" rail. Plex / Jellyfin default-sort by
-    /// `addedAt:desc`, so the first items in each per-library list are the
-    /// newest. We round-robin across libraries so a single huge library
-    /// doesn't dominate, then cap at 12 cards.
-    private var recentlyAdded: [MediaItem] {
-        var perLibrary = feed.libraries.map { Array($0.items.prefix(6)) }
-        var merged: [MediaItem] = []
-        merged.reserveCapacity(12)
-        while merged.count < 12 {
-            var added = false
-            for i in 0..<perLibrary.count {
-                if !perLibrary[i].isEmpty {
-                    merged.append(perLibrary[i].removeFirst())
-                    added = true
-                    if merged.count >= 12 { break }
-                }
-            }
-            if !added { break }
-        }
-        return merged
-    }
-
-    private var recentlyAddedRail: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Recently Added")
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: AetherDesign.Spacing.l) {
-                    ForEach(recentlyAdded) { item in
-                        NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL)
-                                .frame(width: posterWidth)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.vertical, AetherDesign.Spacing.xs)
-            }
-            .aetherFocusSection()
-        }
-    }
-
-    // MARK: - Per-library section
-
-    /// One library's row: title with inline count + horizontal poster rail +
-    /// "See all" link that pushes the existing `LibraryView` grid. The inline
-    /// `(N)` format — "Movies (1,234)" — gives a sense of scale at a glance
-    /// without taking a second line away from the artwork below.
-    private func librarySectionRail(_ section: HomeFeed.LibrarySection) -> some View {
+    /// A unified poster rail (Movies / TV Shows) with a "See all" that pushes
+    /// the full grid for that kind.
+    private func unifiedRail(title: String, kind: MediaItem.Kind, items: [UnifiedMediaItem]) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(
-                title: sectionTitle(for: section),
+                title: title,
                 accessoryTitle: "See all",
-                accessoryAction: { @MainActor in navigationPath.append(section.library) }
+                accessoryAction: { @MainActor in
+                    navigationPath.append(UnifiedLibrarySection(kind: kind, title: title))
+                }
             )
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
-                    ForEach(section.items.prefix(12)) { item in
+                    ForEach(items.prefix(12)) { item in
                         NavigationLink(value: item) {
                             AetherCard.poster(title: item.title, posterURL: item.posterURL)
                                 .frame(width: posterWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Prominent, focusable "See all" tile at the end of the rail
+                    // (Apple-TV pattern) — far more visible than the header link,
+                    // and reliably reachable by focus on tvOS.
+                    if items.count > 12 {
+                        NavigationLink(value: UnifiedLibrarySection(kind: kind, title: title)) {
+                            seeAllCard
                         }
                         .buttonStyle(.plain)
                     }
@@ -332,18 +288,27 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// Section title with the item count baked in — `"Movies (1,234)"`. The
-    /// count is a best-effort number from the first page of items the source
-    /// returned; accurate for libraries that fit in one page, an honest lower
-    /// bound for very large libraries (true `totalSize` plumbing is future
-    /// work and the inline format makes the approximation unobtrusive).
-    private func sectionTitle(for section: HomeFeed.LibrarySection) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        let count = section.items.count
-        guard count > 0 else { return section.library.title }
-        let formatted = formatter.string(from: NSNumber(value: count)) ?? "\(count)"
-        return "\(section.library.title) (\(formatted))"
+    /// The trailing "See all" tile — poster-sized so it sits flush in the rail.
+    private var seeAllCard: some View {
+        VStack(spacing: AetherDesign.Spacing.s) {
+            Image(systemName: "arrow.forward.circle.fill")
+                .font(.largeTitle)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            Text("See all")
+                .font(AetherDesign.Typography.cardTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .frame(width: posterWidth)
+        .frame(maxHeight: .infinity)
+        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Materials.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+        )
     }
 
     // MARK: - Sizing
@@ -368,20 +333,21 @@ struct LibraryBrowseView: View {
 
     private func load() async {
         loadError = nil
-        guard let source else {
-            feed = .empty
+        guard !connectedSources.isEmpty else {
+            rails = .empty
             return
         }
         isLoading = true
         defer { isLoading = false }
-        do {
-            let builder = HomeFeedBuilder()
-            feed = try await builder.build(source: source, resumeStore: resumeStore)
-        } catch {
-            feed = .empty
-            loadError = error.localizedDescription
-        }
+        let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
+        rails = await library.homeRails(resumeStore: resumeStore)
     }
+}
+
+/// "See all" push target — a full unified grid for one media kind.
+struct UnifiedLibrarySection: Hashable {
+    let kind: MediaItem.Kind
+    let title: String
 }
 
 private extension View {
@@ -391,6 +357,18 @@ private extension View {
     func aetherFocusSection() -> some View {
         #if os(tvOS)
         self.focusSection()
+        #else
+        self
+        #endif
+    }
+
+    /// Tap-to-dismiss the search keyboard — iOS / visionOS only. On tvOS there's
+    /// no software keyboard, and a `TapGesture` there would intercept the Select
+    /// button and disrupt the focus engine, so it's a no-op.
+    @ViewBuilder
+    func dismissSearchKeyboardOnTap(_ action: @escaping () -> Void) -> some View {
+        #if os(iOS) || os(visionOS)
+        simultaneousGesture(TapGesture().onEnded(action))
         #else
         self
         #endif
