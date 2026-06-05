@@ -70,7 +70,8 @@ struct RootTabView: View {
 
             Tab("Library", systemImage: "rectangle.stack.fill") {
                 LibraryBrowseView(
-                    source: session.source,
+                    connectedSources: session.connectedSources,
+                    downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
