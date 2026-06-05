@@ -6,13 +6,12 @@ import AetherCore
 // is unavailable on tvOS — compiles out for that platform.
 #if !os(tvOS)
 
-/// Storage — Aether's download manager tab.
+/// Storage — Aether's download manager.
 ///
-/// A **top-level tab** next to Home / Library / Settings in
-/// `RootTabView`. Replaces what used to be the Search tab; search moved
-/// into the `.searchable` modifier on Home + Library (the iOS-native
-/// "search lives in the tab that owns the content" pattern that Music /
-/// Photos / TV+ use).
+/// Reached via **Settings → Downloads** (it used to be a top-level tab; the
+/// nav refactor folded it in, since downloads are an Offline *source*, not a
+/// separate area). Hosted in the Settings `NavigationStack` via `embedded:
+/// true`, where it titles itself "Downloads".
 ///
 /// Surfaces total downloaded bytes, device free space, per-source
 /// breakdown, per-item list with Delete actions, and a destructive
@@ -39,6 +38,11 @@ struct StorageView: View {
     let downloads: DownloadObserver?
     /// Forwarded to DetailView via `mediaNavigationDestinations`.
     let playbackPreferences: PlaybackPreferencesStore?
+    /// When `true`, the screen is hosted inside another `NavigationStack`
+    /// (Settings → Downloads) so it renders its content bare — the host owns the
+    /// stack — and titles itself "Downloads". When `false` (legacy standalone
+    /// use) it wraps itself in a `NavigationStack` titled "Storage".
+    var embedded: Bool = false
 
     /// Bytes available + total bytes on the device's main volume.
     /// Refreshed at appear and after every destructive action so the
@@ -47,35 +51,45 @@ struct StorageView: View {
     @State private var isClearingAll = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section { header.listRowSeparator(.hidden) }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(rowInsets)
-
-                inProgressSection
-                breakdownSection
-                downloadedSection
-                clearAllSection
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(AetherDesign.Gradients.background.ignoresSafeArea())
-            .navigationTitle("Storage")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
-            #endif
-            .task { await refreshCapacity() }
-            .mediaNavigationDestinations(
-                source: source,
-                resumeStore: resumeStore,
-                playbackSession: playbackSession,
-                libraryPreferences: libraryPreferences,
-                downloadManager: downloadManager,
-                downloads: downloads,
-                playbackPreferences: playbackPreferences
-            )
+        if embedded {
+            listContent
+        } else {
+            NavigationStack { listContent }
         }
+    }
+
+    /// The download manager list + its modifiers. The `mediaNavigationDestinations`
+    /// register on whichever `NavigationStack` encloses this view — its own
+    /// (standalone) or the Settings stack (embedded), so a downloaded-item tap
+    /// pushes Detail either way.
+    private var listContent: some View {
+        List {
+            Section { header.listRowSeparator(.hidden) }
+                .listRowBackground(Color.clear)
+                .listRowInsets(rowInsets)
+
+            inProgressSection
+            breakdownSection
+            downloadedSection
+            clearAllSection
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AetherDesign.Gradients.background.ignoresSafeArea())
+        .navigationTitle(embedded ? "Downloads" : "Storage")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
+        .task { await refreshCapacity() }
+        .mediaNavigationDestinations(
+            source: source,
+            resumeStore: resumeStore,
+            playbackSession: playbackSession,
+            libraryPreferences: libraryPreferences,
+            downloadManager: downloadManager,
+            downloads: downloads,
+            playbackPreferences: playbackPreferences
+        )
     }
 
     /// Uniform insets that make List rows sit like the app's free-standing
