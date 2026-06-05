@@ -68,7 +68,10 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "ParentId", value: libraryID.rawValue),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear"),
+            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+            // Per Jellyfin docs, play state (UserData.Played) comes via this flag,
+            // not a `Fields` value — it's the watched-checkmark source.
+            URLQueryItem(name: "enableUserData", value: "true"),
             URLQueryItem(name: "SortBy", value: sortBy),
             URLQueryItem(name: "SortOrder", value: sortOrder)
         ]
@@ -87,7 +90,8 @@ public actor JellyfinMediaSource: MediaSource {
             path: "/Users/\(userID)/Items",
             queryItems: [
                 URLQueryItem(name: "ParentId", value: id.rawValue),
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+                URLQueryItem(name: "enableUserData", value: "true"),
                 URLQueryItem(name: "SortBy", value: "SortName"),
                 URLQueryItem(name: "SortOrder", value: "Ascending")
             ]
@@ -100,11 +104,24 @@ public actor JellyfinMediaSource: MediaSource {
         guard id.source == self.id else { return nil }
         let request = makeRequest(
             path: "/Users/\(userID)/Items/\(id.rawValue)",
-            queryItems: [URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear")]
+            queryItems: [
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+                URLQueryItem(name: "enableUserData", value: "true")
+            ]
         )
         // This endpoint returns a single item, not a wrapped list.
         let dto = try await api.decode(JellyfinAPI.BaseItemDto.self, from: request, decoder: decoder)
         return mapItem(dto)
+    }
+
+    /// Mark watched on the server: `POST /Users/{userId}/PlayedItems/{itemId}`
+    /// flips Jellyfin's `UserData.Played` so the state syncs across clients.
+    /// Best-effort — a failure is swallowed so it never disrupts teardown.
+    public func markWatched(_ id: MediaID) async {
+        guard id.source == self.id else { return }
+        var request = makeRequest(path: "/Users/\(userID)/PlayedItems/\(id.rawValue)")
+        request.httpMethod = "POST"
+        _ = try? await api.data(for: request)
     }
 
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
@@ -291,7 +308,8 @@ public actor JellyfinMediaSource: MediaSource {
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
             subtitleTracks: subtitleTracks,
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
-            guids: dto.guids
+            guids: dto.guids,
+            isWatched: dto.isWatched
         )
     }
 

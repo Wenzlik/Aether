@@ -224,6 +224,9 @@ public enum PlexAPI {
         /// `imdb://tt0083658`, `tvdb://78874`. The basis for Unified Library
         /// dedup. JSON key is capital `Guid`; see `CodingKeys`.
         public let externalGuids: [GuidEntry]?
+        /// Number of times the user has played this item. `>= 1` ⇒ watched.
+        /// Plex includes it on list + detail by default. JSON key `viewCount`.
+        public let viewCount: Int?
 
         public struct GuidEntry: Decodable, Sendable, Equatable {
             public let id: String
@@ -253,7 +256,8 @@ public enum PlexAPI {
             parentIndex: Int? = nil,
             index: Int? = nil,
             media: [Media]? = nil,
-            externalGuids: [GuidEntry]? = nil
+            externalGuids: [GuidEntry]? = nil,
+            viewCount: Int? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -268,6 +272,7 @@ public enum PlexAPI {
             self.index = index
             self.media = media
             self.externalGuids = externalGuids
+            self.viewCount = viewCount
         }
 
         public var kind: MediaItem.Kind {
@@ -388,7 +393,7 @@ public enum PlexAPI {
 
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
-            case grandparentTitle, parentIndex, index
+            case grandparentTitle, parentIndex, index, viewCount
             case media = "Media"
             case externalGuids = "Guid"
         }

@@ -325,6 +325,16 @@ struct DetailView: View {
             CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
                 .frame(width: 150)
                 .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if episode.isWatched {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.white, AetherDesign.Palette.accent)
+                            .font(.system(size: 18, weight: .bold))
+                            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                            .padding(AetherDesign.Spacing.xs)
+                    }
+                }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
                 Text(episode.title)

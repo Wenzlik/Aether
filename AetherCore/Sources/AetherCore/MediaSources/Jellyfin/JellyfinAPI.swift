@@ -89,6 +89,15 @@ public enum JellyfinAPI {
         /// External-ID map, e.g. `{"Tmdb":"12345","Imdb":"tt0083658"}`. Basis
         /// for Unified Library dedup.
         public let providerIds: [String: String]?
+        /// Per-user playback state. `Played == true` ⇒ watched. Jellyfin returns
+        /// it on the user-scoped `/Users/{id}/Items` endpoint.
+        public let userData: UserData?
+
+        public struct UserData: Decodable, Sendable, Equatable {
+            public let played: Bool?
+            public init(played: Bool? = nil) { self.played = played }
+            enum CodingKeys: String, CodingKey { case played = "Played" }
+        }
 
         /// External IDs as a typed `MediaGuids` (case-insensitive provider keys).
         public var guids: MediaGuids {
@@ -98,6 +107,9 @@ public enum JellyfinAPI {
             }
             return MediaGuids(tmdb: value("Tmdb"), imdb: value("Imdb"), tvdb: value("Tvdb"))
         }
+
+        /// Whether the user has watched this item, per Jellyfin's play state.
+        public var isWatched: Bool { userData?.played ?? false }
 
         public var kind: MediaItem.Kind? {
             switch type {
@@ -163,6 +175,7 @@ public enum JellyfinAPI {
             case backdropImageTags = "BackdropImageTags"
             case mediaSources = "MediaSources"
             case providerIds = "ProviderIds"
+            case userData = "UserData"
         }
     }
 
