@@ -12,6 +12,8 @@ import AetherCore
 /// connected source** and returns deduplicated `UnifiedMediaItem`s — so a title
 /// on both Plex and Jellyfin appears once, and Detail gets its full source list.
 struct SearchView: View {
+    /// Lifted from `RootTabView` so re-selecting the Search tab can pop to root.
+    @Binding var navigationPath: NavigationPath
     /// Every connected source — searched together, results merged + deduped.
     let connectedSources: [any MediaSource]
     /// The single active source — still threaded through
@@ -25,7 +27,6 @@ struct SearchView: View {
     let playbackPreferences: PlaybackPreferencesStore?
 
     @State private var query = ""
-    @State private var navigationPath = NavigationPath()
     /// Owns keyboard focus so taps outside the field, scrolling the results, or
     /// selecting a result all dismiss the keyboard — the native search feel.
     @FocusState private var searchFocused: Bool

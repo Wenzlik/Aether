@@ -16,6 +16,8 @@ import AetherCore
 /// `UnifiedMediaItem` (Detail shows its Available Sources). The shuffle is
 /// re-rolled per build so returning users see different picks.
 struct DiscoverView: View {
+    /// Lifted from `RootTabView` so re-selecting the Discover tab can pop to root.
+    @Binding var navigationPath: NavigationPath
     /// Every connected source — aggregated + deduplicated by `UnifiedLibrary`.
     let connectedSources: [any MediaSource]
     /// Backs the unified aggregator's offline fold-in.
@@ -32,7 +34,6 @@ struct DiscoverView: View {
     @State private var recentlyAdded: [UnifiedMediaItem] = []
     @State private var isLoading = false
     @State private var loadError: String?
-    @State private var navigationPath = NavigationPath()
 
     var body: some View {
         NavigationStack(path: $navigationPath) {

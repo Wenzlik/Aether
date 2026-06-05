@@ -16,6 +16,8 @@ import AetherCore
 /// the data layer isn't duplicated. Cards navigate `UnifiedMediaItem`, so Detail
 /// shows the title's Available Sources.
 struct LibraryBrowseView: View {
+    /// Lifted from `RootTabView` so re-selecting the Library tab can pop to root.
+    @Binding var navigationPath: NavigationPath
     /// Every connected source — aggregated + deduplicated by `UnifiedLibrary`.
     let connectedSources: [any MediaSource]
     /// Backs the unified aggregator's offline fold-in.
@@ -35,9 +37,6 @@ struct LibraryBrowseView: View {
     @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
     @State private var loadError: String?
-    /// Drives the `NavigationStack` so a rail's "See all" can push the full
-    /// unified grid. Card taps push via `NavigationLink`.
-    @State private var navigationPath = NavigationPath()
 
     /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
     @State private var searchQuery = ""
