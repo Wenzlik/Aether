@@ -84,6 +84,11 @@ public protocol MediaSource: Sendable {
     /// scrobble must never disrupt playback teardown. Default: no-op for sources
     /// without server-side watch state (Mock, offline).
     func markWatched(_ id: MediaID) async
+
+    /// Mark an item **unwatched on the server** — the inverse of `markWatched`,
+    /// for the manual "Mark as Unwatched" action. Best-effort + non-throwing.
+    /// Default: no-op.
+    func markUnwatched(_ id: MediaID) async
 }
 
 public extension MediaSource {
@@ -112,6 +117,9 @@ public extension MediaSource {
 
     /// Default: no server-side watch state to update. Plex / Jellyfin override.
     func markWatched(_ id: MediaID) async {}
+
+    /// Default: no server-side watch state to update. Plex / Jellyfin override.
+    func markUnwatched(_ id: MediaID) async {}
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }
