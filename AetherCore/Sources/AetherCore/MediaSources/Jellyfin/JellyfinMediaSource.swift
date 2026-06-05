@@ -127,6 +127,66 @@ public actor JellyfinMediaSource: MediaSource {
         }
     }
 
+    // MARK: - Downloads
+
+    /// Jellyfin supports downloads. Synchronous flag so Detail's Download
+    /// button visibility is decided at view-render time without an actor hop
+    /// (mirrors `PlexMediaSource`).
+    public nonisolated var supportsDownloads: Bool { true }
+
+    /// Build a download URL the `DownloadManager`'s background `URLSession` can
+    /// pull in one GET.
+    ///
+    /// - `.original` → the canonical `/Items/{id}/Download` endpoint: the raw
+    ///   source file, no transcode (single GET, movable file). Same thing the
+    ///   Jellyfin web client's Download button uses.
+    /// - any capped / convert quality → a **progressive MP4** transcode via
+    ///   `/Videos/{id}/stream.mp4?static=false`, with the bitrate / height caps
+    ///   applied, so the file is smaller and AVPlayer-friendly.
+    public func downloadURL(for item: MediaItem, quality: PlaybackQuality) async throws -> URL? {
+        guard item.id.source == self.id else { return nil }
+        let itemID = item.id.rawValue
+
+        if quality == .original {
+            var components = URLComponents(
+                url: baseURL.appendingPathComponent("/Items/\(itemID)/Download"),
+                resolvingAgainstBaseURL: false
+            )
+            components?.queryItems = [URLQueryItem(name: "api_key", value: accessToken)]
+            return components?.url
+        }
+
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/Videos/\(itemID)/stream.mp4"),
+            resolvingAgainstBaseURL: false
+        )
+        var queryItems = [
+            URLQueryItem(name: "static", value: "false"),
+            URLQueryItem(name: "container", value: "mp4"),
+            URLQueryItem(name: "VideoCodec", value: "h264"),
+            URLQueryItem(name: "AudioCodec", value: "aac"),
+            URLQueryItem(name: "MediaSourceId", value: itemID),
+            URLQueryItem(name: "api_key", value: accessToken),
+            URLQueryItem(name: "DeviceId", value: configuration.deviceID),
+            // Fresh session each download so a stuck job can't poison the next.
+            URLQueryItem(name: "PlaySessionId", value: UUID().uuidString)
+        ]
+        if let kbps = quality.maxVideoBitrateKbps {
+            queryItems.append(URLQueryItem(name: "VideoBitrate", value: String(kbps * 1000)))
+        }
+        if let maxHeight = Self.maxHeight(for: quality) {
+            queryItems.append(URLQueryItem(name: "MaxHeight", value: String(maxHeight)))
+        }
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
+    /// Pixel height from a `PlaybackQuality.videoResolution` like `"1920x1080"`.
+    private static func maxHeight(for quality: PlaybackQuality) -> Int? {
+        guard let resolution = quality.videoResolution else { return nil }
+        return resolution.split(separator: "x").last.flatMap { Int($0) }
+    }
+
     // MARK: - Stream URLs
 
     /// Containers AVPlayer opens natively → direct-play the static file;
