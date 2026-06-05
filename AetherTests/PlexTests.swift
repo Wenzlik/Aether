@@ -1927,3 +1927,48 @@ struct PlexGuidTests {
         #expect(dto.guids.isEmpty)
     }
 }
+
+@Suite("Plex — markers / playback segments")
+struct PlexMarkerTests {
+    @Test("Markers map ms offsets + type to PlaybackSegments")
+    func mapsMarkers() throws {
+        let json = #"""
+        {"ratingKey":"1","type":"episode","title":"Ep",
+         "Marker":[
+           {"type":"intro","startTimeOffset":5000,"endTimeOffset":85000},
+           {"type":"credits","startTimeOffset":1200000,"endTimeOffset":1300000},
+           {"type":"bogus","startTimeOffset":0,"endTimeOffset":1}
+         ]}
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        let segs = dto.segments
+        #expect(segs.count == 2)                  // unknown type dropped
+        #expect(segs[0].kind == .intro)
+        #expect(segs[0].start == 5)               // 5000ms → 5s
+        #expect(segs[0].end == 85)
+        #expect(segs[1].kind == .credits)
+    }
+
+    @Test("No Marker array → no segments")
+    func noMarkers() throws {
+        let json = #"{"ratingKey":"1","type":"movie","title":"X"}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.segments.isEmpty)
+    }
+}
+
+@Suite("PlaybackSegment — helpers")
+struct PlaybackSegmentHelperTests {
+    @Test("contains + intro/credits lookup by time")
+    func lookup() {
+        let segs = [
+            PlaybackSegment(kind: .intro, start: 5, end: 85),
+            PlaybackSegment(kind: .credits, start: 1200, end: 1300)
+        ]
+        #expect(segs.introSegment(at: 30)?.kind == .intro)
+        #expect(segs.introSegment(at: 100) == nil)
+        #expect(segs.creditsSegment(at: 1250)?.kind == .credits)
+        #expect(segs[0].contains(5))
+        #expect(!segs[0].contains(85))   // end is exclusive
+    }
+}

@@ -1,5 +1,23 @@
 import Foundation
 
+/// How a skip segment (intro / credits) is handled during playback.
+public enum SkipMode: String, CaseIterable, Sendable, Hashable {
+    /// Show a "Skip …" button while inside the segment (default).
+    case button
+    /// Seek past the segment automatically, no button.
+    case automatically
+    /// Don't surface the segment at all.
+    case off
+
+    public var displayName: String {
+        switch self {
+        case .button:         return "Show Button"
+        case .automatically:  return "Automatically"
+        case .off:            return "Off"
+        }
+    }
+}
+
 /// App-wide default preferences for playback — what the user has chosen as
 /// their "always start with this" picks for **quality**, **audio language**,
 /// and **subtitle language**.
@@ -65,12 +83,41 @@ public final class PlaybackPreferencesStore {
         }
     }
 
+    /// How to handle an intro/recap segment. Default `.button`.
+    public var skipIntro: SkipMode {
+        didSet { defaults.set(skipIntro.rawValue, forKey: Keys.skipIntro) }
+    }
+
+    /// How to handle a credits/outro segment. Default `.button`.
+    public var skipCredits: SkipMode {
+        didSet { defaults.set(skipCredits.rawValue, forKey: Keys.skipCredits) }
+    }
+
+    /// Auto-play the next episode when an episode reaches its credits / end.
+    /// Default `true`.
+    public var autoPlayNext: Bool {
+        didSet { defaults.set(autoPlayNext, forKey: Keys.autoPlayNext) }
+    }
+
+    /// Seconds the "Next Episode" countdown runs before auto-advancing.
+    /// One of 5 / 10 / 15. Default `10`.
+    public var nextEpisodeCountdown: Int {
+        didSet { defaults.set(nextEpisodeCountdown, forKey: Keys.countdown) }
+    }
+
+    /// Allowed countdown lengths, for the Settings picker.
+    public static let countdownOptions = [5, 10, 15]
+
     private let defaults: UserDefaults
 
     private enum Keys {
         static let quality = "playback.defaultQuality"
         static let audio = "playback.defaultAudioLanguage"
         static let subtitle = "playback.defaultSubtitleLanguage"
+        static let skipIntro = "playback.skipIntro"
+        static let skipCredits = "playback.skipCredits"
+        static let autoPlayNext = "playback.autoPlayNext"
+        static let countdown = "playback.nextEpisodeCountdown"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -85,5 +132,12 @@ public final class PlaybackPreferencesStore {
 
         self.defaultAudioLanguage = defaults.string(forKey: Keys.audio)
         self.defaultSubtitleLanguage = defaults.string(forKey: Keys.subtitle)
+
+        self.skipIntro = defaults.string(forKey: Keys.skipIntro).flatMap(SkipMode.init) ?? .button
+        self.skipCredits = defaults.string(forKey: Keys.skipCredits).flatMap(SkipMode.init) ?? .button
+        // `object(forKey:)` so a missing key → default true (not false).
+        self.autoPlayNext = (defaults.object(forKey: Keys.autoPlayNext) as? Bool) ?? true
+        let savedCountdown = defaults.integer(forKey: Keys.countdown)
+        self.nextEpisodeCountdown = Self.countdownOptions.contains(savedCountdown) ? savedCountdown : 10
     }
 }

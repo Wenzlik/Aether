@@ -40,6 +40,10 @@ struct DetailView: View {
     /// children) follows `activeItem`, so switching swaps the whole screen to
     /// the chosen server without re-navigating.
     @State private var overrideItem: MediaItem?
+    /// Optimistic watched state for the manual toggle — overrides the hydrated
+    /// item's server value so the UI flips instantly. `nil` = use the item's own
+    /// `isWatched`. Reset when the active source changes.
+    @State private var watchedOverride: Bool?
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
@@ -127,6 +131,7 @@ struct DetailView: View {
                     session: playbackSession,
                     startAt: playbackStartAt,
                     preferExpanded: launchingInCinema,
+                    playbackPreferences: playbackPreferences,
                     onDismiss: dismissPlayer
                 )
                 .transition(.opacity)
@@ -509,6 +514,7 @@ struct DetailView: View {
         playbackItem = nil
         children = []
         resume = nil
+        watchedOverride = nil   // the new source carries its own watched state
         overrideItem = (src.item.id == item.id) ? nil : src.item
     }
 
@@ -529,9 +535,42 @@ struct DetailView: View {
                 if shouldShowDownloadControl {
                     downloadControl
                 }
+                markWatchedButton
             }
         } else {
             unavailableState
+        }
+    }
+
+    /// Manual "Mark as Watched / Unwatched" — writes the play state back to the
+    /// source server (Plex scrobble / Jellyfin PlayedItems) and flips the local
+    /// display optimistically. Shown for playable, non-container items (movies +
+    /// episodes); hidden when there's no connector to update.
+    @ViewBuilder
+    private var markWatchedButton: some View {
+        if source != nil {
+            AetherButton(
+                isWatched ? "Mark as Unwatched" : "Mark as Watched",
+                systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle",
+                role: .secondary
+            ) {
+                Task { await toggleWatched() }
+            }
+        }
+    }
+
+    /// Displayed watched state — the optimistic override wins over the hydrated
+    /// item's server value so the button + badge flip instantly on tap.
+    private var isWatched: Bool { watchedOverride ?? current.isWatched }
+
+    private func toggleWatched() async {
+        guard let source else { return }
+        let next = !isWatched
+        watchedOverride = next   // optimistic
+        if next {
+            await source.markWatched(activeItem.id)
+        } else {
+            await source.markUnwatched(activeItem.id)
         }
     }
 

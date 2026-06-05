@@ -287,3 +287,37 @@ struct JellyfinWatchedTests {
         #expect(!dto.isWatched)
     }
 }
+
+@Suite("Jellyfin — media segments")
+struct JellyfinMediaSegmentsTests {
+    @Test("MediaSegmentDto maps ticks + type to a PlaybackSegment")
+    func mapsIntro() throws {
+        let json = #"{"Type":"Intro","StartTicks":100000000,"EndTicks":900000000}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.MediaSegmentDto.self, from: Data(json.utf8))
+        let seg = try #require(dto.segment)
+        #expect(seg.kind == .intro)
+        #expect(seg.start == 10)   // 100_000_000 ticks / 1e7 = 10s
+        #expect(seg.end == 90)
+    }
+
+    @Test("Outro maps to credits")
+    func outroToCredits() throws {
+        let json = #"{"Type":"Outro","StartTicks":12000000000,"EndTicks":13000000000}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.MediaSegmentDto.self, from: Data(json.utf8))
+        #expect(dto.segment?.kind == .credits)
+    }
+
+    @Test("Response decodes the Items wrapper and compacts to segments")
+    func decodesWrapper() throws {
+        let json = #"""
+        {"Items":[
+          {"Type":"Intro","StartTicks":0,"EndTicks":50000000},
+          {"Type":"Unknown","StartTicks":0,"EndTicks":1}
+        ],"TotalRecordCount":2}
+        """#
+        let resp = try JSONDecoder().decode(JellyfinAPI.MediaSegmentsResponse.self, from: Data(json.utf8))
+        let segs = resp.items.compactMap(\.segment)
+        #expect(segs.count == 1)          // unknown type dropped
+        #expect(segs[0].kind == .intro)
+    }
+}

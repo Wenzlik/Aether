@@ -16,6 +16,14 @@ public final class PlayerStateViewModel {
     /// The most recent `PlaybackState` snapshot from the session.
     public private(set) var state: PlaybackState = .init()
 
+    /// Source-provided skip segments for the playing item (intro / credits /
+    /// …). Fetched once on `open`; empty when the source has no data.
+    public private(set) var segments: [PlaybackSegment] = []
+
+    /// Live absolute content position in seconds, refreshed every tick — drives
+    /// the Skip Intro / Skip Credits buttons (the resume loop is too coarse).
+    public private(set) var currentSeconds: Double = 0
+
     private let session: PlaybackSession
     private var refreshTask: Task<Void, Never>?
     private let refreshInterval: Duration
@@ -36,6 +44,15 @@ public final class PlayerStateViewModel {
         await refresh()
         startRefreshing()
         await session.play()
+        await refresh()
+        // Skip segments (intro / credits) — best-effort, never blocks playback.
+        segments = await source?.segments(for: item.id) ?? []
+    }
+
+    /// Seek past a skip segment (absolute content seconds), accounting for the
+    /// transcode base offset.
+    public func skip(toContentSeconds target: Double) async {
+        await session.skip(toContentSeconds: target)
         await refresh()
     }
 
@@ -96,6 +113,7 @@ public final class PlayerStateViewModel {
 
         self.state = snapshot
         self.player = avPlayer
+        self.currentSeconds = await session.currentPositionSeconds()
     }
 
     /// Build a short, user-readable hint from `AVPlayer.error` /

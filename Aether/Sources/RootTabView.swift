@@ -47,10 +47,42 @@ struct RootTabView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     #endif
 
+    /// Tab identity + lifted navigation paths, so re-selecting the active tab
+    /// can pop its stack to the root.
+    private enum AppTab: Hashable { case home, library, discover, search, settings }
+    @State private var selectedTab: AppTab = .home
+    @State private var homePath = NavigationPath()
+    @State private var libraryPath = NavigationPath()
+    @State private var discoverPath = NavigationPath()
+    @State private var searchPath = NavigationPath()
+
+    /// Re-tapping the already-selected tab resets that tab's navigation to root
+    /// — the iOS-standard behaviour. A plain `selection` binding only fires on a
+    /// *change*; intercepting the setter lets us catch the re-tap of the current
+    /// tab and clear its path.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                if newValue == selectedTab {
+                    switch newValue {
+                    case .home:     homePath = NavigationPath()
+                    case .library:  libraryPath = NavigationPath()
+                    case .discover: discoverPath = NavigationPath()
+                    case .search:   searchPath = NavigationPath()
+                    case .settings: break
+                    }
+                }
+                selectedTab = newValue
+            }
+        )
+    }
+
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house.fill") {
+        TabView(selection: tabSelection) {
+            Tab("Home", systemImage: "house.fill", value: AppTab.home) {
                 HomeView(
+                    navigationPath: $homePath,
                     source: session.source,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
@@ -68,8 +100,9 @@ struct RootTabView: View {
                 )
             }
 
-            Tab("Library", systemImage: "rectangle.stack.fill") {
+            Tab("Library", systemImage: "rectangle.stack.fill", value: AppTab.library) {
                 LibraryBrowseView(
+                    navigationPath: $libraryPath,
                     connectedSources: session.connectedSources,
                     downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
@@ -83,8 +116,9 @@ struct RootTabView: View {
             }
 
             // Discover + Search are first-class on every platform now.
-            Tab("Discover", systemImage: "sparkles") {
+            Tab("Discover", systemImage: "sparkles", value: AppTab.discover) {
                 DiscoverView(
+                    navigationPath: $discoverPath,
                     connectedSources: session.connectedSources,
                     downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
@@ -96,8 +130,9 @@ struct RootTabView: View {
                 )
             }
 
-            Tab("Search", systemImage: "magnifyingglass") {
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
                 SearchView(
+                    navigationPath: $searchPath,
                     connectedSources: session.connectedSources,
                     source: session.source,
                     resumeStore: session.resumeStore,
@@ -109,7 +144,7 @@ struct RootTabView: View {
                 )
             }
 
-            Tab("Settings", systemImage: "gearshape.fill") {
+            Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
                 // Downloads now lives inside Settings (→ Downloads), not a tab.
                 // The download-pipeline deps are threaded in for that destination.
                 SettingsView(

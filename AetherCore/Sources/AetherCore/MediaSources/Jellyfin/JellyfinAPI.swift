@@ -75,6 +75,50 @@ public enum JellyfinAPI {
         }
     }
 
+    // MARK: - Media segments (Skip Intro / Credits)
+
+    /// `GET /MediaSegments/{itemId}` wraps segments in this (QueryResult shape).
+    public struct MediaSegmentsResponse: Decodable, Sendable {
+        public let items: [MediaSegmentDto]
+        enum CodingKeys: String, CodingKey { case items = "Items" }
+    }
+
+    /// One Jellyfin MediaSegment. Times are 100-ns ticks. Types: Intro, Outro,
+    /// Recap, Preview, Commercial (10.10+).
+    public struct MediaSegmentDto: Decodable, Sendable, Equatable {
+        public let type: String?
+        public let startTicks: Int64?
+        public let endTicks: Int64?
+
+        enum CodingKeys: String, CodingKey {
+            case type = "Type"
+            case startTicks = "StartTicks"
+            case endTicks = "EndTicks"
+        }
+
+        /// Mapped to a source-agnostic `PlaybackSegment`, or `nil` if the type
+        /// isn't one we surface or the ticks are missing.
+        public var segment: PlaybackSegment? {
+            guard let startTicks, let endTicks, let kind = Self.kind(for: type) else { return nil }
+            return PlaybackSegment(
+                kind: kind,
+                start: Double(startTicks) / 10_000_000,
+                end: Double(endTicks) / 10_000_000
+            )
+        }
+
+        static func kind(for type: String?) -> PlaybackSegment.Kind? {
+            switch type?.lowercased() {
+            case "intro":      return .intro
+            case "outro":      return .credits
+            case "recap":      return .recap
+            case "preview":    return .preview
+            case "commercial": return .commercial
+            default:           return nil
+            }
+        }
+    }
+
     public struct BaseItemDto: Decodable, Sendable, Equatable {
         public let id: String
         public let name: String?
@@ -86,6 +130,9 @@ public enum JellyfinAPI {
         public let imageTags: [String: String]?
         public let backdropImageTags: [String]?
         public let mediaSources: [MediaSourceInfo]?
+        /// For episodes: the parent season's id (`ParentId`) — Auto-Play-Next
+        /// fetches the season's episodes from it.
+        public let parentId: String?
         /// External-ID map, e.g. `{"Tmdb":"12345","Imdb":"tt0083658"}`. Basis
         /// for Unified Library dedup.
         public let providerIds: [String: String]?
@@ -174,6 +221,7 @@ public enum JellyfinAPI {
             case imageTags = "ImageTags"
             case backdropImageTags = "BackdropImageTags"
             case mediaSources = "MediaSources"
+            case parentId = "ParentId"
             case providerIds = "ProviderIds"
             case userData = "UserData"
         }
