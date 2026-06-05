@@ -57,7 +57,9 @@ struct LibraryBrowseView: View {
                     content
                 }
             }
-            #if os(iOS) || os(visionOS)
+            // `scrollDismissesKeyboard` is unavailable on visionOS; tap-outside
+            // + Search/Done still dismiss there.
+            #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
             .background(AetherDesign.Gradients.background.ignoresSafeArea())
