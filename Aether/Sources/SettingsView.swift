@@ -94,6 +94,7 @@ struct SettingsView: View {
         .sheet(isPresented: $isWhatsNewPresented) {
             WhatsNewSheet(
                 version: viewModel.versionString,
+                codename: viewModel.releaseCodename,
                 bullets: viewModel.whatsNewBullets
             ) { isWhatsNewPresented = false }
         }
@@ -634,6 +635,7 @@ private struct PreferencePickerSheet<Content: View>: View {
 /// Mirrors `PreferencePickerSheet`'s container so the two modals feel identical.
 private struct WhatsNewSheet: View {
     let version: String
+    let codename: String
     let bullets: [String]
     let onClose: () -> Void
 
@@ -643,7 +645,7 @@ private struct WhatsNewSheet: View {
                 Text("What's New")
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("Version \(version)")
+                Text("Version \(version) · “\(codename)”")
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
