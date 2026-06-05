@@ -96,6 +96,11 @@ public protocol MediaSource: Sendable {
     /// when the source has no segment data, so skip controls stay hidden.
     /// Aether never detects these locally. Default: none.
     func segments(for id: MediaID) async -> [PlaybackSegment]
+
+    /// The next episode after `id` within the same season (Auto-Play-Next), or
+    /// `nil`. The default resolves it generically from `item(for:)` + `parentID`
+    /// + `children(of:)`, so any source that populates those gets it for free.
+    func nextEpisode(after id: MediaID) async -> MediaItem?
 }
 
 public extension MediaSource {
@@ -130,6 +135,20 @@ public extension MediaSource {
 
     /// Default: no segment data. Plex / Jellyfin override.
     func segments(for id: MediaID) async -> [PlaybackSegment] { [] }
+
+    /// Generic next-episode resolver: hydrate the item, fetch its season's
+    /// episodes, return the one after it. Works for any source that fills in
+    /// `parentID` and implements `children(of:)`. Same-season only (v1);
+    /// returns `nil` at a season boundary.
+    func nextEpisode(after id: MediaID) async -> MediaItem? {
+        guard let current = try? await item(for: id),
+              current.kind == .episode,
+              let parent = current.parentID else { return nil }
+        let siblings = (try? await children(of: parent)) ?? []
+        guard let index = siblings.firstIndex(where: { $0.id == id }),
+              index + 1 < siblings.count else { return nil }
+        return siblings[index + 1]
+    }
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
     func children(of id: MediaID) async throws -> [MediaItem] { [] }

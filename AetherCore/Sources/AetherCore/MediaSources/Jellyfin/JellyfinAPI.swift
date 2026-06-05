@@ -130,6 +130,9 @@ public enum JellyfinAPI {
         public let imageTags: [String: String]?
         public let backdropImageTags: [String]?
         public let mediaSources: [MediaSourceInfo]?
+        /// For episodes: the parent season's id (`ParentId`) — Auto-Play-Next
+        /// fetches the season's episodes from it.
+        public let parentId: String?
         /// External-ID map, e.g. `{"Tmdb":"12345","Imdb":"tt0083658"}`. Basis
         /// for Unified Library dedup.
         public let providerIds: [String: String]?
@@ -218,6 +221,7 @@ public enum JellyfinAPI {
             case imageTags = "ImageTags"
             case backdropImageTags = "BackdropImageTags"
             case mediaSources = "MediaSources"
+            case parentId = "ParentId"
             case providerIds = "ProviderIds"
             case userData = "UserData"
         }

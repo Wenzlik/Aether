@@ -29,6 +29,11 @@ struct PlayerView: View {
     /// Segments already auto-skipped this session, so `.automatically` fires
     /// once per segment instead of on every time tick.
     @State private var autoSkipped: Set<String> = []
+    /// The resolved next episode (Auto-Play-Next), fetched on open.
+    @State private var nextItem: MediaItem?
+    /// Seconds left on the "Next Episode" countdown; `nil` when not counting.
+    @State private var countdownRemaining: Int?
+    @State private var countdownTask: Task<Void, Never>?
 
     /// Chrome auto-hide window — short, so controls don't linger over the video.
     private static let chromeIdleHide: Duration = .milliseconds(2500)
@@ -102,8 +107,14 @@ struct PlayerView: View {
 
             skipOverlay
                 .zIndex(25)
+
+            nextEpisodeOverlay
+                .zIndex(26)
         }
-        .onChange(of: viewModel.currentSeconds) { _, _ in autoSkipIfNeeded() }
+        .onChange(of: viewModel.currentSeconds) { _, _ in
+            autoSkipIfNeeded()
+            updateNextEpisodePrompt()
+        }
         #if os(iOS)
         // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome intact
         // while letting us mirror its visibility on the Back button. Without the
@@ -113,11 +124,13 @@ struct PlayerView: View {
         #endif
         .task {
             await viewModel.open(item, source: source, startAt: startAt)
+            await loadNextItem()
             #if os(iOS)
             if viewModel.player != nil { scheduleChromeHide() }
             #endif
         }
         .onDisappear {
+            cancelCountdown()
             Task { await viewModel.close() }
             // `onDisappear` is the reliable "player is gone" signal — it fires
             // even when the system dismisses a *docked* player without our Back
@@ -138,11 +151,16 @@ struct PlayerView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
             guard let current = viewModel.player?.currentItem,
                   (note.object as? AVPlayerItem) === current else { return }
-            // Played to the end → mark watched on the source server (Plex
-            // scrobble / Jellyfin PlayedItems) so the state syncs everywhere,
-            // not just in Aether. Best-effort; independent of teardown.
-            if let source { Task { await source.markWatched(item.id) } }
-            Task { await dismissPlayer() }
+            // Played to the end → auto-advance to the next episode if enabled
+            // and one exists (`playNext` also marks the finished one watched);
+            // otherwise mark watched and dismiss.
+            if autoPlayNext, nextItem != nil {
+                Task { await playNext() }
+            } else {
+                let finishedID = viewModel.state.item?.id ?? item.id
+                if let source { Task { await source.markWatched(finishedID) } }
+                Task { await dismissPlayer() }
+            }
         }
         #if os(tvOS)
         .onExitCommand { Task { await dismissPlayer() } }
@@ -176,7 +194,8 @@ struct PlayerView: View {
                 Spacer()
                 if introMode == .button, let intro = activeIntro {
                     skipButton("Skip Intro", to: intro.end)
-                } else if creditsMode == .button, let credits = activeCredits {
+                } else if creditsMode == .button, let credits = activeCredits, countdownRemaining == nil {
+                    // The Next Episode countdown card supersedes Skip Credits.
                     skipButton("Skip Credits", to: credits.end)
                 }
             }
@@ -188,6 +207,110 @@ struct PlayerView: View {
         AetherButton(title, systemImage: "forward.end.fill", role: .secondary) {
             Task { await viewModel.skip(toContentSeconds: target) }
         }
+    }
+
+    // MARK: - Auto-Play-Next
+
+    private var autoPlayNext: Bool { playbackPreferences?.autoPlayNext ?? true }
+
+    /// Credits segment active right now (independent of the Skip Credits mode —
+    /// auto-play has its own setting).
+    private var creditsForNext: PlaybackSegment? {
+        viewModel.segments.creditsSegment(at: viewModel.currentSeconds)
+    }
+
+    /// Bottom-trailing "Up Next" card with a live countdown — shown while inside
+    /// the credits segment when Auto-Play-Next is on and a next episode exists.
+    @ViewBuilder
+    private var nextEpisodeOverlay: some View {
+        if let remaining = countdownRemaining, let next = nextItem {
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                        Text("Up Next")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        Text(next.displayTitle)
+                            .font(AetherDesign.Typography.cardTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                            .lineLimit(2)
+                        Text("Starting in \(remaining)s")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        HStack(spacing: AetherDesign.Spacing.s) {
+                            AetherButton("Play Now", systemImage: "play.fill", role: .primary) {
+                                Task { await playNext() }
+                            }
+                            AetherButton("Dismiss", role: .secondary) {
+                                cancelCountdown()
+                            }
+                        }
+                        .padding(.top, AetherDesign.Spacing.xs)
+                    }
+                    .padding(AetherDesign.Spacing.l)
+                    .frame(maxWidth: 380, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                            .fill(AetherDesign.Materials.card)
+                    )
+                }
+            }
+            .padding(AetherDesign.Spacing.xl)
+        }
+    }
+
+    /// Resolve the episode after whatever is currently playing.
+    private func loadNextItem() async {
+        let currentID = viewModel.state.item?.id ?? item.id
+        nextItem = await source?.nextEpisode(after: currentID)
+    }
+
+    /// Enter / leave the credits region drives the countdown.
+    private func updateNextEpisodePrompt() {
+        guard autoPlayNext, nextItem != nil else { cancelCountdown(); return }
+        if creditsForNext != nil {
+            if countdownRemaining == nil { startCountdown() }
+        } else {
+            cancelCountdown()
+        }
+    }
+
+    private func startCountdown() {
+        let total = playbackPreferences?.nextEpisodeCountdown ?? 10
+        countdownRemaining = total
+        countdownTask?.cancel()
+        countdownTask = Task { @MainActor in
+            var remaining = total
+            while remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                remaining -= 1
+                countdownRemaining = remaining
+            }
+            await playNext()
+        }
+    }
+
+    private func cancelCountdown() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        countdownRemaining = nil
+    }
+
+    /// Advance to the next episode in place — reuse the same player/session.
+    /// Marks the finished episode watched, then opens the next and pre-resolves
+    /// the one after it.
+    private func playNext() async {
+        guard let next = nextItem else { return }
+        cancelCountdown()
+        let finishedID = viewModel.state.item?.id ?? item.id
+        if let source { await source.markWatched(finishedID) }
+        autoSkipped = []
+        nextItem = nil
+        await viewModel.open(next, source: source, startAt: 0)
+        await loadNextItem()
     }
 
     /// For the "Automatically" mode: seek past a segment the moment it starts,
