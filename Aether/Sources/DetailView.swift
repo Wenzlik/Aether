@@ -217,6 +217,10 @@ struct DetailView: View {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        // Clamp the overview for shows so the seasons rail surfaces
+                        // sooner (it's the only focusable target on tvOS); movies
+                        // show the full synopsis.
+                        .lineLimit(item.kind.isContainer ? 3 : nil)
                         .padding(.horizontal, AetherDesign.Spacing.l)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
@@ -244,10 +248,17 @@ struct DetailView: View {
     }
 
     private var backdropMaxHeight: CGFloat {
+        // Shows put their seasons rail directly below the hero. On tvOS the only
+        // way to scroll is to move focus onto a focusable element (a season
+        // card), so a tall backdrop that pushes the seasons off-screen traps
+        // focus entirely — the user can't move, and Menu exits the app. Use a
+        // shorter backdrop for containers (shows) so the seasons sit on-screen
+        // and are reachable on first appearance. Movies keep the full hero.
+        let isContainer = item.kind.isContainer
         #if os(tvOS)
-        560
+        return isContainer ? 300 : 560
         #else
-        420
+        return isContainer ? 240 : 420
         #endif
     }
 
@@ -291,6 +302,11 @@ struct DetailView: View {
             }
             .padding(.vertical, AetherDesign.Spacing.xs)
         }
+        // tvOS: mark the horizontal rail as a focus section so Up escapes it
+        // back to the tab bar (there's no focusable element above it on a show
+        // detail). Without this, focus is trapped in the rail. Matches the
+        // Home / Library rails; the episodes list is vertical so it doesn't need it.
+        .aetherDetailFocusSection()
     }
 
     private var episodesList: some View {
@@ -1168,5 +1184,19 @@ struct DetailView: View {
     private func durationSeconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+}
+
+private extension View {
+    /// Apply `.focusSection()` on tvOS so the focus engine can move into and
+    /// **out of** this region (e.g. Up from the seasons rail back to the tab
+    /// bar). No-op elsewhere — the API is tvOS-only.
+    @ViewBuilder
+    func aetherDetailFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
     }
 }
