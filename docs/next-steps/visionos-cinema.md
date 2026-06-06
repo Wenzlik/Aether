@@ -148,11 +148,63 @@ architecture.
 
 ---
 
-## Future (designed-for, NOT in V1)
+## Part 4 — Enhanced Cinema V2 (0.5.5)
 
-- **Phase 2 — Enhanced Cinema:** authored Dark Theater `.usda` + custom
-  `DockingRegion` (precise placement) → real Medium/Large/IMAX presets; floor
-  media reflections; smoother transitions.
+Grounded in a visionOS-26 API research pass (see commit history). The work splits
+into two tracks by what's achievable in pure code vs. what needs authored assets.
+
+### Track A — premium environment (SHIPPED, code-only, no asset pipeline)
+
+`DarkTheaterView` was rewritten to replace the empty black-wall/gray-floor/violet-
+line look with a premium screening room, all procedural RealityKit:
+
+- **Image-based lighting** is now the primary light: a 1024×512 dark-violet
+  gradient is drawn in Core Graphics, turned into an `EnvironmentResource`
+  (`init(equirectangular:)`) and applied via `ImageBasedLightComponent`
+  (`intensityExponent` negative to stay dark) on an IBL entity; the floor carries
+  an `ImageBasedLightReceiverComponent` (set per-entity — it does **not** inherit
+  from the root). Replaces V1's two bare point lights.
+- **Glossy clearcoat floor** (`PhysicallyBasedMaterial`, roughness ~0.18,
+  clearcoat 1.0) reflects the IBL gradient + its baked screen-glow band as a soft
+  on-floor pool — the luxury-screening-room cue.
+- **Dark skybox** (inverted/`faceCulling = .none` sphere with the gradient
+  texture) encloses the void; **emissive cove strips** + a **screen-bloom panel**
+  (`UnlitMaterial`, which glows but does not light other surfaces — the floor
+  spill comes from the IBL band, not these); **grounding shadows** + one dim
+  directional key light for contact shadow.
+- **Transitions:** passthrough dims to `.systemDark` over ~1.4 s on enter (the
+  "house lights down"); immersion now defaults to **`.progressive`** so the
+  Digital Crown blends the real room back in (Apple TV+ / Disney+ behaviour).
+
+All values are first-pass and **must be tuned on a real Vision Pro** — the
+Simulator misjudges scale, reflections, and passthrough dimming.
+
+### Track B — real presets + literal video reflection (DEFERRED, asset-gated)
+
+Both require authored **Reality Composer Pro** content and a new build-pipeline
+dependency the repo doesn't have. They are NOT doable in pure code:
+
+- **Screen-size presets (Medium/Large/IMAX/Wall):** there is **no public Swift
+  API to construct a `DockingRegion`** and it is silently ignored unless its
+  environment is the player's *active* environment (via
+  `.immersiveEnvironmentPicker`). Presets = one authored `.usda` per size, each
+  with a `DockingRegionComponent` at a different width/position. (Do **not** scale
+  a video entity — that's the V1 failure. `CinemaScreenPreset.relativeScale` must
+  never touch `entity.scale`; repurpose `widthMetres` as the authored dock width.)
+  The box is a fixed 2.4:1 and only scales content *down*, so "IMAX" is partly
+  perceptual — discrete presets + Digital-Crown immersion, mirroring Apple's
+  Cinema, not free scaling.
+- **Literal moving-video floor reflection:** only exists as the RCP ShaderGraph
+  `Reflection_Specular` / `Reflection_Diffuse` nodes on the floor material. The
+  code-only floor reflects the *room/screen glow*, never the live picture.
+
+When Track B lands: add a RealityKitContent package (visionOS-scoped) in
+`project.yml`, per-preset `ImmersiveSpace(id:)` scenes wired through
+`.immersiveEnvironmentPicker`, a `CinemaScreenPreset → spaceID` mapping, and a
+`CinemaPreferencesStore` for the persisted default.
+
+## Future (designed-for, NOT yet built)
+
 - **Phase 3 — Premium Immersion:** Nebula / Deep Space / Orbit Station (already
   enumerated in `CinemaEnvironment`).
 - **Phase 4 — Advanced:** SharePlay (`AVPlaybackCoordinator` +

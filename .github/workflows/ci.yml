@@ -62,3 +62,41 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
+
+  # Compile-only builds for the platforms the iOS test job doesn't cover, so
+  # visionOS / tvOS-only code (immersive cinema, focus sections, gated SwiftUI
+  # APIs) can't pass iOS CI green and then break the Xcode Cloud archive.
+  # Generic simulator destinations avoid pinning to a specific device name.
+  platform-builds:
+    name: Build (${{ matrix.platform }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [visionOS, tvOS]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -switch "$LATEST"; fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (${{ matrix.platform }} Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Aether.xcodeproj \
+            -scheme Aether \
+            -destination "generic/platform=${{ matrix.platform }} Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
