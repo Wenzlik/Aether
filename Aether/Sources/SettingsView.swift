@@ -154,11 +154,14 @@ struct SettingsView: View {
     }
 
     /// iPhone: a single column. Source health lives inline in the Sources
-    /// section (the Offline row), so the phone doesn't need the separate status
-    /// cards the wide dashboard shows.
+    /// section (the Offline row), so the phone doesn't need the *status* cards
+    /// the wide dashboard shows — but the **Cache** card has no other home, so
+    /// it's appended here too (otherwise "Clear Image Cache" was invisible on
+    /// iPhone, where only this column renders).
     private var compactColumn: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
             controlSections
+            imageCacheCard
         }
     }
 
