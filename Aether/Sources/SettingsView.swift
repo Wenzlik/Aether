@@ -139,20 +139,29 @@ struct SettingsView: View {
                 controlSections
             }
             .frame(maxWidth: .infinity, alignment: .top)
+            // tvOS: mark each column a focus section so a Right/Left press jumps
+            // between them. Without this, the right column's only focusable row
+            // (Clear Image Cache, below non-focusable status rows) had no
+            // horizontally-aligned target and focus could never reach it.
+            .aetherFocusSection()
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 dashboardCards
             }
             .frame(maxWidth: .infinity, alignment: .top)
+            .aetherFocusSection()
         }
     }
 
     /// iPhone: a single column. Source health lives inline in the Sources
-    /// section (the Offline row), so the phone doesn't need the separate status
-    /// cards the wide dashboard shows.
+    /// section (the Offline row), so the phone doesn't need the *status* cards
+    /// the wide dashboard shows — but the **Cache** card has no other home, so
+    /// it's appended here too (otherwise "Clear Image Cache" was invisible on
+    /// iPhone, where only this column renders).
     private var compactColumn: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
             controlSections
+            imageCacheCard
         }
     }
 
@@ -782,5 +791,18 @@ private struct WhatsNewSheet: View {
         .background(AetherDesign.Palette.background.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+private extension View {
+    /// Apply `.focusSection()` on tvOS so the focus engine can move between the
+    /// two dashboard columns; no-op elsewhere (the API is tvOS-only).
+    @ViewBuilder
+    func aetherFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
     }
 }

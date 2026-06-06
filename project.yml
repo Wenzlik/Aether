@@ -29,7 +29,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.5.0"
+    MARKETING_VERSION: "0.5.1"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -64,6 +64,11 @@ targets:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Clear per-build identifier (short git commit), stamped into the built
+        # Info.plist by the "Stamp git commit" build phase below. Default "dev"
+        # is what shows if the stamp ever fails to run. Surfaced in Settings →
+        # About; unlike CFBundleVersion it's meaningful on local builds too.
+        AetherGitCommit: dev
         ITSAppUsesNonExemptEncryption: false
         # iOS / iPadOS / visionOS read the launch screen + scene manifest;
         # tvOS ignores them harmlessly.
@@ -119,6 +124,24 @@ targets:
       path: Aether/SupportingFiles/Aether.entitlements
       properties:
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+    # Stamp the short git commit into the built Info.plist's AetherGitCommit key,
+    # so every build (local Xcode included, where CFBundleVersion is always "1")
+    # carries a clear identifier. Runs against the checked-out repo, so it works
+    # locally and on Xcode Cloud. Best-effort: falls back to "dev" if git is
+    # unavailable, and never fails the build.
+    postBuildScripts:
+      - name: Stamp git commit
+        basedOnDependencyAnalysis: false
+        script: |
+          set +e
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          [ -f "$PLIST" ] || exit 0
+          HASH=$(git -C "$SRCROOT" rev-parse --short HEAD 2>/dev/null)
+          [ -z "$HASH" ] && HASH="dev"
+          if ! git -C "$SRCROOT" diff --quiet HEAD 2>/dev/null; then HASH="${HASH}+"; fi
+          /usr/libexec/PlistBuddy -c "Set :AetherGitCommit ${HASH}" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :AetherGitCommit string ${HASH}" "$PLIST"
+          exit 0
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether

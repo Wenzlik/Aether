@@ -118,9 +118,19 @@ struct HomeView: View {
         VStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.large)
                 .frame(maxWidth: .infinity)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
             #if os(tvOS)
-            AetherTVReloadButton { Task { await load() } }
+            // tvOS has no pull-to-refresh, so Reload sits to the right of a
+            // right-sized search field — a single Right press from the field
+            // lands on it, instead of being stranded full-width below.
+            HStack(spacing: AetherDesign.Spacing.m) {
+                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                    .frame(maxWidth: 760)
+                AetherTVReloadButton { Task { await load() } }
+                    .frame(width: 260)
+            }
+            .frame(maxWidth: .infinity)
+            #else
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
             #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)

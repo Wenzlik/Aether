@@ -55,13 +55,19 @@ struct DetailView: View {
     @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
+    /// Similar titles for the "More Like This" rail (source recommendations).
+    @State private var related: [MediaItem] = []
     /// Series detail only — the season the inline episode list is showing.
     /// Defaults to the first season once `children` (the show's seasons) load.
     @State private var selectedSeason: MediaItem?
     /// Episodes of `selectedSeason`, shown inline (no navigation into a season).
     @State private var seasonEpisodes: [MediaItem] = []
     @State private var isLoadingEpisodes = false
-    /// Saved resume position for the "Next Up" episode, when one exists — drives
+    /// The series "On Deck" episode — the next one to watch across the *whole*
+    /// show (the first unwatched episode of the first not-fully-watched season).
+    /// Computed once on load and stays put while the user browses other seasons.
+    @State private var nextUpEpisode: MediaItem?
+    /// Saved resume position for the On Deck episode, when one exists — drives
     /// the "Resume from m:ss" caption on the Next Up card.
     @State private var nextUpResume: ResumePoint?
     /// The item with full metadata (audio + subtitle streams, partID,
@@ -93,13 +99,14 @@ struct DetailView: View {
     /// sheet pattern but enqueues a download instead of recording a
     /// selection on the item.
     private enum PlaybackSelector: Identifiable {
-        case audio, subtitles, quality, downloadQuality
+        case audio, subtitles, quality, downloadQuality, technicalDetails
         var id: String {
             switch self {
             case .audio: return "audio"
             case .subtitles: return "subtitles"
             case .quality: return "quality"
             case .downloadQuality: return "downloadQuality"
+            case .technicalDetails: return "technicalDetails"
             }
         }
     }
@@ -132,11 +139,17 @@ struct DetailView: View {
         ZStack {
             GeometryReader { geo in
                 Group {
-                    // Shows always use the stacked layout — the cinematic
-                    // hero-background column is movie-oriented and too narrow for
-                    // a season's episode list. Movies / episodes still go wide on
-                    // roomy surfaces.
-                    if isWideLayout(geo.size) && !isShow {
+                    if isShow {
+                        // Shows use the stacked series layout (Next Up → seasons →
+                        // episodes); the cinematic hero is movie-oriented.
+                        scrollContent
+                    } else if item.kind == .movie {
+                        // Movies get the cinematic hero on every platform — the
+                        // backdrop is the screen, content embedded over it.
+                        movieContent(geo.size)
+                    } else if isWideLayout(geo.size) {
+                        // Episodes (and other non-movie playables) keep the
+                        // responsive wide / stacked split.
                         wideContent
                     } else {
                         scrollContent
@@ -176,6 +189,7 @@ struct DetailView: View {
             await hydrateForPlayback()
             await loadChildrenIfNeeded()
             await setupSeasonsIfNeeded()
+            related = await source?.related(to: activeItem.id) ?? []
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
@@ -396,6 +410,150 @@ struct DetailView: View {
         #endif
     }
 
+    // MARK: - Movie layout (cinematic hero, every platform)
+
+    /// The redesigned movie screen: a full-bleed backdrop hero with the title,
+    /// metadata, source + capability badges, a short overview and the primary
+    /// actions embedded over it — content-first, configuration second. Playback
+    /// settings sit *below* the hero (most users never touch them), and the
+    /// technical readout moves into the "More" menu.
+    private func movieContent(_ size: CGSize) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                movieHero(size)
+
+                // Below the fold: discovery first, then configuration (kept
+                // secondary — most users never touch playback settings).
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                    relatedRail
+                    if current.streamURL != nil {
+                        playbackSection
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
+                    if availableSources.count > 1 {
+                        availableSourcesSection
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+            }
+            .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+
+    private func movieHero(_ size: CGSize) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            CachedAsyncImage(url: activeItem.backdropURL ?? activeItem.posterURL)
+                .frame(width: size.width, height: movieHeroHeight(size))
+                .clipped()
+                .overlay { movieHeroScrim }
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text(item.title)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+                HStack(spacing: AetherDesign.Spacing.s) {
+                    Text(metadataParts.joined(separator: " • "))
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    sourceBadge
+                    Spacer(minLength: 0)
+                }
+
+                mediaBadges
+
+                if let summary = item.summary {
+                    Text(summary)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                actionRow
+            }
+            .padding(AetherDesign.Spacing.l)
+            .frame(maxWidth: movieHeroContentWidth, alignment: .leading)
+        }
+        .frame(width: size.width, height: movieHeroHeight(size), alignment: .bottomLeading)
+    }
+
+    /// Bottom-anchored dark gradient — keeps the embedded content readable in
+    /// both portrait and landscape (unlike the wide layout's leading scrim).
+    private var movieHeroScrim: some View {
+        LinearGradient(
+            colors: [
+                .clear,
+                AetherDesign.Palette.background.opacity(0.55),
+                AetherDesign.Palette.background.opacity(0.96)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Hero height: most of the screen on tvOS / landscape (cinematic), a tall
+    /// upper portion in portrait so the content still hints at scroll below.
+    private func movieHeroHeight(_ size: CGSize) -> CGFloat {
+        #if os(tvOS)
+        return size.height * 0.80
+        #else
+        return size.width > size.height ? size.height * 0.82 : size.height * 0.60
+        #endif
+    }
+
+    /// Cap the embedded content column on roomy surfaces so lines stay readable;
+    /// fills the width on a phone.
+    private var movieHeroContentWidth: CGFloat {
+        #if os(tvOS)
+        900
+        #else
+        640
+        #endif
+    }
+
+    // MARK: - More Like This
+
+    /// Source-recommended similar titles. Each card navigates the per-source
+    /// `MediaItem`, opening its own Detail. Hidden when the source returns none.
+    @ViewBuilder
+    private var relatedRail: some View {
+        if !related.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text("More Like This")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: AetherDesign.Spacing.l) {
+                        ForEach(related) { rel in
+                            NavigationLink(value: rel) {
+                                AetherCard.poster(
+                                    title: rel.title,
+                                    posterURL: rel.posterURL,
+                                    isWatched: rel.isWatched
+                                )
+                                .frame(width: relatedPosterWidth)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, AetherDesign.Spacing.xs)
+                }
+                .aetherDetailFocusSection()
+            }
+        }
+    }
+
+    private var relatedPosterWidth: CGFloat {
+        #if os(tvOS)
+        220
+        #else
+        120
+        #endif
+    }
+
     // MARK: - Children (seasons / episodes)
 
     @ViewBuilder
@@ -525,6 +683,7 @@ struct DetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
+                relatedRail
                 seriesDetailsSection
                 if availableSources.count > 1 {
                     availableSourcesSection
@@ -532,13 +691,6 @@ struct DetailView: View {
                 }
             }
         }
-    }
-
-    /// The episode to surface as "Next Up": the first unwatched episode of the
-    /// selected season (falls back to nothing when the season is fully watched —
-    /// the card then stays hidden rather than nudging a rewatch).
-    private var nextUpEpisode: MediaItem? {
-        seasonEpisodes.first { !$0.isWatched }
     }
 
     /// "On Deck"-style card: thumbnail + episode code + title, with a resume
@@ -712,21 +864,40 @@ struct DetailView: View {
 
     // MARK: - Series loading
 
-    /// Once the show's seasons (`children`) are loaded, default to the first one
-    /// and pull its episodes. Idempotent — only sets up while no season is
-    /// selected, so re-running the `.task` after hydration doesn't reset the
-    /// user's season choice.
+    /// Once the show's seasons (`children`) load, default browsing to the season
+    /// the user is actually in — the first season with unwatched episodes (true
+    /// On Deck), via the per-season `unwatchedEpisodeCount` — instead of always
+    /// Season 1. Then compute the series' Next Up from that season's episodes.
+    /// Idempotent — only runs while no season is selected, so re-running the
+    /// `.task` after hydration doesn't reset the user's manual season choice.
     private func setupSeasonsIfNeeded() async {
-        guard isShow, selectedSeason == nil, let first = children.first else { return }
-        selectedSeason = first
-        await loadSeasonEpisodes(first)
+        guard isShow, selectedSeason == nil, !children.isEmpty else { return }
+        let deck = children.first { ($0.unwatchedEpisodeCount ?? 0) > 0 } ?? children.first
+        selectedSeason = deck
+        guard let deck else { return }
+        await loadSeasonEpisodes(deck)
+        await computeNextUp(from: seasonEpisodes)
+    }
+
+    /// The series On Deck episode + its resume point, derived from the deck
+    /// season's episodes. Stays fixed while the user browses other seasons, so
+    /// the Next Up card always points at where they left off in the show.
+    private func computeNextUp(from episodes: [MediaItem]) async {
+        guard let candidate = episodes.first(where: { !$0.isWatched }) else {
+            nextUpEpisode = nil
+            nextUpResume = nil
+            return
+        }
+        nextUpEpisode = candidate
+        nextUpResume = await resumeStore.point(for: candidate.id)
     }
 
     private func selectSeason(_ season: MediaItem) {
         guard season.id != selectedSeason?.id else { return }
         selectedSeason = season
         seasonEpisodes = []
-        nextUpResume = nil
+        // Note: the Next Up card tracks the whole series, so it deliberately
+        // stays put when the user browses to a different season.
         Task { await loadSeasonEpisodes(season) }
     }
 
@@ -739,9 +910,6 @@ struct DetailView: View {
             // Bail if the user switched seasons while this was in flight.
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = episodes
-            if let candidate = episodes.first(where: { !$0.isWatched }) {
-                nextUpResume = await resumeStore.point(for: candidate.id)
-            }
         } catch {
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = []
@@ -836,7 +1004,37 @@ struct DetailView: View {
                 labels.append(audio)
             }
         }
+        // Surface Atmos as its own chip when the codec string advertises it
+        // (e.g. "EAC3 (Atmos)"); harmless no-op when the source doesn't report it.
+        if let audio = info.audioCodec?.lowercased(), audio.contains("atmos") {
+            labels.append("Atmos")
+        }
         return labels
+    }
+
+    // MARK: - Source badge
+
+    /// The active source as a short uppercase tag (PLEX / JELLYFIN / OFFLINE /
+    /// EMBY). Prefers the matching unified source's kind; falls back to the
+    /// item's own source id. `nil` when it can't be determined.
+    private var sourceLabel: String? {
+        if let match = availableSources.first(where: { $0.item.id == activeItem.id }) {
+            return match.kind.displayName.uppercased()
+        }
+        return MediaSourceKind(streaming: activeItem.id.source)?.displayName.uppercased()
+    }
+
+    @ViewBuilder
+    private var sourceBadge: some View {
+        if let label = sourceLabel {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .tracking(0.5)
+                .padding(.horizontal, AetherDesign.Spacing.xs)
+                .padding(.vertical, 3)
+                .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        }
     }
 
     // MARK: - Available Sources (manual source override)
@@ -929,6 +1127,7 @@ struct DetailView: View {
         configuredItem = nil
         playbackItem = nil
         children = []
+        related = []
         resume = nil
         watchedOverride = nil   // the new source carries its own watched state
         overrideItem = (src.item.id == item.id) ? nil : src.item
@@ -951,27 +1150,69 @@ struct DetailView: View {
                 if shouldShowDownloadControl {
                     downloadControl
                 }
-                markWatchedButton
+                moreActionsMenu
             }
         } else {
             unavailableState
         }
     }
 
-    /// Manual "Mark as Watched / Unwatched" — writes the play state back to the
-    /// source server (Plex scrobble / Jellyfin PlayedItems) and flips the local
-    /// display optimistically. Shown for playable, non-container items (movies +
-    /// episodes); hidden when there's no connector to update.
+    /// Secondary actions folded into one unobtrusive menu, so the hero stays
+    /// playback-first (replaces the big "Mark as Watched" button). Surfaces
+    /// Mark Watched/Unwatched, source switching, and the full technical readout.
     @ViewBuilder
-    private var markWatchedButton: some View {
-        if source != nil {
-            AetherButton(
-                isWatched ? "Mark as Unwatched" : "Mark as Watched",
-                systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle",
-                role: .secondary
-            ) {
-                Task { await toggleWatched() }
+    private var moreActionsMenu: some View {
+        Menu {
+            if source != nil {
+                Button {
+                    Task { await toggleWatched() }
+                } label: {
+                    Label(
+                        isWatched ? "Mark as Unwatched" : "Mark as Watched",
+                        systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle"
+                    )
+                }
             }
+
+            if availableSources.count > 1 {
+                Menu {
+                    ForEach(availableSources) { src in
+                        Button {
+                            selectSource(src)
+                        } label: {
+                            if src.item.id == activeItem.id {
+                                Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(src.serverName ?? src.kind.displayName)
+                            }
+                        }
+                        .disabled(!src.playable)
+                    }
+                } label: {
+                    Label("Choose Source", systemImage: "rectangle.2.swap")
+                }
+            }
+
+            if current.mediaInfo != nil {
+                Button {
+                    presentedSelector = .technicalDetails
+                } label: {
+                    Label("Technical Details", systemImage: "info.circle")
+                }
+            }
+        } label: {
+            HStack(spacing: AetherDesign.Spacing.xs) {
+                Image(systemName: "ellipsis.circle")
+                Text("More")
+            }
+            .font(AetherDesign.Typography.cardTitle)
+            .foregroundStyle(AetherDesign.Palette.textPrimary)
+            .padding(.vertical, AetherDesign.Spacing.s)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .frame(maxWidth: .infinity)
+            .background(AetherDesign.Materials.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(AetherDesign.Palette.separator, lineWidth: 1))
+            .contentShape(Capsule())
         }
     }
 
@@ -1247,6 +1488,20 @@ struct DetailView: View {
             playbackSelectorContent(title: "Download Quality") {
                 downloadQualitySelectorList
             }
+        case .technicalDetails:
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                    Text("Technical Details")
+                        .font(AetherDesign.Typography.sectionTitle)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    mediaSection
+                }
+                .padding(AetherDesign.Spacing.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(AetherDesign.Palette.background.ignoresSafeArea())
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 

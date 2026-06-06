@@ -4,6 +4,56 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.1] — Unreleased · "Boötes"
+
+### Added
+
+- **Build identifier in About.** Settings → About now shows the short git commit
+  the build was cut from (e.g. "Version 0.5.1 (a1b2c3d)"), stamped into the
+  Info.plist at build time — so local builds are distinguishable instead of all
+  reading build "1" (only Xcode Cloud injects a real `CFBundleVersion`). A `+`
+  suffix flags uncommitted changes.
+- **"More Like This" on Detail.** Movie and show screens now show a rail of
+  similar titles from the source's own recommendations (Plex related hubs,
+  Jellyfin `/Similar`) — content discovery sits above the playback settings.
+- **Redesigned Movie Detail.** Movies now open into a cinematic full-bleed
+  backdrop hero on every platform, with the title, year • runtime • Movie, a
+  **source badge** (PLEX / JELLYFIN / OFFLINE), capability badges (4K / HDR /
+  Dolby Vision / codec / Atmos), a short overview and the play actions embedded
+  over the artwork — content first. A **More** menu folds away the secondary
+  actions (Mark Watched/Unwatched · Choose Source · Technical Details), and the
+  Audio / Subtitles / Quality controls move *below* the hero. (TV shows keep
+  their dedicated season-first layout.)
+- **Series "Next Up" now follows where you are.** The Next Up card and the
+  default-selected season land on the season you're actually mid-watch (the
+  first with unwatched episodes), instead of always Season 1 — true On Deck.
+  It stays put while you browse other seasons. Uses per-season unwatched counts
+  from the server (Plex `viewedLeafCount`, Jellyfin `UnplayedItemCount`), so no
+  episode-by-episode fetching.
+
+### Fixed
+
+- **Every season read "Season 1" (Plex).** The season selector took its number
+  from the parent show's index instead of the season's own, so all seasons
+  showed "Season 1". They now number correctly; Jellyfin seasons/episodes also
+  carry their season & episode numbers (and series title) now.
+- **iPhone — "Clear Image Cache" was missing.** The Cache card lived only in the
+  Settings wide dashboard (iPad / tvOS / visionOS), so on iPhone — which renders
+  a single column — it never appeared. It's now shown on iPhone too.
+- **Detail screen trapped you across tab changes.** Opening a movie/show on one
+  tab, switching tabs, and switching back left the Detail screen still showing —
+  sometimes with no clear way back to the tab's root. Selecting any tab (Home /
+  Library / Discover / Search) now returns it to its **root**, and re-tapping the
+  active tab pops to root — the Apple TV / Netflix behaviour. Consistent across
+  iOS, iPadOS, tvOS and visionOS.
+- **tvOS — Settings right column was unreachable.** The "Clear Image Cache" row
+  (and the rest of the right-hand dashboard) couldn't be focused, because the
+  focus engine had no horizontally-aligned target to cross to. Each dashboard
+  column is now a focus section, so a Right/Left press moves between them.
+- **tvOS — Reload was stranded below search.** On Home and Library, Reload now
+  sits to the **right** of a right-sized search field, so it's reachable with a
+  single Right press from the field instead of being almost impossible to focus.
+
 ## [0.5.0] — Unreleased · "Boötes"
 
 A dedicated TV-show experience and a clearer Home / Library / Discover split,

@@ -886,9 +886,9 @@ struct PlexMediaSourceLibrariesTests {
         {
           "MediaContainer": {
             "Metadata": [
-              {"ratingKey":"201","type":"season","title":"Season 1",
+              {"ratingKey":"201","type":"season","title":"Season 1","index":1,"parentIndex":1,
                "thumb":"/library/metadata/201/thumb/1"},
-              {"ratingKey":"202","type":"season","title":"Season 2"}
+              {"ratingKey":"202","type":"season","title":"Season 2","index":2,"parentIndex":1}
             ]
           }
         }
@@ -906,8 +906,44 @@ struct PlexMediaSourceLibrariesTests {
         #expect(seasons.count == 2)
         #expect(seasons.map(\.kind) == [.season, .season])
         #expect(seasons.map(\.title) == ["Season 1", "Season 2"])
+        // Season number comes from the season's *own* index, not parentIndex
+        // (which is the show's index — 1 for both — and gave "Season 1" twice).
+        #expect(seasons.map(\.seasonNumber) == [1, 2])
+        #expect(seasons.allSatisfy { $0.episodeNumber == nil })
         // Seasons are containers — no stream URL.
         #expect(seasons.allSatisfy { $0.streamURL == nil })
+    }
+
+    @Test("related(to:) hits /hubs/metadata/{id}/related and flattens hubs, dropping self + dupes")
+    func relatedEndpointAndMapping() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Hub": [
+              {"title":"Related","Metadata":[
+                {"ratingKey":"10","type":"movie","title":"Alpha"},
+                {"ratingKey":"11","type":"movie","title":"Beta"}
+              ]},
+              {"title":"Similar","Metadata":[
+                {"ratingKey":"11","type":"movie","title":"Beta"},
+                {"ratingKey":"5","type":"movie","title":"Self"}
+              ]}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let movieID = MediaID(source: .plex(serverID: "test-server"), rawValue: "5")
+        let related = await source.related(to: movieID)
+
+        let recorded = await api.requests
+        #expect(recorded.last?.url?.path == "/hubs/metadata/5/related")
+        // "Self" (the item itself, ratingKey 5) and the duplicate Beta are dropped.
+        #expect(related.map(\.title) == ["Alpha", "Beta"])
     }
 
     @Test("items without Media (e.g. a show container) get a nil streamURL")
@@ -1948,6 +1984,23 @@ struct PlexMetadataTests {
         let release = try #require(dto.releaseDate)
         #expect(cal.dateComponents(in: TimeZone(identifier: "UTC")!, from: release).year == 2008)
         #expect(dto.dateAdded != nil)
+    }
+
+    @Test("viewedLeafCount yields the unwatched remainder; nil without leafCount")
+    func unwatchedLeafCount() throws {
+        let season = #"{"ratingKey":"3","type":"season","title":"Season 1","leafCount":10,"viewedLeafCount":4}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(season.utf8))
+        #expect(dto.unwatchedLeafCount == 6)
+
+        // No viewed count → all unwatched.
+        let fresh = #"{"ratingKey":"4","type":"season","title":"Season 2","leafCount":8}"#
+        let dtoFresh = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(fresh.utf8))
+        #expect(dtoFresh.unwatchedLeafCount == 8)
+
+        // No leafCount → unknown.
+        let movie = #"{"ratingKey":"5","type":"movie","title":"X"}"#
+        let dtoMovie = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(movie.utf8))
+        #expect(dtoMovie.unwatchedLeafCount == nil)
     }
 
     @Test("audienceRating preferred, falls back to rating")

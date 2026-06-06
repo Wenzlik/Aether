@@ -156,11 +156,26 @@ public enum JellyfinAPI {
         public let genres: [String]?
         /// For a Series: airing status (`Status`, e.g. "Continuing", "Ended").
         public let status: String?
+        /// For a season or episode: its own number (`IndexNumber`).
+        public let indexNumber: Int?
+        /// For an episode: its season's number (`ParentIndexNumber`).
+        public let parentIndexNumber: Int?
+        /// For an episode: the series title (`SeriesName`).
+        public let seriesName: String?
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
-            public init(played: Bool? = nil) { self.played = played }
-            enum CodingKeys: String, CodingKey { case played = "Played" }
+            /// For a season / series: how many episodes are still unplayed
+            /// (`UnplayedItemCount`). Drives Series Detail's On Deck.
+            public let unplayedItemCount: Int?
+            public init(played: Bool? = nil, unplayedItemCount: Int? = nil) {
+                self.played = played
+                self.unplayedItemCount = unplayedItemCount
+            }
+            enum CodingKeys: String, CodingKey {
+                case played = "Played"
+                case unplayedItemCount = "UnplayedItemCount"
+            }
         }
 
         /// External IDs as a typed `MediaGuids` (case-insensitive provider keys).
@@ -279,6 +294,9 @@ public enum JellyfinAPI {
             case communityRating = "CommunityRating"
             case genres = "Genres"
             case status = "Status"
+            case indexNumber = "IndexNumber"
+            case parentIndexNumber = "ParentIndexNumber"
+            case seriesName = "SeriesName"
         }
     }
 

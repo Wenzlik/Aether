@@ -286,6 +286,13 @@ struct JellyfinWatchedTests {
         let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
         #expect(!dto.isWatched)
     }
+
+    @Test("UserData.UnplayedItemCount decodes for a season (On Deck)")
+    func unplayedItemCount() throws {
+        let json = #"{"Id":"7","Name":"Season 1","Type":"Season","UserData":{"UnplayedItemCount":3}}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.userData?.unplayedItemCount == 3)
+    }
 }
 
 @Suite("Jellyfin — rich metadata")

@@ -191,6 +191,26 @@ public actor PlexMediaSource: MediaSource {
         return response.mediaContainer.metadata?.first?.segments ?? []
     }
 
+    /// Similar titles from Plex's related hubs (`/hubs/metadata/{id}/related`).
+    /// Flattens every hub, drops the item itself + duplicates, and maps to
+    /// `MediaItem`. Best-effort: `[]` on any failure, so the rail stays hidden.
+    public func related(to id: MediaID) async -> [MediaItem] {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return [] }
+        let request = request(base: base, path: "/hubs/metadata/\(id.rawValue)/related")
+        guard let response = try? await api.decode(
+            PlexAPI.RelatedHubsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+
+        var seen: Set<String> = [id.rawValue]
+        var items: [MediaItem] = []
+        for hub in response.mediaContainer.hub ?? [] {
+            for dto in hub.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                items.append(mapMetadataToMediaItem(dto, base: base))
+            }
+        }
+        return items
+    }
+
     /// Build a fresh playback URL for the request, mirroring Plex Web:
     ///
     /// 1. **PUT** `/library/parts/{partId}?audioStreamID=…&subtitleStreamID=…`
@@ -775,8 +795,12 @@ public actor PlexMediaSource: MediaSource {
             // parentIndex / index when the DTO is an episode. Movies
             // leave these nil; `displayTitle` collapses gracefully.
             seriesTitle: dto.grandparentTitle,
-            seasonNumber: dto.parentIndex,
-            episodeNumber: dto.index,
+            // For a season, its *own* `index` is the season number; for an
+            // episode, the season number is the parent's `index` and the episode
+            // number is its own `index`. (Using `parentIndex` for a season gave
+            // every season "Season 1" — the show's index — in the selector.)
+            seasonNumber: dto.kind == .season ? dto.index : dto.parentIndex,
+            episodeNumber: dto.kind == .episode ? dto.index : nil,
             selectedQuality: .original,
             guids: dto.guids,
             // Plex marks an item watched via `viewCount` (>= 1 play).
@@ -789,7 +813,9 @@ public actor PlexMediaSource: MediaSource {
             dateAdded: dto.dateAdded,
             seasonCount: dto.childCount,
             episodeCount: dto.leafCount,
-            endYear: nil   // Plex doesn't expose a series end year on list/detail
+            endYear: nil,   // Plex doesn't expose a series end year on list/detail
+            isContinuing: nil,
+            unwatchedEpisodeCount: dto.unwatchedLeafCount
         )
     }
 
