@@ -4,6 +4,30 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.7] — Unreleased · "Boötes"
+
+Artwork bandwidth — server-side resized posters (phase 1 of the artwork review).
+
+### Changed
+
+- **Posters & backdrops are now resized by the server**, not downloaded at full
+  resolution and shrunk locally. Plex uses its photo transcoder
+  (`/photo/:/transcode?width=&height=&minSize=1&upscale=0`); Jellyfin uses
+  `fillWidth`/`fillHeight`/`quality` + `format=Webp`. Rails/grids/cards request a
+  ~400-px poster (was a multi-MB original); heroes request ~1200-px backdrops.
+  Estimated ~20–60× less artwork bandwidth — a Home/Library load drops from
+  tens/hundreds of MB to low single-digit MB. The local downsample stays as a
+  safety net.
+- The image cache key already retains the size/format params (and the Plex
+  version token) while stripping only auth, so each tier caches independently and
+  a rotated token no longer busts the cache (covered by new tests).
+
+### Notes
+
+- Phase 2 of the review (per-call-site size tiers, a `UnifiedArtwork` variants
+  model to end source-flip re-downloads, offline poster persistence) is tracked
+  for a follow-up — see the artwork optimization review.
+
 ## [0.5.6] — Unreleased · "Boötes"
 
 Cinema screen-size presets — scaffolding (visionOS). The code path for

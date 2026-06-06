@@ -705,6 +705,24 @@ struct PlexMediaSourceLibrariesTests {
         await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
     }
 
+    @Test("transcodedImageURL wraps the path in /photo/:/transcode with size + outer token")
+    func transcodedImageURLShape() throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let base = URL(string: "https://lan.plex.direct:32400")!
+        let url = try #require(source.transcodedImageURL(base: base, path: "/library/metadata/6/thumb/1", tier: .thumbnail))
+        let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        #expect(comps.path == "/photo/:/transcode")
+        let items = Dictionary(uniqueKeysWithValues: (comps.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(items["url"] == "/library/metadata/6/thumb/1")   // inner path, no token
+        #expect(items["width"] == "400")
+        #expect(items["height"] == "600")
+        #expect(items["minSize"] == "1")
+        #expect(items["upscale"] == "0")
+        #expect(items["X-Plex-Token"] == "srv-token")            // token on the OUTER url only
+        // nil path → nil URL (no poster).
+        #expect(source.transcodedImageURL(base: base, path: nil, tier: .thumbnail) == nil)
+    }
+
     @Test("libraries() filters out non-movie / non-show library sections")
     func librariesFiltering() async throws {
         let api = RecordingAPIClient()
@@ -777,13 +795,19 @@ struct PlexMediaSourceLibrariesTests {
         #expect(item.year == 2024)
         #expect(item.runtime == .seconds(7200))   // 7_200_000ms → 7200s
 
-        // Tokenised poster + backdrop URLs
+        // Server-side resized poster + backdrop (via /photo/:/transcode): the
+        // original path moves into the `url` query item; the token stays on the
+        // outer URL.
         let poster = try #require(item.posterURL)
-        #expect(poster.path == "/library/metadata/123/thumb/1")
+        #expect(poster.path == "/photo/:/transcode")
+        #expect(poster.query?.contains("url=/library/metadata/123/thumb/1") == true)
+        #expect(poster.query?.contains("width=400") == true)
         #expect(poster.query?.contains("X-Plex-Token=srv-token") == true)
 
         let backdrop = try #require(item.backdropURL)
-        #expect(backdrop.path == "/library/metadata/123/art/1")
+        #expect(backdrop.path == "/photo/:/transcode")
+        #expect(backdrop.query?.contains("url=/library/metadata/123/art/1") == true)
+        #expect(backdrop.query?.contains("width=1200") == true)
         #expect(backdrop.query?.contains("X-Plex-Token=srv-token") == true)
 
         // mp4 container → direct-play stream URL from the first Part, tokenised.

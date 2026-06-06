@@ -322,7 +322,14 @@ public actor JellyfinMediaSource: MediaSource {
 
     // MARK: - Images
 
-    private func imageURL(itemID: String, type: String, tag: String?) -> URL? {
+    /// Build a **server-side resized** image URL. `fillWidth`/`fillHeight` make
+    /// Jellyfin (SkiaSharp) resize-and-crop to the box before sending — cover
+    /// semantics matching the UI's `.scaledToFill`, so a poster grid downloads a
+    /// ~400-px image, not the full original. `format=Webp` is ~25–35% smaller
+    /// than JPEG and decodes natively on every Aether target. The `tag` (kept)
+    /// makes the URL content-addressed → strong caching + auto-bust on art
+    /// change; `api_key` is stripped from the cache key.
+    private func imageURL(itemID: String, type: String, tag: String?, tier: ArtworkTier) -> URL? {
         guard tag != nil else { return nil }
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/Items/\(itemID)/Images/\(type)"),
@@ -330,6 +337,10 @@ public actor JellyfinMediaSource: MediaSource {
         )
         var queryItems = [URLQueryItem(name: "api_key", value: accessToken)]
         if let tag { queryItems.append(URLQueryItem(name: "tag", value: tag)) }
+        queryItems.append(URLQueryItem(name: "fillWidth", value: String(tier.pixelWidth)))
+        queryItems.append(URLQueryItem(name: "fillHeight", value: String(tier.pixelHeight)))
+        queryItems.append(URLQueryItem(name: "quality", value: tier == .thumbnail ? "85" : "90"))
+        queryItems.append(URLQueryItem(name: "format", value: "Webp"))
         components?.queryItems = queryItems
         return components?.url
     }
@@ -349,8 +360,8 @@ public actor JellyfinMediaSource: MediaSource {
             year: dto.productionYear,
             runtime: dto.runTimeTicks.map { .seconds(Double($0) / 10_000_000.0) },
             summary: dto.overview,
-            posterURL: imageURL(itemID: dto.id, type: "Primary", tag: dto.imageTags?["Primary"]),
-            backdropURL: imageURL(itemID: dto.id, type: "Backdrop", tag: dto.backdropImageTags?.first),
+            posterURL: imageURL(itemID: dto.id, type: "Primary", tag: dto.imageTags?["Primary"], tier: .thumbnail),
+            backdropURL: imageURL(itemID: dto.id, type: "Backdrop", tag: dto.backdropImageTags?.first, tier: .backdrop),
             streamURL: url,
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
