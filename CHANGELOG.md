@@ -6,10 +6,20 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.5.0] — Unreleased · "Boötes"
 
-A dedicated TV-show experience, built on richer metadata plumbed end-to-end.
+A dedicated TV-show experience and a clearer Home / Library / Discover split,
+built on richer metadata plumbed end-to-end.
 
 ### Added
 
+- **Home, Library & Discover, redefined** — each tab now has a distinct job:
+  - **Home** is *watch now*: Continue Watching, **Recently Added**, **Recently
+    Released**, and Downloaded. The full catalog no longer clutters it.
+  - **Library** is your *collection*: Movies, TV Shows and Downloads with title
+    **counts**, and a "See all" grid that now sorts by **Recently Added** and
+    **Top Rated** (not just title/year) and filters by **genre**. Continue
+    Watching / Recently Added moved to Home.
+  - **Discover** gains a **Top Rated** rail and **per-genre** rails (your
+    catalog's most common genres), alongside the existing hero + random picks.
 - **Redesigned Series Detail** — TV shows now get a purpose-built layout instead
   of the movie screen:
   - **Next Up** card — the first unwatched episode of the selected season, with a

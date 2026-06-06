@@ -107,11 +107,12 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`.
     let whatsNewBullets: [String] = [
         "Redesigned TV shows — pick a season, see its episodes, jump to Next Up",
+        "Home now focuses on what to watch: resume, recently added & released",
+        "Library is your collection — counts, genre filter, sort by rating",
+        "Discover by genre and Top Rated",
         "Faster artwork — posters cache to memory + disk and load instantly",
-        "Pull to refresh on Home, Library, and Discover",
         "Skip Intro / Skip Credits, with Auto-Play Next Episode",
         "Mark as Watched / Unwatched — synced back to your server",
-        "Unified Library — one feed across every connected source",
         "Cinema mode on Apple Vision Pro"
     ]
 

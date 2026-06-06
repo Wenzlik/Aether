@@ -160,20 +160,21 @@ struct LibraryBrowseView: View {
 
     // MARK: - Rails
 
+    /// Library is the **collection browser**: the full deduplicated catalog by
+    /// kind, each with a count and a "See all" grid (sort + genre filter live
+    /// there). Continue Watching / Recently Added are watch-now surfaces — they
+    /// live on Home, not here.
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                if hasAnyDownloads {
-                    downloadedRail
-                }
-                if !rails.continueWatching.isEmpty {
-                    continueWatchingRail
-                }
                 if !rails.movies.isEmpty {
-                    unifiedRail(title: "Movies", kind: .movie, items: rails.movies)
+                    unifiedRail(title: "Movies", count: rails.movieCount, kind: .movie, items: rails.movies)
                 }
                 if !rails.shows.isEmpty {
-                    unifiedRail(title: "TV Shows", kind: .show, items: rails.shows)
+                    unifiedRail(title: "TV Shows", count: rails.showCount, kind: .show, items: rails.shows)
+                }
+                if hasAnyDownloads {
+                    downloadedRail
                 }
             }
             .padding(.top, AetherDesign.Spacing.l)
@@ -191,8 +192,9 @@ struct LibraryBrowseView: View {
     /// "Downloaded" rail — completed items, newest first, straight from the
     /// download observer's snapshot (valid offline).
     private var downloadedRail: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Downloaded")
+        let count = downloads?.snapshot.completed.count ?? 0
+        return VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Downloads", subtitle: countLabel(count))
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
@@ -228,38 +230,13 @@ struct LibraryBrowseView: View {
         .buttonStyle(.plain)
     }
 
-    /// Cross-source "Continue Watching" — best resume per title.
-    private var continueWatchingRail: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Continue Watching")
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: AetherDesign.Spacing.l) {
-                    ForEach(rails.continueWatching) { entry in
-                        NavigationLink(value: entry.item) {
-                            AetherCard.episode(
-                                title: entry.item.title,
-                                thumbURL: entry.item.backdropURL ?? entry.item.posterURL,
-                                progress: entry.progress
-                            )
-                            .frame(width: episodeCardWidth)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.vertical, AetherDesign.Spacing.xs)
-            }
-            .aetherFocusSection()
-        }
-    }
-
-    /// A unified poster rail (Movies / TV Shows) with a "See all" that pushes
-    /// the full grid for that kind.
-    private func unifiedRail(title: String, kind: MediaItem.Kind, items: [UnifiedMediaItem]) -> some View {
+    /// A unified poster rail (Movies / TV Shows) with a title count and a
+    /// "See all" that pushes the full grid for that kind.
+    private func unifiedRail(title: String, count: Int, kind: MediaItem.Kind, items: [UnifiedMediaItem]) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(
                 title: title,
+                subtitle: countLabel(count),
                 accessoryTitle: "See all",
                 accessoryAction: { @MainActor in
                     navigationPath.append(UnifiedLibrarySection(kind: kind, title: title))
@@ -326,12 +303,9 @@ struct LibraryBrowseView: View {
         #endif
     }
 
-    private var episodeCardWidth: CGFloat {
-        #if os(tvOS)
-        480
-        #else
-        296
-        #endif
+    /// "1 title" / "248 titles" — the count shown beneath a section header.
+    private func countLabel(_ count: Int) -> String {
+        "\(count) title\(count == 1 ? "" : "s")"
     }
 
     // MARK: - Loading
@@ -348,9 +322,7 @@ struct LibraryBrowseView: View {
         let built = await library.homeRails(resumeStore: resumeStore)
         rails = built
         AetherImageCache.shared.prefetch(
-            built.movies.map(\.posterURL)
-                + built.shows.map(\.posterURL)
-                + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+            built.movies.map(\.posterURL) + built.shows.map(\.posterURL)
         )
     }
 }

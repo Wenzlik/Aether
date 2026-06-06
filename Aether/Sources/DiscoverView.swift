@@ -32,8 +32,17 @@ struct DiscoverView: View {
     @State private var hero: UnifiedMediaItem?
     @State private var randomPicks: [UnifiedMediaItem] = []
     @State private var recentlyAdded: [UnifiedMediaItem] = []
+    @State private var topRated: [UnifiedMediaItem] = []
+    @State private var genreRails: [GenreRail] = []
     @State private var isLoading = false
     @State private var loadError: String?
+
+    /// One genre's rail. `id` is the genre name so SwiftUI can diff the rails.
+    private struct GenreRail: Identifiable {
+        let id: String
+        var genre: String { id }
+        let items: [UnifiedMediaItem]
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -103,6 +112,12 @@ struct DiscoverView: View {
                 #endif
                 if let hero {
                     heroSection(hero)
+                }
+                if !topRated.isEmpty {
+                    rail(title: "Top Rated", items: topRated)
+                }
+                ForEach(genreRails) { genreRail in
+                    rail(title: genreRail.genre, items: genreRail.items)
                 }
                 if !randomPicks.isEmpty {
                     rail(title: "Random Picks", items: randomPicks)
@@ -182,7 +197,7 @@ struct DiscoverView: View {
         loadError = nil
 
         guard !connectedSources.isEmpty else {
-            hero = nil; randomPicks = []; recentlyAdded = []
+            resetRails()
             isLoading = false
             return
         }
@@ -196,7 +211,7 @@ struct DiscoverView: View {
         let all = movies + shows
 
         guard !all.isEmpty else {
-            hero = nil; randomPicks = []; recentlyAdded = []
+            resetRails()
             return
         }
 
@@ -214,12 +229,52 @@ struct DiscoverView: View {
                 .prefix(12)
         )
 
+        // Top Rated: highest community rating first, only titles that carry one.
+        topRated = Array(
+            all.filter { ($0.communityRating ?? 0) > 0 }
+                .sorted { ($0.communityRating ?? 0) > ($1.communityRating ?? 0) }
+                .prefix(12)
+        )
+
+        // Genre rails: the catalog's most common genres, one shuffled rail each.
+        genreRails = topGenres(in: all).map { genre in
+            GenreRail(
+                id: genre,
+                items: Array(all.filter { $0.genres.contains(genre) }.shuffled().prefix(12))
+            )
+        }
+
         // Warm the artwork cache for the rails we're about to show.
         AetherImageCache.shared.prefetch(
             [pick?.backdropURL ?? pick?.posterURL]
                 + randomPicks.map(\.posterURL)
+                + topRated.map(\.posterURL)
                 + recentlyAdded.map(\.posterURL)
+                + genreRails.flatMap { $0.items.map(\.posterURL) }
         )
+    }
+
+    private func resetRails() {
+        hero = nil
+        randomPicks = []
+        recentlyAdded = []
+        topRated = []
+        genreRails = []
+    }
+
+    /// The catalog's most common genres (most frequent first), capped to a few
+    /// so Discover doesn't turn into an endless wall of rails. Only genres with
+    /// enough titles to fill a rail are kept.
+    private func topGenres(in items: [UnifiedMediaItem]) -> [String] {
+        var counts: [String: Int] = [:]
+        for item in items {
+            for genre in item.genres { counts[genre, default: 0] += 1 }
+        }
+        return counts
+            .filter { $0.value >= 4 }
+            .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+            .prefix(4)
+            .map(\.key)
     }
 
     /// Round-robin two lists: a, b, a, b, … until both drain.
