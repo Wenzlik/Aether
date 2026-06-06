@@ -777,8 +777,10 @@ public actor PlexMediaSource: MediaSource {
             year: dto.year,
             runtime: dto.duration.map { .seconds(Double($0) / 1000.0) },
             summary: dto.summary,
-            posterURL: tokenisedURL(base: base, path: dto.thumb),
-            backdropURL: tokenisedURL(base: base, path: dto.art),
+            // Server-side resized via /photo/:/transcode — a 400-px poster /
+            // ~1200-px backdrop instead of the full-resolution original.
+            posterURL: transcodedImageURL(base: base, path: dto.thumb, tier: .thumbnail),
+            backdropURL: transcodedImageURL(base: base, path: dto.art, tier: .backdrop),
             streamURL: streamURL,
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
@@ -992,6 +994,32 @@ public actor PlexMediaSource: MediaSource {
         query.append(URLQueryItem(name: "X-Plex-Token", value: accessToken))
         components.queryItems = query
         return components.url
+    }
+
+    /// Build a **server-side resized** artwork URL via Plex's photo transcoder
+    /// (`/photo/:/transcode`) instead of the raw full-resolution image. The
+    /// original image path goes in the `url` query item (no token on it); the
+    /// `X-Plex-Token` rides the outer URL only — keeping the token out of the
+    /// inner value so `AetherImageCache`'s key (which strips the token but keeps
+    /// `url` + size) stays stable. `minSize=1` fills the box (matches the UI's
+    /// `.scaledToFill`); `upscale=0` never enlarges a smaller original. Plex's
+    /// transcoder emits JPEG (no WebP/AVIF), so the win is the resize itself —
+    /// a 400-px poster instead of a multi-MB original.
+    nonisolated func transcodedImageURL(base: URL, path relativePath: String?, tier: ArtworkTier) -> URL? {
+        guard let relativePath, !relativePath.isEmpty else { return nil }
+        var components = URLComponents(
+            url: base.appendingPathComponent("/photo/:/transcode"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "url", value: relativePath),
+            URLQueryItem(name: "width", value: String(tier.pixelWidth)),
+            URLQueryItem(name: "height", value: String(tier.pixelHeight)),
+            URLQueryItem(name: "minSize", value: "1"),
+            URLQueryItem(name: "upscale", value: "0"),
+            URLQueryItem(name: "X-Plex-Token", value: accessToken),
+        ]
+        return components?.url
     }
 
     /// Re-anchor a tokenised URL onto a different base (host + scheme +

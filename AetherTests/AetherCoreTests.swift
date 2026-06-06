@@ -666,3 +666,42 @@ struct CinemaPresetTests {
         #expect(reloaded.screenPreset == .imax)
     }
 }
+
+@Suite("AetherCore — artwork cache keys")
+struct ArtworkCacheKeyTests {
+    @Test("Plex: token rotation = same key; path/size are part of the key")
+    func plexKeys() {
+        let thumb = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=400&height=600&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        let thumbOtherToken = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=400&height=600&minSize=1&upscale=0&X-Plex-Token=BBB")!
+        // Only the token differs → same cache key (no re-download on token rotation).
+        #expect(AetherImageCache.cacheKey(for: thumb) == AetherImageCache.cacheKey(for: thumbOtherToken))
+
+        // Backdrop (different inner path + size) must NOT collide with the thumb.
+        let backdrop = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/art/1&width=1200&height=675&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        #expect(AetherImageCache.cacheKey(for: thumb) != AetherImageCache.cacheKey(for: backdrop))
+
+        // Same thumb, larger requested size → different key (size is part of it).
+        let detail = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=600&height=900&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        #expect(AetherImageCache.cacheKey(for: thumb) != AetherImageCache.cacheKey(for: detail))
+    }
+
+    @Test("key is independent of query-item order")
+    func orderIndependent() {
+        let a = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        let b = URL(string: "https://j/Items/9/Images/Primary?fillHeight=600&format=Webp&tag=abc&quality=85&fillWidth=400&api_key=ZZZ")!
+        #expect(AetherImageCache.cacheKey(for: a) == AetherImageCache.cacheKey(for: b))
+    }
+
+    @Test("Jellyfin: api_key stripped; tag + fill size kept")
+    func jellyfinKeys() {
+        let a = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        let b = URL(string: "https://j/Items/9/Images/Primary?api_key=BBB&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) == AetherImageCache.cacheKey(for: b))      // token-only diff
+
+        let bigger = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=1200&fillHeight=675&quality=90&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) != AetherImageCache.cacheKey(for: bigger))  // size diff
+
+        let newArt = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=zzz&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) != AetherImageCache.cacheKey(for: newArt))  // art changed (tag) → new key
+    }
+}
