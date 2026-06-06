@@ -8,6 +8,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Responsive Movie Detail** — wide layouts (tvOS, iPad/iPhone landscape, wide
+  visionOS windows) now use an Apple-TV / Infuse-style **hero-background**: the
+  backdrop fills the background behind a dark scrim, with title, year • runtime •
+  type, technical badges, primary actions, overview and playback rows in a
+  readable left column — all visible without scrolling. iPhone portrait keeps the
+  vertical layout. Runtime ("1h 59m") shows in the metadata everywhere.
 - **Bounded artwork disk cache** — the on-disk image cache now has a 256 MB cap
   with **LRU eviction** (least-recently-used posters dropped first; modification
   date touched on read), trimmed on launch + periodically. It can no longer grow

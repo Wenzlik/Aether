@@ -121,8 +121,17 @@ struct DetailView: View {
 
     var body: some View {
         ZStack {
-            scrollContent
-                .opacity(isPlayerPresented ? 0 : 1)
+            GeometryReader { geo in
+                Group {
+                    if isWideLayout(geo.size) {
+                        wideContent
+                    } else {
+                        scrollContent
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+            .opacity(isPlayerPresented ? 0 : 1)
 
             if isPlayerPresented {
                 PlayerView(
@@ -252,6 +261,108 @@ struct DetailView: View {
         }
     }
 
+    // MARK: - Wide hero layout (tvOS / landscape / visionOS wide)
+
+    /// Wide when the surface is landscape-ish and roomy: tvOS always; iPad
+    /// landscape, iPhone landscape, and wide visionOS windows. iPhone/iPad
+    /// portrait fall back to the vertical `scrollContent`.
+    private func isWideLayout(_ size: CGSize) -> Bool {
+        #if os(tvOS)
+        return true
+        #else
+        return size.width > size.height && size.width >= 600
+        #endif
+    }
+
+    /// Apple-TV / Infuse-style detail: the backdrop fills the background; a
+    /// dark scrim keeps the left content column readable; title, actions,
+    /// overview and the playback rows sit on top, visible immediately.
+    private var wideContent: some View {
+        ZStack(alignment: .topLeading) {
+            CachedAsyncImage(url: item.backdropURL ?? item.posterURL)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .overlay { wideScrim }
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                    Text(item.title)
+                        .font(AetherDesign.Typography.heroTitle)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    metadataRow
+                    mediaBadges
+
+                    if !item.kind.isContainer {
+                        actionRow
+                    }
+
+                    if let summary = item.summary {
+                        Text(summary)
+                            .font(AetherDesign.Typography.body)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                            .lineLimit(item.kind.isContainer ? 3 : 6)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !item.kind.isContainer, current.streamURL != nil {
+                        playbackSection
+                    }
+                    if !item.kind.isContainer, current.mediaInfo != nil {
+                        mediaSection
+                    }
+                    if availableSources.count > 1 {
+                        availableSourcesSection
+                    }
+                    if item.kind.isContainer {
+                        childrenSection
+                    }
+                }
+                .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, AetherDesign.Spacing.xl)
+                .padding(.top, AetherDesign.Spacing.xl)
+                .padding(.bottom, AetherDesign.Spacing.xxl)
+            }
+        }
+    }
+
+    /// Left-anchored content column width on wide layouts — the artwork shows
+    /// through on the trailing side, the text stays readable on the leading.
+    private var wideColumnWidth: CGFloat {
+        #if os(tvOS)
+        820
+        #else
+        640
+        #endif
+    }
+
+    /// Dark gradient over the backdrop: strong on the leading edge (where the
+    /// content column lives) and along the bottom, fading toward the trailing
+    /// artwork so the image still reads.
+    private var wideScrim: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    AetherDesign.Palette.background.opacity(0.92),
+                    AetherDesign.Palette.background.opacity(0.55),
+                    AetherDesign.Palette.background.opacity(0.08)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            LinearGradient(
+                colors: [
+                    AetherDesign.Palette.background.opacity(0.75),
+                    AetherDesign.Palette.background.opacity(0.0)
+                ],
+                startPoint: .bottom,
+                endPoint: .center
+            )
+        }
+        .ignoresSafeArea()
+    }
+
     private var backdropMaxHeight: CGFloat {
         // Shows put their seasons rail directly below the hero. On tvOS the only
         // way to scroll is to move focus onto a focusable element (a season
@@ -373,20 +484,21 @@ struct DetailView: View {
         }
     }
 
+    /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
+    /// is always included when known, on every layout.
     private var metadataRow: some View {
-        HStack(spacing: AetherDesign.Spacing.s) {
-            if let year = item.year {
-                Text(String(year))
-            }
-            if let runtime = item.runtime {
-                Text(formatRuntime(runtime))
-            }
-            Text(kindLabel(item.kind))
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-            Spacer(minLength: 0)
-        }
-        .font(AetherDesign.Typography.metadata)
-        .foregroundStyle(AetherDesign.Palette.textSecondary)
+        Text(metadataParts.joined(separator: " • "))
+            .font(AetherDesign.Typography.metadata)
+            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var metadataParts: [String] {
+        var parts: [String] = []
+        if let year = item.year { parts.append(String(year)) }
+        if let runtime = item.runtime { parts.append(formatRuntime(runtime)) }
+        parts.append(kindLabel(item.kind))
+        return parts
     }
 
     /// Compact technical chips under the metadata — resolution, HDR / Dolby
