@@ -4,6 +4,18 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.1] — Unreleased · "Boötes"
+
+### Fixed
+
+- **tvOS — Settings right column was unreachable.** The "Clear Image Cache" row
+  (and the rest of the right-hand dashboard) couldn't be focused, because the
+  focus engine had no horizontally-aligned target to cross to. Each dashboard
+  column is now a focus section, so a Right/Left press moves between them.
+- **tvOS — Reload was stranded below search.** On Home and Library, Reload now
+  sits to the **right** of a right-sized search field, so it's reachable with a
+  single Right press from the field instead of being almost impossible to focus.
+
 ## [0.5.0] — Unreleased · "Boötes"
 
 A dedicated TV-show experience and a clearer Home / Library / Discover split,
