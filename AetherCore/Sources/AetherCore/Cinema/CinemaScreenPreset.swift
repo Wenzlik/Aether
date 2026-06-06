@@ -51,6 +51,25 @@ public enum CinemaScreenPreset: String, Sendable, Hashable, CaseIterable, Codabl
         widthMetres / CinemaScreenPreset.medium.widthMetres
     }
 
+    /// The Reality Composer Pro scene (in `RealityKitContent.rkassets`) that
+    /// holds this preset's authored environment — a `DockingRegion` sized to
+    /// `widthMetres` plus a reflective floor. Authored later; the loader falls
+    /// back to the procedural Dark Theater until the scene exists.
+    public var sceneName: String {
+        switch self {
+        case .medium: return "CinemaMedium"
+        case .large:  return "CinemaLarge"
+        case .imax:   return "CinemaIMAX"
+        case .wall:   return "CinemaWall"
+        }
+    }
+
+    /// The immersive-space id for this preset. Distinct per preset because the
+    /// docked screen's size/placement lives in each preset's *own* environment,
+    /// chosen through the system `immersiveEnvironmentPicker` (a `DockingRegion`
+    /// is ignored unless its environment is the player's active one).
+    public var spaceID: String { "AetherCinema.\(rawValue)" }
+
     /// The order the size switcher presents, smallest → largest.
     public static let ordered: [CinemaScreenPreset] = [.medium, .large, .imax, .wall]
 

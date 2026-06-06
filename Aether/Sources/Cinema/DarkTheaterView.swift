@@ -27,6 +27,12 @@ import AetherCore
 struct DarkTheaterView: View {
     /// Cinema state — so the theater can reset it when playback ends.
     let cinema: CinemaManager
+    /// Which screen-size preset's environment to show. When the matching
+    /// authored `.usda` exists in `RealityKitContent`, it's loaded (its
+    /// `DockingRegion` sizes the docked screen + its reflective floor); until
+    /// then this falls back to the procedural room below — identical for every
+    /// preset, but the seam is in place.
+    var preset: CinemaScreenPreset = .default
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
     /// Drives the gentle passthrough dim on enter ("house lights down"). Starts
@@ -37,8 +43,14 @@ struct DarkTheaterView: View {
 
     var body: some View {
         RealityView { content in
-            let environment = await Self.makeEnvironment()
-            content.add(environment)
+            // Prefer the preset's authored environment (sized DockingRegion +
+            // reflective floor); fall back to the procedural room until it's
+            // authored in Reality Composer Pro.
+            if let authored = await Self.loadAuthoredEnvironment(named: preset.sceneName) {
+                content.add(authored)
+            } else {
+                content.add(await Self.makeEnvironment())
+            }
         }
         // Gentle "house lights down": ramp passthrough to dark on enter instead
         // of a hard cut. Only visible on device (Simulator barely dims).
@@ -60,6 +72,19 @@ struct DarkTheaterView: View {
                 cinema.end()
             }
         }
+    }
+
+    // MARK: - Authored environment (Reality Composer Pro)
+
+    /// Try to load a preset's authored environment by scene name from the app
+    /// bundle (the Reality Composer Pro `.rkassets`, compiled in as an app
+    /// resource). Returns `nil` when the scene hasn't been authored yet (the
+    /// placeholder ships empty), so the caller falls back to the procedural
+    /// room. Each authored scene is expected to carry a `DockingRegion` (sizing
+    /// the docked screen) and a reflective floor.
+    @MainActor
+    private static func loadAuthoredEnvironment(named name: String) async -> Entity? {
+        try? await Entity(named: name, in: .main)
     }
 
     // MARK: - Environment
