@@ -90,10 +90,21 @@ final class SettingsViewModel {
         infoString("CFBundleVersion") ?? "—"
     }
 
+    /// Short git commit the build was cut from, stamped into the Info.plist by
+    /// the "Stamp git commit" build phase. This is the *clear build identifier*:
+    /// `CFBundleVersion` is only meaningful on Xcode Cloud archives (it injects
+    /// `$CI_BUILD_NUMBER`) — every local Xcode build just shows "1". `nil` when
+    /// the stamp didn't run (key absent / placeholder).
+    var commitString: String? {
+        guard let commit = infoString("AetherGitCommit"), commit != "dev" else { return nil }
+        return commit
+    }
+
     /// One-line label for the About section's tappable Version row.
-    /// "Version 0.3.2 (1)" — collapses two rows (version + build) into one.
+    /// "Version 0.5.1 (a1b2c3d)" — prefers the commit hash (works everywhere),
+    /// falling back to the build number when the commit stamp is unavailable.
     var versionRowLabel: String {
-        "Version \(versionString) (\(buildString))"
+        "Version \(versionString) (\(commitString ?? buildString))"
     }
 
     /// Codename for the current release, shown in the What's New modal. Theme:
