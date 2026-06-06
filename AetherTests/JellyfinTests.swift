@@ -288,6 +288,63 @@ struct JellyfinWatchedTests {
     }
 }
 
+@Suite("Jellyfin — rich metadata")
+struct JellyfinMetadataTests {
+    @Test("Series DTO decodes genres, rating, counts, status + dates")
+    func seriesMetadata() throws {
+        let json = #"""
+        {"Id":"7","Name":"Game of Thrones","Type":"Series",
+         "Genres":["Drama","Fantasy"],"CommunityRating":9.3,
+         "ChildCount":8,"RecursiveItemCount":73,"Status":"Ended",
+         "PremiereDate":"2011-04-17T00:00:00.0000000Z",
+         "EndDate":"2019-05-19T00:00:00.0000000Z",
+         "DateCreated":"2020-01-02T03:04:05.0000000Z"}
+        """#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.genreList == ["Drama", "Fantasy"])
+        #expect(dto.communityRating == 9.3)
+        #expect(dto.childCount == 8)
+        #expect(dto.recursiveItemCount == 73)
+        #expect(dto.endYear == 2019)
+        // PremiereDate → 2011-04-17
+        let cal = Calendar(identifier: .gregorian)
+        let release = try #require(dto.releaseDate)
+        #expect(cal.dateComponents(in: TimeZone(identifier: "UTC")!, from: release).year == 2011)
+        #expect(dto.dateAdded != nil)
+    }
+
+    @Test("Continuing series has no end year (renders as Present)")
+    func continuingNoEndYear() throws {
+        let json = #"""
+        {"Id":"8","Name":"Ongoing Show","Type":"Series","Status":"Continuing",
+         "EndDate":"2030-01-01T00:00:00.0000000Z"}
+        """#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.endYear == nil)
+    }
+
+    @Test("Missing metadata fields decode to nil / empty")
+    func missingMetadata() throws {
+        let json = #"{"Id":"9","Name":"Bare","Type":"Movie"}"#
+        let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.genreList.isEmpty)
+        #expect(dto.communityRating == nil)
+        #expect(dto.releaseDate == nil)
+        #expect(dto.dateAdded == nil)
+        #expect(dto.endYear == nil)
+        #expect(dto.childCount == nil)
+        #expect(dto.recursiveItemCount == nil)
+    }
+
+    @Test("ISO-8601 date parses with and without fractional seconds")
+    func dateParsing() throws {
+        #expect(JellyfinAPI.BaseItemDto.parseDate("2011-04-17T00:00:00.0000000Z") != nil)
+        #expect(JellyfinAPI.BaseItemDto.parseDate("2011-04-17T00:00:00Z") != nil)
+        #expect(JellyfinAPI.BaseItemDto.parseDate(nil) == nil)
+        #expect(JellyfinAPI.BaseItemDto.parseDate("") == nil)
+    }
+}
+
 @Suite("Jellyfin — media segments")
 struct JellyfinMediaSegmentsTests {
     @Test("MediaSegmentDto maps ticks + type to a PlaybackSegment")

@@ -782,7 +782,14 @@ public actor PlexMediaSource: MediaSource {
             // Plex marks an item watched via `viewCount` (>= 1 play).
             isWatched: (dto.viewCount ?? 0) > 0,
             // Season ratingKey → the id Auto-Play-Next pulls siblings from.
-            parentID: dto.parentRatingKey.map { MediaID(source: id, rawValue: $0) }
+            parentID: dto.parentRatingKey.map { MediaID(source: id, rawValue: $0) },
+            genres: dto.genres,
+            communityRating: dto.audienceRating ?? dto.rating,
+            releaseDate: dto.releaseDate,
+            dateAdded: dto.dateAdded,
+            seasonCount: dto.childCount,
+            episodeCount: dto.leafCount,
+            endYear: nil   // Plex doesn't expose a series end year on list/detail
         )
     }
 

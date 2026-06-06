@@ -4,6 +4,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.0] — Unreleased · "Boötes"
+
+Richer metadata end-to-end, laying the groundwork for the redesigned Series
+Detail and the Library collection browser.
+
+### Added
+
+- **Rich metadata plumbing** — `MediaItem` now carries `genres`,
+  `communityRating`, `releaseDate`, `dateAdded`, `seasonCount`, `episodeCount`
+  and `endYear`, populated from both connectors:
+  - **Plex** — requests/maps `Genre`, `audienceRating`/`rating`,
+    `originallyAvailableAt`, `addedAt`, `childCount` (seasons) and `leafCount`
+    (episodes).
+  - **Jellyfin** — requests/maps `Genres`, `CommunityRating`, `PremiereDate`,
+    `DateCreated`, `ChildCount` (seasons), `RecursiveItemCount` (episodes) and
+    `Status`/`EndDate` (so an ended series shows its final year, a continuing
+    one reads as "Present").
+
 ## [0.4.4] — Unreleased · "Andromeda"
 
 ### Added
