@@ -244,14 +244,17 @@ struct DiscoverView: View {
             )
         }
 
-        // Warm the artwork cache for the rails we're about to show.
-        AetherImageCache.shared.prefetch(
-            [pick?.backdropURL ?? pick?.posterURL]
-                + randomPicks.map(\.posterURL)
-                + topRated.map(\.posterURL)
-                + recentlyAdded.map(\.posterURL)
-                + genreRails.flatMap { $0.items.map(\.posterURL) }
-        )
+        // Warm the artwork cache for the rails we're about to show. Built up
+        // step by step with an explicit type — a single long `+` chain of
+        // `[URL?]` arrays blows the Swift type-checker's time budget.
+        var artworkURLs: [URL?] = [pick?.backdropURL ?? pick?.posterURL]
+        artworkURLs += randomPicks.map(\.posterURL)
+        artworkURLs += topRated.map(\.posterURL)
+        artworkURLs += recentlyAdded.map(\.posterURL)
+        for genreRail in genreRails {
+            artworkURLs += genreRail.items.map(\.posterURL)
+        }
+        AetherImageCache.shared.prefetch(artworkURLs)
     }
 
     private func resetRails() {
