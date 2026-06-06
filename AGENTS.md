@@ -315,8 +315,14 @@ is labelled with the version it's actually working toward — never the previous
 one. (Build numbers are separate: `CURRENT_PROJECT_VERSION` is overwritten per
 build by Xcode Cloud.)
 
-- Patch (`0.4.0 → 0.4.1`): bug fixes / small UX.
-- Minor (`0.4.x → 0.5.0`): a named feature milestone (see ROADMAP).
+- **Only the patch digit is auto-bumped.** At the start of new work, bump the
+  last number (`0.4.4 → 0.4.5`) without asking — that's the default for fixes
+  *and* features alike.
+- **Minor / major bumps are the user's call.** Do **not** roll a `0.4.x → 0.5.0`
+  (or major) bump on your own initiative — that signals a release milestone, and
+  the user decides when something earns it. Ask first; if they haven't said so,
+  stay on the patch track. (We wrongly auto-jumped `0.4.4 → 0.5.0` once — don't
+  repeat it.)
 - The bump is its own tiny commit/PR (or rides the first PR of the version).
 - Tag `vX.Y.Z` on `main` only when the version is **finished** and promoted.
 

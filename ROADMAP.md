@@ -104,7 +104,7 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
   `AVPlayerViewController` docked into an immersive Dark Theater via the system
   docking pattern; single-source-of-truth `CinemaManager`; reliable enter/exit.
   No custom rendering or controls.
-- ⬜ **Phase 2 — Enhanced Cinema** — authored Dark Theater + custom
+- ⬜ **Phase 2 — Enhanced Cinema (0.5.5)** — authored Dark Theater + custom
   `DockingRegion` (real Medium/Large/IMAX/Wall presets), floor media
   reflections, smoother transitions, lighting tuning.
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
