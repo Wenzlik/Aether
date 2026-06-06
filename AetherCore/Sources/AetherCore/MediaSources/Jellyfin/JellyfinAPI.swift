@@ -139,6 +139,23 @@ public enum JellyfinAPI {
         /// Per-user playback state. `Played == true` ⇒ watched. Jellyfin returns
         /// it on the user-scoped `/Users/{id}/Items` endpoint.
         public let userData: UserData?
+        /// For a Series: number of seasons (`ChildCount`).
+        public let childCount: Int?
+        /// For a Series: total number of episodes (`RecursiveItemCount`).
+        public let recursiveItemCount: Int?
+        /// When the item was added to the library (`DateCreated`, ISO-8601).
+        public let dateCreated: String?
+        /// Original release / air date (`PremiereDate`, ISO-8601).
+        public let premiereDate: String?
+        /// For a Series: date the show ended (`EndDate`, ISO-8601). Absent while
+        /// the show is still airing.
+        public let endDate: String?
+        /// Critic/community score on a 0–10 scale (`CommunityRating`).
+        public let communityRating: Double?
+        /// Genre names (`Genres`).
+        public let genres: [String]?
+        /// For a Series: airing status (`Status`, e.g. "Continuing", "Ended").
+        public let status: String?
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
@@ -157,6 +174,36 @@ public enum JellyfinAPI {
 
         /// Whether the user has watched this item, per Jellyfin's play state.
         public var isWatched: Bool { userData?.played ?? false }
+
+        /// Genres as a non-optional list.
+        public var genreList: [String] { genres ?? [] }
+
+        /// Original release date parsed from `PremiereDate`.
+        public var releaseDate: Date? { Self.parseDate(premiereDate) }
+
+        /// Date the item was added to the library, parsed from `DateCreated`.
+        public var dateAdded: Date? { Self.parseDate(dateCreated) }
+
+        /// For an ended series, the final airing year (from `EndDate`). `nil`
+        /// while the show is still continuing, which the UI renders as "Present".
+        public var endYear: Int? {
+            guard status != "Continuing", let endDate, endDate.count >= 4 else { return nil }
+            return Int(endDate.prefix(4))
+        }
+
+        /// Parse a Jellyfin ISO-8601 timestamp (may carry up to 7 fractional
+        /// digits), tolerating the presence or absence of fractional seconds.
+        static func parseDate(_ raw: String?) -> Date? {
+            guard let raw, !raw.isEmpty else { return nil }
+            var withFractional: ISO8601DateFormatter.Options = .withInternetDateTime
+            withFractional.insert(.withFractionalSeconds)
+            for options: ISO8601DateFormatter.Options in [withFractional, .withInternetDateTime] {
+                let f = ISO8601DateFormatter()
+                f.formatOptions = options
+                if let date = f.date(from: raw) { return date }
+            }
+            return nil
+        }
 
         public var kind: MediaItem.Kind? {
             switch type {
@@ -224,6 +271,14 @@ public enum JellyfinAPI {
             case parentId = "ParentId"
             case providerIds = "ProviderIds"
             case userData = "UserData"
+            case childCount = "ChildCount"
+            case recursiveItemCount = "RecursiveItemCount"
+            case dateCreated = "DateCreated"
+            case premiereDate = "PremiereDate"
+            case endDate = "EndDate"
+            case communityRating = "CommunityRating"
+            case genres = "Genres"
+            case status = "Status"
         }
     }
 

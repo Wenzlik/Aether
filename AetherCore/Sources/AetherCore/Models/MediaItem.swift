@@ -70,6 +70,22 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Jellyfin `ParentId`). Lets Auto-Play-Next fetch the season's episodes and
     /// pick the next one. `nil` for movies / when the source didn't provide it.
     public let parentID: MediaID?
+    /// Catalogue genres (e.g. "Sci-Fi", "Drama") — drives Discover genre rails.
+    public let genres: [String]
+    /// Community / audience rating (≈0–10) when the source provides one — for
+    /// "Top Rated". `nil` when unknown.
+    public let communityRating: Double?
+    /// Original release / premiere date — for "Recently Released".
+    public let releaseDate: Date?
+    /// When the item was added to the library — for an accurate "Recently Added".
+    public let dateAdded: Date?
+    /// For shows: number of seasons (Plex `childCount` / Jellyfin `ChildCount`).
+    public let seasonCount: Int?
+    /// For shows: total episodes (Plex `leafCount` / Jellyfin `RecursiveItemCount`).
+    public let episodeCount: Int?
+    /// For shows: the final year if the series has ended; `nil` = ongoing /
+    /// unknown (renders as "–Present").
+    public let endYear: Int?
 
     public init(
         id: MediaID,
@@ -94,7 +110,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         selectedQuality: PlaybackQuality = .original,
         guids: MediaGuids = MediaGuids(),
         isWatched: Bool = false,
-        parentID: MediaID? = nil
+        parentID: MediaID? = nil,
+        genres: [String] = [],
+        communityRating: Double? = nil,
+        releaseDate: Date? = nil,
+        dateAdded: Date? = nil,
+        seasonCount: Int? = nil,
+        episodeCount: Int? = nil,
+        endYear: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -119,6 +142,13 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.guids = guids
         self.isWatched = isWatched
         self.parentID = parentID
+        self.genres = genres
+        self.communityRating = communityRating
+        self.releaseDate = releaseDate
+        self.dateAdded = dateAdded
+        self.seasonCount = seasonCount
+        self.episodeCount = episodeCount
+        self.endYear = endYear
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -180,7 +210,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             selectedQuality: selectedQuality ?? self.selectedQuality,
             guids: guids,
             isWatched: isWatched,
-            parentID: parentID
+            parentID: parentID,
+            genres: genres,
+            communityRating: communityRating,
+            releaseDate: releaseDate,
+            dateAdded: dateAdded,
+            seasonCount: seasonCount,
+            episodeCount: episodeCount,
+            endYear: endYear
         )
     }
 
