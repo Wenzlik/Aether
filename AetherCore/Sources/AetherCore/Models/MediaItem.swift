@@ -90,6 +90,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// as "2011–Present"; `false` ⇒ ended; `nil` ⇒ unknown (Plex doesn't
     /// expose a status, so we don't guess). Jellyfin maps it from `Status`.
     public let isContinuing: Bool?
+    /// For a **season** (or show): how many of its episodes are still unwatched
+    /// (Plex `leafCount − viewedLeafCount`, Jellyfin `UserData.UnplayedItemCount`).
+    /// Lets Series Detail land its "Next Up" / On Deck on the season the user is
+    /// actually in, without fetching every episode. `nil` when unknown.
+    public let unwatchedEpisodeCount: Int?
 
     public init(
         id: MediaID,
@@ -122,7 +127,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         seasonCount: Int? = nil,
         episodeCount: Int? = nil,
         endYear: Int? = nil,
-        isContinuing: Bool? = nil
+        isContinuing: Bool? = nil,
+        unwatchedEpisodeCount: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -155,6 +161,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.episodeCount = episodeCount
         self.endYear = endYear
         self.isContinuing = isContinuing
+        self.unwatchedEpisodeCount = unwatchedEpisodeCount
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -224,7 +231,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             seasonCount: seasonCount,
             episodeCount: episodeCount,
             endYear: endYear,
-            isContinuing: isContinuing
+            isContinuing: isContinuing,
+            unwatchedEpisodeCount: unwatchedEpisodeCount
         )
     }
 

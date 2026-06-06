@@ -1950,6 +1950,23 @@ struct PlexMetadataTests {
         #expect(dto.dateAdded != nil)
     }
 
+    @Test("viewedLeafCount yields the unwatched remainder; nil without leafCount")
+    func unwatchedLeafCount() throws {
+        let season = #"{"ratingKey":"3","type":"season","title":"Season 1","leafCount":10,"viewedLeafCount":4}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(season.utf8))
+        #expect(dto.unwatchedLeafCount == 6)
+
+        // No viewed count → all unwatched.
+        let fresh = #"{"ratingKey":"4","type":"season","title":"Season 2","leafCount":8}"#
+        let dtoFresh = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(fresh.utf8))
+        #expect(dtoFresh.unwatchedLeafCount == 8)
+
+        // No leafCount → unknown.
+        let movie = #"{"ratingKey":"5","type":"movie","title":"X"}"#
+        let dtoMovie = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(movie.utf8))
+        #expect(dtoMovie.unwatchedLeafCount == nil)
+    }
+
     @Test("audienceRating preferred, falls back to rating")
     func ratingFallback() throws {
         let json = #"{"ratingKey":"1","type":"movie","title":"X","rating":7.8}"#

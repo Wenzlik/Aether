@@ -789,7 +789,9 @@ public actor PlexMediaSource: MediaSource {
             dateAdded: dto.dateAdded,
             seasonCount: dto.childCount,
             episodeCount: dto.leafCount,
-            endYear: nil   // Plex doesn't expose a series end year on list/detail
+            endYear: nil,   // Plex doesn't expose a series end year on list/detail
+            isContinuing: nil,
+            unwatchedEpisodeCount: dto.unwatchedLeafCount
         )
     }
 
