@@ -8,6 +8,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **iPhone — "Clear Image Cache" was missing.** The Cache card lived only in the
+  Settings wide dashboard (iPad / tvOS / visionOS), so on iPhone — which renders
+  a single column — it never appeared. It's now shown on iPhone too.
 - **Detail screen trapped you across tab changes.** Opening a movie/show on one
   tab, switching tabs, and switching back left the Detail screen still showing —
   sometimes with no clear way back to the tab's root. Selecting any tab (Home /
