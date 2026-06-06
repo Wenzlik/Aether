@@ -1864,7 +1864,11 @@ struct DetailView: View {
         playbackItem = current
         playbackStartAt = resume != nil ? nil : 0
         launchingInCinema = true   // auto-expand so it docks into the theater
-        cinema.present(current, source: source, startAt: playbackStartAt)
+        // Open the user's preferred screen-size environment (persisted). Read
+        // transiently from UserDefaults — Detail doesn't carry the store, and the
+        // value is the source of truth.
+        cinema.present(current, source: source, startAt: playbackStartAt,
+                       preset: CinemaPreferencesStore().screenPreset)
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
         }

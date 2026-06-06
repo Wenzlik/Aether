@@ -23,6 +23,10 @@ final class SettingsViewModel {
     /// without round-tripping through the view model.
     var playbackPreferences: PlaybackPreferencesStore { session.playbackPreferences }
 
+    /// The default cinema screen-size store (visionOS). Exposed so the Settings
+    /// picker can bind to it.
+    var cinemaPreferences: CinemaPreferencesStore { session.cinemaPreferences }
+
     /// The app-wide appearance store (System / Dark / Light).
     var appearance: AppearancePreferenceStore { session.appearance }
 

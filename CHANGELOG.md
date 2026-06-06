@@ -4,6 +4,28 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.6] — Unreleased · "Boötes"
+
+Cinema screen-size presets — scaffolding (visionOS). The code path for
+Medium / Large / IMAX / Wall is in place; each size's actual look + the literal
+floor video reflection arrive when the per-size environments are authored in
+Reality Composer Pro (the size + reflection live inside each `.usda`).
+
+### Added
+
+- **Screen-size preset machinery (visionOS).** A default-size picker in
+  Settings → Cinema (persisted via `CinemaPreferencesStore`); the cinema opens
+  the chosen preset's own immersive space and loads that preset's authored
+  environment from the bundled Reality Composer Pro content, falling back to the
+  procedural Dark Theater until the scene is authored. `CinemaScreenPreset` now
+  carries a per-preset `sceneName` + `spaceID`.
+- **Reality Composer Pro content** (`Packages/RealityKitContent`) — open it in
+  Reality Composer Pro to author one environment per preset (`CinemaMedium`,
+  `CinemaLarge`, `CinemaIMAX`, `CinemaWall`), each with a `DockingRegion` at that
+  screen width and a `Reflection_Specular` floor. The `.rkassets` is bundled as
+  an app resource (compiled at the app's deployment target, so it builds on
+  tvOS too — it's never linked as a Swift package).
+
 ## [0.5.5] — Unreleased · "Boötes"
 
 Enhanced Cinema (visionOS).

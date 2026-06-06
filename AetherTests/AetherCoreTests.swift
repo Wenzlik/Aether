@@ -630,3 +630,39 @@ struct UnifiedHomeRailsTests {
         #expect(rails.recentlyReleased.isEmpty)         // no release date → hidden
     }
 }
+
+@Suite("AetherCore — Cinema presets")
+struct CinemaPresetTests {
+    @Test("each preset has a distinct, stable spaceID + sceneName")
+    func distinctIdentifiers() {
+        let spaceIDs = Set(CinemaScreenPreset.allCases.map(\.spaceID))
+        let sceneNames = Set(CinemaScreenPreset.allCases.map(\.sceneName))
+        #expect(spaceIDs.count == CinemaScreenPreset.allCases.count)
+        #expect(sceneNames.count == CinemaScreenPreset.allCases.count)
+        #expect(CinemaScreenPreset.medium.spaceID == "AetherCinema.medium")
+        #expect(CinemaScreenPreset.imax.sceneName == "CinemaIMAX")
+    }
+
+    @Test("widthMetres grows monotonically with size")
+    func widthsOrdered() {
+        let widths = CinemaScreenPreset.ordered.map(\.widthMetres)
+        #expect(widths == widths.sorted())
+        #expect(widths.first == CinemaScreenPreset.medium.widthMetres)
+    }
+
+    @Test("CinemaPreferencesStore persists the chosen preset")
+    @MainActor
+    func preferencesRoundTrip() {
+        let suite = "cinema.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = CinemaPreferencesStore(defaults: defaults)
+        #expect(store.screenPreset == .medium)   // default
+        store.screenPreset = .imax
+
+        // A fresh store over the same defaults reads the persisted value.
+        let reloaded = CinemaPreferencesStore(defaults: defaults)
+        #expect(reloaded.screenPreset == .imax)
+    }
+}

@@ -173,9 +173,36 @@ struct SettingsView: View {
         downloadsSection
         #endif
         playbackSection
+        #if os(visionOS)
+        cinemaSection
+        #endif
         appearanceSection
         aboutSection
     }
+
+    #if os(visionOS)
+    /// Cinema (visionOS): the default screen-size the immersive theater opens
+    /// with. Each size is its own authored environment; the picker persists the
+    /// choice via `CinemaPreferencesStore`.
+    private var cinemaSection: some View {
+        AetherSettingsSection("Cinema") {
+            Picker(
+                "Screen Size",
+                selection: Binding(
+                    get: { viewModel.cinemaPreferences.screenPreset },
+                    set: { viewModel.cinemaPreferences.screenPreset = $0 }
+                )
+            ) {
+                ForEach(CinemaScreenPreset.ordered, id: \.self) { preset in
+                    Text(preset.displayName).tag(preset)
+                }
+            }
+            .pickerStyle(.menu)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .padding(.vertical, AetherDesign.Spacing.s)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var dashboardCards: some View {
