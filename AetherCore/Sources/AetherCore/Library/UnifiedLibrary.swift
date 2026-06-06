@@ -88,12 +88,54 @@ public actor UnifiedLibrary {
             if let best { continueWatching.append(.init(item: best.item, resume: best.resume)) }
         }
 
+        let pool = movies + shows
+
+        // Recently Added: newest library-add date first. When no source dates
+        // its items, fall back to merge (source) order so Home isn't blank.
+        let dated = pool.filter { $0.dateAdded != nil }
+        let recentlyAdded: [UnifiedMediaItem]
+        if dated.isEmpty {
+            recentlyAdded = Array(Self.interleave(movies, shows).prefix(limit))
+        } else {
+            recentlyAdded = Array(
+                dated.sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
+                    .prefix(limit)
+            )
+        }
+
+        // Recently Released: newest original-release date first. No fallback —
+        // an undated catalog simply hides this rail.
+        let recentlyReleased = Array(
+            pool.filter { $0.releaseDate != nil }
+                .sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
+                .prefix(limit)
+        )
+
         return UnifiedRails(
             continueWatching: continueWatching,
             movies: Array(movies.prefix(limit)),
             shows: Array(shows.prefix(limit)),
-            downloaded: (movies + shows).filter(\.isDownloaded)
+            downloaded: pool.filter(\.isDownloaded),
+            recentlyAdded: recentlyAdded,
+            recentlyReleased: recentlyReleased,
+            movieCount: movies.count,
+            showCount: shows.count
         )
+    }
+
+    /// Round-robin two lists: a, b, a, b, … until both drain. Used for the
+    /// Recently Added fallback so neither movies nor shows dominate.
+    private static func interleave(
+        _ a: [UnifiedMediaItem], _ b: [UnifiedMediaItem]
+    ) -> [UnifiedMediaItem] {
+        var result: [UnifiedMediaItem] = []
+        var index = 0
+        while index < a.count || index < b.count {
+            if index < a.count { result.append(a[index]) }
+            if index < b.count { result.append(b[index]) }
+            index += 1
+        }
+        return result
     }
 
     private static func seconds(_ duration: Duration) -> Double {
@@ -220,7 +262,13 @@ public actor UnifiedLibrary {
             posterURL: lead.posterURL,
             backdropURL: lead.backdropURL,
             type: lead.kind,
-            sources: sources
+            sources: sources,
+            genres: lead.genres,
+            communityRating: lead.communityRating,
+            releaseDate: lead.releaseDate,
+            // Prefer any source that reports an add date (the lead's library may
+            // not), so "Recently Added" still works when only one server dates it.
+            dateAdded: items.compactMap(\.dateAdded).max() ?? lead.dateAdded
         )
     }
 }

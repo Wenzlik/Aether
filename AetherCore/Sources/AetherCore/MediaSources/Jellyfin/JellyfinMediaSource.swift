@@ -68,7 +68,7 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "ParentId", value: libraryID.rawValue),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status"),
             // Per Jellyfin docs, play state (UserData.Played) comes via this flag,
             // not a `Fields` value — it's the watched-checkmark source.
             URLQueryItem(name: "enableUserData", value: "true"),
@@ -90,7 +90,7 @@ public actor JellyfinMediaSource: MediaSource {
             path: "/Users/\(userID)/Items",
             queryItems: [
                 URLQueryItem(name: "ParentId", value: id.rawValue),
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status"),
                 URLQueryItem(name: "enableUserData", value: "true"),
                 URLQueryItem(name: "SortBy", value: "SortName"),
                 URLQueryItem(name: "SortOrder", value: "Ascending")
@@ -105,7 +105,7 @@ public actor JellyfinMediaSource: MediaSource {
         let request = makeRequest(
             path: "/Users/\(userID)/Items/\(id.rawValue)",
             queryItems: [
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status"),
                 URLQueryItem(name: "enableUserData", value: "true")
             ]
         )
@@ -338,7 +338,15 @@ public actor JellyfinMediaSource: MediaSource {
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
             guids: dto.guids,
             isWatched: dto.isWatched,
-            parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) }
+            parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) },
+            genres: dto.genreList,
+            communityRating: dto.communityRating,
+            releaseDate: dto.releaseDate,
+            dateAdded: dto.dateAdded,
+            seasonCount: dto.childCount,
+            episodeCount: dto.recursiveItemCount,
+            endYear: dto.endYear,
+            isContinuing: dto.status.map { $0 == "Continuing" }
         )
     }
 

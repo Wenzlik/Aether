@@ -505,6 +505,24 @@ struct UnifiedLibraryTests {
         #expect(u[0].preferredSource?.kind == .offline)
         #expect(u[0].sources.map(\.kind) == [.offline, .plex, .jellyfin])
     }
+
+    @Test("lead metadata (genres / rating / dates) propagates to the unified item")
+    func leadMetadata() {
+        let added = Date(timeIntervalSince1970: 1_700_000_000)
+        let released = Date(timeIntervalSince1970: 900_000_000)
+        let item = MediaItem(
+            id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+            kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"),
+            genres: ["Sci-Fi", "Action"], communityRating: 8.7,
+            releaseDate: released, dateAdded: added
+        )
+        let u = UnifiedLibrary.merge([item])
+        #expect(u.count == 1)
+        #expect(u[0].genres == ["Sci-Fi", "Action"])
+        #expect(u[0].communityRating == 8.7)
+        #expect(u[0].releaseDate == released)
+        #expect(u[0].dateAdded == added)
+    }
 }
 
 @Suite("AetherCore — UnifiedLibrary aggregator")
@@ -576,5 +594,39 @@ struct UnifiedHomeRailsTests {
         #expect(rails.shows.count == 1)
         #expect(rails.movies.first?.title == "Matrix")
         #expect(rails.shows.first?.title == "Severance")
+    }
+
+    @Test("recentlyAdded sorts by add date, recentlyReleased by release date")
+    func recencyRails() async {
+        let lib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "mov"), title: "Movies", kind: .movie)
+        func movie(_ id: String, _ title: String, added: TimeInterval, released: TimeInterval) -> MediaItem {
+            MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: id), title: title, kind: .movie,
+                      streamURL: URL(string: "http://p/\(id)"), guids: MediaGuids(tmdb: id),
+                      releaseDate: Date(timeIntervalSince1970: released),
+                      dateAdded: Date(timeIntervalSince1970: added))
+        }
+        // Newest-added is "B"; newest-released is "A".
+        let a = movie("1", "A", added: 1_000, released: 9_000)
+        let b = movie("2", "B", added: 9_000, released: 1_000)
+        let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
+                        libs: [lib], itemsByLib: [lib.id: [a, b]])
+
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        #expect(rails.recentlyAdded.first?.title == "B")
+        #expect(rails.recentlyReleased.first?.title == "A")
+        #expect(rails.recentlyAdded.count == 2)
+    }
+
+    @Test("recentlyAdded falls back to merge order when nothing is dated")
+    func recencyFallback() async {
+        let lib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "mov"), title: "Movies", kind: .movie)
+        let undated = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Undated",
+                                kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
+                        libs: [lib], itemsByLib: [lib.id: [undated]])
+
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        #expect(rails.recentlyAdded.count == 1)         // fallback kept it
+        #expect(rails.recentlyReleased.isEmpty)         // no release date → hidden
     }
 }

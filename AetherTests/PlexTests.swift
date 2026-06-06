@@ -1928,6 +1928,50 @@ struct PlexGuidTests {
     }
 }
 
+@Suite("Plex — rich metadata")
+struct PlexMetadataTests {
+    @Test("Show Metadata decodes genres, rating, counts + dates")
+    func showMetadata() throws {
+        let json = #"""
+        {"ratingKey":"7","type":"show","title":"Breaking Bad",
+         "childCount":5,"leafCount":62,"audienceRating":9.5,
+         "addedAt":1577934245,"originallyAvailableAt":"2008-01-20",
+         "Genre":[{"tag":"Drama"},{"tag":"Crime"}]}
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.genres == ["Drama", "Crime"])
+        #expect(dto.audienceRating == 9.5)
+        #expect(dto.childCount == 5)
+        #expect(dto.leafCount == 62)
+        // originallyAvailableAt → 2008-01-20 (UTC)
+        let cal = Calendar(identifier: .gregorian)
+        let release = try #require(dto.releaseDate)
+        #expect(cal.dateComponents(in: TimeZone(identifier: "UTC")!, from: release).year == 2008)
+        #expect(dto.dateAdded != nil)
+    }
+
+    @Test("audienceRating preferred, falls back to rating")
+    func ratingFallback() throws {
+        let json = #"{"ratingKey":"1","type":"movie","title":"X","rating":7.8}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.audienceRating == nil)
+        #expect(dto.rating == 7.8)
+    }
+
+    @Test("Missing metadata fields decode to nil / empty")
+    func missingMetadata() throws {
+        let json = #"{"ratingKey":"1","type":"movie","title":"Bare"}"#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.genres.isEmpty)
+        #expect(dto.audienceRating == nil)
+        #expect(dto.rating == nil)
+        #expect(dto.releaseDate == nil)
+        #expect(dto.dateAdded == nil)
+        #expect(dto.childCount == nil)
+        #expect(dto.leafCount == nil)
+    }
+}
+
 @Suite("Plex — markers / playback segments")
 struct PlexMarkerTests {
     @Test("Markers map ms offsets + type to PlaybackSegments")

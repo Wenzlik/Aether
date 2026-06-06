@@ -4,6 +4,47 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.0] — Unreleased · "Boötes"
+
+A dedicated TV-show experience and a clearer Home / Library / Discover split,
+built on richer metadata plumbed end-to-end.
+
+### Added
+
+- **Home, Library & Discover, redefined** — each tab now has a distinct job:
+  - **Home** is *watch now*: Continue Watching, **Recently Added**, **Recently
+    Released**, and Downloaded. The full catalog no longer clutters it.
+  - **Library** is your *collection*: Movies, TV Shows and Downloads with title
+    **counts**, and a "See all" grid that now sorts by **Recently Added** and
+    **Top Rated** (not just title/year) and filters by **genre**. Continue
+    Watching / Recently Added moved to Home.
+  - **Discover** gains a **Top Rated** rail and **per-genre** rails (your
+    catalog's most common genres), alongside the existing hero + random picks.
+- **Redesigned Series Detail** — TV shows now get a purpose-built layout instead
+  of the movie screen:
+  - **Next Up** card — the first unwatched episode of the selected season, with a
+    "Resume from m:ss" caption when there's a saved position.
+  - **Inline season selector** — capsule chips switch seasons in place; the
+    episode list updates without navigating into a season.
+  - **Inline episodes** — the selected season's episodes (thumbnail, title,
+    runtime, synopsis, watched check) right on the show screen.
+  - **Series metadata line** — "2011–Present • 8 Seasons • 73 Episodes • Series"
+    (run span + counts) instead of a single runtime. The "–Present" only shows
+    when the source confirms the series is still airing (Jellyfin `Status`); Plex,
+    which doesn't report status, shows just the start year.
+  - **Details** section — genres, rating, first-aired, and status.
+  - Movies keep the cinematic hero-background layout and their runtime metadata.
+- **Rich metadata plumbing** — `MediaItem` now carries `genres`,
+  `communityRating`, `releaseDate`, `dateAdded`, `seasonCount`, `episodeCount`,
+  `endYear` and `isContinuing`, populated from both connectors:
+  - **Plex** — requests/maps `Genre`, `audienceRating`/`rating`,
+    `originallyAvailableAt`, `addedAt`, `childCount` (seasons) and `leafCount`
+    (episodes).
+  - **Jellyfin** — requests/maps `Genres`, `CommunityRating`, `PremiereDate`,
+    `DateCreated`, `ChildCount` (seasons), `RecursiveItemCount` (episodes) and
+    `Status`/`EndDate` (so an ended series shows its final year, a continuing
+    one reads as "Present").
+
 ## [0.4.4] — Unreleased · "Andromeda"
 
 ### Added

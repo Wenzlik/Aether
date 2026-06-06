@@ -6,6 +6,16 @@ import Foundation
 /// and so we don't pollute the top-level AetherCore namespace with Plex-only types.
 public enum PlexAPI {
 
+    /// Parses Plex's `originallyAvailableAt` ("YYYY-MM-DD", UTC).
+    static let dateOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     /// Response from `POST /api/v2/pins` and `GET /api/v2/pins/{id}`.
     ///
     /// `authToken` is `nil` until the user enters the displayed `code` at
@@ -233,6 +243,24 @@ public enum PlexAPI {
         /// Intro / credits / commercial markers — only returned on the detail
         /// endpoint with `includeMarkers=1`. JSON key capital `Marker`.
         public let markers: [MarkerEntry]?
+        /// For shows: number of seasons (`childCount`) and total episodes
+        /// (`leafCount`).
+        public let childCount: Int?
+        public let leafCount: Int?
+        /// Epoch seconds the item was added to the library.
+        public let addedAt: Int?
+        /// Original release date, "YYYY-MM-DD".
+        public let originallyAvailableAt: String?
+        /// Audience / critic rating (0–10).
+        public let audienceRating: Double?
+        public let rating: Double?
+        /// Genre tags (`{"tag": "Sci-Fi"}`). JSON key capital `Genre`.
+        public let genreTags: [Tag]?
+
+        public struct Tag: Decodable, Sendable, Equatable {
+            public let tag: String?
+            public init(tag: String? = nil) { self.tag = tag }
+        }
 
         public struct GuidEntry: Decodable, Sendable, Equatable {
             public let id: String
@@ -280,6 +308,22 @@ public enum PlexAPI {
             (markers ?? []).compactMap(\.segment)
         }
 
+        /// Genre tag strings.
+        public var genres: [String] {
+            (genreTags ?? []).compactMap(\.tag)
+        }
+
+        /// Library-add date from `addedAt` epoch seconds.
+        public var dateAdded: Date? {
+            addedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+        }
+
+        /// Release date parsed from `originallyAvailableAt` ("YYYY-MM-DD").
+        public var releaseDate: Date? {
+            guard let value = originallyAvailableAt else { return nil }
+            return PlexAPI.dateOnlyFormatter.date(from: value)
+        }
+
         /// Explicit init with defaults for every optional field, so the
         /// test fixtures that build `Metadata` synthetically don't have
         /// to enumerate the full optional tail each time a new field
@@ -301,7 +345,14 @@ public enum PlexAPI {
             media: [Media]? = nil,
             externalGuids: [GuidEntry]? = nil,
             viewCount: Int? = nil,
-            markers: [MarkerEntry]? = nil
+            markers: [MarkerEntry]? = nil,
+            childCount: Int? = nil,
+            leafCount: Int? = nil,
+            addedAt: Int? = nil,
+            originallyAvailableAt: String? = nil,
+            audienceRating: Double? = nil,
+            rating: Double? = nil,
+            genreTags: [Tag]? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -319,6 +370,13 @@ public enum PlexAPI {
             self.externalGuids = externalGuids
             self.viewCount = viewCount
             self.markers = markers
+            self.childCount = childCount
+            self.leafCount = leafCount
+            self.addedAt = addedAt
+            self.originallyAvailableAt = originallyAvailableAt
+            self.audienceRating = audienceRating
+            self.rating = rating
+            self.genreTags = genreTags
         }
 
         public var kind: MediaItem.Kind {
@@ -440,9 +498,11 @@ public enum PlexAPI {
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case grandparentTitle, parentIndex, parentRatingKey, index, viewCount
+            case childCount, leafCount, addedAt, originallyAvailableAt, audienceRating, rating
             case media = "Media"
             case externalGuids = "Guid"
             case markers = "Marker"
+            case genreTags = "Genre"
         }
 
         public struct Media: Decodable, Sendable, Equatable {

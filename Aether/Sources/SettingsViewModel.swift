@@ -99,18 +99,20 @@ final class SettingsViewModel {
     /// Codename for the current release, shown in the What's New modal. Theme:
     /// constellations, alphabetical per release (see AGENTS.md → Release
     /// process). Update this when `MARKETING_VERSION` bumps to a new version.
-    let releaseCodename = "Andromeda"
+    let releaseCodename = "Boötes"
 
     /// Headline features shipped to date, surfaced in the About section's
     /// "What's New" disclosure. Cumulative — the section showcases what
     /// Aether actually does today rather than churning per-release notes;
     /// the full per-version log lives in `CHANGELOG.md`.
     let whatsNewBullets: [String] = [
+        "Redesigned TV shows — pick a season, see its episodes, jump to Next Up",
+        "Home now focuses on what to watch: resume, recently added & released",
+        "Library is your collection — counts, genre filter, sort by rating",
+        "Discover by genre and Top Rated",
         "Faster artwork — posters cache to memory + disk and load instantly",
-        "Pull to refresh on Home, Library, and Discover",
         "Skip Intro / Skip Credits, with Auto-Play Next Episode",
         "Mark as Watched / Unwatched — synced back to your server",
-        "Unified Library — one feed across every connected source",
         "Cinema mode on Apple Vision Pro"
     ]
 

@@ -23,14 +23,18 @@ struct UnifiedLibraryGridView: View {
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
     @State private var sort: LibrarySort = .titleAZ
+    /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
+    @State private var selectedGenre: String?
     #if os(tvOS)
     @State private var isSortSheetPresented = false
     #endif
 
-    /// Cross-source sorts that work without server-side ordering or per-item
-    /// ratings. (Recently-added / rating need signals the unified item doesn't
-    /// carry, so they're intentionally omitted here.)
-    private let sortOptions: [LibrarySort] = [.titleAZ, .titleZA, .yearNewest, .yearOldest]
+    /// Cross-source sorts, all now backed by the unified item's metadata
+    /// (title, year, add date, rating). Sorting is client-side over the loaded
+    /// items since the grid spans sources.
+    private let sortOptions: [LibrarySort] = [
+        .titleAZ, .titleZA, .yearNewest, .yearOldest, .recentlyAdded, .ratingHighest
+    ]
 
     var body: some View {
         ScrollView {
@@ -71,6 +75,9 @@ struct UnifiedLibraryGridView: View {
                 #if os(tvOS)
                 tvOSSortTrigger
                 #endif
+                if !availableGenres.isEmpty {
+                    genreFilterRow
+                }
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                     ForEach(sortedItems) { item in
                         NavigationLink(value: item) {
@@ -83,20 +90,43 @@ struct UnifiedLibraryGridView: View {
         }
     }
 
+    /// Items after the genre filter, before sorting.
+    private var filteredItems: [UnifiedMediaItem] {
+        guard let selectedGenre else { return items }
+        return items.filter { $0.genres.contains(selectedGenre) }
+    }
+
     private var sortedItems: [UnifiedMediaItem] {
+        let base = filteredItems
         switch sort {
         case .titleAZ:
-            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         case .titleZA:
-            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
+            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
         case .yearNewest:
-            return items.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
+            return base.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
         case .yearOldest:
-            return items.sorted { ($0.year ?? Int.max) < ($1.year ?? Int.max) }
-        case .recentlyAdded, .ratingHighest, .random:
-            // Not supported cross-source; keep the merge (source) order.
-            return items
+            return base.sorted { ($0.year ?? Int.max) < ($1.year ?? Int.max) }
+        case .recentlyAdded:
+            return base.sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
+        case .ratingHighest:
+            return base.sorted { ($0.communityRating ?? -1) > ($1.communityRating ?? -1) }
+        case .random:
+            // No stable random for a client-side grid; keep merge order.
+            return base
         }
+    }
+
+    /// Distinct genres across the loaded items, most common first, capped so the
+    /// chip row stays usable. Empty when no item carries genres → no filter UI.
+    private var availableGenres: [String] {
+        var counts: [String: Int] = [:]
+        for item in items {
+            for genre in item.genres { counts[genre, default: 0] += 1 }
+        }
+        return counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+            .prefix(12)
+            .map(\.key)
     }
 
     private var columns: [GridItem] {
@@ -105,6 +135,43 @@ struct UnifiedLibraryGridView: View {
         #else
         [GridItem(.adaptive(minimum: 120, maximum: 180), spacing: AetherDesign.Spacing.m)]
         #endif
+    }
+
+    // MARK: - Genre filter
+
+    /// Horizontal capsule chips: "All" + each genre. Tapping filters the grid in
+    /// place. Mirrors the season-selector chips on Series Detail for consistency.
+    private var genreFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                genreChip(label: "All", isSelected: selectedGenre == nil) { selectedGenre = nil }
+                ForEach(availableGenres, id: \.self) { genre in
+                    genreChip(label: genre, isSelected: selectedGenre == genre) {
+                        // Tapping the active genre again clears the filter.
+                        selectedGenre = (selectedGenre == genre) ? nil : genre
+                    }
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    private func genreChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(AetherDesign.Typography.metadata)
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+                .background(
+                    isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.surfaceElevated,
+                    in: Capsule()
+                )
+                .foregroundStyle(isSelected ? Color.white : AetherDesign.Palette.textSecondary)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Sort UI
