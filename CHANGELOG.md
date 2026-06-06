@@ -4,6 +4,31 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.5] — Unreleased · "Boötes"
+
+Enhanced Cinema (visionOS).
+
+### Added
+
+- **Enhanced Cinema environment (visionOS).** The Dark Theater is now a premium
+  screening room instead of a placeholder: image-based lighting from a
+  code-drawn dark-violet gradient (replacing the two bare point lights), a
+  **glossy clearcoat floor** that pools the room + screen glow, an enclosing
+  dark **skybox** for depth, restrained emissive **cove lighting** + a
+  **screen-bloom** panel, and grounding shadows. Entering "dims the house
+  lights" — the passthrough fades to dark — and immersion now defaults to
+  **progressive** (the Digital Crown dials the real room back in, like Apple
+  TV+ / Disney+). Still 100% procedural (no asset pipeline); the system continues
+  to own video rendering, sizing, and native controls.
+  - *Deferred (need authored Reality Composer Pro assets):* real
+    Medium/Large/IMAX docking-size presets and a literal moving-video floor
+    reflection — see `docs/next-steps/visionos-cinema.md`.
+
+### Changed
+
+- **CI now also compiles visionOS + tvOS** (build-only), so platform-gated code
+  can't pass the iOS-only test job and then break the Xcode Cloud archive.
+
 ## [0.5.1] — Unreleased · "Boötes"
 
 ### Added

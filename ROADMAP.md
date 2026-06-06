@@ -104,9 +104,13 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
   `AVPlayerViewController` docked into an immersive Dark Theater via the system
   docking pattern; single-source-of-truth `CinemaManager`; reliable enter/exit.
   No custom rendering or controls.
-- ⬜ **Phase 2 — Enhanced Cinema (0.5.5)** — authored Dark Theater + custom
-  `DockingRegion` (real Medium/Large/IMAX/Wall presets), floor media
-  reflections, smoother transitions, lighting tuning.
+- 🟡 **Phase 2 — Enhanced Cinema (0.5.5)** — *environment shipped (Track A,
+  code-only):* image-based lighting, glossy reflective floor, dark skybox,
+  cove + screen-bloom accents, grounding shadows, "house-lights-down" dimming,
+  progressive immersion. *Remaining (Track B, needs authored Reality Composer
+  Pro `.usda` assets):* a custom `DockingRegion` for real Medium/Large/IMAX/Wall
+  screen-size presets and a literal moving-video floor reflection
+  (`Reflection_Specular`). On-device lighting/scale tuning also pending.
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
 - ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
 

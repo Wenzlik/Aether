@@ -124,7 +124,7 @@ final class SettingsViewModel {
         "Faster artwork — posters cache to memory + disk and load instantly",
         "Skip Intro / Skip Credits, with Auto-Play Next Episode",
         "Mark as Watched / Unwatched — synced back to your server",
-        "Cinema mode on Apple Vision Pro"
+        "A premium dark screening room in Cinema mode on Apple Vision Pro"
     ]
 
     private func infoString(_ key: String) -> String? {
