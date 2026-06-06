@@ -106,6 +106,7 @@ final class SettingsViewModel {
     /// Aether actually does today rather than churning per-release notes;
     /// the full per-version log lives in `CHANGELOG.md`.
     let whatsNewBullets: [String] = [
+        "Redesigned TV shows — pick a season, see its episodes, jump to Next Up",
         "Faster artwork — posters cache to memory + disk and load instantly",
         "Pull to refresh on Home, Library, and Discover",
         "Skip Intro / Skip Credits, with Auto-Play Next Episode",

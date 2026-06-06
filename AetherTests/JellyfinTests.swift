@@ -321,6 +321,7 @@ struct JellyfinMetadataTests {
         """#
         let dto = try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
         #expect(dto.endYear == nil)
+        #expect(dto.status == "Continuing")
     }
 
     @Test("Missing metadata fields decode to nil / empty")

@@ -345,7 +345,8 @@ public actor JellyfinMediaSource: MediaSource {
             dateAdded: dto.dateAdded,
             seasonCount: dto.childCount,
             episodeCount: dto.recursiveItemCount,
-            endYear: dto.endYear
+            endYear: dto.endYear,
+            isContinuing: dto.status.map { $0 == "Continuing" }
         )
     }
 

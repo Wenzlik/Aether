@@ -55,6 +55,15 @@ struct DetailView: View {
     @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
+    /// Series detail only — the season the inline episode list is showing.
+    /// Defaults to the first season once `children` (the show's seasons) load.
+    @State private var selectedSeason: MediaItem?
+    /// Episodes of `selectedSeason`, shown inline (no navigation into a season).
+    @State private var seasonEpisodes: [MediaItem] = []
+    @State private var isLoadingEpisodes = false
+    /// Saved resume position for the "Next Up" episode, when one exists — drives
+    /// the "Resume from m:ss" caption on the Next Up card.
+    @State private var nextUpResume: ResumePoint?
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -123,7 +132,11 @@ struct DetailView: View {
         ZStack {
             GeometryReader { geo in
                 Group {
-                    if isWideLayout(geo.size) {
+                    // Shows always use the stacked layout — the cinematic
+                    // hero-background column is movie-oriented and too narrow for
+                    // a season's episode list. Movies / episodes still go wide on
+                    // roomy surfaces.
+                    if isWideLayout(geo.size) && !isShow {
                         wideContent
                     } else {
                         scrollContent
@@ -162,6 +175,7 @@ struct DetailView: View {
             resume = await resumeStore.point(for: activeItem.id)
             await hydrateForPlayback()
             await loadChildrenIfNeeded()
+            await setupSeasonsIfNeeded()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
@@ -214,47 +228,51 @@ struct DetailView: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                 }
 
-                // Layout order (Apple-TV / Infuse style): Hero → Actions →
-                // Playback → Overview → Media Information → (children).
-                if !item.kind.isContainer {
-                    actionRow
+                if isShow {
+                    // Dedicated TV-show layout: Next Up → Season Selector →
+                    // Episodes → Overview → Details.
+                    seriesContent
                         .padding(.horizontal, AetherDesign.Spacing.l)
-                }
+                } else {
+                    // Layout order (Apple-TV / Infuse style): Hero → Actions →
+                    // Playback → Overview → Media Information → (children).
+                    if !item.kind.isContainer {
+                        actionRow
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
 
-                if !item.kind.isContainer, current.streamURL != nil {
-                    playbackSection
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .frame(maxWidth: 720, alignment: .leading)
-                }
+                    if !item.kind.isContainer, current.streamURL != nil {
+                        playbackSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
 
-                if let summary = item.summary {
-                    Text(summary)
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        // Clamp the overview for shows so the seasons rail surfaces
-                        // sooner (it's the only focusable target on tvOS); movies
-                        // show the full synopsis.
-                        .lineLimit(item.kind.isContainer ? 3 : nil)
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .frame(maxWidth: 720, alignment: .leading)
-                }
+                    if let summary = item.summary {
+                        Text(summary)
+                            .font(AetherDesign.Typography.body)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
 
-                if !item.kind.isContainer, current.mediaInfo != nil {
-                    mediaSection
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .frame(maxWidth: 720, alignment: .leading)
-                }
+                    if !item.kind.isContainer, current.mediaInfo != nil {
+                        mediaSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
 
-                // Only meaningful when the title exists on more than one source.
-                if availableSources.count > 1 {
-                    availableSourcesSection
-                        .padding(.horizontal, AetherDesign.Spacing.l)
-                        .frame(maxWidth: 720, alignment: .leading)
-                }
+                    // Only meaningful when the title exists on more than one source.
+                    if availableSources.count > 1 {
+                        availableSourcesSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                            .frame(maxWidth: 720, alignment: .leading)
+                    }
 
-                if item.kind.isContainer {
-                    childrenSection
-                        .padding(.horizontal, AetherDesign.Spacing.l)
+                    // Season detail (browsed into directly): episode list.
+                    if item.kind.isContainer {
+                        childrenSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
                 }
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
@@ -484,6 +502,252 @@ struct DetailView: View {
         }
     }
 
+    // MARK: - Series layout (Next Up → Season Selector → Episodes → Details)
+
+    /// The dedicated TV-show body. `children` here are the show's *seasons*; the
+    /// selected season's episodes live in `seasonEpisodes` and render inline, so
+    /// the user never navigates into a season just to see its episodes.
+    @ViewBuilder
+    private var seriesContent: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            if isLoadingChildren && children.isEmpty {
+                AetherLoadingState(.inline)
+            } else {
+                nextUpCard
+                if children.count > 1 {
+                    seasonSelector
+                }
+                seasonEpisodesSection
+                if let summary = item.summary {
+                    Text(summary)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 720, alignment: .leading)
+                }
+                seriesDetailsSection
+                if availableSources.count > 1 {
+                    availableSourcesSection
+                        .frame(maxWidth: 720, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// The episode to surface as "Next Up": the first unwatched episode of the
+    /// selected season (falls back to nothing when the season is fully watched —
+    /// the card then stays hidden rather than nudging a rewatch).
+    private var nextUpEpisode: MediaItem? {
+        seasonEpisodes.first { !$0.isWatched }
+    }
+
+    /// "On Deck"-style card: thumbnail + episode code + title, with a resume
+    /// caption when there's a saved position. Tapping opens the episode's detail
+    /// (where Resume / Play / Download already live), so playback stays on the
+    /// well-tested episode path.
+    @ViewBuilder
+    private var nextUpCard: some View {
+        if let episode = nextUpEpisode {
+            NavigationLink(value: episode) {
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
+                        .frame(width: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                        Text(nextUpResume != nil ? "CONTINUE WATCHING" : "NEXT UP")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.accent)
+                        Text(episodeLabel(episode))
+                            .font(AetherDesign.Typography.cardTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                            .lineLimit(2)
+                        if let resume = nextUpResume {
+                            Text("Resume from \(formatPosition(resume.position))")
+                                .font(AetherDesign.Typography.caption)
+                                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        } else if let runtime = episode.runtime {
+                            Text(formatRuntime(runtime))
+                                .font(AetherDesign.Typography.caption)
+                                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 34))
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                }
+                .padding(AetherDesign.Spacing.m)
+                .background(
+                    AetherDesign.Palette.surface,
+                    in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: 720, alignment: .leading)
+            // tvOS: isolate so Up exits to the tab bar and Down reaches the
+            // season selector / episodes instead of trapping focus.
+            .aetherDetailFocusSection()
+        }
+    }
+
+    /// Horizontal capsule chips, one per season — selecting one swaps the inline
+    /// episode list without navigating. Scrolls when a show has many seasons.
+    private var seasonSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                ForEach(children) { season in
+                    let isSelected = season.id == selectedSeason?.id
+                    Button {
+                        selectSeason(season)
+                    } label: {
+                        Text(seasonLabel(season))
+                            .font(AetherDesign.Typography.metadata)
+                            .padding(.horizontal, AetherDesign.Spacing.m)
+                            .padding(.vertical, AetherDesign.Spacing.xs)
+                            .background(
+                                isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.surfaceElevated,
+                                in: Capsule()
+                            )
+                            .foregroundStyle(
+                                isSelected ? Color.white : AetherDesign.Palette.textSecondary
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        .aetherDetailFocusSection()
+    }
+
+    private func seasonLabel(_ season: MediaItem) -> String {
+        if let number = season.seasonNumber { return "Season \(number)" }
+        return season.title
+    }
+
+    @ViewBuilder
+    private var seasonEpisodesSection: some View {
+        if isLoadingEpisodes {
+            AetherLoadingState(.inline)
+        } else if !seasonEpisodes.isEmpty {
+            LazyVStack(spacing: AetherDesign.Spacing.m) {
+                ForEach(seasonEpisodes) { episode in
+                    NavigationLink(value: episode) {
+                        episodeRow(episode)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func episodeLabel(_ episode: MediaItem) -> String {
+        if let season = episode.seasonNumber, let number = episode.episodeNumber {
+            return "S\(season)E\(number) · \(episode.title)"
+        }
+        return episode.title
+    }
+
+    /// The "Metadata" block: genres, rating, first-aired, status — surfaced now
+    /// that both connectors plumb them through. Hidden entirely when empty.
+    @ViewBuilder
+    private var seriesDetailsSection: some View {
+        let rows = seriesDetailRows
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                Text("Details")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                ForEach(rows, id: \.label) { row in
+                    HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+                        Text(row.label)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .frame(width: 110, alignment: .leading)
+                        Text(row.value)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .font(AetherDesign.Typography.body)
+                }
+            }
+            .frame(maxWidth: 720, alignment: .leading)
+        }
+    }
+
+    private var seriesDetailRows: [(label: String, value: String)] {
+        let show = current
+        var rows: [(label: String, value: String)] = []
+        if !show.genres.isEmpty {
+            rows.append((label: "Genres", value: show.genres.joined(separator: ", ")))
+        }
+        if let rating = show.communityRating {
+            rows.append((label: "Rating", value: String(format: "%.1f", rating)))
+        }
+        if let aired = firstAiredText(show) {
+            rows.append((label: "First Aired", value: aired))
+        }
+        if let status = seriesStatusText(show) {
+            rows.append((label: "Status", value: status))
+        }
+        return rows
+    }
+
+    private func firstAiredText(_ show: MediaItem) -> String? {
+        guard let date = show.releaseDate else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.string(from: date)
+    }
+
+    private func seriesStatusText(_ show: MediaItem) -> String? {
+        if show.isContinuing == true { return "Continuing" }
+        if show.isContinuing == false || show.endYear != nil { return "Ended" }
+        return nil
+    }
+
+    // MARK: - Series loading
+
+    /// Once the show's seasons (`children`) are loaded, default to the first one
+    /// and pull its episodes. Idempotent — only sets up while no season is
+    /// selected, so re-running the `.task` after hydration doesn't reset the
+    /// user's season choice.
+    private func setupSeasonsIfNeeded() async {
+        guard isShow, selectedSeason == nil, let first = children.first else { return }
+        selectedSeason = first
+        await loadSeasonEpisodes(first)
+    }
+
+    private func selectSeason(_ season: MediaItem) {
+        guard season.id != selectedSeason?.id else { return }
+        selectedSeason = season
+        seasonEpisodes = []
+        nextUpResume = nil
+        Task { await loadSeasonEpisodes(season) }
+    }
+
+    private func loadSeasonEpisodes(_ season: MediaItem) async {
+        guard let source else { return }
+        isLoadingEpisodes = true
+        defer { isLoadingEpisodes = false }
+        do {
+            let episodes = try await source.children(of: season.id)
+            // Bail if the user switched seasons while this was in flight.
+            guard selectedSeason?.id == season.id else { return }
+            seasonEpisodes = episodes
+            if let candidate = episodes.first(where: { !$0.isWatched }) {
+                nextUpResume = await resumeStore.point(for: candidate.id)
+            }
+        } catch {
+            guard selectedSeason?.id == season.id else { return }
+            seasonEpisodes = []
+        }
+    }
+
     /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
     /// is always included when known, on every layout.
     private var metadataRow: some View {
@@ -494,12 +758,52 @@ struct DetailView: View {
     }
 
     private var metadataParts: [String] {
+        // Shows describe themselves by run span + season/episode counts, not a
+        // single runtime: "2011–Present • 8 Seasons • 73 Episodes • Series".
+        if item.kind == .show { return seriesMetadataParts }
         var parts: [String] = []
         if let year = item.year { parts.append(String(year)) }
         if let runtime = item.runtime { parts.append(formatRuntime(runtime)) }
         parts.append(kindLabel(item.kind))
         return parts
     }
+
+    /// Series metadata line. Reads `current` so the hydrated counts/status fill
+    /// in after the detail endpoint resolves (the navigated list item often
+    /// lacks them).
+    private var seriesMetadataParts: [String] {
+        let show = current
+        var parts: [String] = []
+        if let years = seriesYearText(show) { parts.append(years) }
+        if let seasons = show.seasonCount, seasons > 0 {
+            parts.append("\(seasons) Season\(seasons == 1 ? "" : "s")")
+        }
+        if let episodes = show.episodeCount, episodes > 0 {
+            parts.append("\(episodes) Episode\(episodes == 1 ? "" : "s")")
+        }
+        parts.append("Series")
+        return parts
+    }
+
+    /// "2011–2019" (ended), "2011–Present" (known continuing), or just "2011"
+    /// when the end is unknown — Plex doesn't expose a status, so we never guess
+    /// "Present" for it.
+    private func seriesYearText(_ show: MediaItem) -> String? {
+        guard let start = seriesStartYear(show) else { return nil }
+        if let end = show.endYear, end != start { return "\(start)–\(end)" }
+        if show.isContinuing == true { return "\(start)–Present" }
+        return "\(start)"
+    }
+
+    private func seriesStartYear(_ show: MediaItem) -> Int? {
+        if let year = show.year { return year }
+        guard let date = show.releaseDate else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? calendar.timeZone
+        return calendar.component(.year, from: date)
+    }
+
+    private var isShow: Bool { item.kind == .show }
 
     /// Compact technical chips under the metadata — resolution, HDR / Dolby
     /// Vision, video codec, audio. Quality at a glance instead of buried in a
