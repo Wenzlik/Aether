@@ -886,9 +886,9 @@ struct PlexMediaSourceLibrariesTests {
         {
           "MediaContainer": {
             "Metadata": [
-              {"ratingKey":"201","type":"season","title":"Season 1",
+              {"ratingKey":"201","type":"season","title":"Season 1","index":1,"parentIndex":1,
                "thumb":"/library/metadata/201/thumb/1"},
-              {"ratingKey":"202","type":"season","title":"Season 2"}
+              {"ratingKey":"202","type":"season","title":"Season 2","index":2,"parentIndex":1}
             ]
           }
         }
@@ -906,6 +906,10 @@ struct PlexMediaSourceLibrariesTests {
         #expect(seasons.count == 2)
         #expect(seasons.map(\.kind) == [.season, .season])
         #expect(seasons.map(\.title) == ["Season 1", "Season 2"])
+        // Season number comes from the season's *own* index, not parentIndex
+        // (which is the show's index — 1 for both — and gave "Season 1" twice).
+        #expect(seasons.map(\.seasonNumber) == [1, 2])
+        #expect(seasons.allSatisfy { $0.episodeNumber == nil })
         // Seasons are containers — no stream URL.
         #expect(seasons.allSatisfy { $0.streamURL == nil })
     }
