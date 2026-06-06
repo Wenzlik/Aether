@@ -156,6 +156,12 @@ public enum JellyfinAPI {
         public let genres: [String]?
         /// For a Series: airing status (`Status`, e.g. "Continuing", "Ended").
         public let status: String?
+        /// For a season or episode: its own number (`IndexNumber`).
+        public let indexNumber: Int?
+        /// For an episode: its season's number (`ParentIndexNumber`).
+        public let parentIndexNumber: Int?
+        /// For an episode: the series title (`SeriesName`).
+        public let seriesName: String?
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
@@ -288,6 +294,9 @@ public enum JellyfinAPI {
             case communityRating = "CommunityRating"
             case genres = "Genres"
             case status = "Status"
+            case indexNumber = "IndexNumber"
+            case parentIndexNumber = "ParentIndexNumber"
+            case seriesName = "SeriesName"
         }
     }
 

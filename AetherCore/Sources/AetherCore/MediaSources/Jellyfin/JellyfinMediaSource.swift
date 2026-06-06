@@ -336,6 +336,11 @@ public actor JellyfinMediaSource: MediaSource {
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
             subtitleTracks: subtitleTracks,
             selectedSubtitleTrackID: subtitleTracks.first(where: \.isSelected)?.id,
+            seriesTitle: dto.seriesName,
+            // Season: its own IndexNumber. Episode: season = ParentIndexNumber,
+            // episode = IndexNumber.
+            seasonNumber: kind == .season ? dto.indexNumber : dto.parentIndexNumber,
+            episodeNumber: kind == .episode ? dto.indexNumber : nil,
             guids: dto.guids,
             isWatched: dto.isWatched,
             parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) },

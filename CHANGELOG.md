@@ -8,6 +8,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Redesigned Movie Detail.** Movies now open into a cinematic full-bleed
+  backdrop hero on every platform, with the title, year • runtime • Movie, a
+  **source badge** (PLEX / JELLYFIN / OFFLINE), capability badges (4K / HDR /
+  Dolby Vision / codec / Atmos), a short overview and the play actions embedded
+  over the artwork — content first. A **More** menu folds away the secondary
+  actions (Mark Watched/Unwatched · Choose Source · Technical Details), and the
+  Audio / Subtitles / Quality controls move *below* the hero. (TV shows keep
+  their dedicated season-first layout.)
 - **Series "Next Up" now follows where you are.** The Next Up card and the
   default-selected season land on the season you're actually mid-watch (the
   first with unwatched episodes), instead of always Season 1 — true On Deck.
@@ -17,6 +25,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Every season read "Season 1" (Plex).** The season selector took its number
+  from the parent show's index instead of the season's own, so all seasons
+  showed "Season 1". They now number correctly; Jellyfin seasons/episodes also
+  carry their season & episode numbers (and series title) now.
 - **iPhone — "Clear Image Cache" was missing.** The Cache card lived only in the
   Settings wide dashboard (iPad / tvOS / visionOS), so on iPhone — which renders
   a single column — it never appeared. It's now shown on iPhone too.

@@ -775,8 +775,12 @@ public actor PlexMediaSource: MediaSource {
             // parentIndex / index when the DTO is an episode. Movies
             // leave these nil; `displayTitle` collapses gracefully.
             seriesTitle: dto.grandparentTitle,
-            seasonNumber: dto.parentIndex,
-            episodeNumber: dto.index,
+            // For a season, its *own* `index` is the season number; for an
+            // episode, the season number is the parent's `index` and the episode
+            // number is its own `index`. (Using `parentIndex` for a season gave
+            // every season "Season 1" — the show's index — in the selector.)
+            seasonNumber: dto.kind == .season ? dto.index : dto.parentIndex,
+            episodeNumber: dto.kind == .episode ? dto.index : nil,
             selectedQuality: .original,
             guids: dto.guids,
             // Plex marks an item watched via `viewCount` (>= 1 play).
