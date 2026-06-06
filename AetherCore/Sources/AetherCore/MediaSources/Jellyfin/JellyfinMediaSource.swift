@@ -152,6 +152,26 @@ public actor JellyfinMediaSource: MediaSource {
         return response.items.compactMap(\.segment)
     }
 
+    /// Similar titles via `GET /Items/{id}/Similar` — Jellyfin's own
+    /// recommendation. Requests the same fields the grid needs (poster art,
+    /// play state). Best-effort: `[]` on failure.
+    public func related(to id: MediaID) async -> [MediaItem] {
+        guard id.source == self.id else { return [] }
+        let request = makeRequest(
+            path: "/Items/\(id.rawValue)/Similar",
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "limit", value: "24"),
+                URLQueryItem(name: "Fields", value: "Overview,Genres,ProviderIds,ProductionYear"),
+                URLQueryItem(name: "enableUserData", value: "true")
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap { mapItem($0) }
+    }
+
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
         switch request.mode {
         case .directPlay:

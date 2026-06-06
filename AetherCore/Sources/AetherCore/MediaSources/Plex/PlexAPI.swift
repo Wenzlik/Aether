@@ -202,6 +202,33 @@ public enum PlexAPI {
         }
     }
 
+    /// `GET /hubs/metadata/{ratingKey}/related` — a `MediaContainer` of hubs
+    /// ("Related", "Similar", "From the same collection"), each carrying its own
+    /// `Metadata` list. Drives the Detail screen's "More Like This" rail.
+    public struct RelatedHubsResponse: Decodable, Sendable {
+        public let mediaContainer: Container
+
+        public struct Container: Decodable, Sendable {
+            public let hub: [Hub]?
+
+            enum CodingKeys: String, CodingKey {
+                case hub = "Hub"
+            }
+        }
+
+        public struct Hub: Decodable, Sendable {
+            public let metadata: [Metadata]?
+
+            enum CodingKeys: String, CodingKey {
+                case metadata = "Metadata"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaContainer = "MediaContainer"
+        }
+    }
+
     /// One metadata item — a movie, show, episode, season, album, etc.
     /// We only model the fields the player needs in 0.2.
     public struct Metadata: Decodable, Sendable, Equatable {
