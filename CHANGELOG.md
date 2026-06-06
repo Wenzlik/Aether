@@ -6,14 +6,27 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.5.0] — Unreleased · "Boötes"
 
-Richer metadata end-to-end, laying the groundwork for the redesigned Series
-Detail and the Library collection browser.
+A dedicated TV-show experience, built on richer metadata plumbed end-to-end.
 
 ### Added
 
+- **Redesigned Series Detail** — TV shows now get a purpose-built layout instead
+  of the movie screen:
+  - **Next Up** card — the first unwatched episode of the selected season, with a
+    "Resume from m:ss" caption when there's a saved position.
+  - **Inline season selector** — capsule chips switch seasons in place; the
+    episode list updates without navigating into a season.
+  - **Inline episodes** — the selected season's episodes (thumbnail, title,
+    runtime, synopsis, watched check) right on the show screen.
+  - **Series metadata line** — "2011–Present • 8 Seasons • 73 Episodes • Series"
+    (run span + counts) instead of a single runtime. The "–Present" only shows
+    when the source confirms the series is still airing (Jellyfin `Status`); Plex,
+    which doesn't report status, shows just the start year.
+  - **Details** section — genres, rating, first-aired, and status.
+  - Movies keep the cinematic hero-background layout and their runtime metadata.
 - **Rich metadata plumbing** — `MediaItem` now carries `genres`,
-  `communityRating`, `releaseDate`, `dateAdded`, `seasonCount`, `episodeCount`
-  and `endYear`, populated from both connectors:
+  `communityRating`, `releaseDate`, `dateAdded`, `seasonCount`, `episodeCount`,
+  `endYear` and `isContinuing`, populated from both connectors:
   - **Plex** — requests/maps `Genre`, `audienceRating`/`rating`,
     `originallyAvailableAt`, `addedAt`, `childCount` (seasons) and `leafCount`
     (episodes).

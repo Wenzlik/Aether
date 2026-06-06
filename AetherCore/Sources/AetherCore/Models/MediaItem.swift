@@ -84,8 +84,12 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// For shows: total episodes (Plex `leafCount` / Jellyfin `RecursiveItemCount`).
     public let episodeCount: Int?
     /// For shows: the final year if the series has ended; `nil` = ongoing /
-    /// unknown (renders as "–Present").
+    /// unknown.
     public let endYear: Int?
+    /// For shows: whether the series is still airing. `true` ⇒ render the year
+    /// as "2011–Present"; `false` ⇒ ended; `nil` ⇒ unknown (Plex doesn't
+    /// expose a status, so we don't guess). Jellyfin maps it from `Status`.
+    public let isContinuing: Bool?
 
     public init(
         id: MediaID,
@@ -117,7 +121,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         dateAdded: Date? = nil,
         seasonCount: Int? = nil,
         episodeCount: Int? = nil,
-        endYear: Int? = nil
+        endYear: Int? = nil,
+        isContinuing: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -149,6 +154,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.seasonCount = seasonCount
         self.episodeCount = episodeCount
         self.endYear = endYear
+        self.isContinuing = isContinuing
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -217,7 +223,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             dateAdded: dateAdded,
             seasonCount: seasonCount,
             episodeCount: episodeCount,
-            endYear: endYear
+            endYear: endYear,
+            isContinuing: isContinuing
         )
     }
 
