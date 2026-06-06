@@ -101,6 +101,12 @@ public protocol MediaSource: Sendable {
     /// `nil`. The default resolves it generically from `item(for:)` + `parentID`
     /// + `children(of:)`, so any source that populates those gets it for free.
     func nextEpisode(after id: MediaID) async -> MediaItem?
+
+    /// Titles **similar** to `id` — Plex's related hub, Jellyfin's `/Similar` —
+    /// for the Detail screen's "More Like This" rail. Best-effort + non-throwing:
+    /// returns `[]` when the source has no recommendation data, so the rail just
+    /// stays hidden. Default: none.
+    func related(to id: MediaID) async -> [MediaItem]
 }
 
 public extension MediaSource {
@@ -135,6 +141,9 @@ public extension MediaSource {
 
     /// Default: no segment data. Plex / Jellyfin override.
     func segments(for id: MediaID) async -> [PlaybackSegment] { [] }
+
+    /// Default: no recommendation data. Plex / Jellyfin override.
+    func related(to id: MediaID) async -> [MediaItem] { [] }
 
     /// Generic next-episode resolver: hydrate the item, fetch its season's
     /// episodes, return the one after it. Works for any source that fills in

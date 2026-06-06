@@ -8,6 +8,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **"More Like This" on Detail.** Movie and show screens now show a rail of
+  similar titles from the source's own recommendations (Plex related hubs,
+  Jellyfin `/Similar`) — content discovery sits above the playback settings.
 - **Redesigned Movie Detail.** Movies now open into a cinematic full-bleed
   backdrop hero on every platform, with the title, year • runtime • Movie, a
   **source badge** (PLEX / JELLYFIN / OFFLINE), capability badges (4K / HDR /

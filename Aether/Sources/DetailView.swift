@@ -55,6 +55,8 @@ struct DetailView: View {
     @State private var launchingInCinema = false
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
+    /// Similar titles for the "More Like This" rail (source recommendations).
+    @State private var related: [MediaItem] = []
     /// Series detail only — the season the inline episode list is showing.
     /// Defaults to the first season once `children` (the show's seasons) load.
     @State private var selectedSeason: MediaItem?
@@ -187,6 +189,7 @@ struct DetailView: View {
             await hydrateForPlayback()
             await loadChildrenIfNeeded()
             await setupSeasonsIfNeeded()
+            related = await source?.related(to: activeItem.id) ?? []
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
@@ -419,9 +422,10 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 movieHero(size)
 
-                // Below the fold: configuration, kept secondary.
-                // (A "More Like This" rail lands here in a follow-up.)
+                // Below the fold: discovery first, then configuration (kept
+                // secondary — most users never touch playback settings).
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                    relatedRail
                     if current.streamURL != nil {
                         playbackSection
                             .frame(maxWidth: 720, alignment: .leading)
@@ -506,6 +510,47 @@ struct DetailView: View {
         900
         #else
         640
+        #endif
+    }
+
+    // MARK: - More Like This
+
+    /// Source-recommended similar titles. Each card navigates the per-source
+    /// `MediaItem`, opening its own Detail. Hidden when the source returns none.
+    @ViewBuilder
+    private var relatedRail: some View {
+        if !related.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text("More Like This")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: AetherDesign.Spacing.l) {
+                        ForEach(related) { rel in
+                            NavigationLink(value: rel) {
+                                AetherCard.poster(
+                                    title: rel.title,
+                                    posterURL: rel.posterURL,
+                                    isWatched: rel.isWatched
+                                )
+                                .frame(width: relatedPosterWidth)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, AetherDesign.Spacing.xs)
+                }
+                .aetherDetailFocusSection()
+            }
+        }
+    }
+
+    private var relatedPosterWidth: CGFloat {
+        #if os(tvOS)
+        220
+        #else
+        120
         #endif
     }
 
@@ -638,6 +683,7 @@ struct DetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: 720, alignment: .leading)
                 }
+                relatedRail
                 seriesDetailsSection
                 if availableSources.count > 1 {
                     availableSourcesSection
@@ -1081,6 +1127,7 @@ struct DetailView: View {
         configuredItem = nil
         playbackItem = nil
         children = []
+        related = []
         resume = nil
         watchedOverride = nil   // the new source carries its own watched state
         overrideItem = (src.item.id == item.id) ? nil : src.item

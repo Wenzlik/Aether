@@ -914,6 +914,38 @@ struct PlexMediaSourceLibrariesTests {
         #expect(seasons.allSatisfy { $0.streamURL == nil })
     }
 
+    @Test("related(to:) hits /hubs/metadata/{id}/related and flattens hubs, dropping self + dupes")
+    func relatedEndpointAndMapping() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Hub": [
+              {"title":"Related","Metadata":[
+                {"ratingKey":"10","type":"movie","title":"Alpha"},
+                {"ratingKey":"11","type":"movie","title":"Beta"}
+              ]},
+              {"title":"Similar","Metadata":[
+                {"ratingKey":"11","type":"movie","title":"Beta"},
+                {"ratingKey":"5","type":"movie","title":"Self"}
+              ]}
+            ]
+          }
+        }
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let movieID = MediaID(source: .plex(serverID: "test-server"), rawValue: "5")
+        let related = await source.related(to: movieID)
+
+        let recorded = await api.requests
+        #expect(recorded.last?.url?.path == "/hubs/metadata/5/related")
+        // "Self" (the item itself, ratingKey 5) and the duplicate Beta are dropped.
+        #expect(related.map(\.title) == ["Alpha", "Beta"])
+    }
+
     @Test("items without Media (e.g. a show container) get a nil streamURL")
     func containerHasNoStreamURL() async throws {
         let api = RecordingAPIClient()

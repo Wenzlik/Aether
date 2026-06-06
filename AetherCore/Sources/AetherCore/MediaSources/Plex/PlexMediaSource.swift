@@ -191,6 +191,26 @@ public actor PlexMediaSource: MediaSource {
         return response.mediaContainer.metadata?.first?.segments ?? []
     }
 
+    /// Similar titles from Plex's related hubs (`/hubs/metadata/{id}/related`).
+    /// Flattens every hub, drops the item itself + duplicates, and maps to
+    /// `MediaItem`. Best-effort: `[]` on any failure, so the rail stays hidden.
+    public func related(to id: MediaID) async -> [MediaItem] {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return [] }
+        let request = request(base: base, path: "/hubs/metadata/\(id.rawValue)/related")
+        guard let response = try? await api.decode(
+            PlexAPI.RelatedHubsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+
+        var seen: Set<String> = [id.rawValue]
+        var items: [MediaItem] = []
+        for hub in response.mediaContainer.hub ?? [] {
+            for dto in hub.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                items.append(mapMetadataToMediaItem(dto, base: base))
+            }
+        }
+        return items
+    }
+
     /// Build a fresh playback URL for the request, mirroring Plex Web:
     ///
     /// 1. **PUT** `/library/parts/{partId}?audioStreamID=…&subtitleStreamID=…`
