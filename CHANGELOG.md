@@ -8,6 +8,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Detail screen trapped you across tab changes.** Opening a movie/show on one
+  tab, switching tabs, and switching back left the Detail screen still showing —
+  sometimes with no clear way back to the tab's root. Selecting any tab (Home /
+  Library / Discover / Search) now returns it to its **root**, and re-tapping the
+  active tab pops to root — the Apple TV / Netflix behaviour. Consistent across
+  iOS, iPadOS, tvOS and visionOS.
 - **tvOS — Settings right column was unreachable.** The "Clear Image Cache" row
   (and the rest of the right-hand dashboard) couldn't be focused, because the
   focus engine had no horizontally-aligned target to cross to. Each dashboard
