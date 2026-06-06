@@ -8,6 +8,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Build identifier in About.** Settings → About now shows the short git commit
+  the build was cut from (e.g. "Version 0.5.1 (a1b2c3d)"), stamped into the
+  Info.plist at build time — so local builds are distinguishable instead of all
+  reading build "1" (only Xcode Cloud injects a real `CFBundleVersion`). A `+`
+  suffix flags uncommitted changes.
 - **"More Like This" on Detail.** Movie and show screens now show a rail of
   similar titles from the source's own recommendations (Plex related hubs,
   Jellyfin `/Similar`) — content discovery sits above the playback settings.
