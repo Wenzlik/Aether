@@ -56,22 +56,26 @@ struct RootTabView: View {
     @State private var discoverPath = NavigationPath()
     @State private var searchPath = NavigationPath()
 
-    /// Re-tapping the already-selected tab resets that tab's navigation to root
-    /// — the iOS-standard behaviour. A plain `selection` binding only fires on a
-    /// *change*; intercepting the setter lets us catch the re-tap of the current
-    /// tab and clear its path.
+    /// Selecting a tab — whether switching to it or re-tapping the current one —
+    /// returns it to its **root**. A pushed Detail therefore never persists across
+    /// tab changes (the bug: open a movie on Home, visit Library, come back to
+    /// Home, and the Detail was still there with no clear way out), and a re-tap
+    /// of the active tab acts as the iOS-standard "pop to root". Matches Apple TV
+    /// / Netflix / Infuse.
+    ///
+    /// We clear the *destination* tab's path on the way in, so every tab is
+    /// entered at its root. A plain `selection` binding only fires on a change;
+    /// intercepting the setter lets us also catch the re-tap of the current tab.
     private var tabSelection: Binding<AppTab> {
         Binding(
             get: { selectedTab },
             set: { newValue in
-                if newValue == selectedTab {
-                    switch newValue {
-                    case .home:     homePath = NavigationPath()
-                    case .library:  libraryPath = NavigationPath()
-                    case .discover: discoverPath = NavigationPath()
-                    case .search:   searchPath = NavigationPath()
-                    case .settings: break
-                    }
+                switch newValue {
+                case .home:     homePath = NavigationPath()
+                case .library:  libraryPath = NavigationPath()
+                case .discover: discoverPath = NavigationPath()
+                case .search:   searchPath = NavigationPath()
+                case .settings: break
                 }
                 selectedTab = newValue
             }
