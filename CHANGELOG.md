@@ -6,6 +6,15 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.5.1] — Unreleased · "Boötes"
 
+### Added
+
+- **Series "Next Up" now follows where you are.** The Next Up card and the
+  default-selected season land on the season you're actually mid-watch (the
+  first with unwatched episodes), instead of always Season 1 — true On Deck.
+  It stays put while you browse other seasons. Uses per-season unwatched counts
+  from the server (Plex `viewedLeafCount`, Jellyfin `UnplayedItemCount`), so no
+  episode-by-episode fetching.
+
 ### Fixed
 
 - **Detail screen trapped you across tab changes.** Opening a movie/show on one

@@ -61,7 +61,11 @@ struct DetailView: View {
     /// Episodes of `selectedSeason`, shown inline (no navigation into a season).
     @State private var seasonEpisodes: [MediaItem] = []
     @State private var isLoadingEpisodes = false
-    /// Saved resume position for the "Next Up" episode, when one exists — drives
+    /// The series "On Deck" episode — the next one to watch across the *whole*
+    /// show (the first unwatched episode of the first not-fully-watched season).
+    /// Computed once on load and stays put while the user browses other seasons.
+    @State private var nextUpEpisode: MediaItem?
+    /// Saved resume position for the On Deck episode, when one exists — drives
     /// the "Resume from m:ss" caption on the Next Up card.
     @State private var nextUpResume: ResumePoint?
     /// The item with full metadata (audio + subtitle streams, partID,
@@ -534,13 +538,6 @@ struct DetailView: View {
         }
     }
 
-    /// The episode to surface as "Next Up": the first unwatched episode of the
-    /// selected season (falls back to nothing when the season is fully watched —
-    /// the card then stays hidden rather than nudging a rewatch).
-    private var nextUpEpisode: MediaItem? {
-        seasonEpisodes.first { !$0.isWatched }
-    }
-
     /// "On Deck"-style card: thumbnail + episode code + title, with a resume
     /// caption when there's a saved position. Tapping opens the episode's detail
     /// (where Resume / Play / Download already live), so playback stays on the
@@ -712,21 +709,40 @@ struct DetailView: View {
 
     // MARK: - Series loading
 
-    /// Once the show's seasons (`children`) are loaded, default to the first one
-    /// and pull its episodes. Idempotent — only sets up while no season is
-    /// selected, so re-running the `.task` after hydration doesn't reset the
-    /// user's season choice.
+    /// Once the show's seasons (`children`) load, default browsing to the season
+    /// the user is actually in — the first season with unwatched episodes (true
+    /// On Deck), via the per-season `unwatchedEpisodeCount` — instead of always
+    /// Season 1. Then compute the series' Next Up from that season's episodes.
+    /// Idempotent — only runs while no season is selected, so re-running the
+    /// `.task` after hydration doesn't reset the user's manual season choice.
     private func setupSeasonsIfNeeded() async {
-        guard isShow, selectedSeason == nil, let first = children.first else { return }
-        selectedSeason = first
-        await loadSeasonEpisodes(first)
+        guard isShow, selectedSeason == nil, !children.isEmpty else { return }
+        let deck = children.first { ($0.unwatchedEpisodeCount ?? 0) > 0 } ?? children.first
+        selectedSeason = deck
+        guard let deck else { return }
+        await loadSeasonEpisodes(deck)
+        await computeNextUp(from: seasonEpisodes)
+    }
+
+    /// The series On Deck episode + its resume point, derived from the deck
+    /// season's episodes. Stays fixed while the user browses other seasons, so
+    /// the Next Up card always points at where they left off in the show.
+    private func computeNextUp(from episodes: [MediaItem]) async {
+        guard let candidate = episodes.first(where: { !$0.isWatched }) else {
+            nextUpEpisode = nil
+            nextUpResume = nil
+            return
+        }
+        nextUpEpisode = candidate
+        nextUpResume = await resumeStore.point(for: candidate.id)
     }
 
     private func selectSeason(_ season: MediaItem) {
         guard season.id != selectedSeason?.id else { return }
         selectedSeason = season
         seasonEpisodes = []
-        nextUpResume = nil
+        // Note: the Next Up card tracks the whole series, so it deliberately
+        // stays put when the user browses to a different season.
         Task { await loadSeasonEpisodes(season) }
     }
 
@@ -739,9 +755,6 @@ struct DetailView: View {
             // Bail if the user switched seasons while this was in flight.
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = episodes
-            if let candidate = episodes.first(where: { !$0.isWatched }) {
-                nextUpResume = await resumeStore.point(for: candidate.id)
-            }
         } catch {
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = []

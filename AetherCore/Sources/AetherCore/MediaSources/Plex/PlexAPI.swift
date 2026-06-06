@@ -247,6 +247,9 @@ public enum PlexAPI {
         /// (`leafCount`).
         public let childCount: Int?
         public let leafCount: Int?
+        /// For a season / show: episodes already watched (`viewedLeafCount`).
+        /// Combined with `leafCount` to know how many remain — On Deck.
+        public let viewedLeafCount: Int?
         /// Epoch seconds the item was added to the library.
         public let addedAt: Int?
         /// Original release date, "YYYY-MM-DD".
@@ -324,6 +327,13 @@ public enum PlexAPI {
             return PlexAPI.dateOnlyFormatter.date(from: value)
         }
 
+        /// Unwatched episodes for a season / show: `leafCount − viewedLeafCount`.
+        /// `nil` unless both counts are present.
+        public var unwatchedLeafCount: Int? {
+            guard let leafCount else { return nil }
+            return max(0, leafCount - (viewedLeafCount ?? 0))
+        }
+
         /// Explicit init with defaults for every optional field, so the
         /// test fixtures that build `Metadata` synthetically don't have
         /// to enumerate the full optional tail each time a new field
@@ -348,6 +358,7 @@ public enum PlexAPI {
             markers: [MarkerEntry]? = nil,
             childCount: Int? = nil,
             leafCount: Int? = nil,
+            viewedLeafCount: Int? = nil,
             addedAt: Int? = nil,
             originallyAvailableAt: String? = nil,
             audienceRating: Double? = nil,
@@ -372,6 +383,7 @@ public enum PlexAPI {
             self.markers = markers
             self.childCount = childCount
             self.leafCount = leafCount
+            self.viewedLeafCount = viewedLeafCount
             self.addedAt = addedAt
             self.originallyAvailableAt = originallyAvailableAt
             self.audienceRating = audienceRating
@@ -498,7 +510,7 @@ public enum PlexAPI {
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case grandparentTitle, parentIndex, parentRatingKey, index, viewCount
-            case childCount, leafCount, addedAt, originallyAvailableAt, audienceRating, rating
+            case childCount, leafCount, viewedLeafCount, addedAt, originallyAvailableAt, audienceRating, rating
             case media = "Media"
             case externalGuids = "Guid"
             case markers = "Marker"

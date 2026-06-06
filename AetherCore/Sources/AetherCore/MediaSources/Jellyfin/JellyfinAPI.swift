@@ -159,8 +159,17 @@ public enum JellyfinAPI {
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
-            public init(played: Bool? = nil) { self.played = played }
-            enum CodingKeys: String, CodingKey { case played = "Played" }
+            /// For a season / series: how many episodes are still unplayed
+            /// (`UnplayedItemCount`). Drives Series Detail's On Deck.
+            public let unplayedItemCount: Int?
+            public init(played: Bool? = nil, unplayedItemCount: Int? = nil) {
+                self.played = played
+                self.unplayedItemCount = unplayedItemCount
+            }
+            enum CodingKeys: String, CodingKey {
+                case played = "Played"
+                case unplayedItemCount = "UnplayedItemCount"
+            }
         }
 
         /// External IDs as a typed `MediaGuids` (case-insensitive provider keys).
