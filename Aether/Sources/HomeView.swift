@@ -160,17 +160,20 @@ struct HomeView: View {
 
     // MARK: - Unified rails (deduplicated across all connected sources)
 
+    /// Home is the **watch-now** surface: what to resume, what's new, what's
+    /// offline. The full deduplicated catalog (Movies / TV Shows browsing) lives
+    /// in the Library tab — Home doesn't repeat it.
     private var unifiedRailsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 if !rails.continueWatching.isEmpty {
                     continueWatchingSection
                 }
-                if !rails.movies.isEmpty {
-                    unifiedSection(title: "Movies", items: rails.movies)
+                if !rails.recentlyAdded.isEmpty {
+                    unifiedSection(title: "Recently Added", items: rails.recentlyAdded)
                 }
-                if !rails.shows.isEmpty {
-                    unifiedSection(title: "TV Shows", items: rails.shows)
+                if !rails.recentlyReleased.isEmpty {
+                    unifiedSection(title: "Recently Released", items: rails.recentlyReleased)
                 }
                 if !rails.downloaded.isEmpty {
                     unifiedSection(title: "Downloaded", items: rails.downloaded)
@@ -463,8 +466,8 @@ struct HomeView: View {
             feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
             // Warm the artwork cache for the rails we're about to show.
             AetherImageCache.shared.prefetch(
-                built.movies.map(\.posterURL)
-                    + built.shows.map(\.posterURL)
+                built.recentlyAdded.map(\.posterURL)
+                    + built.recentlyReleased.map(\.posterURL)
                     + built.downloaded.map(\.posterURL)
                     + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
             )

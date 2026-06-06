@@ -73,6 +73,15 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
     public let type: MediaItem.Kind
     /// Sorted by priority (offline → plex → jellyfin → emby).
     public let sources: [UnifiedSource]
+    /// Catalogue genres (from the lead source) — Discover genre rails + Library
+    /// genre filter.
+    public let genres: [String]
+    /// Community / audience rating (≈0–10) — Discover "Top Rated", Library sort.
+    public let communityRating: Double?
+    /// Original release / premiere date — Home "Recently Released".
+    public let releaseDate: Date?
+    /// When the title was added to the library — Home "Recently Added".
+    public let dateAdded: Date?
 
     public init(
         id: String,
@@ -82,7 +91,11 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
         posterURL: URL?,
         backdropURL: URL?,
         type: MediaItem.Kind,
-        sources: [UnifiedSource]
+        sources: [UnifiedSource],
+        genres: [String] = [],
+        communityRating: Double? = nil,
+        releaseDate: Date? = nil,
+        dateAdded: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -92,6 +105,10 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
         self.backdropURL = backdropURL
         self.type = type
         self.sources = sources
+        self.genres = genres
+        self.communityRating = communityRating
+        self.releaseDate = releaseDate
+        self.dateAdded = dateAdded
     }
 
     /// The source playback should use: highest-priority playable source.
@@ -117,22 +134,41 @@ public struct UnifiedRails: Sendable, Equatable {
     public let movies: [UnifiedMediaItem]
     public let shows: [UnifiedMediaItem]
     public let downloaded: [UnifiedMediaItem]
+    /// Newest titles by library add date — Home's "Recently Added" rail. Falls
+    /// back to merge order when no source reports an add date.
+    public let recentlyAdded: [UnifiedMediaItem]
+    /// Newest titles by original release date — Home's "Recently Released" rail.
+    public let recentlyReleased: [UnifiedMediaItem]
+    /// True total movie / show counts across all sources (the `movies` / `shows`
+    /// arrays above are capped to the rail limit; these are the full figures the
+    /// Library tab shows in its section headers).
+    public let movieCount: Int
+    public let showCount: Int
 
     public init(
         continueWatching: [HomeFeed.ContinueWatchingEntry] = [],
         movies: [UnifiedMediaItem] = [],
         shows: [UnifiedMediaItem] = [],
-        downloaded: [UnifiedMediaItem] = []
+        downloaded: [UnifiedMediaItem] = [],
+        recentlyAdded: [UnifiedMediaItem] = [],
+        recentlyReleased: [UnifiedMediaItem] = [],
+        movieCount: Int = 0,
+        showCount: Int = 0
     ) {
         self.continueWatching = continueWatching
         self.movies = movies
         self.shows = shows
         self.downloaded = downloaded
+        self.recentlyAdded = recentlyAdded
+        self.recentlyReleased = recentlyReleased
+        self.movieCount = movieCount
+        self.showCount = showCount
     }
 
     public static let empty = UnifiedRails()
 
     public var isEmpty: Bool {
         continueWatching.isEmpty && movies.isEmpty && shows.isEmpty && downloaded.isEmpty
+            && recentlyAdded.isEmpty && recentlyReleased.isEmpty
     }
 }
