@@ -2,6 +2,7 @@
 import SwiftUI
 import RealityKit
 import UIKit
+import CoreGraphics
 import AVFoundation
 import Combine
 import os
@@ -9,28 +10,43 @@ import AetherCore
 
 /// The Dark Theater immersive **environment** — and only the environment.
 ///
-/// It draws a near-black space with a subtle Aether-violet accent glow. It does
-/// **not** render the movie: the system docks the native `AVPlayerViewController`
-/// into this space automatically once it's open (see
-/// `docs/next-steps/visionos-cinema.md` → Part 1/2). Keeping video out of here
-/// is the whole point — the system owns rendering, sizing, and controls.
+/// It draws a premium dark screening room. It does **not** render the movie: the
+/// system docks the native `AVPlayerViewController` into this space (see
+/// `docs/next-steps/visionos-cinema.md`). Keeping video out of here is the whole
+/// point — the system owns rendering, sizing, and controls.
 ///
-/// Full immersion gives real OLED black (a screening room, not passthrough). The
-/// procedural content is intentionally minimal — no particles, no shaders, no
-/// animated effects — so it's cheap and reliable. A richer authored environment
-/// with a custom `DockingRegion` and floor reflections is Phase 2.
+/// **V2 (Enhanced Cinema):** the empty black-wall / gray-floor / purple-line look
+/// is replaced with image-based lighting from a code-drawn dark-violet gradient,
+/// a glossy clearcoat floor that pools the room + screen glow, an enclosing dark
+/// skybox, restrained emissive cove strips + a screen-bloom panel, grounding
+/// shadows, and a gentle "lights dimming" passthrough fade on enter. It is still
+/// 100% procedural — no Reality Composer Pro assets — so it ships with no asset
+/// pipeline and stays the reliable fallback. (Real Medium/Large/IMAX docking
+/// presets + a literal moving-video floor reflection need authored `.usda`
+/// assets and are a separate track — see the design doc.)
 struct DarkTheaterView: View {
     /// Cinema state — so the theater can reset it when playback ends.
     let cinema: CinemaManager
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
+    /// Drives the gentle passthrough dim on enter ("house lights down"). Starts
+    /// off so the room fades dark rather than snapping.
+    @State private var dimmed = false
+
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
 
     var body: some View {
         RealityView { content in
-            content.add(Self.makeEnvironment())
+            let environment = await Self.makeEnvironment()
+            content.add(environment)
         }
-        .onAppear { Self.log.debug("DarkTheater appeared (space open)") }
+        // Gentle "house lights down": ramp passthrough to dark on enter instead
+        // of a hard cut. Only visible on device (Simulator barely dims).
+        .preferredSurroundingsEffect(dimmed ? .systemDark : nil)
+        .onAppear {
+            Self.log.debug("DarkTheater appeared (space open)")
+            withAnimation(.easeInOut(duration: 1.4)) { dimmed = true }
+        }
         .onDisappear { Self.log.debug("DarkTheater disappeared (space closed)") }
         // Authoritative exit: this view lives for as long as the immersive space
         // is open (it *is* the space's scene), so its end-of-playback observer
@@ -46,75 +62,193 @@ struct DarkTheaterView: View {
         }
     }
 
-    /// Build the procedural Dark Theater: a dark, slightly glossy floor; a very
-    /// dim neutral fill so the room reads as a space rather than a void; and a
-    /// restrained Aether-violet accent (two side glows + a faint floor line).
-    /// `@MainActor` because RealityKit entity / component initialisers are
-    /// main-actor-isolated. Values are a first pass — tune on device.
+    // MARK: - Environment
+
+    /// Build the premium Dark Theater. `@MainActor` because RealityKit entity /
+    /// component initialisers are main-actor-isolated; `async` so the IBL +
+    /// skybox textures can be generated off the render path. Values are a first
+    /// pass — tune on device (Simulator misjudges scale, reflections, dimming).
     @MainActor
-    private static func makeEnvironment() -> Entity {
+    private static func makeEnvironment() async -> Entity {
         let root = Entity()
         root.name = "DarkTheater"
 
-        // Floor — near-black with a touch of gloss so the docked screen's light
-        // pools faintly on it (the "luxury screening room" cue).
-        var floorMaterial = PhysicallyBasedMaterial()
-        floorMaterial.baseColor = .init(tint: color(0x101014))
-        floorMaterial.roughness = .init(floatLiteral: 0.45)
-        floorMaterial.metallic = .init(floatLiteral: 0.0)
-        let floor = ModelEntity(
-            mesh: .generatePlane(width: 60, depth: 60),
-            materials: [floorMaterial]
-        )
-        floor.name = "Floor"
+        // Draw the dark-violet gradient once; both the IBL and the skybox use it
+        // (it also carries the screen-glow band, so the "bloom" lives in the
+        // lighting/reflection — never as an opaque panel between the audience and
+        // the system-docked screen).
+        let gradient = makeGradientImage()
+
+        // Image-based lighting from that gradient is the primary light — soft and
+        // cinematic, unlike two bare point lights. Tuned to stay dark but bright
+        // enough that the glossy floor actually pools a reflection (TUNE ON
+        // DEVICE — the Simulator misjudges this).
+        var ibl: Entity?
+        if let gradient { ibl = await makeIBL(from: gradient) }
+        if let ibl { root.addChild(ibl) }
+
+        // The floor is the one PBR surface that should reflect the environment,
+        // so the IBL receiver goes on it directly (the component doesn't
+        // propagate from the root to children). The skybox / cove are unlit and
+        // don't need it.
+        let floor = makeFloor()
+        if let ibl {
+            floor.components.set(ImageBasedLightReceiverComponent(imageBasedLight: ibl))
+        }
         root.addChild(floor)
-
-        // Very dim neutral fill from above-front, angled down, so the floor is
-        // *just* readable — keeps the space from being a flat black void without
-        // competing with the screen (which is the real key light).
-        let fill = Entity()
-        fill.name = "FillLight"
-        fill.components.set(DirectionalLightComponent(color: color(0xFFF4E6), intensity: 320))
-        fill.orientation = simd_quatf(angle: -.pi * 0.32, axis: [1, 0, 0])
-        root.addChild(fill)
-
-        // Restrained violet accent — two low side glows toward the front where
-        // the screen docks, plus a faint emissive line on the floor. Calm, not
-        // neon (spec: avoid neon / cyberpunk).
-        root.addChild(makeAccentLight(name: "AccentLightL", at: [-5.5, 0.8, -4.0]))
-        root.addChild(makeAccentLight(name: "AccentLightR", at: [5.5, 0.8, -4.0]))
-        root.addChild(makeAccentLine())
+        if let gradient, let skybox = await makeSkybox(from: gradient) { root.addChild(skybox) }
+        root.addChild(makeKeyLight())
+        for cove in makeCoveLights() { root.addChild(cove) }
 
         return root
     }
 
-    /// A thin, dim violet emissive line on the floor toward the screen — the one
-    /// restrained graphic accent. Unlit so it glows softly regardless of the
-    /// room lighting.
+    /// The image-based light entity, built from the code-drawn gradient. `nil`
+    /// if the resource can't be generated (then the room falls back to the dim
+    /// key light alone — still dark, just flatter).
     @MainActor
-    private static func makeAccentLine() -> Entity {
-        let line = ModelEntity(
-            mesh: .generatePlane(width: 10, depth: 0.04),
-            materials: [UnlitMaterial(color: color(0x3B2A6B))]
-        )
-        line.name = "AccentLine"
-        line.position = [0, 0.01, -4.2]
-        return line
+    private static func makeIBL(from image: CGImage) async -> Entity? {
+        guard let resource = try? await EnvironmentResource(equirectangular: image) else { return nil }
+        let ibl = Entity()
+        ibl.name = "IBL"
+        // `intensityExponent` is a power-of-two multiplier (−0.5 ≈ 0.71×). Kept
+        // only slightly under unity so the glossy floor still picks up a visible
+        // reflection of the gradient's glow band — a more negative value (the
+        // first pass used −1.5 ≈ 0.35×) crushed the floor back to flat black.
+        // TUNE ON DEVICE.
+        ibl.components.set(ImageBasedLightComponent(source: .single(resource), intensityExponent: -0.5))
+        return ibl
     }
 
+    /// Near-black, glossy clearcoat floor. Low roughness + a clearcoat layer make
+    /// it pool the IBL gradient and the screen-bloom band as a soft on-floor glow
+    /// — the "luxury screening room" cue. (This reflects the *environment*, not
+    /// the live picture; a literal video reflection needs an authored asset.)
     @MainActor
-    private static func makeAccentLight(name: String, at position: SIMD3<Float>) -> Entity {
+    private static func makeFloor() -> Entity {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: color(0x0B0B0F))
+        material.roughness = .init(floatLiteral: 0.18)
+        material.metallic = .init(floatLiteral: 0.0)
+        material.clearcoat = .init(floatLiteral: 1.0)
+        material.clearcoatRoughness = .init(floatLiteral: 0.12)
+
+        let floor = ModelEntity(mesh: .generatePlane(width: 60, depth: 60), materials: [material])
+        floor.name = "Floor"
+        // No GroundingShadowComponent here: the floor *is* the ground (its normal
+        // faces up, so it can't cast a downward grounding shadow), and the room
+        // has no hovering props to ground — the docked screen is system-owned and
+        // must not be touched. Grounding shadows return only if we add real props.
+        return floor
+    }
+
+    /// A large inverted sphere textured with the same dark gradient so the room
+    /// reads as an enclosed space with depth instead of a flat black void.
+    @MainActor
+    private static func makeSkybox(from image: CGImage) async -> Entity? {
+        guard let texture = try? await TextureResource(image: image, options: .init(semantic: .color))
+        else { return nil }
+
+        var material = UnlitMaterial()
+        material.color = .init(tint: .white, texture: .init(texture))
+        // Render both sides so the gradient is visible from inside the sphere
+        // (default back-face culling would hide the interior we're standing in).
+        material.faceCulling = .none
+
+        let sphere = ModelEntity(mesh: .generateSphere(radius: 50), materials: [material])
+        sphere.name = "Skybox"
+        return sphere
+    }
+
+    /// One dim, warm key light from above-front. Kept low — the IBL does the
+    /// ambient work — purely so the glossy floor gets a soft specular streak.
+    /// (It does *not* steer shadows: grounding shadows ignore scene lights.)
+    @MainActor
+    private static func makeKeyLight() -> Entity {
         let entity = Entity()
-        entity.name = name
-        entity.components.set(
-            PointLightComponent(
-                color: color(0x8B5CF6),   // Aether Violet
-                intensity: 2200,
-                attenuationRadius: 16
-            )
-        )
-        entity.position = position
+        entity.name = "KeyLight"
+        entity.components.set(DirectionalLightComponent(color: color(0xFFF4E6), intensity: 220))
+        entity.orientation = simd_quatf(angle: -.pi * 0.34, axis: [1, 0, 0])
         return entity
+    }
+
+    /// Thin, dim violet emissive cove strips — a restrained brand accent that
+    /// reads as architectural cove lighting, not two lamps (replaces V1's two
+    /// bright point lights). The "front" run sits *behind* the screen plane so it
+    /// glows at the base of the far wall rather than as a line between the
+    /// audience and the docked screen; the side runs flank the seating. Calm, not
+    /// neon.
+    @MainActor
+    private static func makeCoveLights() -> [Entity] {
+        func strip(_ name: String, width: Float, depth: Float, at position: SIMD3<Float>) -> Entity {
+            let entity = ModelEntity(
+                mesh: .generatePlane(width: width, depth: depth),
+                materials: [UnlitMaterial(color: color(0x2C1F52))]
+            )
+            entity.name = name
+            entity.position = position
+            return entity
+        }
+        return [
+            strip("CoveFront", width: 11, depth: 0.05, at: [0, 0.012, -6.6]),
+            strip("CoveLeft", width: 0.05, depth: 9, at: [-5.4, 0.012, -1.5]),
+            strip("CoveRight", width: 0.05, depth: 9, at: [5.4, 0.012, -1.5]),
+        ]
+    }
+
+    // MARK: - Procedural gradient
+
+    /// Draw a 1024×512 equirectangular gradient used for both the IBL and the
+    /// skybox: near-black at the nadir, rising to a charcoal-violet zenith, with a
+    /// soft brighter glow toward the upper-front. The glow sits high on purpose —
+    /// a flat floor's reflection samples the *upper* hemisphere, so that's where
+    /// the on-floor pool comes from. Brightness + exact placement need on-device
+    /// tuning (equirectangular yaw and Simulator lighting are unreliable here). No
+    /// assets — pure Core Graphics.
+    private static func makeGradientImage() -> CGImage? {
+        let width = 1024, height = 512
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        // Vertical gradient: near-black nadir → charcoal-violet zenith. The top
+        // carries the most energy because that's what the floor reflects.
+        let colors = [
+            color(0x050507).cgColor,   // nadir — floor never reflects this
+            color(0x100D20).cgColor,   // horizon
+            color(0x241D44).cgColor,   // zenith — charcoal violet, the floor's source
+        ] as CFArray
+        guard let gradient = CGGradient(
+            colorsSpace: colorSpace, colors: colors, locations: [0.0, 0.5, 1.0]
+        ) else { return nil }
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: 0, y: 0),
+            end: CGPoint(x: 0, y: height),
+            options: []
+        )
+
+        // Soft brighter glow high and centred (upper-front) — the screen's light
+        // spilling into the dome, picked up as the pooled glow on the glossy
+        // floor. Kept restrained so the room still reads dark.
+        if let glow = CGGradient(
+            colorsSpace: colorSpace,
+            colors: [color(0x4A4072).cgColor, color(0x241D44).withAlphaComponent(0).cgColor] as CFArray,
+            locations: [0.0, 1.0]
+        ) {
+            let center = CGPoint(x: CGFloat(width) / 2, y: CGFloat(height) * 0.80)
+            context.drawRadialGradient(
+                glow,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: CGFloat(width) * 0.42,
+                options: []
+            )
+        }
+
+        return context.makeImage()
     }
 
     /// `UIColor` from a 24-bit RGB hex literal — RealityKit takes `UIColor`,

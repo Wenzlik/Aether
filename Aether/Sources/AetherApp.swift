@@ -23,11 +23,12 @@ struct AetherApp: App {
     // truth for cinema state; `RootTabView` opens/closes the immersive space and
     // presents the native player on its intent. The space renders only the Dark
     // Theater environment — the system docks the native `AVPlayerViewController`
-    // into it. `immersionStyle` defaults to `.full` (true OLED black) with
-    // `.progressive` so the Digital Crown can blend the room back in.
+    // into it. `immersionStyle` defaults to `.progressive` (Apple TV+ / Disney+
+    // feel — enter dark, but the Digital Crown dials the real room back in) with
+    // `.full` available for true OLED black.
     // See `docs/next-steps/visionos-cinema.md`.
     @State private var cinema = CinemaManager()
-    @State private var immersionStyle: any ImmersionStyle = .full
+    @State private var immersionStyle: any ImmersionStyle = .progressive
     #endif
 
     var body: some Scene {
