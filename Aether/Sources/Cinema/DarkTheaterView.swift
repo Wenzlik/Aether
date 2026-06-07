@@ -64,13 +64,14 @@ struct DarkTheaterView: View {
             refs.dock = root.findEntity(named: Self.dockEntityName)
             applyLayout()
 
-            // Floating glass control (size + seat), parked low and close to the
-            // viewer — NOT a child of the room (stays put as the seat slides).
-            // Low + near so it sits *below* the screen rectangle (even at the
-            // largest preset / during playback the docked video doesn't cover
-            // it) and stays reachable. Tune Y on device.
+            // Floating glass control (size + seat), parked at a comfortable
+            // downward-glance spot near the viewer — NOT a child of the room
+            // (stays put as the seat slides). It collapses to a small handle
+            // while watching (so it doesn't get covered or clutter the view) and
+            // expands on look/tap, so exact height matters less than before.
+            // Tune Y on device.
             if let panel = attachments.entity(for: Self.controlPanelID) {
-                panel.position = SIMD3<Float>(0, 0.35, -1.15)
+                panel.position = SIMD3<Float>(0, 0.75, -1.25)
                 content.add(panel)
             }
         } attachments: {
@@ -398,19 +399,55 @@ private final class CinemaSceneRefs {
 private struct CinemaControlPanel: View {
     let cinema: CinemaManager
 
+    /// Collapsed by default to a faint handle; expands to the full controls on
+    /// look/tap, then auto-collapses after a few seconds so it's out of the way
+    /// while watching.
+    @State private var expanded = false
+    @State private var hideTask: Task<Void, Never>?
+
     var body: some View {
+        Group {
+            if expanded {
+                fullPanel
+            } else {
+                handle
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: expanded)
+        // Gaze (or a connected pointer) reveals the full panel. visionOS doesn't
+        // hand apps the gaze point, so the handle below also carries a system
+        // hover highlight + a tap fallback (look → pinch) — pure look-with-no-
+        // marker isn't possible.
+        .onHover { hovering in if hovering { reveal() } }
+    }
+
+    /// The always-present, unobtrusive affordance shown while collapsed.
+    private var handle: some View {
+        Image(systemName: "slider.horizontal.3")
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 26)
+            .glassBackgroundEffect()
+            .hoverEffect()
+            .onTapGesture { reveal() }
+            .accessibilityLabel("Cinema controls")
+            .accessibilityHint("Shows screen size and seat controls")
+    }
+
+    private var fullPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             row("Screen Size") {
                 ForEach(CinemaScreenPreset.ordered, id: \.self) { preset in
                     chip(preset.displayName, selected: cinema.screenPreset == preset) {
-                        cinema.setScreenPreset(preset)
+                        cinema.setScreenPreset(preset); reveal()
                     }
                 }
             }
             row("Seat") {
                 ForEach(CinemaSeat.ordered, id: \.self) { seat in
                     chip(seat.displayName, selected: cinema.seat == seat) {
-                        cinema.setSeat(seat)
+                        cinema.setSeat(seat); reveal()
                     }
                 }
             }
@@ -418,6 +455,19 @@ private struct CinemaControlPanel: View {
         .padding(28)
         .frame(width: 480)
         .glassBackgroundEffect()
+    }
+
+    /// Show the full panel and (re)start the inactivity timer that collapses it
+    /// back to the handle. Called on reveal *and* on every interaction so it
+    /// stays open while the user is using it.
+    private func reveal() {
+        if !expanded { expanded = true }
+        hideTask?.cancel()
+        hideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            expanded = false
+        }
     }
 
     @ViewBuilder
