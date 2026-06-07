@@ -26,6 +26,9 @@ struct PlayerView: View {
     let playbackPreferences: PlaybackPreferencesStore?
     @State private var viewModel: PlayerStateViewModel
     @State private var showFailureDetails = false
+    /// Foreground/background — drives suspending the UI-refresh poll while
+    /// backgrounded (audio keeps playing; we just stop the 500 ms CPU churn).
+    @Environment(\.scenePhase) private var scenePhase
     /// Segments already auto-skipped this session, so `.automatically` fires
     /// once per segment instead of on every time tick.
     @State private var autoSkipped: Set<String> = []
@@ -134,6 +137,12 @@ struct PlayerView: View {
             #if os(iOS)
             if viewModel.player != nil { scheduleChromeHide() }
             #endif
+        }
+        // Suspend the 500 ms UI-refresh poll while backgrounded (no visible
+        // player UI to update) so the app stops burning CPU behind the lock
+        // screen; resume on return to foreground. Audio keeps playing.
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.setAppActive(phase == .active)
         }
         .onDisappear {
             cancelCountdown()

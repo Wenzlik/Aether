@@ -79,6 +79,22 @@ public final class PlayerStateViewModel {
         await refresh()
     }
 
+    /// Track the app's foreground/background state (drive from `scenePhase`).
+    /// While backgrounded there's no visible player UI, so the 500 ms refresh
+    /// poll is suspended entirely — audio keeps playing via the background-audio
+    /// mode, but we stop burning CPU 2×/second behind the lock screen (battery /
+    /// heat). It resumes, with an immediate refresh, on return to foreground.
+    public func setAppActive(_ isActive: Bool) {
+        guard player != nil else { return }   // nothing open → nothing to poll
+        if isActive {
+            startRefreshing()
+            Task { await refresh() }
+        } else {
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
+    }
+
     // MARK: - Internals
 
     private func startRefreshing() {
