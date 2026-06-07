@@ -4,6 +4,47 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.0] — Unreleased · "Cassiopeia"
+
+Coordinated UX/UI refresh across iOS, iPadOS, tvOS and visionOS — a premium,
+cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
+
+### Changed
+
+- **New brand colour** — the accent moves from violet to a premium blue
+  (`#6A8BFF`); purple is now a subtle secondary. Everything interactive —
+  buttons, focus, progress, badges, links — picks it up automatically.
+- **Layered cinematic backgrounds** replace flat black on every screen
+  (`#0B0D12 → #111827 → #0A0A0F` plus faint brand blooms), applied through one
+  shared modifier so navigating never shows a background shift.
+- **Premium focus on Apple TV** — focused cards / buttons / rows lift and glow
+  softly instead of drawing hard white outlines.
+- **Continue Watching progress** is integrated into the artwork (a frosted
+  strip with a blue fill), not a detached line.
+- **Detail pages** — Resume leads, Restart is secondary, and the oversized
+  "More" button is demoted to a compact menu so it never competes with Resume.
+- **Search** comes alive before you type — discovery rails (Recently Added /
+  Released) instead of a blank page.
+- **Discover** reordered as a discovery hub (Featured → Recently Added → Top
+  Rated → genres → Picked for You).
+- **Compact navigation header** — the brand mark sits inline beside search
+  instead of a large centered banner, reclaiming vertical space.
+
+### Notes
+
+- tvOS / visionOS visuals (focus feel, gradient depth, nav placement) are best
+  verified on-device via TestFlight.
+- Deferred to a 0.6.x follow-up: the full nav-bar / ornament logo migration and
+  extracting a single shared rail component (consistency).
+
+## [0.5.9] — Unreleased · "Boötes"
+
+### Fixed
+
+- Home / Library / Discover no longer flash an empty / "connect a source" state
+  during pull-to-refresh or at launch — content persists through a refresh, and
+  a loading state shows until data (or source discovery) lands.
+
 ## [0.5.8] — Unreleased · "Boötes"
 
 Artwork bandwidth — phase 2 of the artwork review: per-call-site size tiers and

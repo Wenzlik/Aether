@@ -66,13 +66,12 @@ private struct AetherButtonLabel: View {
         .background(background)
         .clipShape(Capsule())
         .foregroundStyle(foreground)
-        // Brand-violet glow on focus (and a permanent soft bloom under the
-        // primary action so it reads as the hero CTA), never a flat black drop.
-        .shadow(color: glowColor.opacity(isFocused ? 0.55 : (role == .primary ? 0.25 : 0.0)),
-                radius: isFocused ? 18 : (role == .primary ? 10 : 0),
-                y: isFocused ? 8 : 0)
-        .scaleEffect(isFocused ? 1.05 : 1.0)
-        .animation(AetherDesign.Motion.focus, value: isFocused)
+        // Permanent soft bloom under the primary action so it reads as the hero
+        // CTA even unfocused; the focused lift + blue glow come from
+        // `premiumFocus` (one focus treatment everywhere — no borders).
+        .shadow(color: AetherDesign.Palette.focusGlow.opacity(role == .primary && !isFocused ? 0.25 : 0.0),
+                radius: role == .primary && !isFocused ? 10 : 0)
+        .premiumFocus(scale: 1.04)
     }
 
     @ViewBuilder
@@ -86,14 +85,6 @@ private struct AetherButtonLabel: View {
             AetherDesign.Palette.surface.opacity(isFocused ? 1.0 : 0.6)
         case .destructive:
             AetherDesign.Palette.error.opacity(isFocused ? 0.40 : 0.18)
-        }
-    }
-
-    private var glowColor: Color {
-        switch role {
-        case .primary:     return AetherDesign.Palette.accent
-        case .secondary:   return AetherDesign.Palette.accent
-        case .destructive: return AetherDesign.Palette.error
         }
     }
 

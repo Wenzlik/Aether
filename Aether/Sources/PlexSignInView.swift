@@ -27,7 +27,7 @@ struct PlexSignInView: View {
 
     var body: some View {
         ZStack {
-            AetherDesign.Palette.background.ignoresSafeArea()
+            AetherDesign.Gradients.background.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                 header

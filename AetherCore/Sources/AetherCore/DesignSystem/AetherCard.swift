@@ -18,8 +18,6 @@ public struct AetherCard: View {
     /// Shows a "watched" checkmark badge over the artwork when `true`.
     public let isWatched: Bool
 
-    @Environment(\.isFocused) private var isFocused
-
     public init(
         title: String,
         subtitle: String? = nil,
@@ -39,20 +37,12 @@ public struct AetherCard: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             artwork
-                .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 .overlay(alignment: .bottom) { progressBar }
                 .overlay(alignment: .topTrailing) { watchedBadge }
-                // Violet brand glow when focused — a soft bloom, not a hard
-                // white border.
-                .overlay {
-                    RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous)
-                        .strokeBorder(AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0.0), lineWidth: 2)
-                }
-                .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.55 : 0.0),
-                        radius: isFocused ? 24 : 0,
-                        y: isFocused ? 12 : 0)
-                .scaleEffect(isFocused ? 1.06 : 1.0)
-                .animation(AetherDesign.Motion.focus, value: isFocused)
+                .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
+                // Premium focus: lift + soft blue glow, no border (Apple TV+ feel).
+                // Cards earn the larger lift.
+                .premiumFocus(scale: 1.06)
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
                 Text(title)
@@ -89,20 +79,41 @@ public struct AetherCard: View {
         }
     }
 
+    /// Apple-TV-style progress: a frosted strip across the artwork's lower edge
+    /// (so it reads as part of the poster, not a detached line) with a 2pt
+    /// gradient fill in the brand blue. Clipped by the card's rounded corners
+    /// (the overlays are composited before the parent `clipShape`).
     @ViewBuilder
     private var progressBar: some View {
         if let progress {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(.black.opacity(0.45))
-                    Rectangle()
-                        .fill(AetherDesign.Gradients.progress)
-                        .frame(width: geo.size.width * max(0, min(progress, 1)))
+            let clamped = CGFloat(max(0, min(progress, 1)))
+            ZStack(alignment: .bottom) {
+                Rectangle().fill(AetherDesign.Materials.card)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(Color.white.opacity(0.18))
+                        Rectangle()
+                            .fill(AetherDesign.Gradients.progress)
+                            .frame(width: geo.size.width * clamped)
+                    }
+                    .frame(height: 2)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
                 }
             }
-            .frame(height: 3)
+            .frame(height: progressStripHeight)
+            .clipShape(
+                UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8, style: .continuous)
+            )
         }
+    }
+
+    /// Taller frosted strip on the 10-foot / spatial UI, slimmer on touch.
+    private var progressStripHeight: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 28
+        #else
+        return 22
+        #endif
     }
 
     private var platformCornerRadius: CGFloat {

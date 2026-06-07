@@ -45,7 +45,7 @@ struct LibraryView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.l)
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .navigationTitle(library.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)

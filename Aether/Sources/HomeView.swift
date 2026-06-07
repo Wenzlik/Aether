@@ -72,7 +72,7 @@ struct HomeView: View {
             #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
-            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .aetherScreenBackground()
             // Pull-to-refresh on iOS/iPadOS/visionOS; tvOS uses the explicit
             // Reload button in the header (pull-to-refresh isn't available).
             #if !os(tvOS)
@@ -119,26 +119,18 @@ struct HomeView: View {
         return true
     }
 
-    /// Centered Aether mark on top, search field beneath. Replaces the
-    /// system `.searchable` modifier so the lockup gets the prime spot
-    /// instead of the search bar.
+    /// Compact nav header (0.6.0): the brand mark sits inline at the leading
+    /// edge beside the search field instead of a large centered banner — far
+    /// less wasted vertical space, more content density.
     private var brandedHeader: some View {
-        VStack(spacing: AetherDesign.Spacing.m) {
-            AetherWordmark(.large)
-                .frame(maxWidth: .infinity)
-            #if os(tvOS)
-            // tvOS has no pull-to-refresh, so Reload sits to the right of a
-            // right-sized search field — a single Right press from the field
-            // lands on it, instead of being stranded full-width below.
-            HStack(spacing: AetherDesign.Spacing.m) {
-                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
-                    .frame(maxWidth: 760)
-                AetherTVReloadButton { Task { await load() } }
-                    .frame(width: 260)
-            }
-            .frame(maxWidth: .infinity)
-            #else
+        HStack(spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.small)
             AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            #if os(tvOS)
+            // tvOS has no pull-to-refresh, so Reload sits to the right of the
+            // search field — one Right press from the field lands on it.
+            AetherTVReloadButton { Task { await load() } }
+                .frame(width: 260)
             #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
