@@ -29,6 +29,10 @@ struct HomeView: View {
     /// All connected sources — when non-empty, Home renders **unified**
     /// (deduplicated) rails across them instead of a single source's libraries.
     let connectedSources: [any MediaSource]
+    /// `true` while `AppSession` is still starting up / discovering. While it is,
+    /// an empty feed means "still connecting" → show loading, not the welcome /
+    /// empty state.
+    let isConnecting: Bool
     /// Backs the unified aggregator's offline fold-in.
     let downloadStore: DownloadStore?
 
@@ -36,6 +40,10 @@ struct HomeView: View {
     @State private var rails: UnifiedRails = .empty
     @State private var loadError: String?
     @State private var isLoading = false
+    /// `true` once at least one `load()` has completed — so an empty feed during
+    /// the first load or a refresh shows loading / keeps content instead of
+    /// flashing the welcome / empty state.
+    @State private var hasLoaded = false
     /// Bound to the system search bar (`.searchable` modifier). When
     /// non-empty, Home swaps its rails for `MediaSearchResults`. Same
     /// search surface Library offers — both tabs let the user reach the
@@ -151,14 +159,16 @@ struct HomeView: View {
             MediaSearchResults(sources: connectedSources, query: searchQuery)
         } else if let loadError {
             errorState(loadError)
-        } else if isLoading && isContentEmpty {
+        } else if !isContentEmpty {
+            // Have content → always show it, even while a refresh is running, so
+            // pull-to-refresh never blanks to a loading/empty/welcome state.
+            if usesUnified { unifiedRailsContent } else { railsContent }
+        } else if isConnecting || isLoading || !hasLoaded {
+            // Still starting up, loading, or the first load hasn't finished —
+            // show loading rather than flashing "connect Plex" / "empty".
             loadingState
-        } else if isContentEmpty {
-            emptyState
-        } else if usesUnified {
-            unifiedRailsContent
         } else {
-            railsContent
+            emptyState
         }
     }
 
@@ -463,6 +473,7 @@ struct HomeView: View {
 
     private func load() async {
         loadError = nil
+        defer { hasLoaded = true }
 
         // Unified path: aggregate + dedupe across every connected source. The
         // aggregator is fault-tolerant (no throw) — a down server is skipped.

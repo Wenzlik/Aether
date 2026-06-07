@@ -100,6 +100,7 @@ struct RootTabView: View {
                     downloads: dlObserver,
                     playbackPreferences: session.playbackPreferences,
                     connectedSources: session.connectedSources,
+                    isConnecting: session.isStartingUp,
                     downloadStore: dlManager == nil ? nil : session.downloadStore
                 )
             }
@@ -108,6 +109,7 @@ struct RootTabView: View {
                 LibraryBrowseView(
                     navigationPath: $libraryPath,
                     connectedSources: session.connectedSources,
+                    isConnecting: session.isStartingUp,
                     downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
@@ -124,6 +126,7 @@ struct RootTabView: View {
                 DiscoverView(
                     navigationPath: $discoverPath,
                     connectedSources: session.connectedSources,
+                    isConnecting: session.isStartingUp,
                     downloadStore: dlManager == nil ? nil : session.downloadStore,
                     resumeStore: session.resumeStore,
                     playbackSession: session.playback,
