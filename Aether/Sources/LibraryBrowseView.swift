@@ -227,7 +227,7 @@ struct LibraryBrowseView: View {
             id: job.mediaID,
             title: job.title,
             kind: job.kind,
-            posterURL: job.posterURL,
+            posterURL: job.displayPosterURL,
             seriesTitle: job.seriesTitle,
             seasonNumber: job.seasonNumber,
             episodeNumber: job.episodeNumber

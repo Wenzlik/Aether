@@ -95,6 +95,12 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Lets Series Detail land its "Next Up" / On Deck on the season the user is
     /// actually in, without fetching every episode. `nil` when unknown.
     public let unwatchedEpisodeCount: Int?
+    /// The title's artwork as a source + reference, able to mint a server-resized
+    /// URL at any `ArtworkTier`. `posterURL`/`backdropURL` above are the baked
+    /// defaults (thumbnail / backdrop); call sites that want a different size
+    /// (e.g. a full-screen hero) use `artwork?.backdropURL(.backdropLarge)`.
+    /// `nil` for sources/items without it (offline, mock).
+    public let artwork: ArtworkSource?
 
     public init(
         id: MediaID,
@@ -128,7 +134,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         episodeCount: Int? = nil,
         endYear: Int? = nil,
         isContinuing: Bool? = nil,
-        unwatchedEpisodeCount: Int? = nil
+        unwatchedEpisodeCount: Int? = nil,
+        artwork: ArtworkSource? = nil
     ) {
         self.id = id
         self.title = title
@@ -162,6 +169,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.endYear = endYear
         self.isContinuing = isContinuing
         self.unwatchedEpisodeCount = unwatchedEpisodeCount
+        self.artwork = artwork
     }
 
     /// Display label that's smart about episodes vs movies. For an
@@ -189,6 +197,19 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public var selectedSubtitleTrack: MediaSubtitleTrack? {
         guard let selectedSubtitleTrackID else { return nil }
         return subtitleTracks.first { $0.id == selectedSubtitleTrackID }
+    }
+
+    /// A server-resized poster URL at the given tier, minted from `artwork`.
+    /// Falls back to the baked default-tier `posterURL` (offline / mock items).
+    public func posterURL(_ tier: ArtworkTier) -> URL? {
+        artwork?.posterURL(tier) ?? posterURL
+    }
+
+    /// A server-resized backdrop URL at the given tier (e.g. `.backdropLarge`
+    /// for a full-screen hero, `.still` for an episode row). Falls back to the
+    /// baked default-tier `backdropURL`.
+    public func backdropURL(_ tier: ArtworkTier) -> URL? {
+        artwork?.backdropURL(tier) ?? backdropURL
     }
 
     /// Copy preserving every field except those explicitly overridden. Keeps
@@ -232,7 +253,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             episodeCount: episodeCount,
             endYear: endYear,
             isContinuing: isContinuing,
-            unwatchedEpisodeCount: unwatchedEpisodeCount
+            unwatchedEpisodeCount: unwatchedEpisodeCount,
+            artwork: artwork
         )
     }
 

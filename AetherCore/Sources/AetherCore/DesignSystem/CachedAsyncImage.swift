@@ -18,13 +18,23 @@ import SwiftUI
 public struct CachedAsyncImage: View {
     public let url: URL?
     public let aspectRatio: CGFloat?
+    /// Longest-edge ceiling for the local downsample. Pair with the server tier
+    /// the `url` was minted at (e.g. `ArtworkTier.backdropLarge.maxPixel`) so a
+    /// large hero isn't shrunk back below what was requested. Defaults to the
+    /// poster/card-sized `AetherImageCache.defaultMaxPixel`.
+    public let maxPixel: CGFloat
 
     @State private var image: AetherPlatformImage?
     @State private var isAnimating = false
 
-    public init(url: URL?, aspectRatio: CGFloat? = nil) {
+    public init(
+        url: URL?,
+        aspectRatio: CGFloat? = nil,
+        maxPixel: CGFloat = AetherImageCache.defaultMaxPixel
+    ) {
         self.url = url
         self.aspectRatio = aspectRatio
+        self.maxPixel = maxPixel
     }
 
     public var body: some View {
@@ -42,7 +52,7 @@ public struct CachedAsyncImage: View {
         // appearance of the same url is an instant memory-cache hit.
         .task(id: url) {
             guard let url else { image = nil; return }
-            image = await AetherImageCache.shared.image(for: url)
+            image = await AetherImageCache.shared.image(for: url, maxPixel: maxPixel)
         }
     }
 

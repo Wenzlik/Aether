@@ -705,11 +705,14 @@ struct PlexMediaSourceLibrariesTests {
         await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:]))
     }
 
-    @Test("transcodedImageURL wraps the path in /photo/:/transcode with size + outer token")
-    func transcodedImageURLShape() throws {
-        let source = makeSource(api: RecordingAPIClient())
+    @Test("ArtworkSource (plex) wraps the path in /photo/:/transcode with size + outer token")
+    func plexArtworkSourceShape() throws {
         let base = URL(string: "https://lan.plex.direct:32400")!
-        let url = try #require(source.transcodedImageURL(base: base, path: "/library/metadata/6/thumb/1", tier: .thumbnail))
+        let artwork = ArtworkSource(
+            provider: .plex, base: base, token: "srv-token",
+            posterPath: "/library/metadata/6/thumb/1", backdropPath: "/library/metadata/6/art/1"
+        )
+        let url = try #require(artwork.posterURL(.thumbnail))
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(comps.path == "/photo/:/transcode")
         let items = Dictionary(uniqueKeysWithValues: (comps.queryItems ?? []).map { ($0.name, $0.value) })
@@ -719,8 +722,19 @@ struct PlexMediaSourceLibrariesTests {
         #expect(items["minSize"] == "1")
         #expect(items["upscale"] == "0")
         #expect(items["X-Plex-Token"] == "srv-token")            // token on the OUTER url only
+
+        // A larger tier mints a larger box from the same source.
+        let large = try #require(artwork.backdropURL(.backdropLarge))
+        let largeItems = Dictionary(uniqueKeysWithValues:
+            (URLComponents(url: large, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(largeItems["url"] == "/library/metadata/6/art/1")
+        #expect(largeItems["width"] == "1920")
+        #expect(largeItems["height"] == "1080")
+
         // nil path → nil URL (no poster).
-        #expect(source.transcodedImageURL(base: base, path: nil, tier: .thumbnail) == nil)
+        let noArt = ArtworkSource(provider: .plex, base: base, token: "srv-token",
+                                  posterPath: nil, backdropPath: nil)
+        #expect(noArt.posterURL(.thumbnail) == nil)
     }
 
     @Test("libraries() filters out non-movie / non-show library sections")

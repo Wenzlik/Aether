@@ -770,6 +770,12 @@ public actor PlexMediaSource: MediaSource {
         // to transcode.
         let audioTracks = dto.audioTracks
         let subtitleTracks = dto.subtitleTracks
+        // Artwork as a tier-aware source; the baked poster/backdrop below are its
+        // default tiers, and the Detail hero can ask it for a larger backdrop.
+        let artwork = ArtworkSource(
+            provider: .plex, base: base, token: accessToken,
+            posterPath: dto.thumb, backdropPath: dto.art
+        )
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,
@@ -779,8 +785,8 @@ public actor PlexMediaSource: MediaSource {
             summary: dto.summary,
             // Server-side resized via /photo/:/transcode — a 400-px poster /
             // ~1200-px backdrop instead of the full-resolution original.
-            posterURL: transcodedImageURL(base: base, path: dto.thumb, tier: .thumbnail),
-            backdropURL: transcodedImageURL(base: base, path: dto.art, tier: .backdrop),
+            posterURL: artwork.posterURL(.thumbnail),
+            backdropURL: artwork.backdropURL(.backdrop),
             streamURL: streamURL,
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
@@ -817,7 +823,8 @@ public actor PlexMediaSource: MediaSource {
             episodeCount: dto.leafCount,
             endYear: nil,   // Plex doesn't expose a series end year on list/detail
             isContinuing: nil,
-            unwatchedEpisodeCount: dto.unwatchedLeafCount
+            unwatchedEpisodeCount: dto.unwatchedLeafCount,
+            artwork: artwork
         )
     }
 
@@ -996,31 +1003,6 @@ public actor PlexMediaSource: MediaSource {
         return components.url
     }
 
-    /// Build a **server-side resized** artwork URL via Plex's photo transcoder
-    /// (`/photo/:/transcode`) instead of the raw full-resolution image. The
-    /// original image path goes in the `url` query item (no token on it); the
-    /// `X-Plex-Token` rides the outer URL only — keeping the token out of the
-    /// inner value so `AetherImageCache`'s key (which strips the token but keeps
-    /// `url` + size) stays stable. `minSize=1` fills the box (matches the UI's
-    /// `.scaledToFill`); `upscale=0` never enlarges a smaller original. Plex's
-    /// transcoder emits JPEG (no WebP/AVIF), so the win is the resize itself —
-    /// a 400-px poster instead of a multi-MB original.
-    nonisolated func transcodedImageURL(base: URL, path relativePath: String?, tier: ArtworkTier) -> URL? {
-        guard let relativePath, !relativePath.isEmpty else { return nil }
-        var components = URLComponents(
-            url: base.appendingPathComponent("/photo/:/transcode"),
-            resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [
-            URLQueryItem(name: "url", value: relativePath),
-            URLQueryItem(name: "width", value: String(tier.pixelWidth)),
-            URLQueryItem(name: "height", value: String(tier.pixelHeight)),
-            URLQueryItem(name: "minSize", value: "1"),
-            URLQueryItem(name: "upscale", value: "0"),
-            URLQueryItem(name: "X-Plex-Token", value: accessToken),
-        ]
-        return components?.url
-    }
 
     /// Re-anchor a tokenised URL onto a different base (host + scheme +
     /// port). The path and query items survive; only the host moves. Used

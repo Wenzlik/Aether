@@ -217,8 +217,37 @@ public actor DownloadManager {
 
         startFreshTask(jobID: resolvedJob.id, url: url)
         await store.updateStatus(resolvedJob.id, status: .downloading(fractionCompleted: 0))
+        // Persist the poster to disk so an offline card has artwork even when
+        // the server is unreachable / the token has expired. Fire-and-forget so
+        // it never delays the media download starting.
+        persistPoster(for: resolvedJob, posterURL: item.posterURL)
         Self.log.notice("enqueued job=\(resolvedJob.id, privacy: .public) item=\(item.id.rawValue, privacy: .public) quality=\(quality.rawValue, privacy: .public)")
         return resolvedJob
+    }
+
+    /// Download `posterURL` and write it to `{downloadsDirectory}/{jobID}.poster`,
+    /// then re-record the job with the relative path so offline cards load it
+    /// locally. Best-effort: a failure just leaves the job on its server poster.
+    ///
+    /// `{jobID}.poster` shares the job-id prefix, so `removeFiles(for:)` cleans
+    /// it up alongside the media file when the download is removed.
+    private func persistPoster(for job: DownloadJob, posterURL: URL?) {
+        guard let posterURL else { return }
+        let filename = "\(job.id.uuidString).poster"
+        let destination = downloadsDirectory.appendingPathComponent(filename)
+        let store = self.store
+        let directory = downloadsDirectory
+        Task.detached(priority: .utility) {
+            guard let data = try? await URLSession.shared.data(from: posterURL).0,
+                  !data.isEmpty else { return }
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try data.write(to: destination, options: .atomic)
+            } catch {
+                return
+            }
+            await store.record(job.withLocalPosterPath(filename))
+        }
     }
 
     /// Pause an active download. Captures URLSession's resume data so
