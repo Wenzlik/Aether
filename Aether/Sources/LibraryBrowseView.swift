@@ -72,7 +72,7 @@ struct LibraryBrowseView: View {
             #endif
             .aetherScreenBackground()
             #if !os(tvOS)
-            .refreshable { await load() }
+            .refreshable { await load(forceRefresh: true) }
             #endif
             .mediaNavigationDestinations(
                 source: connectedSources.first,
@@ -331,7 +331,7 @@ struct LibraryBrowseView: View {
 
     // MARK: - Loading
 
-    private func load() async {
+    private func load(forceRefresh: Bool = false) async {
         loadError = nil
         defer { hasLoaded = true }
         guard !connectedSources.isEmpty else {
@@ -341,7 +341,7 @@ struct LibraryBrowseView: View {
         isLoading = true
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let built = await library.homeRails(resumeStore: resumeStore)
+        let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
         rails = built
         AetherImageCache.shared.prefetch(
             built.movies.map(\.posterURL) + built.shows.map(\.posterURL)

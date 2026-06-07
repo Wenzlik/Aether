@@ -56,7 +56,7 @@ struct DiscoverView: View {
             content
                 .aetherScreenBackground()
                 #if !os(tvOS)
-                .refreshable { await load() }
+                .refreshable { await load(forceRefresh: true) }
                 #endif
                 .mediaNavigationDestinations(
                     source: connectedSources.first,
@@ -210,7 +210,7 @@ struct DiscoverView: View {
 
     // MARK: - Loading
 
-    private func load() async {
+    private func load(forceRefresh: Bool = false) async {
         loadError = nil
         defer { hasLoaded = true }
 
@@ -224,8 +224,8 @@ struct DiscoverView: View {
         defer { isLoading = false }
 
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let movies = await library.unifiedItems(kind: .movie)
-        let shows = await library.unifiedItems(kind: .show)
+        let movies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
+        let shows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
         let all = movies + shows
 
         guard !all.isEmpty else {

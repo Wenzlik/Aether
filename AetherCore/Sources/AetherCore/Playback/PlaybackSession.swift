@@ -401,6 +401,24 @@ public actor PlaybackSession {
         }
     }
 
+    /// Suspend/resume background work with the app's foreground state (driven
+    /// from the view layer's `scenePhase`). On background we cancel the periodic
+    /// resume loop — after writing one final resume point so the position is
+    /// captured — rather than waking the CPU every few seconds behind the lock
+    /// screen; on foreground the loop restarts. Background audio keeps playing
+    /// either way. (`resumeTask` is private to the session, so the view model's
+    /// poll-gating couldn't reach it — this closes that gap.)
+    public func setActive(_ isActive: Bool) async {
+        if isActive {
+            guard avPlayer != nil, resumeTask == nil else { return }
+            startResumeLoop()
+        } else {
+            resumeTask?.cancel()
+            resumeTask = nil
+            await writeResumeNow()
+        }
+    }
+
     private func startResumeLoop() {
         resumeTask?.cancel()
         let interval = resumeWriteInterval

@@ -76,7 +76,7 @@ struct HomeView: View {
             // Pull-to-refresh on iOS/iPadOS/visionOS; tvOS uses the explicit
             // Reload button in the header (pull-to-refresh isn't available).
             #if !os(tvOS)
-            .refreshable { await load() }
+            .refreshable { await load(forceRefresh: true) }
             #endif
             .mediaNavigationDestinations(
                 source: source,
@@ -463,7 +463,7 @@ struct HomeView: View {
 
     // MARK: - Loading
 
-    private func load() async {
+    private func load(forceRefresh: Bool = false) async {
         loadError = nil
         defer { hasLoaded = true }
 
@@ -473,7 +473,7 @@ struct HomeView: View {
             isLoading = true
             defer { isLoading = false }
             let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-            let built = await library.homeRails(resumeStore: resumeStore)
+            let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
             rails = built
             // Mirror Continue Watching into `feed` so the shared section renders.
             feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])

@@ -83,14 +83,19 @@ public struct CachedAsyncImage: View {
                 .foregroundStyle(AetherDesign.Palette.accent.opacity(0.65))
         }
         .opacity(isAnimating ? 0.35 : 0.75)
-        .onAppear {
-            withAnimation(
-                .easeInOut(duration: 1.2)
-                .repeatForever(autoreverses: true)
-            ) {
-                isAnimating = true
-            }
-        }
+        // Drive the shimmer through `.animation(value:)` so it can be **stopped**:
+        // when `isAnimating` flips back to false the animation becomes
+        // non-repeating and the loop ends. (The old `withAnimation(.repeatForever)`
+        // never stopped — it kept animating even after the image loaded or the
+        // cell scrolled off-screen, dozens at a time. Now `.onDisappear` halts it,
+        // which fires both when the real image replaces the skeleton and when a
+        // lazy-stack cell is recycled.)
+        .animation(
+            isAnimating ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true) : .default,
+            value: isAnimating
+        )
+        .onAppear { isAnimating = true }
+        .onDisappear { isAnimating = false }
     }
 }
 
