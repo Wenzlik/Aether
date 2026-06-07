@@ -633,14 +633,16 @@ struct UnifiedHomeRailsTests {
 
 @Suite("AetherCore — Cinema presets")
 struct CinemaPresetTests {
-    @Test("each preset has a distinct, stable spaceID + sceneName")
-    func distinctIdentifiers() {
-        let spaceIDs = Set(CinemaScreenPreset.allCases.map(\.spaceID))
-        let sceneNames = Set(CinemaScreenPreset.allCases.map(\.sceneName))
-        #expect(spaceIDs.count == CinemaScreenPreset.allCases.count)
-        #expect(sceneNames.count == CinemaScreenPreset.allCases.count)
-        #expect(CinemaScreenPreset.medium.spaceID == "AetherCinema.medium")
-        #expect(CinemaScreenPreset.imax.sceneName == "CinemaIMAX")
+    @Test("relativeScale anchors medium at 1.0 and grows with size")
+    func relativeScaleAnchored() {
+        // One authored scene, sized in code: medium is the authored baseline.
+        #expect(CinemaScreenPreset.medium.relativeScale == 1.0)
+        let scales = CinemaScreenPreset.ordered.map(\.relativeScale)
+        #expect(scales == scales.sorted())
+        #expect(scales.allSatisfy { $0 >= 1.0 })
+        // Each preset's scale tracks its width relative to medium.
+        #expect(CinemaScreenPreset.imax.relativeScale
+                == CinemaScreenPreset.imax.widthMetres / CinemaScreenPreset.medium.widthMetres)
     }
 
     @Test("widthMetres grows monotonically with size")
