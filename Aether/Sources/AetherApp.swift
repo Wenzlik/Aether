@@ -54,12 +54,11 @@ struct AetherApp: App {
 
         #if os(visionOS)
         // A single Dark Theater immersive space. It loads the one authored
-        // environment (`AetherDarkTheater.usda`) and sizes the docked screen in
-        // code from the chosen preset — no per-preset space. `RootTabView`
-        // opens it; the preset is read from `cinema` at open time (it's set by
-        // `present(...)` before the space opens).
+        // environment (`AetherDarkTheater.usda`); `DarkTheaterView` reads the
+        // live size + seat off `cinema` (set by `present(...)` before open, and
+        // changeable in-cinema), so there's no per-preset space.
         ImmersiveSpace(id: CinemaManager.spaceID) {
-            DarkTheaterView(cinema: cinema, preset: cinema.preset)
+            DarkTheaterView(cinema: cinema)
         }
         .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
         #endif
