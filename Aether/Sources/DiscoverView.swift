@@ -125,8 +125,13 @@ struct DiscoverView: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                 #endif
+                // Discovery Hub order: a featured pick, then fresh arrivals, the
+                // best-rated, genre lanes, and serendipitous picks at the tail.
                 if let hero {
                     heroSection(hero)
+                }
+                if !recentlyAdded.isEmpty {
+                    rail(title: "Recently Added", items: recentlyAdded)
                 }
                 if !topRated.isEmpty {
                     rail(title: "Top Rated", items: topRated)
@@ -135,10 +140,7 @@ struct DiscoverView: View {
                     rail(title: genreRail.genre, items: genreRail.items)
                 }
                 if !randomPicks.isEmpty {
-                    rail(title: "Random Picks", items: randomPicks)
-                }
-                if !recentlyAdded.isEmpty {
-                    rail(title: "Recently Added", items: recentlyAdded)
+                    rail(title: "Picked for You", items: randomPicks)
                 }
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
@@ -152,7 +154,7 @@ struct DiscoverView: View {
     /// reads as "this is the title we're suggesting."
     private func heroSection(_ item: UnifiedMediaItem) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Discover")
+            AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
 
             NavigationLink(value: item) {
                 AetherCard.hero(

@@ -29,7 +29,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.5.9"
+    MARKETING_VERSION: "0.6.0"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:

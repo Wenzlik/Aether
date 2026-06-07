@@ -31,6 +31,12 @@ struct SearchView: View {
     /// selecting a result all dismiss the keyboard — the native search feel.
     @FocusState private var searchFocused: Bool
 
+    /// Discovery rails shown before the user types, so Search never looks like a
+    /// blank page. Same unified data Home builds from.
+    @State private var discovery: UnifiedRails = .empty
+    @State private var isLoadingDiscovery = false
+    @State private var hasLoadedDiscovery = false
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
@@ -48,6 +54,7 @@ struct SearchView: View {
                     #endif
             }
             .aetherScreenBackground()
+            .task(id: sourcesKey) { await loadDiscovery() }
             .mediaNavigationDestinations(
                 source: source,
                 connectedSources: connectedSources,
@@ -61,12 +68,11 @@ struct SearchView: View {
         }
     }
 
-    /// Centered Aether mark + search field — mirrors Home's branded header so
-    /// the two tabs feel like one family.
+    /// Compact nav header — brand mark inline beside the search field, mirroring
+    /// Home / Library so the tabs read as one family (0.6.0).
     private var header: some View {
-        VStack(spacing: AetherDesign.Spacing.m) {
-            AetherWordmark(.large)
-                .frame(maxWidth: .infinity)
+        HStack(spacing: AetherDesign.Spacing.m) {
+            AetherWordmark(.small)
             AetherSearchField(text: $query, prompt: "Search your library", focus: $searchFocused)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
@@ -79,17 +85,101 @@ struct SearchView: View {
         if isSearching {
             MediaSearchResults(sources: connectedSources, query: query)
         } else {
+            discoveryContent
+        }
+    }
+
+    /// Pre-typing state — alive, not blank: discovery rails from the unified
+    /// library. Degrades gracefully (no source / still loading / nothing found).
+    @ViewBuilder
+    private var discoveryContent: some View {
+        if connectedSources.isEmpty {
+            AetherEmptyState(
+                glyph: "magnifyingglass",
+                title: "Search your library",
+                message: "Connect a source, then find a movie or show across all of them."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if discoveryIsEmpty && (isLoadingDiscovery || !hasLoadedDiscovery) {
+            AetherLoadingState(.rails(count: 2))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if discoveryIsEmpty {
             AetherEmptyState(
                 glyph: "magnifyingglass",
                 title: "Search your library",
                 message: "Find a movie or show across every connected source — start typing above."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                    Text("Find anything across every connected source — or pick up where you left off below.")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+                    if !discovery.recentlyAdded.isEmpty {
+                        rail(title: "Recently Added", items: discovery.recentlyAdded)
+                    }
+                    if !discovery.recentlyReleased.isEmpty {
+                        rail(title: "Recently Released", items: discovery.recentlyReleased)
+                    }
+                }
+                .padding(.vertical, AetherDesign.Spacing.l)
+            }
         }
+    }
+
+    /// Horizontal poster rail — mirrors Discover/Home so the tabs read as one
+    /// family (shared rail extraction is tracked as a consistency follow-up).
+    private func rail(title: String, items: [UnifiedMediaItem]) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item) {
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isWatched)
+                                .frame(width: posterWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+        }
+    }
+
+    private var posterWidth: CGFloat {
+        #if os(tvOS)
+        300
+        #else
+        168
+        #endif
     }
 
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var discoveryIsEmpty: Bool {
+        discovery.recentlyAdded.isEmpty && discovery.recentlyReleased.isEmpty
+    }
+
+    private var sourcesKey: String {
+        connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    private func loadDiscovery() async {
+        defer { hasLoadedDiscovery = true }
+        guard !connectedSources.isEmpty else {
+            discovery = .empty
+            return
+        }
+        isLoadingDiscovery = true
+        defer { isLoadingDiscovery = false }
+        let library = UnifiedLibrary(sources: connectedSources, downloads: nil)
+        discovery = await library.homeRails(resumeStore: resumeStore)
     }
 }
 
