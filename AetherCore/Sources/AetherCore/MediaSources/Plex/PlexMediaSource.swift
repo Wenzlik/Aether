@@ -770,6 +770,12 @@ public actor PlexMediaSource: MediaSource {
         // to transcode.
         let audioTracks = dto.audioTracks
         let subtitleTracks = dto.subtitleTracks
+        // Artwork as a tier-aware source; the baked poster/backdrop below are its
+        // default tiers, and the Detail hero can ask it for a larger backdrop.
+        let artwork = ArtworkSource(
+            provider: .plex, base: base, token: accessToken,
+            posterPath: dto.thumb, backdropPath: dto.art
+        )
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,
@@ -777,8 +783,10 @@ public actor PlexMediaSource: MediaSource {
             year: dto.year,
             runtime: dto.duration.map { .seconds(Double($0) / 1000.0) },
             summary: dto.summary,
-            posterURL: tokenisedURL(base: base, path: dto.thumb),
-            backdropURL: tokenisedURL(base: base, path: dto.art),
+            // Server-side resized via /photo/:/transcode — a 400-px poster /
+            // ~1200-px backdrop instead of the full-resolution original.
+            posterURL: artwork.posterURL(.thumbnail),
+            backdropURL: artwork.backdropURL(.backdrop),
             streamURL: streamURL,
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
@@ -815,7 +823,8 @@ public actor PlexMediaSource: MediaSource {
             episodeCount: dto.leafCount,
             endYear: nil,   // Plex doesn't expose a series end year on list/detail
             isContinuing: nil,
-            unwatchedEpisodeCount: dto.unwatchedLeafCount
+            unwatchedEpisodeCount: dto.unwatchedLeafCount,
+            artwork: artwork
         )
     }
 
@@ -993,6 +1002,7 @@ public actor PlexMediaSource: MediaSource {
         components.queryItems = query
         return components.url
     }
+
 
     /// Re-anchor a tokenised URL onto a different base (host + scheme +
     /// port). The path and query items survive; only the host moves. Used

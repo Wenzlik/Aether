@@ -630,3 +630,225 @@ struct UnifiedHomeRailsTests {
         #expect(rails.recentlyReleased.isEmpty)         // no release date → hidden
     }
 }
+
+@Suite("AetherCore — Cinema presets")
+struct CinemaPresetTests {
+    @Test("each preset has a distinct, stable spaceID + sceneName")
+    func distinctIdentifiers() {
+        let spaceIDs = Set(CinemaScreenPreset.allCases.map(\.spaceID))
+        let sceneNames = Set(CinemaScreenPreset.allCases.map(\.sceneName))
+        #expect(spaceIDs.count == CinemaScreenPreset.allCases.count)
+        #expect(sceneNames.count == CinemaScreenPreset.allCases.count)
+        #expect(CinemaScreenPreset.medium.spaceID == "AetherCinema.medium")
+        #expect(CinemaScreenPreset.imax.sceneName == "CinemaIMAX")
+    }
+
+    @Test("widthMetres grows monotonically with size")
+    func widthsOrdered() {
+        let widths = CinemaScreenPreset.ordered.map(\.widthMetres)
+        #expect(widths == widths.sorted())
+        #expect(widths.first == CinemaScreenPreset.medium.widthMetres)
+    }
+
+    @Test("CinemaPreferencesStore persists the chosen preset")
+    @MainActor
+    func preferencesRoundTrip() {
+        let suite = "cinema.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = CinemaPreferencesStore(defaults: defaults)
+        #expect(store.screenPreset == .medium)   // default
+        store.screenPreset = .imax
+
+        // A fresh store over the same defaults reads the persisted value.
+        let reloaded = CinemaPreferencesStore(defaults: defaults)
+        #expect(reloaded.screenPreset == .imax)
+    }
+}
+
+@Suite("AetherCore — artwork cache keys")
+struct ArtworkCacheKeyTests {
+    @Test("Plex: token rotation = same key; path/size are part of the key")
+    func plexKeys() {
+        let thumb = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=400&height=600&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        let thumbOtherToken = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=400&height=600&minSize=1&upscale=0&X-Plex-Token=BBB")!
+        // Only the token differs → same cache key (no re-download on token rotation).
+        #expect(AetherImageCache.cacheKey(for: thumb) == AetherImageCache.cacheKey(for: thumbOtherToken))
+
+        // Backdrop (different inner path + size) must NOT collide with the thumb.
+        let backdrop = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/art/1&width=1200&height=675&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        #expect(AetherImageCache.cacheKey(for: thumb) != AetherImageCache.cacheKey(for: backdrop))
+
+        // Same thumb, larger requested size → different key (size is part of it).
+        let detail = URL(string: "https://s:32400/photo/:/transcode?url=/library/metadata/6/thumb/1&width=600&height=900&minSize=1&upscale=0&X-Plex-Token=AAA")!
+        #expect(AetherImageCache.cacheKey(for: thumb) != AetherImageCache.cacheKey(for: detail))
+    }
+
+    @Test("key is independent of query-item order")
+    func orderIndependent() {
+        let a = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        let b = URL(string: "https://j/Items/9/Images/Primary?fillHeight=600&format=Webp&tag=abc&quality=85&fillWidth=400&api_key=ZZZ")!
+        #expect(AetherImageCache.cacheKey(for: a) == AetherImageCache.cacheKey(for: b))
+    }
+
+    @Test("Jellyfin: api_key stripped; tag + fill size kept")
+    func jellyfinKeys() {
+        let a = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        let b = URL(string: "https://j/Items/9/Images/Primary?api_key=BBB&tag=abc&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) == AetherImageCache.cacheKey(for: b))      // token-only diff
+
+        let bigger = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=abc&fillWidth=1200&fillHeight=675&quality=90&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) != AetherImageCache.cacheKey(for: bigger))  // size diff
+
+        let newArt = URL(string: "https://j/Items/9/Images/Primary?api_key=AAA&tag=zzz&fillWidth=400&fillHeight=600&quality=85&format=Webp")!
+        #expect(AetherImageCache.cacheKey(for: a) != AetherImageCache.cacheKey(for: newArt))  // art changed (tag) → new key
+    }
+}
+
+@Suite("AetherCore — ArtworkSource per-tier URLs")
+struct ArtworkSourceTests {
+    private let plexBase = URL(string: "https://s:32400")!
+    private let jellyBase = URL(string: "https://j:8096")!
+
+    @Test("Jellyfin mints fillWidth/Height per tier, keeps tag, requires it")
+    func jellyfinTiers() throws {
+        let art = ArtworkSource(
+            provider: .jellyfin, base: jellyBase, token: "tok",
+            posterPath: "/Items/9/Images/Primary", posterTag: "abc",
+            backdropPath: "/Items/9/Images/Backdrop", backdropTag: "def"
+        )
+        let thumb = try #require(art.posterURL(.thumbnail))
+        let q = Dictionary(uniqueKeysWithValues:
+            (URLComponents(url: thumb, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(q["fillWidth"] == "400")
+        #expect(q["fillHeight"] == "600")
+        #expect(q["tag"] == "abc")
+        #expect(q["format"] == "Webp")
+        #expect(q["quality"] == "85")          // thumbnail/still = 85
+        #expect(q["api_key"] == "tok")
+
+        // A larger backdrop tier scales the box up and uses higher quality.
+        let large = try #require(art.backdropURL(.backdropLarge))
+        let lq = Dictionary(uniqueKeysWithValues:
+            (URLComponents(url: large, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(lq["fillWidth"] == "1920")
+        #expect(lq["fillHeight"] == "1080")
+        #expect(lq["quality"] == "90")
+        #expect(lq["tag"] == "def")
+
+        // No tag → no URL (Jellyfin can't size an image it can't address).
+        let noTag = ArtworkSource(provider: .jellyfin, base: jellyBase, token: "tok",
+                                  posterPath: "/Items/9/Images/Primary", posterTag: nil,
+                                  backdropPath: nil)
+        #expect(noTag.posterURL(.thumbnail) == nil)
+    }
+
+    @Test("Plex puts the inner path in url= and the token only on the outer URL")
+    func plexTiers() throws {
+        let art = ArtworkSource(provider: .plex, base: plexBase, token: "AAA",
+                                posterPath: "/library/metadata/6/thumb/1",
+                                backdropPath: "/library/metadata/6/art/1")
+        let still = try #require(art.backdropURL(.still))
+        let q = Dictionary(uniqueKeysWithValues:
+            (URLComponents(url: still, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(q["url"] == "/library/metadata/6/art/1")
+        #expect(q["width"] == "500")
+        #expect(q["height"] == "282")
+        #expect(q["X-Plex-Token"] == "AAA")
+        // empty path → nil
+        let empty = ArtworkSource(provider: .plex, base: plexBase, token: "AAA",
+                                  posterPath: "", backdropPath: nil)
+        #expect(empty.posterURL() == nil)
+    }
+}
+
+@Suite("AetherCore — UnifiedMediaItem artwork pin")
+struct UnifiedArtworkTests {
+    private func item(_ source: MediaSourceID, artwork: ArtworkSource?) -> MediaItem {
+        MediaItem(id: .init(source: source, rawValue: "1"), title: "T", kind: .movie,
+                  posterURL: nil, backdropURL: nil, streamURL: URL(string: "https://x/s"),
+                  artwork: artwork)
+    }
+
+    @Test("tier accessor mints from the pinned artwork; falls back to baked URL")
+    func tierAccessor() throws {
+        let art = ArtworkSource(provider: .jellyfin, base: URL(string: "https://j")!, token: "t",
+                                posterPath: "/Items/1/Images/Primary", posterTag: "abc",
+                                backdropPath: "/Items/1/Images/Backdrop", backdropTag: "def")
+        let unified = UnifiedMediaItem(
+            id: "id", title: "T", year: nil, overview: nil,
+            posterURL: URL(string: "https://baked/poster"), backdropURL: URL(string: "https://baked/backdrop"),
+            type: .movie, sources: [], artwork: art
+        )
+        // Large backdrop tier comes from the pinned source, not the baked URL.
+        let large = try #require(unified.backdropURL(.backdropLarge))
+        #expect(large.absoluteString.contains("fillWidth=1920"))
+
+        // No artwork → the baked default-tier URL is returned unchanged.
+        let bald = UnifiedMediaItem(
+            id: "id", title: "T", year: nil, overview: nil,
+            posterURL: URL(string: "https://baked/poster"), backdropURL: URL(string: "https://baked/backdrop"),
+            type: .movie, sources: [], artwork: nil
+        )
+        #expect(bald.backdropURL(.backdropLarge) == URL(string: "https://baked/backdrop"))
+    }
+}
+
+@Suite("AetherCore — DownloadJob offline poster")
+struct DownloadJobPosterTests {
+    private func job(posterURL: URL?, localPosterPath: String?) -> DownloadJob {
+        DownloadJob(
+            mediaID: .init(source: .plex(serverID: "s"), rawValue: "1"),
+            title: "T", posterURL: posterURL, localPosterPath: localPosterPath,
+            quality: .original
+        )
+    }
+
+    @Test("no local path → displayPosterURL is the server snapshot")
+    func noLocal() {
+        let server = URL(string: "https://s/poster?X-Plex-Token=AAA")!
+        let j = job(posterURL: server, localPosterPath: nil)
+        #expect(j.localPosterURL == nil)
+        #expect(j.displayPosterURL == server)
+    }
+
+    @Test("local path with no file on disk → falls back to the server URL")
+    func localMissingFile() {
+        let server = URL(string: "https://s/poster")!
+        let j = job(posterURL: server, localPosterPath: "does-not-exist.poster")
+        #expect(j.localPosterURL == nil)
+        #expect(j.displayPosterURL == server)
+    }
+
+    @Test("local path with a real file → local-first")
+    func localPresent() throws {
+        let dir = DownloadManager.defaultDownloadsDirectory()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let filename = "test-\(UUID().uuidString).poster"
+        let fileURL = dir.appendingPathComponent(filename)
+        try Data([0xFF, 0xD8, 0xFF]).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let j = job(posterURL: URL(string: "https://s/poster")!, localPosterPath: filename)
+        #expect(j.localPosterURL == fileURL)
+        #expect(j.displayPosterURL == fileURL)
+    }
+
+    @Test("withLocalPosterPath carries every other field forward")
+    func copyKeepsFields() {
+        let base = DownloadJob(
+            mediaID: .init(source: .jellyfin(serverID: "j"), rawValue: "9"),
+            title: "Show", posterURL: URL(string: "https://s/p"),
+            kind: .episode, seriesTitle: "S", seasonNumber: 1, episodeNumber: 2,
+            quality: .original, sourceURL: URL(string: "https://s/dl")
+        )
+        let copy = base.withLocalPosterPath("9.poster")
+        #expect(copy.id == base.id)
+        #expect(copy.sourceURL == base.sourceURL)
+        #expect(copy.seriesTitle == "S")
+        #expect(copy.seasonNumber == 1)
+        #expect(copy.episodeNumber == 2)
+        #expect(copy.localPosterPath == "9.poster")
+    }
+}

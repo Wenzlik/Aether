@@ -29,7 +29,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.5.5"
+    MARKETING_VERSION: "0.5.8"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -55,6 +55,14 @@ targets:
         buildPhase: resources
         excludes:
           - ".gitkeep"
+      # Reality Composer Pro cinema environments, bundled as an app resource
+      # (NOT linked as a Swift package). realitytool compiles it at the app's own
+      # deployment target — tvOS 26 satisfies its ≥19 requirement, which a
+      # package can't declare (the SPM platform enum caps at tvOS 18). Authored
+      # in Reality Composer Pro by opening `RealityKitContent`; loaded at runtime
+      # from `Bundle.main`.
+      - path: RealityKitContent/Sources/RealityKitContent/RealityKitContent.rkassets
+        buildPhase: resources
     dependencies:
       - package: AetherCore
         product: AetherCore

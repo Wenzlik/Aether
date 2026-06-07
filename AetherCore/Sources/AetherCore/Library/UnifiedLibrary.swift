@@ -254,6 +254,11 @@ public actor UnifiedLibrary {
         // Representative metadata = the preferred (highest-priority) source's
         // item, falling back to the first item if nothing is playable.
         let lead = sources.first?.item ?? items[0]
+        // Pin artwork to the first source (in priority order) that actually
+        // carries it, so the image identity stays stable even if the lead flips
+        // playability between renders — and so an offline-only lead (which may
+        // lack a server artwork source) still shows a server-minted image.
+        let pinnedArtwork = sources.compactMap(\.item.artwork).first ?? lead.artwork
         return UnifiedMediaItem(
             id: canonicalID(for: items),
             title: lead.title,
@@ -263,6 +268,7 @@ public actor UnifiedLibrary {
             backdropURL: lead.backdropURL,
             type: lead.kind,
             sources: sources,
+            artwork: pinnedArtwork,
             genres: lead.genres,
             communityRating: lead.communityRating,
             releaseDate: lead.releaseDate,

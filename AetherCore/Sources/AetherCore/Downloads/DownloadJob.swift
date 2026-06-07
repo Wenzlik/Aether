@@ -30,6 +30,16 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
     /// auth) so it still loads while the user is signed-in to that source.
     public let posterURL: URL?
 
+    /// Filename (relative to the downloads directory) of the poster image
+    /// persisted to disk at enqueue time. Lets an offline card render its
+    /// artwork from a local file when the server is unreachable *or* the
+    /// token has expired — the `posterURL` snapshot can't survive either.
+    /// Relative (not absolute) so it stays valid across relaunches even when
+    /// iOS reassigns the app-container path. `nil` until the fetch lands (or
+    /// for jobs recorded before this field existed). Resolve via
+    /// `localPosterURL` / prefer the local copy via `displayPosterURL`.
+    public let localPosterPath: String?
+
     /// Whether this download is a movie or an episode. Lets the offline
     /// surfaces decide which display format to use without re-fetching
     /// metadata.
@@ -67,6 +77,7 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         mediaID: MediaID,
         title: String,
         posterURL: URL? = nil,
+        localPosterPath: String? = nil,
         kind: MediaItem.Kind = .movie,
         seriesTitle: String? = nil,
         seasonNumber: Int? = nil,
@@ -79,6 +90,7 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
         self.mediaID = mediaID
         self.title = title
         self.posterURL = posterURL
+        self.localPosterPath = localPosterPath
         self.kind = kind
         self.seriesTitle = seriesTitle
         self.seasonNumber = seasonNumber
@@ -97,6 +109,7 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
             mediaID: mediaID,
             title: title,
             posterURL: posterURL,
+            localPosterPath: localPosterPath,
             kind: kind,
             seriesTitle: seriesTitle,
             seasonNumber: seasonNumber,
@@ -105,6 +118,42 @@ public struct DownloadJob: Sendable, Hashable, Codable, Identifiable {
             sourceURL: url,
             createdAt: createdAt
         )
+    }
+
+    /// Copy carrying the persisted local poster filename, set once the poster
+    /// fetch (kicked off at enqueue) lands. Same `id`, so re-recording replaces
+    /// in place — and carries every other field forward unchanged.
+    public func withLocalPosterPath(_ path: String?) -> DownloadJob {
+        DownloadJob(
+            id: id,
+            mediaID: mediaID,
+            title: title,
+            posterURL: posterURL,
+            localPosterPath: path,
+            kind: kind,
+            seriesTitle: seriesTitle,
+            seasonNumber: seasonNumber,
+            episodeNumber: episodeNumber,
+            quality: quality,
+            sourceURL: sourceURL,
+            createdAt: createdAt
+        )
+    }
+
+    /// The on-disk poster URL, resolved against the downloads directory — but
+    /// only when the file actually exists (the fetch may still be in flight,
+    /// or have failed). `nil` otherwise.
+    public var localPosterURL: URL? {
+        guard let localPosterPath else { return nil }
+        let url = DownloadManager.defaultDownloadsDirectory().appendingPathComponent(localPosterPath)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// The poster URL an offline-aware card should load: the persisted local
+    /// copy first (works with no network and after the token expires), falling
+    /// back to the server snapshot.
+    public var displayPosterURL: URL? {
+        localPosterURL ?? posterURL
     }
 
     /// Same `displayTitle` semantics as `MediaItem`, but resolved from

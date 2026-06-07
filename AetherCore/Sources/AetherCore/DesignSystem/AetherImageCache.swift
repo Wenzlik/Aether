@@ -268,14 +268,19 @@ public final class AetherImageCache: @unchecked Sendable {
     }
 
     /// Stable key: drop auth query items so a rotated token doesn't bust the
-    /// cache, leaving path + image tag (content-addressed).
+    /// cache, leaving path + size + image tag (content-addressed). The surviving
+    /// query items are **sorted** so the key is independent of query-item order —
+    /// two URLs that differ only in parameter order (or in which optional params
+    /// a builder happened to include) map to the same cache entry.
     static func cacheKey(for url: URL) -> String {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url.absoluteString
         }
         let stripped: Set<String> = ["x-plex-token", "api_key", "x-plex-client-identifier"]
-        components.queryItems = components.queryItems?.filter { !stripped.contains($0.name.lowercased()) }
-        if components.queryItems?.isEmpty == true { components.queryItems = nil }
+        let kept = (components.queryItems ?? [])
+            .filter { !stripped.contains($0.name.lowercased()) }
+            .sorted { ($0.name, $0.value ?? "") < ($1.name, $1.value ?? "") }
+        components.queryItems = kept.isEmpty ? nil : kept
         return components.url?.absoluteString ?? url.absoluteString
     }
 

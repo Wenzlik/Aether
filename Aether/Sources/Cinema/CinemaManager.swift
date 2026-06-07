@@ -20,8 +20,10 @@ import AetherCore
 @MainActor
 @Observable
 final class CinemaManager {
-    /// The single immersive space (one environment in V1: Dark Theater).
-    static let spaceID = "AetherCinema"
+    /// The immersive space currently requested — derived from the chosen
+    /// screen-size preset, since each preset is its own authored environment
+    /// (its `DockingRegion` sizes the docked screen). `RootTabView` opens this id.
+    var currentSpaceID: String { preset.spaceID }
 
     /// Diagnostics — `log stream --predicate 'subsystem == "cz.zmrhal.aether"'`
     /// filtered to category `cinema` shows the enter/exit path firing.
@@ -46,6 +48,10 @@ final class CinemaManager {
     /// Where playback begins: `nil` resumes from the persisted point, `0`
     /// restarts. Mirrors the windowed player's `startAt`.
     private(set) var startAt: Double?
+    /// The chosen screen-size preset for this session — selects which authored
+    /// environment (and thus docked-screen size) the cinema opens. Defaults to
+    /// the user's persisted preference, passed in by `present(...)`.
+    private(set) var preset: CinemaScreenPreset = .default
 
     // MARK: - Intent signalling
 
@@ -59,7 +65,12 @@ final class CinemaManager {
 
     /// Enter the cinema with a title. No-op while already active (guards against
     /// a double-tap mid-transition).
-    func present(_ item: MediaItem, source: (any MediaSource)?, startAt: Double?) {
+    func present(
+        _ item: MediaItem,
+        source: (any MediaSource)?,
+        startAt: Double?,
+        preset: CinemaScreenPreset = .default
+    ) {
         guard phase == .idle else {
             Self.log.debug("present IGNORED (already active) item=\(item.id.rawValue, privacy: .public)")
             return
@@ -67,6 +78,7 @@ final class CinemaManager {
         self.item = item
         self.source = source
         self.startAt = startAt
+        self.preset = preset
         phase = .active
         openRequestID = UUID()
         Self.log.debug("present item=\(item.id.rawValue, privacy: .public) → request open space")

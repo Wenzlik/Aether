@@ -53,12 +53,26 @@ struct AetherApp: App {
         #endif
 
         #if os(visionOS)
-        ImmersiveSpace(id: CinemaManager.spaceID) {
-            DarkTheaterView(cinema: cinema)
-        }
-        .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
+        // One immersive space per screen-size preset — each loads that preset's
+        // authored environment (its DockingRegion sizes the docked screen), or
+        // falls back to the procedural Dark Theater until the .usda is authored.
+        // `RootTabView` opens the one matching the chosen preset.
+        cinemaSpace(.medium)
+        cinemaSpace(.large)
+        cinemaSpace(.imax)
+        cinemaSpace(.wall)
         #endif
     }
+
+    #if os(visionOS)
+    @SceneBuilder
+    private func cinemaSpace(_ preset: CinemaScreenPreset) -> some Scene {
+        ImmersiveSpace(id: preset.spaceID) {
+            DarkTheaterView(cinema: cinema, preset: preset)
+        }
+        .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
+    }
+    #endif
 }
 
 // MARK: - AppDelegate (background URL session bridge only)
@@ -123,6 +137,9 @@ final class AppSession {
     let api: any APIClient
     let libraryPreferences: LibraryPreferencesStore
     let playbackPreferences: PlaybackPreferencesStore
+    /// Default cinema screen-size preset (visionOS). Cross-platform store so the
+    /// Settings picker round-trips anywhere; only visionOS renders the cinema.
+    let cinemaPreferences: CinemaPreferencesStore
     let appearance: AppearancePreferenceStore
 
     // MARK: - Downloads
@@ -219,6 +236,7 @@ final class AppSession {
         self.api = api
         self.libraryPreferences = LibraryPreferencesStore(keychain: keychain)
         self.playbackPreferences = PlaybackPreferencesStore()
+        self.cinemaPreferences = CinemaPreferencesStore()
         self.appearance = AppearancePreferenceStore()
     }
 

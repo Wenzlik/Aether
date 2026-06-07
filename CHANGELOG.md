@@ -4,6 +4,80 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.8] — Unreleased · "Boötes"
+
+Artwork bandwidth — phase 2 of the artwork review: per-call-site size tiers and
+offline poster persistence.
+
+### Added
+
+- **Per-call-site artwork tiers.** A new `ArtworkSource` value type mints a
+  server-resized URL at any `ArtworkTier` on demand (rather than baking one
+  fixed size at fetch time), so each surface requests what it actually shows:
+  the Detail hero pulls a 1920-px backdrop on tvOS / visionOS, episode rows a
+  small 16:9 still, rails/grids a 400-px poster. `CachedAsyncImage` /
+  `BackdropImage` take a `maxPixel` ceiling so a large hero isn't downsampled
+  back down locally.
+- **Offline poster persistence.** Downloads now save the poster to disk at
+  enqueue time (`{jobID}.poster`); an offline card loads the local copy first,
+  so artwork still renders when the server is unreachable or the token has
+  expired. Cleaned up alongside the media file when a download is removed.
+
+### Changed
+
+- **Unified artwork is pinned to one source.** A unified title's poster/backdrop
+  now resolves from the first source (in priority order) that carries artwork,
+  so its image identity stays stable across source flips instead of changing
+  (and re-downloading) when the active source changes. `MediaItem` and
+  `UnifiedMediaItem` gained `posterURL(_:)` / `backdropURL(_:)` tier accessors
+  that fall back to the baked default-tier URL.
+
+## [0.5.7] — Unreleased · "Boötes"
+
+Artwork bandwidth — server-side resized posters (phase 1 of the artwork review).
+
+### Changed
+
+- **Posters & backdrops are now resized by the server**, not downloaded at full
+  resolution and shrunk locally. Plex uses its photo transcoder
+  (`/photo/:/transcode?width=&height=&minSize=1&upscale=0`); Jellyfin uses
+  `fillWidth`/`fillHeight`/`quality` + `format=Webp`. Rails/grids/cards request a
+  ~400-px poster (was a multi-MB original); heroes request ~1200-px backdrops.
+  Estimated ~20–60× less artwork bandwidth — a Home/Library load drops from
+  tens/hundreds of MB to low single-digit MB. The local downsample stays as a
+  safety net.
+- The image cache key already retains the size/format params (and the Plex
+  version token) while stripping only auth, so each tier caches independently and
+  a rotated token no longer busts the cache (covered by new tests).
+
+### Notes
+
+- Phase 2 of the review (per-call-site size tiers, a `UnifiedArtwork` variants
+  model to end source-flip re-downloads, offline poster persistence) is tracked
+  for a follow-up — see the artwork optimization review.
+
+## [0.5.6] — Unreleased · "Boötes"
+
+Cinema screen-size presets — scaffolding (visionOS). The code path for
+Medium / Large / IMAX / Wall is in place; each size's actual look + the literal
+floor video reflection arrive when the per-size environments are authored in
+Reality Composer Pro (the size + reflection live inside each `.usda`).
+
+### Added
+
+- **Screen-size preset machinery (visionOS).** A default-size picker in
+  Settings → Cinema (persisted via `CinemaPreferencesStore`); the cinema opens
+  the chosen preset's own immersive space and loads that preset's authored
+  environment from the bundled Reality Composer Pro content, falling back to the
+  procedural Dark Theater until the scene is authored. `CinemaScreenPreset` now
+  carries a per-preset `sceneName` + `spaceID`.
+- **Reality Composer Pro content** (`Packages/RealityKitContent`) — open it in
+  Reality Composer Pro to author one environment per preset (`CinemaMedium`,
+  `CinemaLarge`, `CinemaIMAX`, `CinemaWall`), each with a `DockingRegion` at that
+  screen width and a `Reflection_Specular` floor. The `.rkassets` is bundled as
+  an app resource (compiled at the app's deployment target, so it builds on
+  tvOS too — it's never linked as a Swift package).
+
 ## [0.5.5] — Unreleased · "Boötes"
 
 Enhanced Cinema (visionOS).
