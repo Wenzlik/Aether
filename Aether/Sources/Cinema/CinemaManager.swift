@@ -20,10 +20,12 @@ import AetherCore
 @MainActor
 @Observable
 final class CinemaManager {
-    /// The immersive space currently requested — derived from the chosen
-    /// screen-size preset, since each preset is its own authored environment
-    /// (its `DockingRegion` sizes the docked screen). `RootTabView` opens this id.
-    var currentSpaceID: String { preset.spaceID }
+    /// The single Dark Theater immersive-space id. One authored environment for
+    /// every preset — the chosen `preset` sizes the docked screen *in code*
+    /// (scaling the authored `DockingRegion`), so there's no per-preset space.
+    /// `RootTabView` opens this id; `AetherApp` registers the matching space.
+    static let spaceID = "AetherCinema"
+    var currentSpaceID: String { Self.spaceID }
 
     /// Diagnostics — `log stream --predicate 'subsystem == "cz.zmrhal.aether"'`
     /// filtered to category `cinema` shows the enter/exit path firing.

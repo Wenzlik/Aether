@@ -1,0 +1,284 @@
+#usda 1.0
+(
+    defaultPrim = "AetherDarkTheater"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "AetherDarkTheater"
+{
+    custom string aetherNotes = "Starter Reality Composer Pro / RealityKit environment for Aether Cinema. Units are meters. Use VideoDock_Large as the default docking anchor."
+
+    def Xform "Environment"
+    {
+        def Mesh "Floor"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/DarkReflectiveFloor>
+            normal3f[] normals = [(0, 1, 0)]
+            point3f[] points = [(-10, 0, -2), (10, 0, -2), (10, 0, -22), (-10, 0, -22)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "RearWall"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/MatteBlackWall>
+            normal3f[] normals = [(0, 0, 1)]
+            point3f[] points = [(-10, 0, -8), (10, 0, -8), (10, 7, -8), (-10, 7, -8)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "LeftSideWall"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/SideWall>
+            normal3f[] normals = [(1, 0, 0)]
+            point3f[] points = [(-10, 0, -2), (-10, 0, -22), (-10, 7, -22), (-10, 7, -2)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "RightSideWall"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/SideWall>
+            normal3f[] normals = [(-1, 0, 0)]
+            point3f[] points = [(10, 0, -22), (10, 0, -2), (10, 7, -2), (10, 7, -22)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "Ceiling"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/CeilingBlack>
+            normal3f[] normals = [(0, -1, 0)]
+            point3f[] points = [(-10, 7, -2), (10, 7, -2), (10, 7, -22), (-10, 7, -22)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "AetherFloorGlow"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/SoftVioletGlow>
+            normal3f[] normals = [(0, 1, 0)]
+            point3f[] points = [(-7.5, 0.012, -7.65), (7.5, 0.012, -7.65), (7.5, 0.012, -7.95), (-7.5, 0.012, -7.95)]
+            uniform token subdivisionScheme = "none"
+        }
+
+        def Mesh "ReflectionPad"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </AetherDarkTheater/Materials/SubtleReflection>
+            normal3f[] normals = [(0, 1, 0)]
+            point3f[] points = [(-7.5, 0.01, -6.5), (7.5, 0.01, -6.5), (7.5, 0.01, -14), (-7.5, 0.01, -14)]
+            uniform token subdivisionScheme = "none"
+        }
+    }
+
+    def Xform "VideoDockingRegions"
+    {
+        def Xform "VideoDock_Large"
+        {
+            custom float aetherHeightMeters = 2.925
+            custom string aetherUsage = "Attach DockingRegionComponent here for Large 16:9 screen."
+            custom float aetherWidthMeters = 5.2
+            quatf xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 2.700000047683716, -7.935559272766113)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "VideoDock_Medium"
+        {
+            custom float aetherHeightMeters = 2.1375
+            custom string aetherUsage = "Attach DockingRegionComponent here for Medium 16:9 screen."
+            custom float aetherWidthMeters = 3.8
+            quatf xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.13087023794651031, 2.4233462810516357, -7.75)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "VideoDock_IMAX"
+        {
+            custom float aetherHeightMeters = 4.05
+            custom string aetherUsage = "Attach DockingRegionComponent here for IMAX-like 16:9 screen."
+            custom float aetherWidthMeters = 7.2
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 3, -7.9)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Xform "VideoDock_Wall"
+        {
+            custom float aetherHeightMeters = 4.95
+            custom string aetherUsage = "Attach DockingRegionComponent here for Wall-size 16:9 screen."
+            custom float aetherWidthMeters = 8.8
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 3.2, -8)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+    }
+
+    def Xform "Lights"
+    {
+        def SphereLight "AmbientSoft"
+        {
+            color3f inputs:color = (0.4, 0.38, 0.55)
+            float inputs:intensity = 30
+            float inputs:radius = 10
+            double3 xformOp:translate = (0, 5.5, -9)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def SphereLight "LeftVioletAccent"
+        {
+            color3f inputs:color = (0.49, 0.3, 1)
+            float inputs:intensity = 65
+            float inputs:radius = 3
+            double3 xformOp:translate = (-7.5, 1.4, -7.2)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def SphereLight "RightBlueAccent"
+        {
+            color3f inputs:color = (0.18, 0.38, 1)
+            float inputs:intensity = 45
+            float inputs:radius = 3
+            double3 xformOp:translate = (7.5, 1.4, -7.2)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def RectLight "ScreenSoftGlow"
+        {
+            color3f inputs:color = (0.72, 0.68, 1)
+            float inputs:height = 4.2
+            float inputs:intensity = 25
+            float inputs:width = 7.5
+            double3 xformOp:rotateXYZ = (0, 180, 0)
+            double3 xformOp:translate = (0, 2.9, -7.55)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+        }
+    }
+
+    def Scope "Materials"
+    {
+        def Material "MatteBlackWall"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/MatteBlackWall/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.025, 0.025, 0.035)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.86
+                token outputs:surface
+            }
+        }
+
+        def Material "SideWall"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/SideWall/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.018, 0.018, 0.026)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.92
+                token outputs:surface
+            }
+        }
+
+        def Material "CeilingBlack"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/CeilingBlack/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.012, 0.012, 0.018)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.95
+                token outputs:surface
+            }
+        }
+
+        def Material "DarkReflectiveFloor"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/DarkReflectiveFloor/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.045, 0.047, 0.06)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.34
+                token outputs:surface
+            }
+        }
+
+        def Material "SubtleReflection"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/SubtleReflection/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.06, 0.06, 0.075)
+                float inputs:metallic = 0
+                float inputs:opacity = 0.72
+                float inputs:roughness = 0.18
+                token outputs:surface
+            }
+        }
+
+        def Material "SoftVioletGlow"
+        {
+            token outputs:surface.connect = </AetherDarkTheater/Materials/SoftVioletGlow/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.33, 0.16, 0.95)
+                color3f inputs:emissiveColor = (0.2, 0.08, 0.55)
+                float inputs:metallic = 0
+                float inputs:opacity = 0.38
+                float inputs:roughness = 0.4
+                token outputs:surface
+            }
+        }
+    }
+
+    def Xform "Video_Dock"
+    {
+        double3 xformOp:translate = (-0.5820420384407043, 2.5351781845092773, -5.905884265899658)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Xform "Player"
+        {
+            double3 xformOp:translate = (0.5342634320259094, 0.8763134479522705, -2.038485527038574)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+            def RealityKitComponent "CustomDockingRegion"
+            {
+                token info:id = "RealityKit.CustomDockingRegion"
+
+                def RealityKitStruct "m_bounds"
+                {
+                    float3 max = (4, 1.6666666, 0)
+                    float3 min = (-4, -1.6666666, -0)
+                }
+            }
+        }
+    }
+}
+
