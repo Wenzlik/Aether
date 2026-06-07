@@ -181,7 +181,7 @@ struct DetailView: View {
                 #endif
             }
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         #if os(iOS)
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
@@ -1530,7 +1530,7 @@ struct DetailView: View {
                 .padding(AetherDesign.Spacing.l)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(AetherDesign.Palette.background.ignoresSafeArea())
+            .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
@@ -1563,7 +1563,7 @@ struct DetailView: View {
                 .padding(.bottom, AetherDesign.Spacing.l)
             }
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }

@@ -37,10 +37,11 @@ public enum AetherStatus: Sendable, Equatable {
 }
 
 /// Native tvOS focus treatment for list-style rows (settings cards, the audio
-/// / subtitle pickers on Detail): a soft elevated fill, a small scale lift, and
-/// a subtle shadow — driven entirely by the system focus engine, no borders or
-/// focus hacks. On iOS / visionOS `\.isFocused` stays false so the row renders
-/// flat, exactly like `AetherButton`.
+/// / subtitle pickers on Detail). 0.6.0: a focused row **lifts and glows** —
+/// the shared `premiumFocus` depth treatment — instead of painting an
+/// accent-tinted box with a hairline border (which read like a dev build). A
+/// neutral elevated fill keeps the focused row legible without colouring it.
+/// On iOS / visionOS `\.isFocused` stays false so the row renders flat.
 ///
 /// Apply this *inside* a `Button`'s label (where tvOS populates `\.isFocused`),
 /// then give the button `.buttonStyle(.plain)`.
@@ -51,25 +52,14 @@ struct AetherFocusRow: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Neutral elevated fill on focus (no accent wash, no border) so the
+            // focused row reads clearly; depth comes from premiumFocus.
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(AetherDesign.Palette.surfaceElevated)
-                    .overlay {
-                        // Faint violet wash + hairline so the focused row reads
-                        // as "brand-selected", not just lighter grey.
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(AetherDesign.Palette.accent.opacity(0.14))
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(AetherDesign.Palette.accent.opacity(0.45), lineWidth: 1)
-                    }
                     .opacity(isFocused ? 1 : 0)
             }
-            // Soft violet glow instead of a flat black shadow.
-            .shadow(color: AetherDesign.Palette.focusGlow.opacity(isFocused ? 0.45 : 0.0),
-                    radius: isFocused ? 16 : 0,
-                    y: isFocused ? 6 : 0)
-            .scaleEffect(isFocused ? 1.02 : 1.0)
-            .animation(AetherDesign.Motion.focus, value: isFocused)
+            .premiumFocus(scale: 1.04)
     }
 }
 

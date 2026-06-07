@@ -759,7 +759,7 @@ private struct PreferencePickerSheet<Content: View>: View {
                 .padding(.bottom, AetherDesign.Spacing.l)
             }
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -815,7 +815,7 @@ private struct WhatsNewSheet: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }

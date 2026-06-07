@@ -47,7 +47,7 @@ struct SearchView: View {
                     .scrollDismissesKeyboard(.immediately)
                     #endif
             }
-            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .aetherScreenBackground()
             .mediaNavigationDestinations(
                 source: source,
                 connectedSources: connectedSources,

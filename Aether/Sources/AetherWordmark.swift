@@ -101,6 +101,6 @@ public struct AetherWordmark: View {
     }
     .padding(AetherDesign.Spacing.xxl)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(AetherDesign.Palette.background.ignoresSafeArea())
+    .aetherScreenBackground()
     .preferredColorScheme(.dark)
 }

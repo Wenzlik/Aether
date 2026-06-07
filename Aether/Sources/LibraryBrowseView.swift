@@ -70,7 +70,7 @@ struct LibraryBrowseView: View {
             #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
-            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .aetherScreenBackground()
             #if !os(tvOS)
             .refreshable { await load() }
             #endif

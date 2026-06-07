@@ -72,7 +72,7 @@ struct HomeView: View {
             #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
-            .background(AetherDesign.Gradients.background.ignoresSafeArea())
+            .aetherScreenBackground()
             // Pull-to-refresh on iOS/iPadOS/visionOS; tvOS uses the explicit
             // Reload button in the header (pull-to-refresh isn't available).
             #if !os(tvOS)

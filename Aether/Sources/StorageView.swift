@@ -75,7 +75,7 @@ struct StorageView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AetherDesign.Gradients.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .navigationTitle(embedded ? "Downloads" : "Storage")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)

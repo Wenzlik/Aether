@@ -54,7 +54,7 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
-                .background(AetherDesign.Gradients.background.ignoresSafeArea())
+                .aetherScreenBackground()
                 #if !os(tvOS)
                 .refreshable { await load() }
                 #endif
