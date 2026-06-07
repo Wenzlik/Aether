@@ -12,10 +12,19 @@ import SwiftUI
 public struct BackdropImage: View {
     public let url: URL?
     public let height: CGFloat?
+    /// Longest-edge downsample ceiling, paired with the server tier `url` was
+    /// minted at — e.g. `ArtworkTier.backdropLarge.maxPixel` for a full-screen
+    /// tvOS / visionOS hero. Defaults to the regular backdrop size.
+    public let maxPixel: CGFloat
 
-    public init(url: URL?, height: CGFloat? = nil) {
+    public init(
+        url: URL?,
+        height: CGFloat? = nil,
+        maxPixel: CGFloat = AetherImageCache.defaultMaxPixel
+    ) {
         self.url = url
         self.height = height
+        self.maxPixel = maxPixel
     }
 
     public var body: some View {
@@ -37,12 +46,12 @@ public struct BackdropImage: View {
     @ViewBuilder
     private var backdrop: some View {
         if let height {
-            CachedAsyncImage(url: url)
+            CachedAsyncImage(url: url, maxPixel: maxPixel)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
                 .clipped()
         } else {
-            CachedAsyncImage(url: url, aspectRatio: 16.0 / 9.0)
+            CachedAsyncImage(url: url, aspectRatio: 16.0 / 9.0, maxPixel: maxPixel)
                 .frame(maxWidth: .infinity)
         }
     }

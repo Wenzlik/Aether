@@ -163,7 +163,7 @@ struct StorageView: View {
         let live = downloads?.snapshot.liveProgress(for: job.id)
         NavigationLink(value: syntheticMediaItem(for: job)) {
             HStack(spacing: AetherDesign.Spacing.m) {
-                CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
+                CachedAsyncImage(url: job.displayPosterURL, aspectRatio: 2.0 / 3.0)
                     .frame(width: 44, height: 66)
                     .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
@@ -376,7 +376,7 @@ struct StorageView: View {
         let size = jobSizeBytes(job)
         NavigationLink(value: syntheticMediaItem(for: job)) {
             HStack(spacing: AetherDesign.Spacing.m) {
-                CachedAsyncImage(url: job.posterURL, aspectRatio: 2.0 / 3.0)
+                CachedAsyncImage(url: job.displayPosterURL, aspectRatio: 2.0 / 3.0)
                     .frame(width: 44, height: 66)
                     .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
@@ -436,7 +436,7 @@ struct StorageView: View {
             id: job.mediaID,
             title: job.title,
             kind: job.kind,
-            posterURL: job.posterURL,
+            posterURL: job.displayPosterURL,
             seriesTitle: job.seriesTitle,
             seasonNumber: job.seasonNumber,
             episodeNumber: job.episodeNumber

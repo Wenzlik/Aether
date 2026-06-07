@@ -68,8 +68,15 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
     public let title: String
     public let year: Int?
     public let overview: String?
+    /// Default-tier (thumbnail) poster URL. For a specific tier use
+    /// `posterURL(_:)`, which mints a server-resized URL from `artwork`.
     public let posterURL: URL?
+    /// Default-tier (backdrop) URL. For a specific tier use `backdropURL(_:)`.
     public let backdropURL: URL?
+    /// The artwork pinned to one deterministic source, so a unified title's image
+    /// identity stays stable across source flips and can be re-minted at any
+    /// `ArtworkTier` (e.g. a large Detail hero). `nil` when no source carries it.
+    public let artwork: ArtworkSource?
     public let type: MediaItem.Kind
     /// Sorted by priority (offline → plex → jellyfin → emby).
     public let sources: [UnifiedSource]
@@ -92,6 +99,7 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
         backdropURL: URL?,
         type: MediaItem.Kind,
         sources: [UnifiedSource],
+        artwork: ArtworkSource? = nil,
         genres: [String] = [],
         communityRating: Double? = nil,
         releaseDate: Date? = nil,
@@ -103,12 +111,27 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
         self.overview = overview
         self.posterURL = posterURL
         self.backdropURL = backdropURL
+        self.artwork = artwork
         self.type = type
         self.sources = sources
         self.genres = genres
         self.communityRating = communityRating
         self.releaseDate = releaseDate
         self.dateAdded = dateAdded
+    }
+
+    /// A server-resized poster URL at the given tier, minted from the pinned
+    /// `artwork`. Falls back to the baked default-tier `posterURL` when no
+    /// artwork source is pinned (e.g. offline-only titles).
+    public func posterURL(_ tier: ArtworkTier) -> URL? {
+        artwork?.posterURL(tier) ?? posterURL
+    }
+
+    /// A server-resized backdrop URL at the given tier (e.g. `.backdropLarge`
+    /// for a full-screen Detail hero on tvOS / visionOS). Falls back to the
+    /// baked default-tier `backdropURL`.
+    public func backdropURL(_ tier: ArtworkTier) -> URL? {
+        artwork?.backdropURL(tier) ?? backdropURL
     }
 
     /// The source playback should use: highest-priority playable source.

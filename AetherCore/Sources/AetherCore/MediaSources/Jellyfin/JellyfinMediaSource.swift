@@ -322,29 +322,6 @@ public actor JellyfinMediaSource: MediaSource {
 
     // MARK: - Images
 
-    /// Build a **server-side resized** image URL. `fillWidth`/`fillHeight` make
-    /// Jellyfin (SkiaSharp) resize-and-crop to the box before sending — cover
-    /// semantics matching the UI's `.scaledToFill`, so a poster grid downloads a
-    /// ~400-px image, not the full original. `format=Webp` is ~25–35% smaller
-    /// than JPEG and decodes natively on every Aether target. The `tag` (kept)
-    /// makes the URL content-addressed → strong caching + auto-bust on art
-    /// change; `api_key` is stripped from the cache key.
-    private func imageURL(itemID: String, type: String, tag: String?, tier: ArtworkTier) -> URL? {
-        guard tag != nil else { return nil }
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("/Items/\(itemID)/Images/\(type)"),
-            resolvingAgainstBaseURL: false
-        )
-        var queryItems = [URLQueryItem(name: "api_key", value: accessToken)]
-        if let tag { queryItems.append(URLQueryItem(name: "tag", value: tag)) }
-        queryItems.append(URLQueryItem(name: "fillWidth", value: String(tier.pixelWidth)))
-        queryItems.append(URLQueryItem(name: "fillHeight", value: String(tier.pixelHeight)))
-        queryItems.append(URLQueryItem(name: "quality", value: tier == .thumbnail ? "85" : "90"))
-        queryItems.append(URLQueryItem(name: "format", value: "Webp"))
-        components?.queryItems = queryItems
-        return components?.url
-    }
-
     // MARK: - Mapping
 
     private func mapItem(_ dto: JellyfinAPI.BaseItemDto) -> MediaItem? {
@@ -353,6 +330,13 @@ public actor JellyfinMediaSource: MediaSource {
         let isTranscode = url?.pathExtension.lowercased() == "m3u8"
         let audioTracks = isTranscode ? dto.audioTracks : []
         let subtitleTracks = isTranscode ? dto.subtitleTracks : []
+        // Artwork as a tier-aware source; the baked poster/backdrop below are its
+        // default tiers. A nil tag → nil URL, so a title without art stays blank.
+        let artwork = ArtworkSource(
+            provider: .jellyfin, base: baseURL, token: accessToken,
+            posterPath: "/Items/\(dto.id)/Images/Primary", posterTag: dto.imageTags?["Primary"],
+            backdropPath: "/Items/\(dto.id)/Images/Backdrop", backdropTag: dto.backdropImageTags?.first
+        )
         return MediaItem(
             id: .init(source: id, rawValue: dto.id),
             title: dto.name ?? "Untitled",
@@ -360,8 +344,8 @@ public actor JellyfinMediaSource: MediaSource {
             year: dto.productionYear,
             runtime: dto.runTimeTicks.map { .seconds(Double($0) / 10_000_000.0) },
             summary: dto.overview,
-            posterURL: imageURL(itemID: dto.id, type: "Primary", tag: dto.imageTags?["Primary"], tier: .thumbnail),
-            backdropURL: imageURL(itemID: dto.id, type: "Backdrop", tag: dto.backdropImageTags?.first, tier: .backdrop),
+            posterURL: artwork.posterURL(.thumbnail),
+            backdropURL: artwork.backdropURL(.backdrop),
             streamURL: url,
             audioTracks: audioTracks,
             selectedAudioTrackID: audioTracks.first(where: \.isSelected)?.id,
@@ -383,7 +367,8 @@ public actor JellyfinMediaSource: MediaSource {
             episodeCount: dto.recursiveItemCount,
             endYear: dto.endYear,
             isContinuing: dto.status.map { $0 == "Continuing" },
-            unwatchedEpisodeCount: dto.userData?.unplayedItemCount
+            unwatchedEpisodeCount: dto.userData?.unplayedItemCount,
+            artwork: artwork
         )
     }
 

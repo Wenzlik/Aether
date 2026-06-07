@@ -228,7 +228,7 @@ struct DetailView: View {
                 // the text into a side gutter beside a letterboxed image.
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                     BackdropImage(
-                        url: item.backdropURL ?? item.posterURL,
+                        url: item.backdropURL(.backdrop) ?? item.posterURL(.detail),
                         height: hSizeClass == .regular ? backdropMaxHeight : nil
                     )
 
@@ -311,7 +311,10 @@ struct DetailView: View {
     /// overview and the playback rows sit on top, visible immediately.
     private var wideContent: some View {
         ZStack(alignment: .topLeading) {
-            CachedAsyncImage(url: item.backdropURL ?? item.posterURL)
+            CachedAsyncImage(
+                url: item.backdropURL(heroBackdropTier) ?? item.posterURL(.detail),
+                maxPixel: heroBackdropTier.maxPixel
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .overlay { wideScrim }
@@ -395,6 +398,18 @@ struct DetailView: View {
         .ignoresSafeArea()
     }
 
+    /// The server-resize tier for the full-screen hero backdrop. tvOS / visionOS
+    /// fill a large display, so they request a 1080p tier; phone / iPad use the
+    /// regular backdrop. Pair with `maxPixel` so the local cache doesn't shrink
+    /// the large tier back down.
+    private var heroBackdropTier: ArtworkTier {
+        #if os(tvOS) || os(visionOS)
+        return .backdropLarge
+        #else
+        return .backdrop
+        #endif
+    }
+
     private var backdropMaxHeight: CGFloat {
         // Shows put their seasons rail directly below the hero. On tvOS the only
         // way to scroll is to move focus onto a focusable element (a season
@@ -443,7 +458,10 @@ struct DetailView: View {
 
     private func movieHero(_ size: CGSize) -> some View {
         ZStack(alignment: .bottomLeading) {
-            CachedAsyncImage(url: activeItem.backdropURL ?? activeItem.posterURL)
+            CachedAsyncImage(
+                url: activeItem.backdropURL(heroBackdropTier) ?? activeItem.posterURL(.detail),
+                maxPixel: heroBackdropTier.maxPixel
+            )
                 .frame(width: size.width, height: movieHeroHeight(size))
                 .clipped()
                 .overlay { movieHeroScrim }
@@ -614,7 +632,11 @@ struct DetailView: View {
 
     private func episodeRow(_ episode: MediaItem) -> some View {
         HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
-            CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
+            CachedAsyncImage(
+                url: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
+                aspectRatio: 16.0 / 9.0,
+                maxPixel: ArtworkTier.still.maxPixel
+            )
                 .frame(width: 150)
                 .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
                 .overlay(alignment: .topTrailing) {
@@ -702,7 +724,11 @@ struct DetailView: View {
         if let episode = nextUpEpisode {
             NavigationLink(value: episode) {
                 HStack(spacing: AetherDesign.Spacing.m) {
-                    CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
+                    CachedAsyncImage(
+                        url: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
+                        aspectRatio: 16.0 / 9.0,
+                        maxPixel: ArtworkTier.still.maxPixel
+                    )
                         .frame(width: 160)
                         .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
