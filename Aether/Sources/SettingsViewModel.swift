@@ -100,7 +100,9 @@ final class SettingsViewModel {
     /// `$CI_BUILD_NUMBER`) — every local Xcode build just shows "1". `nil` when
     /// the stamp didn't run (key absent / placeholder).
     var commitString: String? {
-        guard let commit = infoString("AetherGitCommit"), commit != "dev" else { return nil }
+        // "dev" / "dev+" is the placeholder the stamp falls back to when git is
+        // unavailable — treat any dev-prefixed value as "no stamp".
+        guard let commit = infoString("AetherGitCommit"), !commit.hasPrefix("dev") else { return nil }
         return commit
     }
 
