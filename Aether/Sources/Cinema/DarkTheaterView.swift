@@ -29,6 +29,10 @@ struct DarkTheaterView: View {
     /// and resets it when playback ends.
     let cinema: CinemaManager
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    /// Pause the theater's procedural/decorative rendering when the space isn't
+    /// active (app backgrounded) to cut compositor work — the docked video is
+    /// kept; only the room is hidden.
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Drives the gentle passthrough dim on enter ("house lights down"). Starts
     /// off so the room fades dark rather than snapping.
@@ -80,6 +84,11 @@ struct DarkTheaterView: View {
         // Order matters — update the region first, then request the re-dock.
         .onChange(of: cinema.screenPreset) { _, _ in applyLayout(); cinema.requestRedock() }
         .onChange(of: cinema.seat) { _, _ in applyLayout(); cinema.requestRedock() }
+        // Battery: when the space goes inactive (app backgrounded), hide the
+        // room so the compositor isn't rendering the full 3D environment behind
+        // the lock screen; re-show on return. The docked video's subtree is left
+        // enabled so playback is untouched.
+        .onChange(of: scenePhase) { _, phase in setEnvironmentActive(phase == .active) }
         // Gentle "house lights down": ramp passthrough to dark on enter instead
         // of a hard cut. Only visible on device (Simulator barely dims).
         .preferredSurroundingsEffect(dimmed ? .systemDark : nil)
@@ -128,6 +137,22 @@ struct DarkTheaterView: View {
             root.position = SIMD3<Float>(0, cinema.seat.yOffsetMetres, cinema.seat.zOffsetMetres)
         }
         Self.log.debug("cinema layout: size=\(cinema.screenPreset.rawValue, privacy: .public) (×\(cinema.screenPreset.relativeScale, privacy: .public)) seat=\(cinema.seat.rawValue, privacy: .public)")
+    }
+
+    /// Show/hide the theater's *room* (everything except the video-dock subtree)
+    /// with the app's active state, so the compositor isn't drawing the full 3D
+    /// environment while backgrounded. The dock subtree stays enabled so the
+    /// docked video is untouched; in the procedural fallback (no dock) the whole
+    /// room toggles — system docking is independent of these entities. Reversible
+    /// (`isEnabled`), so it restores cleanly on return to foreground.
+    @MainActor
+    private func setEnvironmentActive(_ active: Bool) {
+        guard let root = refs.root else { return }
+        for child in root.children {
+            if child.findEntity(named: Self.dockEntityName) != nil { continue }  // keep the dock
+            child.isEnabled = active
+        }
+        Self.log.debug("cinema env rendering \(active ? "resumed" : "paused", privacy: .public)")
     }
 
     // MARK: - Authored environment (Reality Composer Pro)

@@ -93,6 +93,10 @@ public final class PlayerStateViewModel {
             refreshTask?.cancel()
             refreshTask = nil
         }
+        // Also gate the session's own periodic resume-write loop (it lives
+        // inside the actor, out of reach of refreshTask) so it stops waking the
+        // CPU every few seconds while backgrounded.
+        Task { await session.setActive(isActive) }
     }
 
     // MARK: - Internals
