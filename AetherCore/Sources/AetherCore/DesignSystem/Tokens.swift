@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Design tokens for Aether's visual language — its first real visual identity:
-/// a calm, cinematic "personal cinema" look built on a violet brand and near
-/// black surfaces. Numeric values + rationale live in
-/// `docs/ux/DESIGN_PRINCIPLES.md`. Never hard-code a colour, gradient, font,
-/// spacing, radius, or duration in a view — pull it from here.
+/// Design tokens for Aether's visual language — a calm, cinematic "personal
+/// cinema" look built on a premium **blue** brand (0.6.0 refresh, was violet)
+/// over a layered near-black base. Numeric values + rationale live in
+/// `docs/ux/DESIGN_PRINCIPLES.md` and `docs/next-steps/ux-refresh-060.md`.
+/// Never hard-code a colour, gradient, font, spacing, radius, or duration in a
+/// view — pull it from here.
 public enum AetherDesign {
 
     // MARK: - Spacing
@@ -39,32 +40,51 @@ public enum AetherDesign {
     // MARK: - Color (the Aether brand palette)
 
     /// `Palette` is the canonical colour namespace used across the app. The
-    /// brand accent is **Aether Violet**; surfaces are near-black zinc tones for
-    /// an OLED-friendly cinematic base.
+    /// brand accent is **Aether Blue** — a premium, visionOS-aligned blue;
+    /// surfaces are a layered near-black for an OLED-friendly cinematic base.
+    /// (0.6.0 brand refresh — replaced the original violet; see
+    /// `docs/next-steps/ux-refresh-060.md`.)
     public enum Palette {
-        // Brand accents
-        /// Aether Violet — the primary accent (focus, selection, primary action).
-        public static let accent = Color(hex: 0x8B5CF6)
-        /// Aether Indigo — secondary accent, gradient partner.
-        public static let accentIndigo = Color(hex: 0x6366F1)
-        /// Aether Aurora — hero accent, the brightest brand tone.
-        public static let accentAurora = Color(hex: 0xA855F7)
-        /// Aether Gold — the warm cinematic accent extracted from the app icon's
-        /// neon "A" mark. Pairs with violet on hero CTAs and the welcome /
-        /// onboarding bloom. **Secondary accent only** — never replaces violet
-        /// for selection, focus, or interactive primary actions.
+        // Brand accents — premium blue primary, subtle purple secondary.
+        /// Aether Blue — the **primary** accent (focus, selection, primary
+        /// action, links, section accents). Re-pointed from violet in 0.6.0, so
+        /// every existing `Palette.accent` call site reads premium blue.
+        public static let accent = Color(hex: 0x6A8BFF)
+        /// Brightened blue — focus glow, progress fill, hover/active, and the
+        /// bright stop of the brand gradients.
+        public static let accentBright = Color(hex: 0x5B7CFF)
+        /// Darker indigo — the depth partner / dark stop of `aurora` & `progress`.
+        public static let accentIndigo = Color(hex: 0x4C63E0)
+        /// Subtle Purple — **secondary accent only** (muted / planned status,
+        /// tertiary tints, the secondary background bloom). Never primary
+        /// interactive state.
+        public static let accentSecondary = Color(hex: 0x9B7EBF)
+        /// Aether Gold — the warm accent from the app icon's neon "A" mark.
+        /// **Brand-mark pairing only** (the `cinematic` gradient / wordmark) —
+        /// never interactive.
         public static let accentGold = Color(hex: 0xF5B524)
-        /// Slightly warmer amber sibling of `accentGold` — used for soft glows
-        /// and the bottom anchor of `cinematic` gradients.
+        /// Slightly warmer amber sibling of `accentGold` — soft glows / warm
+        /// anchor of the `cinematic` gradient only.
         public static let accentAmber = Color(hex: 0xF59E0B)
 
-        // Surfaces — adaptive. Dark side keeps the OLED-friendly near-black
-        // zinc tones the app shipped on for 0.3.x; light side mirrors the
-        // tints Apple uses in the System / Music / TV apps under a light
-        // appearance (near-white base, white cards, subtle elevated stripe).
+        // Surfaces — adaptive, layered dark base. Dark side is a three-stop
+        // gradient (top #0B0D12 → mid #111827 → bottom #0A0A0F) for cinematic
+        // depth instead of flat near-black; light side mirrors the tints Apple
+        // uses in System / Music / TV under a light appearance.
+        /// Top anchor of the layered background gradient.
         public static let background = Color(
             light: Color(hex: 0xF6F6F6),
-            dark: Color(hex: 0x09090B)
+            dark: Color(hex: 0x0B0D12)
+        )
+        /// Middle (charcoal-blue) depth stop of the background gradient.
+        public static let backgroundMid = Color(
+            light: Color(hex: 0xFFFFFF),
+            dark: Color(hex: 0x111827)
+        )
+        /// Bottom (near-black) anchor of the background gradient.
+        public static let backgroundBottom = Color(
+            light: Color(hex: 0xF6F6F6),
+            dark: Color(hex: 0x0A0A0F)
         )
         public static let surface = Color(
             light: Color(hex: 0xFFFFFF),
@@ -101,12 +121,15 @@ public enum AetherDesign {
 
         // Semantic
         public static let success = Color(hex: 0x22C55E)
-        public static let warning = Color(hex: 0xF59E0B)
+        /// Orange-red — distinct from brand gold (`accentGold`) so a status
+        /// warning never reads as a brand accent.
+        public static let warning = Color(hex: 0xF97316)
         public static let error = Color(hex: 0xEF4444)
 
-        /// The colour of the soft violet focus glow (used as a shadow colour on
-        /// focused cards / buttons / rows). Replaces flat black focus shadows.
-        public static let focusGlow = accent
+        /// The colour of the soft focus glow (a shadow colour on focused cards /
+        /// buttons / rows). The bright blue — the fill/border identity is
+        /// `accent`, the glow is `accentBright`.
+        public static let focusGlow = accentBright
     }
 
     /// Convenience alias so new code can read `AetherDesign.Colors.accent` per
@@ -118,41 +141,48 @@ public enum AetherDesign {
     /// Brand gradients. Computed so they don't pin global state under strict
     /// concurrency, and cheap to build at the call site.
     public enum Gradients {
-        /// Hero / featured wash — indigo → aurora, the signature brand sweep.
+        /// Hero / featured wash and primary-button fill — indigo → bright blue.
         public static var aurora: LinearGradient {
             LinearGradient(
-                colors: [Palette.accentIndigo, Palette.accentAurora],
+                colors: [Palette.accentIndigo, Palette.accentBright],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         }
 
-        /// Progress fill (Continue Watching bars, scrubbers).
+        /// Progress fill (Continue Watching bars, scrubbers) — indigo → bright blue.
         public static var progress: LinearGradient {
             LinearGradient(
-                colors: [Palette.accentIndigo, Palette.accentAurora],
+                colors: [Palette.accentIndigo, Palette.accentBright],
                 startPoint: .leading,
                 endPoint: .trailing
             )
         }
 
-        /// Whole-screen atmosphere — two faint cosmic blooms (cool aurora
-        /// upper-left, warm violet upper-right) over the adaptive
-        /// `Palette.background`. On the dark side the blooms sit at
-        /// 3–5 % opacity and read like distant nebula light; on the light
-        /// side they're swapped for the same accents at half the opacity
-        /// (so the screen still has subtle structure on white) — strong
-        /// brand tints on a white background look like marketing
-        /// material, so the light variant pulls way back. Inspired by
-        /// Apple TV+, Disney+, and visionOS surfaces.
+        /// The layered base — top → mid → bottom, the cinematic-depth substrate
+        /// the blooms sit on (replaces flat `Palette.background`).
+        public static var backgroundBase: LinearGradient {
+            LinearGradient(
+                colors: [Palette.background, Palette.backgroundMid, Palette.backgroundBottom],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        /// Whole-screen atmosphere — the layered base plus two faint blooms
+        /// (bright-blue upper-left, subtle-purple upper-right). On dark the
+        /// blooms sit at 6–8 % for cinematic depth while staying subtle; on
+        /// light they pull back to 3–4 % so a white screen still has structure
+        /// without reading like marketing material. Apply via
+        /// `.aetherScreenBackground()`. Inspired by Apple TV+ / visionOS.
         public static var background: some View {
             ZStack {
-                Palette.background
+                backgroundBase
                 RadialGradient(
                     colors: [
                         Color(
-                            light: Palette.accentAurora.opacity(0.025),
-                            dark: Palette.accentAurora.opacity(0.05)
+                            light: Palette.accentBright.opacity(0.04),
+                            dark: Palette.accentBright.opacity(0.08)
                         ),
                         Color.clear
                     ],
@@ -163,8 +193,8 @@ public enum AetherDesign {
                 RadialGradient(
                     colors: [
                         Color(
-                            light: Palette.accent.opacity(0.02),
-                            dark: Palette.accent.opacity(0.04)
+                            light: Palette.accentSecondary.opacity(0.03),
+                            dark: Palette.accentSecondary.opacity(0.06)
                         ),
                         Color.clear
                     ],
@@ -175,23 +205,22 @@ public enum AetherDesign {
             }
         }
 
-        /// Radial violet bloom used behind hero / welcome content.
+        /// Radial blue bloom used behind hero / welcome content.
         public static var heroBloom: RadialGradient {
             RadialGradient(
-                colors: [Palette.accent.opacity(0.22), Palette.background],
+                colors: [Palette.accentBright.opacity(0.28), Palette.background],
                 center: .center,
                 startRadius: 0,
                 endRadius: 640
             )
         }
 
-        /// Violet → gold sweep for cinematic accents (the welcome glyph, the
-        /// Aether wordmark on hero headers). Echoes the neon "A" on the app
-        /// icon, where the violet halo gives way to the warm gold letterform.
-        /// Use sparingly — once per screen at most.
+        /// Blue → gold sweep for the brand mark (the welcome glyph, the Aether
+        /// wordmark). Echoes the neon "A" on the app icon — the blue halo gives
+        /// way to the warm gold letterform. Brand-mark only; once per screen.
         public static var cinematic: LinearGradient {
             LinearGradient(
-                colors: [Palette.accentAurora, Palette.accent, Palette.accentGold],
+                colors: [Palette.accentBright, Palette.accent, Palette.accentGold],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

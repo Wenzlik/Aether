@@ -42,7 +42,7 @@ struct UnifiedLibraryGridView: View {
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.vertical, AetherDesign.Spacing.l)
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .navigationTitle(title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)

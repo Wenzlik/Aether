@@ -109,14 +109,14 @@ The player is where Aether spends the most polish budget.
 
 ## Color
 
-Aether's identity is **personal cinema**: a violet brand over near-black surfaces. Calm and atmospheric, never neon — and explicitly *not* Plex orange / Netflix red.
+Aether's identity is **personal cinema**: a premium **blue** brand over a layered near-black base. Calm and atmospheric, never neon — and explicitly *not* Plex orange / Netflix red. *(0.6.0 refresh — the brand moved off violet; see [`docs/next-steps/ux-refresh-060.md`](../next-steps/ux-refresh-060.md).)*
 
-- **Near-black backgrounds** (`#09090B`), OLED-friendly, with two faint cosmic blooms (cool aurora upper-left, warm violet upper-right) at 3–5 % opacity over the base — `AetherDesign.Gradients.background` reads as depth, not as wallpaper. Surfaces are zinc (`#18181B` / elevated `#27272A`). All four — background, surface, surfaceElevated, separator — resolve through the new `Color(light:dark:)` helper so the same tokens carry adaptive Light variants (off-white / white / soft zinc / black-at-10 %) for the **Appearance** picker (System / Dark / Light) wired through `AppearancePreferenceStore`. Accent colours and semantic statuses stay single-value across modes — brand identity / semantic meaning is the same in either appearance.
-- **Aether Violet** `#8B5CF6` is the primary accent — focus, selection, primary action. **Aether Indigo** `#6366F1` and **Aether Aurora** `#A855F7` are its gradient partners (`Gradients.aurora` on the hero CTA + progress). Accent appears on focus glow, progress, selected tracks, key CTAs — nowhere decorative.
-- **Aether Gold** `#F5B524` and **Aether Amber** `#F59E0B` are the **secondary** accent — the warm cinematic partner extracted from the app icon's gold→blue light-ribbon "A" mark. Carried into the app primarily through the `AetherBrandMark` artwork itself (the lockup bakes the gold-to-blue gradient into the wordmark and the under-mark glow line). May also tint hero glyphs that pair with the brand mark. **Never for selection, focus, or interactive primary actions** — violet still owns those.
+- **Layered dark backgrounds** — a three-stop gradient (`#0B0D12` top → `#111827` mid → `#0A0A0F` bottom) with two faint brand blooms (bright-blue upper-left, subtle-purple upper-right) at 6–8 % over the base. Exposed as `AetherDesign.Gradients.background` and applied on every screen via the shared `aetherScreenBackground()` modifier so navigating never shows a background shift; it reads as depth, not wallpaper. Surfaces are zinc (`#18181B` / elevated `#27272A`). Background, surfaces, and separator resolve through `Color(light:dark:)` so the same tokens carry adaptive Light variants for the **Appearance** picker (System / Dark / Light) via `AppearancePreferenceStore`. Accent + semantic statuses stay single-value across modes. (Full-screen video keeps a pure-black background — nothing competes with the picture.)
+- **Aether Blue** `#6A8BFF` is the primary accent — focus, selection, primary action, links, section accents. **`accentBright` `#5B7CFF`** is the brightened sibling (focus glow, progress fill) and **`accentIndigo` `#4C63E0`** the gradient depth partner (`Gradients.aurora` / `progress`). Accent appears on focus glow, progress, selected tracks, key CTAs — nowhere decorative. Re-pointing `Palette.accent` from violet to blue re-skins every interactive surface at once.
+- **Subtle purple** `accentSecondary #9B7EBF` is the **secondary** accent only — muted/planned status, the secondary background bloom. Never primary interactive state. **Aether Gold** `#F5B524` / **Amber** `#F59E0B` are **brand-mark only** — the warm partner baked into the `AetherBrandMark` lockup + the `cinematic` gradient. **Never for selection, focus, or interactive primary actions.**
 - **Type uses grayscale** — primary `#FAFAFA`, secondary `#A1A1AA`, tertiary `#71717A`.
-- **Status colors** — success `#22C55E`, warning `#F59E0B`, error `#EF4444` — used only when status *is* the message (the colour-coded settings/source values), never decorative.
-- **Focus** uses scale + depth + brightness + a soft violet glow. **Never thick white borders.**
+- **Status colors** — success `#22C55E`, warning `#F97316` (orange-red, distinct from brand gold), error `#EF4444` — used only when status *is* the message, never decorative.
+- **Focus** uses scale + a soft blue glow (`premiumFocus` — lift + `focusGlow #5B7CFF` shadow). **Never thick white borders or accent-tinted boxes.**
 
 Concrete colors, gradients, and materials are in `DesignSystem/Tokens` (`AetherDesign.Palette` / `.Gradients` / `.Materials`, authored from hex via `Color(hex:)`). Never hard-code a color in a view.
 
@@ -306,22 +306,26 @@ All of these collapse to instant cuts when **Reduce Motion** is enabled.
 
 | Token | Value | Description |
 |-------|-------|-------------|
-| `Palette.accent` | `#8B5CF6` | **Aether Violet** — focus glow, selection, primary action |
-| `Palette.accentIndigo` | `#6366F1` | secondary accent / gradient partner |
-| `Palette.accentAurora` | `#A855F7` | hero accent (brightest brand tone) |
-| `Palette.accentGold` | `#F5B524` | **Aether Gold** — warm sibling extracted from the brand-mark artwork; reserved for code that needs to pair with the mark (hero glyphs); secondary accent only |
-| `Palette.accentAmber` | `#F59E0B` | warm amber sibling of gold; also reused for `warning` status |
-| `Palette.background` | `#09090B` | near-black base (OLED) |
+| `Palette.accent` | `#6A8BFF` | **Aether Blue** — primary: focus, selection, primary action, links |
+| `Palette.accentBright` | `#5B7CFF` | brightened blue — focus glow, progress fill, active |
+| `Palette.accentIndigo` | `#4C63E0` | gradient depth partner (dark stop of aurora/progress) |
+| `Palette.accentSecondary` | `#9B7EBF` | **subtle purple** — secondary only (muted/planned status, secondary bloom) |
+| `Palette.accentGold` | `#F5B524` | **Aether Gold** — brand-mark / `cinematic` gradient only; never interactive |
+| `Palette.accentAmber` | `#F59E0B` | warm anchor of the `cinematic` gradient only |
+| `Palette.background` | `#0B0D12` | top stop of the layered base |
+| `Palette.backgroundMid` | `#111827` | mid (charcoal-blue) depth stop |
+| `Palette.backgroundBottom` | `#0A0A0F` | bottom near-black stop |
 | `Palette.surface` | `#18181B` | cards, chrome |
 | `Palette.surfaceElevated` | `#27272A` | focused rows, raised surfaces |
 | `Palette.textPrimary` | `#FAFAFA` | primary text |
 | `Palette.textSecondary` | `#A1A1AA` | metadata rows |
 | `Palette.textTertiary` | `#71717A` | captions, hints |
 | `Palette.success` | `#22C55E` | "Available" / "Connected" status |
-| `Palette.warning` | `#F59E0B` | warnings |
+| `Palette.warning` | `#F97316` | warnings (orange-red, distinct from brand gold) |
 | `Palette.error` | `#EF4444` | "Not connected" status, destructive |
+| `Palette.focusGlow` | = `accentBright` | the blue focus glow |
 
-Gradients: `Gradients.aurora` (indigo→aurora hero sweep, primary CTA + featured), `Gradients.progress` (Continue Watching bars / scrubbers), `Gradients.background` (faint violet top wash on primary screens), `Gradients.heroBloom` (radial violet behind the Welcome hero), `Gradients.cinematic` (violet → aurora → gold — kept available for paired hero glyphs that need to echo the brand mark; once per screen at most). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`).
+Gradients: `Gradients.aurora` (indigo→bright-blue sweep, primary CTA + featured), `Gradients.progress` (Continue Watching strip / scrubbers), `Gradients.backgroundBase` (the three-stop layered base) + `Gradients.background` (base + faint blue/purple blooms — the whole-screen atmosphere, via `aetherScreenBackground()`), `Gradients.heroBloom` (radial blue behind the Welcome hero), `Gradients.cinematic` (blue → blue → gold — brand mark only; once per screen). Materials: `Materials.card` (`.ultraThinMaterial`) / `Materials.chrome` (`.regularMaterial`). Shared modifiers: `aetherScreenBackground()`, `aetherHeroScrim()`, `premiumFocus()` (`AetherModifiers.swift`).
 
 ### Typography
 

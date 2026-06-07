@@ -181,7 +181,7 @@ struct DetailView: View {
                 #endif
             }
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         #if os(iOS)
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
@@ -1232,19 +1232,36 @@ struct DetailView: View {
                 }
             }
         } label: {
-            HStack(spacing: AetherDesign.Spacing.xs) {
-                Image(systemName: "ellipsis.circle")
-                Text("More")
-            }
-            .font(AetherDesign.Typography.cardTitle)
-            .foregroundStyle(AetherDesign.Palette.textPrimary)
-            .padding(.vertical, AetherDesign.Spacing.s)
-            .padding(.horizontal, AetherDesign.Spacing.l)
-            .frame(maxWidth: .infinity)
-            .background(AetherDesign.Materials.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(AetherDesign.Palette.separator, lineWidth: 1))
-            .contentShape(Capsule())
+            moreMenuLabel
         }
+    }
+
+    /// Tertiary "More" — deliberately the smallest action so it never competes
+    /// with Resume. A compact circular icon on touch / spatial UI; on tvOS a
+    /// small labelled chip stays (an icon-only target is hard for the focus
+    /// engine to surface).
+    @ViewBuilder
+    private var moreMenuLabel: some View {
+        #if os(tvOS)
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: "ellipsis")
+            Text("More")
+        }
+        .font(AetherDesign.Typography.metadata)
+        .foregroundStyle(AetherDesign.Palette.textSecondary)
+        .padding(.vertical, AetherDesign.Spacing.s)
+        .padding(.horizontal, AetherDesign.Spacing.m)
+        .background(AetherDesign.Materials.card, in: Capsule())
+        .contentShape(Capsule())
+        #else
+        Image(systemName: "ellipsis")
+            .font(AetherDesign.Typography.cardTitle)
+            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .frame(width: 46, height: 46)
+            .background(AetherDesign.Materials.card, in: Circle())
+            .contentShape(Circle())
+            .accessibilityLabel("More actions")
+        #endif
     }
 
     /// Displayed watched state — the optimistic override wins over the hydrated
@@ -1530,7 +1547,7 @@ struct DetailView: View {
                 .padding(AetherDesign.Spacing.l)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(AetherDesign.Palette.background.ignoresSafeArea())
+            .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
@@ -1563,7 +1580,7 @@ struct DetailView: View {
                 .padding(.bottom, AetherDesign.Spacing.l)
             }
         }
-        .background(AetherDesign.Palette.background.ignoresSafeArea())
+        .aetherScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
