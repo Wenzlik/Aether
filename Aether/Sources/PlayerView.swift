@@ -143,6 +143,10 @@ struct PlayerView: View {
         // screen; resume on return to foreground. Audio keeps playing.
         .onChange(of: scenePhase) { _, phase in
             viewModel.setAppActive(phase == .active)
+            // Don't tick the once-a-second next-episode countdown (or auto-play
+            // the next item) while backgrounded — it re-arms on return to
+            // foreground when the prompt is re-evaluated.
+            if phase != .active { cancelCountdown() }
         }
         .onDisappear {
             cancelCountdown()
