@@ -43,10 +43,17 @@ struct DarkTheaterView: View {
     @State private var refs = CinemaSceneRefs()
 
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
-    private static let controlPanelID = "cinemaControls"
 
     var body: some View {
-        RealityView { content, attachments in
+        // No SwiftUI/RealityKit attachment for the controls: Screen-size + Seat
+        // live in the native AVKit transport bar as `contextualActions` (see
+        // `SystemVideoPlayer` / `CinemaControlBinding`). A floating attachment
+        // can't composite over the system-docked video — at the larger screen
+        // sizes it hid *behind* the picture — and an always-visible handle
+        // cluttered the view. The transport bar is rendered in the system layer
+        // (always in front) and shows/hides with the native controls. This view
+        // is now purely the environment.
+        RealityView { content in
             // Prefer the authored Dark Theater (its `DockingRegion` sizes the
             // docked screen + reflective floor); fall back to the procedural
             // room if the asset can't load.
@@ -63,21 +70,6 @@ struct DarkTheaterView: View {
             refs.root = root
             refs.dock = root.findEntity(named: Self.dockEntityName)
             applyLayout()
-
-            // Floating glass control (size + seat), parked at a comfortable
-            // downward-glance spot near the viewer — NOT a child of the room
-            // (stays put as the seat slides). It collapses to a small handle
-            // while watching (so it doesn't get covered or clutter the view) and
-            // expands on look/tap, so exact height matters less than before.
-            // Tune Y on device.
-            if let panel = attachments.entity(for: Self.controlPanelID) {
-                panel.position = SIMD3<Float>(0, 0.75, -1.25)
-                content.add(panel)
-            }
-        } attachments: {
-            Attachment(id: Self.controlPanelID) {
-                CinemaControlPanel(cinema: cinema)
-            }
         }
         // Live: re-apply the region/room when the in-cinema control changes
         // size or seat, then ask the player to re-dock so the system re-fits the
@@ -390,105 +382,10 @@ private final class CinemaSceneRefs {
     var baselineDockWidth: Float?
 }
 
-// MARK: - In-cinema control panel
-
-/// Floating glass control inside the Dark Theater: screen **size** + **seat**
-/// (row). Tapping updates `cinema`, which `DarkTheaterView` observes to resize
-/// the docked screen and slide the room live. Mirrors Apple TV+'s in-environment
-/// controls. Tuned for reach; positioned by `DarkTheaterView`.
-private struct CinemaControlPanel: View {
-    let cinema: CinemaManager
-
-    /// Collapsed by default to a faint handle; expands to the full controls on
-    /// look/tap, then auto-collapses after a few seconds so it's out of the way
-    /// while watching.
-    @State private var expanded = false
-    @State private var hideTask: Task<Void, Never>?
-
-    var body: some View {
-        Group {
-            if expanded {
-                fullPanel
-            } else {
-                handle
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: expanded)
-        // Gaze (or a connected pointer) reveals the full panel. visionOS doesn't
-        // hand apps the gaze point, so the handle below also carries a system
-        // hover highlight + a tap fallback (look → pinch) — pure look-with-no-
-        // marker isn't possible.
-        .onHover { hovering in if hovering { reveal() } }
-    }
-
-    /// The always-present, unobtrusive affordance shown while collapsed.
-    private var handle: some View {
-        Image(systemName: "slider.horizontal.3")
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 26)
-            .glassBackgroundEffect()
-            .hoverEffect()
-            .onTapGesture { reveal() }
-            .accessibilityLabel("Cinema controls")
-            .accessibilityHint("Shows screen size and seat controls")
-    }
-
-    private var fullPanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            row("Screen Size") {
-                ForEach(CinemaScreenPreset.ordered, id: \.self) { preset in
-                    chip(preset.displayName, selected: cinema.screenPreset == preset) {
-                        cinema.setScreenPreset(preset); reveal()
-                    }
-                }
-            }
-            row("Seat") {
-                ForEach(CinemaSeat.ordered, id: \.self) { seat in
-                    chip(seat.displayName, selected: cinema.seat == seat) {
-                        cinema.setSeat(seat); reveal()
-                    }
-                }
-            }
-        }
-        .padding(28)
-        .frame(width: 480)
-        .glassBackgroundEffect()
-    }
-
-    /// Show the full panel and (re)start the inactivity timer that collapses it
-    /// back to the handle. Called on reveal *and* on every interaction so it
-    /// stays open while the user is using it.
-    private func reveal() {
-        if !expanded { expanded = true }
-        hideTask?.cancel()
-        hideTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            expanded = false
-        }
-    }
-
-    @ViewBuilder
-    private func row(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) { content() }
-        }
-    }
-
-    private func chip(_ title: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(selected ? AetherDesign.Palette.accent : Color.secondary.opacity(0.35))
-    }
-}
+// The in-cinema Screen-size + Seat controls used to live here as a floating
+// `CinemaControlPanel` attachment. They now live in the native AVKit transport
+// bar (see `SystemVideoPlayer` → `CinemaControlBinding`): a RealityKit
+// attachment can't composite over the system-docked video (it hid behind the
+// larger screens), and the always-visible handle cluttered the view. Transport-
+// bar contextual actions render in front and appear/hide with the native chrome.
 #endif
