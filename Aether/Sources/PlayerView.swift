@@ -47,6 +47,9 @@ struct PlayerView: View {
     /// visionOS only: auto-expand the system player so it docks into an open
     /// immersive space without a manual expand tap. Set by Cinema Mode.
     let preferExpanded: Bool
+    /// visionOS only: bumped when the cinema size/seat changes, so the docked
+    /// player re-docks to re-fit. `nil` for windowed playback.
+    let redockToken: UUID?
 
     init(
         item: MediaItem,
@@ -54,6 +57,7 @@ struct PlayerView: View {
         session: PlaybackSession,
         startAt: Double? = nil,
         preferExpanded: Bool = false,
+        redockToken: UUID? = nil,
         playbackPreferences: PlaybackPreferencesStore? = nil,
         onDismiss: @escaping () -> Void
     ) {
@@ -61,6 +65,7 @@ struct PlayerView: View {
         self.source = source
         self.startAt = startAt
         self.preferExpanded = preferExpanded
+        self.redockToken = redockToken
         self.playbackPreferences = playbackPreferences
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
@@ -76,6 +81,7 @@ struct PlayerView: View {
                 SystemVideoPlayer(
                     player: player,
                     preferExpanded: preferExpanded,
+                    redockToken: redockToken,
                     onDismiss: {
                         Task { await dismissPlayer() }
                     }

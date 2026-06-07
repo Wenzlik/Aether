@@ -33,10 +33,22 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
     /// immersive space without the user tapping the expand control. Used by
     /// Cinema Mode; windowed playback leaves it `false`.
     let preferExpanded: Bool
+    /// visionOS only: a token bumped when the cinema's size/seat changes. The
+    /// system reads the `DockingRegion` only at dock-attach, so an already-docked
+    /// screen is re-fitted by briefly transitioning `.expanded` → `.embedded` →
+    /// `.expanded` (a quick re-dock). `nil` / unchanged → no re-dock; windowed
+    /// playback leaves it `nil`.
+    let redockToken: UUID?
 
-    init(player: AVPlayer, preferExpanded: Bool = false, onDismiss: @escaping () -> Void = {}) {
+    init(
+        player: AVPlayer,
+        preferExpanded: Bool = false,
+        redockToken: UUID? = nil,
+        onDismiss: @escaping () -> Void = {}
+    ) {
         self.player = player
         self.preferExpanded = preferExpanded
+        self.redockToken = redockToken
         self.onDismiss = onDismiss
     }
 
@@ -117,6 +129,24 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
                 _ = await controller.experienceController.transition(to: .expanded)
             }
         }
+
+        // Re-dock on a size/seat change: the docking region was already updated
+        // (DarkTheaterView bumped the token *after* applying it), so a quick
+        // `.embedded` → `.expanded` round-trip makes the system re-fit the
+        // docked screen to the new size/position. Skip until we've expanded once
+        // (nothing to re-dock before then) and only act on a *new* token.
+        if let redockToken, redockToken != context.coordinator.lastRedockToken {
+            context.coordinator.lastRedockToken = redockToken
+            // Only after the initial expand (nothing to re-dock before then). The
+            // token is non-nil only once the user changes size/seat in-cinema, so
+            // this fires on the first such change, not on entry.
+            if context.coordinator.didRequestExpand {
+                Task { @MainActor in
+                    _ = await controller.experienceController.transition(to: .embedded)
+                    _ = await controller.experienceController.transition(to: .expanded)
+                }
+            }
+        }
         #endif
     }
 
@@ -130,6 +160,8 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         var onDismiss: () -> Void
         /// Guards the one-shot expand transition (Cinema Mode).
         var didRequestExpand = false
+        /// Last re-dock token acted on, so each size/seat change re-docks once.
+        var lastRedockToken: UUID?
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss
