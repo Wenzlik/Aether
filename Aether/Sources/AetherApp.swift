@@ -53,26 +53,17 @@ struct AetherApp: App {
         #endif
 
         #if os(visionOS)
-        // One immersive space per screen-size preset — each loads that preset's
-        // authored environment (its DockingRegion sizes the docked screen), or
-        // falls back to the procedural Dark Theater until the .usda is authored.
-        // `RootTabView` opens the one matching the chosen preset.
-        cinemaSpace(.medium)
-        cinemaSpace(.large)
-        cinemaSpace(.imax)
-        cinemaSpace(.wall)
-        #endif
-    }
-
-    #if os(visionOS)
-    @SceneBuilder
-    private func cinemaSpace(_ preset: CinemaScreenPreset) -> some Scene {
-        ImmersiveSpace(id: preset.spaceID) {
-            DarkTheaterView(cinema: cinema, preset: preset)
+        // A single Dark Theater immersive space. It loads the one authored
+        // environment (`AetherDarkTheater.usda`) and sizes the docked screen in
+        // code from the chosen preset — no per-preset space. `RootTabView`
+        // opens it; the preset is read from `cinema` at open time (it's set by
+        // `present(...)` before the space opens).
+        ImmersiveSpace(id: CinemaManager.spaceID) {
+            DarkTheaterView(cinema: cinema, preset: cinema.preset)
         }
         .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
+        #endif
     }
-    #endif
 }
 
 // MARK: - AppDelegate (background URL session bridge only)

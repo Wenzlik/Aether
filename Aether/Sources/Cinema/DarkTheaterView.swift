@@ -43,12 +43,18 @@ struct DarkTheaterView: View {
 
     var body: some View {
         RealityView { content in
-            // Prefer the preset's authored environment (sized DockingRegion +
-            // reflective floor); fall back to the procedural room until it's
-            // authored in Reality Composer Pro.
-            if let authored = await Self.loadAuthoredEnvironment(named: preset.sceneName) {
+            // Prefer the authored Dark Theater (its `DockingRegion` sizes the
+            // docked screen + its reflective floor). One scene for every preset;
+            // the chosen size is applied in code by scaling the dock. Fall back
+            // to the procedural room if the asset is missing.
+            if let authored = await Self.loadAuthoredEnvironment() {
+                Self.applyScreenSize(preset, to: authored)
                 content.add(authored)
             } else {
+                // No cable to test on device — this log + the ones in
+                // applyScreenSize are the TestFlight telemetry that tells us
+                // which path executed (authored vs procedural; which sizing knob).
+                Self.log.debug("authored env: \(Self.sceneName, privacy: .public).usda failed to load → procedural room")
                 content.add(await Self.makeEnvironment())
             }
         }
@@ -76,15 +82,65 @@ struct DarkTheaterView: View {
 
     // MARK: - Authored environment (Reality Composer Pro)
 
-    /// Try to load a preset's authored environment by scene name from the app
-    /// bundle (the Reality Composer Pro `.rkassets`, compiled in as an app
-    /// resource). Returns `nil` when the scene hasn't been authored yet (the
-    /// placeholder ships empty), so the caller falls back to the procedural
-    /// room. Each authored scene is expected to carry a `DockingRegion` (sizing
-    /// the docked screen) and a reflective floor.
+    /// Name of the authored scene in `RealityKitContent.rkassets` (the file is
+    /// `AetherDarkTheater.usda`; its root prim shares the name).
+    private static let sceneName = "AetherDarkTheater"
+    /// Name of the entity that carries the authored `DockingRegion` — scaling it
+    /// resizes the docked screen. Matches the `Player` prim in the `.usda`.
+    private static let dockEntityName = "Player"
+
+    /// Load the authored Dark Theater from the app bundle (the Reality Composer
+    /// Pro `.rkassets`, compiled in as an app resource). Returns `nil` if the
+    /// asset is missing, so the caller falls back to the procedural room. The
+    /// scene carries a `DockingRegion` (sizing the docked screen) and a
+    /// reflective floor.
     @MainActor
-    private static func loadAuthoredEnvironment(named name: String) async -> Entity? {
-        try? await Entity(named: name, in: .main)
+    private static func loadAuthoredEnvironment() async -> Entity? {
+        try? await Entity(named: sceneName, in: .main)
+    }
+
+    /// Size the docked screen for `preset`. The authored `DockingRegion` is the
+    /// `.medium` baseline (`relativeScale == 1.0`), so `.medium` leaves the scene
+    /// exactly as authored and the larger presets widen it.
+    ///
+    /// Two routes, preferred first:
+    /// 1. The **documented** knob — `DockingRegionComponent.width` (height follows
+    ///    at 2.4:1, per WWDC24 "Enhance the immersion of media viewing"). This is
+    ///    the path the system actually honours for docked-video size.
+    /// 2. Fallback — scale the dock entity's transform. The authored bounds are
+    ///    symmetric so a uniform scale neither distorts nor de-centres; if the
+    ///    system ignores transform scale for docking, the screen simply stays at
+    ///    the authored size (acceptable — a bonus feature, not a gate).
+    ///
+    /// No-op (logged) if the dock entity isn't found — a renamed scene still
+    /// loads at its authored size rather than failing. The logs are deliberate:
+    /// with no Vision Pro to test on, the TestFlight Console is the only signal
+    /// for which route the runtime took.
+    @MainActor
+    private static func applyScreenSize(_ preset: CinemaScreenPreset, to environment: Entity) {
+        guard let dock = environment.findEntity(named: dockEntityName) else {
+            log.debug("authored env: dock '\(dockEntityName, privacy: .public)' not found; using authored size")
+            return
+        }
+        guard preset != .medium else {
+            log.debug("authored env: preset=medium → authored dock size kept")
+            return
+        }
+
+        // 1. Documented sizing knob. The RCP component (`RealityKit.CustomDockingRegion`)
+        //    is expected to load as `DockingRegionComponent`; if the type doesn't
+        //    resolve at runtime the `if let` simply fails and we fall through.
+        if var region = dock.components[DockingRegionComponent.self] {
+            let previous = region.width
+            region.width *= preset.relativeScale
+            dock.components.set(region)
+            log.debug("authored env: dock width \(previous, privacy: .public)→\(region.width, privacy: .public) via DockingRegionComponent for \(preset.rawValue, privacy: .public)")
+            return
+        }
+
+        // 2. Fallback: transform scale.
+        dock.scale = SIMD3<Float>(repeating: preset.relativeScale)
+        log.debug("authored env: DockingRegionComponent absent → dock scaled ×\(preset.relativeScale, privacy: .public) via transform for \(preset.rawValue, privacy: .public)")
     }
 
     // MARK: - Environment
