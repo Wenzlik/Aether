@@ -4,6 +4,34 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.5.8] — Unreleased · "Boötes"
+
+Artwork bandwidth — phase 2 of the artwork review: per-call-site size tiers and
+offline poster persistence.
+
+### Added
+
+- **Per-call-site artwork tiers.** A new `ArtworkSource` value type mints a
+  server-resized URL at any `ArtworkTier` on demand (rather than baking one
+  fixed size at fetch time), so each surface requests what it actually shows:
+  the Detail hero pulls a 1920-px backdrop on tvOS / visionOS, episode rows a
+  small 16:9 still, rails/grids a 400-px poster. `CachedAsyncImage` /
+  `BackdropImage` take a `maxPixel` ceiling so a large hero isn't downsampled
+  back down locally.
+- **Offline poster persistence.** Downloads now save the poster to disk at
+  enqueue time (`{jobID}.poster`); an offline card loads the local copy first,
+  so artwork still renders when the server is unreachable or the token has
+  expired. Cleaned up alongside the media file when a download is removed.
+
+### Changed
+
+- **Unified artwork is pinned to one source.** A unified title's poster/backdrop
+  now resolves from the first source (in priority order) that carries artwork,
+  so its image identity stays stable across source flips instead of changing
+  (and re-downloading) when the active source changes. `MediaItem` and
+  `UnifiedMediaItem` gained `posterURL(_:)` / `backdropURL(_:)` tier accessors
+  that fall back to the baked default-tier URL.
+
 ## [0.5.7] — Unreleased · "Boötes"
 
 Artwork bandwidth — server-side resized posters (phase 1 of the artwork review).
