@@ -29,6 +29,10 @@ struct SettingsView: View {
     @State private var deviceCapacity: DeviceCapacity?
     /// Current on-disk artwork cache size, shown next to "Clear Image Cache".
     @State private var imageCacheBytes: Int = 0
+    #if os(iOS)
+    /// Alternate app-icon chooser (iOS / iPadOS only).
+    @State private var appIconStore = AppIconStore()
+    #endif
     /// Drives the split: a two-column dashboard on roomy surfaces, a single
     /// column on the phone.
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -177,8 +181,42 @@ struct SettingsView: View {
         cinemaSection
         #endif
         appearanceSection
+        #if os(iOS)
+        appIconSection
+        #endif
         aboutSection
     }
+
+    #if os(iOS)
+    /// App Icon (iOS / iPadOS): pick the home-screen icon. Backed by the
+    /// system's alternate-icon API (`AppIconStore`), which persists the choice.
+    private var appIconSection: some View {
+        AetherSettingsSection("App Icon") {
+            if appIconStore.isSupported {
+                Picker(
+                    "Icon",
+                    selection: Binding(
+                        get: { appIconStore.current },
+                        set: { appIconStore.select($0) }
+                    )
+                ) {
+                    ForEach(AetherAppIcon.allCases) { icon in
+                        Text(icon.displayName).tag(icon)
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.s)
+            } else {
+                Text("Not available on this device.")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.vertical, AetherDesign.Spacing.s)
+            }
+        }
+    }
+    #endif
 
     #if os(visionOS)
     /// Cinema (visionOS): the default screen-size the immersive theater opens
