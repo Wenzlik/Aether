@@ -667,6 +667,35 @@ struct CinemaPresetTests {
         let reloaded = CinemaPreferencesStore(defaults: defaults)
         #expect(reloaded.screenPreset == .imax)
     }
+
+    @Test("CinemaSeat: middle is the authored origin; back is farther + higher")
+    func seatGeometry() {
+        // Middle = authored layout (no offset).
+        #expect(CinemaSeat.middle.zOffsetMetres == 0)
+        #expect(CinemaSeat.middle.yOffsetMetres == 0)
+        // Back sits farther from the screen (-Z) and higher (room drops, -Y).
+        #expect(CinemaSeat.back.zOffsetMetres < CinemaSeat.middle.zOffsetMetres)
+        #expect(CinemaSeat.back.yOffsetMetres < CinemaSeat.middle.yOffsetMetres)
+        // Front is closer (+Z) and lower (room up, +Y) than middle.
+        #expect(CinemaSeat.front.zOffsetMetres > CinemaSeat.middle.zOffsetMetres)
+        #expect(CinemaSeat.front.yOffsetMetres > CinemaSeat.middle.yOffsetMetres)
+        // Each row back sits a bit higher than the one ahead (front→middle→back).
+        let heights = CinemaSeat.ordered.map(\.yOffsetMetres)   // ordered front→back
+        #expect(heights == heights.sorted(by: >))   // strictly descending room-Y = rising viewer
+    }
+
+    @Test("CinemaSeat persists in CinemaPreferencesStore")
+    @MainActor
+    func seatRoundTrip() {
+        let suite = "cinema.seat.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = CinemaPreferencesStore(defaults: defaults)
+        #expect(store.seat == .middle)   // default
+        store.seat = .back
+        #expect(CinemaPreferencesStore(defaults: defaults).seat == .back)
+    }
 }
 
 @Suite("AetherCore — artwork cache keys")

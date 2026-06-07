@@ -50,10 +50,14 @@ final class CinemaManager {
     /// Where playback begins: `nil` resumes from the persisted point, `0`
     /// restarts. Mirrors the windowed player's `startAt`.
     private(set) var startAt: Double?
-    /// The chosen screen-size preset for this session — selects which authored
-    /// environment (and thus docked-screen size) the cinema opens. Defaults to
-    /// the user's persisted preference, passed in by `present(...)`.
-    private(set) var preset: CinemaScreenPreset = .default
+    /// The live screen-size preset. Initialised from the persisted default on
+    /// `present(...)`, then mutable so the in-cinema control can resize the
+    /// docked screen while watching. `DarkTheaterView` observes it.
+    var screenPreset: CinemaScreenPreset = .default
+    /// The live seat (row). Initialised from the persisted default on
+    /// `present(...)`, then mutable so the in-cinema control can move the
+    /// viewer's row while watching. `DarkTheaterView` observes it.
+    var seat: CinemaSeat = .default
 
     // MARK: - Intent signalling
 
@@ -62,6 +66,12 @@ final class CinemaManager {
     private(set) var openRequestID: UUID?
     /// Bumped to request leaving the cinema.
     private(set) var closeRequestID: UUID?
+    /// Bumped when the live size/seat changes and the docked screen must be
+    /// re-fitted. visionOS reads the `DockingRegion` only at dock-attach, so the
+    /// player wrapper observes this and briefly re-docks (`.embedded` →
+    /// `.expanded`) to pick up the new size/position. `DarkTheaterView` bumps it
+    /// *after* it has updated the region, so the re-dock reads the new values.
+    private(set) var redockToken: UUID?
 
     // MARK: - Intent
 
@@ -71,7 +81,8 @@ final class CinemaManager {
         _ item: MediaItem,
         source: (any MediaSource)?,
         startAt: Double?,
-        preset: CinemaScreenPreset = .default
+        preset: CinemaScreenPreset = .default,
+        seat: CinemaSeat = .default
     ) {
         guard phase == .idle else {
             Self.log.debug("present IGNORED (already active) item=\(item.id.rawValue, privacy: .public)")
@@ -80,10 +91,37 @@ final class CinemaManager {
         self.item = item
         self.source = source
         self.startAt = startAt
-        self.preset = preset
+        self.screenPreset = preset
+        self.seat = seat
         phase = .active
         openRequestID = UUID()
         Self.log.debug("present item=\(item.id.rawValue, privacy: .public) → request open space")
+    }
+
+    /// Change the screen size live (from the in-cinema control) and remember it
+    /// as the new default. `DarkTheaterView` observes `screenPreset` and resizes
+    /// the docked screen.
+    func setScreenPreset(_ preset: CinemaScreenPreset) {
+        screenPreset = preset
+        CinemaPreferencesStore().screenPreset = preset
+        Self.log.debug("cinema: screenPreset → \(preset.rawValue, privacy: .public)")
+    }
+
+    /// Change the seat (row) live and remember it. `DarkTheaterView` observes
+    /// `seat` and slides the theater.
+    func setSeat(_ seat: CinemaSeat) {
+        self.seat = seat
+        CinemaPreferencesStore().seat = seat
+        Self.log.debug("cinema: seat → \(seat.rawValue, privacy: .public)")
+    }
+
+    /// Ask the docked player to re-fit to the current size/seat. Called by
+    /// `DarkTheaterView` right after it updates the `DockingRegion`, so the
+    /// player's re-dock reads the new region. No-op effect until the player
+    /// wrapper acts on the token.
+    func requestRedock() {
+        redockToken = UUID()
+        Self.log.debug("cinema: requestRedock")
     }
 
     /// Leave the cinema. Idempotent — safe to call from a player dismissal that

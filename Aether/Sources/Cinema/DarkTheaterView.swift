@@ -25,39 +25,58 @@ import AetherCore
 /// presets + a literal moving-video floor reflection need authored `.usda`
 /// assets and are a separate track — see the design doc.)
 struct DarkTheaterView: View {
-    /// Cinema state — so the theater can reset it when playback ends.
+    /// Cinema state — the theater reads the live size + seat off it (reactively)
+    /// and resets it when playback ends.
     let cinema: CinemaManager
-    /// Which screen-size preset's environment to show. When the matching
-    /// authored `.usda` exists in `RealityKitContent`, it's loaded (its
-    /// `DockingRegion` sizes the docked screen + its reflective floor); until
-    /// then this falls back to the procedural room below — identical for every
-    /// preset, but the seam is in place.
-    var preset: CinemaScreenPreset = .default
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
     /// Drives the gentle passthrough dim on enter ("house lights down"). Starts
     /// off so the room fades dark rather than snapping.
     @State private var dimmed = false
+    /// References into the loaded scene so the live controls can re-apply size +
+    /// seat without rebuilding it. A reference type → mutating it never trips a
+    /// SwiftUI update (no re-render loop).
+    @State private var refs = CinemaSceneRefs()
 
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
+    private static let controlPanelID = "cinemaControls"
 
     var body: some View {
-        RealityView { content in
+        RealityView { content, attachments in
             // Prefer the authored Dark Theater (its `DockingRegion` sizes the
-            // docked screen + its reflective floor). One scene for every preset;
-            // the chosen size is applied in code by scaling the dock. Fall back
-            // to the procedural room if the asset is missing.
+            // docked screen + reflective floor); fall back to the procedural
+            // room if the asset can't load.
+            let root: Entity
             if let authored = await Self.loadAuthoredEnvironment() {
-                Self.applyScreenSize(preset, to: authored)
-                content.add(authored)
+                root = authored
             } else {
-                // No cable to test on device — this log + the ones in
-                // applyScreenSize are the TestFlight telemetry that tells us
-                // which path executed (authored vs procedural; which sizing knob).
+                // No cable to test on device → this log + the ones in
+                // applyLayout are the TestFlight telemetry for which path ran.
                 Self.log.debug("authored env: \(Self.sceneName, privacy: .public).usda failed to load → procedural room")
-                content.add(await Self.makeEnvironment())
+                root = await Self.makeEnvironment()
+            }
+            content.add(root)
+            refs.root = root
+            refs.dock = root.findEntity(named: Self.dockEntityName)
+            applyLayout()
+
+            // Floating glass control (size + seat), parked near the viewer — NOT
+            // a child of the room, so it stays reachable as the seat slides it.
+            if let panel = attachments.entity(for: Self.controlPanelID) {
+                panel.position = SIMD3<Float>(0, 0.9, -1.4)
+                content.add(panel)
+            }
+        } attachments: {
+            Attachment(id: Self.controlPanelID) {
+                CinemaControlPanel(cinema: cinema)
             }
         }
+        // Live: re-apply the region/room when the in-cinema control changes
+        // size or seat, then ask the player to re-dock so the system re-fits the
+        // already-docked screen to the new region (it only reads it at attach).
+        // Order matters — update the region first, then request the re-dock.
+        .onChange(of: cinema.screenPreset) { _, _ in applyLayout(); cinema.requestRedock() }
+        .onChange(of: cinema.seat) { _, _ in applyLayout(); cinema.requestRedock() }
         // Gentle "house lights down": ramp passthrough to dark on enter instead
         // of a hard cut. Only visible on device (Simulator barely dims).
         .preferredSurroundingsEffect(dimmed ? .systemDark : nil)
@@ -80,6 +99,34 @@ struct DarkTheaterView: View {
         }
     }
 
+    /// Apply the live `cinema.screenPreset` (size) and `cinema.seat` (row) to the
+    /// loaded scene. **Idempotent** — safe to call repeatedly from the controls —
+    /// because every value is absolute, never accumulated.
+    @MainActor
+    private func applyLayout() {
+        // Size: prefer the documented `DockingRegionComponent.width` knob (height
+        // follows at 2.4:1, per WWDC24); fall back to a uniform transform scale
+        // if the component doesn't resolve. width = authored baseline × scale,
+        // so `.medium` (×1.0) is exactly the authored dock.
+        if let dock = refs.dock {
+            let scale = cinema.screenPreset.relativeScale
+            if var region = dock.components[DockingRegionComponent.self] {
+                if refs.baselineDockWidth == nil { refs.baselineDockWidth = region.width }
+                region.width = (refs.baselineDockWidth ?? region.width) * scale
+                dock.components.set(region)
+            } else {
+                dock.scale = SIMD3<Float>(repeating: scale)
+            }
+        }
+        // Seat: slide the whole room. -Z = back (screen farther), -Y = room down
+        // so the viewer sits higher — a stadium rake where each row back is a
+        // little higher. Absolute, anchored at the authored layout (.middle=0,0).
+        if let root = refs.root {
+            root.position = SIMD3<Float>(0, cinema.seat.yOffsetMetres, cinema.seat.zOffsetMetres)
+        }
+        Self.log.debug("cinema layout: size=\(cinema.screenPreset.rawValue, privacy: .public) (×\(cinema.screenPreset.relativeScale, privacy: .public)) seat=\(cinema.seat.rawValue, privacy: .public)")
+    }
+
     // MARK: - Authored environment (Reality Composer Pro)
 
     /// Name of the authored scene in `RealityKitContent.rkassets` (the file is
@@ -97,50 +144,6 @@ struct DarkTheaterView: View {
     @MainActor
     private static func loadAuthoredEnvironment() async -> Entity? {
         try? await Entity(named: sceneName, in: .main)
-    }
-
-    /// Size the docked screen for `preset`. The authored `DockingRegion` is the
-    /// `.medium` baseline (`relativeScale == 1.0`), so `.medium` leaves the scene
-    /// exactly as authored and the larger presets widen it.
-    ///
-    /// Two routes, preferred first:
-    /// 1. The **documented** knob — `DockingRegionComponent.width` (height follows
-    ///    at 2.4:1, per WWDC24 "Enhance the immersion of media viewing"). This is
-    ///    the path the system actually honours for docked-video size.
-    /// 2. Fallback — scale the dock entity's transform. The authored bounds are
-    ///    symmetric so a uniform scale neither distorts nor de-centres; if the
-    ///    system ignores transform scale for docking, the screen simply stays at
-    ///    the authored size (acceptable — a bonus feature, not a gate).
-    ///
-    /// No-op (logged) if the dock entity isn't found — a renamed scene still
-    /// loads at its authored size rather than failing. The logs are deliberate:
-    /// with no Vision Pro to test on, the TestFlight Console is the only signal
-    /// for which route the runtime took.
-    @MainActor
-    private static func applyScreenSize(_ preset: CinemaScreenPreset, to environment: Entity) {
-        guard let dock = environment.findEntity(named: dockEntityName) else {
-            log.debug("authored env: dock '\(dockEntityName, privacy: .public)' not found; using authored size")
-            return
-        }
-        guard preset != .medium else {
-            log.debug("authored env: preset=medium → authored dock size kept")
-            return
-        }
-
-        // 1. Documented sizing knob. The RCP component (`RealityKit.CustomDockingRegion`)
-        //    is expected to load as `DockingRegionComponent`; if the type doesn't
-        //    resolve at runtime the `if let` simply fails and we fall through.
-        if var region = dock.components[DockingRegionComponent.self] {
-            let previous = region.width
-            region.width *= preset.relativeScale
-            dock.components.set(region)
-            log.debug("authored env: dock width \(previous, privacy: .public)→\(region.width, privacy: .public) via DockingRegionComponent for \(preset.rawValue, privacy: .public)")
-            return
-        }
-
-        // 2. Fallback: transform scale.
-        dock.scale = SIMD3<Float>(repeating: preset.relativeScale)
-        log.debug("authored env: DockingRegionComponent absent → dock scaled ×\(preset.relativeScale, privacy: .public) via transform for \(preset.rawValue, privacy: .public)")
     }
 
     // MARK: - Environment
@@ -341,6 +344,73 @@ struct DarkTheaterView: View {
             blue: CGFloat(hex & 0xFF) / 255.0,
             alpha: 1.0
         )
+    }
+}
+
+// MARK: - Scene references
+
+/// Mutable handles into the loaded Dark Theater so the live controls can
+/// re-apply size + seat without rebuilding the scene. A reference type, held in
+/// `@State`, so mutating its fields never triggers a SwiftUI update.
+@MainActor
+private final class CinemaSceneRefs {
+    var root: Entity?
+    var dock: Entity?
+    /// Authored `DockingRegion` width, captured once so size changes are
+    /// absolute (`baseline × relativeScale`) rather than compounding.
+    var baselineDockWidth: Float?
+}
+
+// MARK: - In-cinema control panel
+
+/// Floating glass control inside the Dark Theater: screen **size** + **seat**
+/// (row). Tapping updates `cinema`, which `DarkTheaterView` observes to resize
+/// the docked screen and slide the room live. Mirrors Apple TV+'s in-environment
+/// controls. Tuned for reach; positioned by `DarkTheaterView`.
+private struct CinemaControlPanel: View {
+    let cinema: CinemaManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            row("Screen Size") {
+                ForEach(CinemaScreenPreset.ordered, id: \.self) { preset in
+                    chip(preset.displayName, selected: cinema.screenPreset == preset) {
+                        cinema.setScreenPreset(preset)
+                    }
+                }
+            }
+            row("Seat") {
+                ForEach(CinemaSeat.ordered, id: \.self) { seat in
+                    chip(seat.displayName, selected: cinema.seat == seat) {
+                        cinema.setSeat(seat)
+                    }
+                }
+            }
+        }
+        .padding(28)
+        .frame(width: 480)
+        .glassBackgroundEffect()
+    }
+
+    @ViewBuilder
+    private func row(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 12) { content() }
+        }
+    }
+
+    private func chip(_ title: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.callout.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(selected ? AetherDesign.Palette.accent : Color.secondary.opacity(0.35))
     }
 }
 #endif

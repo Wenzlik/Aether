@@ -17,10 +17,17 @@ public final class CinemaPreferencesStore {
         didSet { defaults.set(screenPreset.rawValue, forKey: Keys.screenPreset) }
     }
 
+    /// The seat (row) the cinema opens with. Persists across launches.
+    /// Default `.middle`.
+    public var seat: CinemaSeat {
+        didSet { defaults.set(seat.rawValue, forKey: Keys.seat) }
+    }
+
     private let defaults: UserDefaults
 
     private enum Keys {
         static let screenPreset = "cinema.screenPreset"
+        static let seat = "cinema.seat"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -30,6 +37,12 @@ public final class CinemaPreferencesStore {
             self.screenPreset = value
         } else {
             self.screenPreset = .default
+        }
+        if let raw = defaults.string(forKey: Keys.seat),
+           let value = CinemaSeat(rawValue: raw) {
+            self.seat = value
+        } else {
+            self.seat = .default
         }
     }
 }

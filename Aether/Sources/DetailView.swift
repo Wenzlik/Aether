@@ -92,6 +92,10 @@ struct DetailView: View {
     /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
     /// app root; always present inside the windowed view tree on visionOS.
     @Environment(CinemaManager.self) private var cinema
+    /// Re-dock signal for the docked player (size/seat changed live in-cinema).
+    private var cinemaRedockToken: UUID? { cinema.redockToken }
+    #else
+    private var cinemaRedockToken: UUID? { nil }
     #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
@@ -166,6 +170,7 @@ struct DetailView: View {
                     session: playbackSession,
                     startAt: playbackStartAt,
                     preferExpanded: launchingInCinema,
+                    redockToken: cinemaRedockToken,
                     playbackPreferences: playbackPreferences,
                     onDismiss: dismissPlayer
                 )
@@ -1890,11 +1895,12 @@ struct DetailView: View {
         playbackItem = current
         playbackStartAt = resume != nil ? nil : 0
         launchingInCinema = true   // auto-expand so it docks into the theater
-        // Open the user's preferred screen-size environment (persisted). Read
-        // transiently from UserDefaults — Detail doesn't carry the store, and the
-        // value is the source of truth.
+        // Open with the user's persisted screen size + seat (changeable live
+        // in-cinema). Read transiently from UserDefaults — Detail doesn't carry
+        // the store, and the value is the source of truth.
+        let cinemaPrefs = CinemaPreferencesStore()
         cinema.present(current, source: source, startAt: playbackStartAt,
-                       preset: CinemaPreferencesStore().screenPreset)
+                       preset: cinemaPrefs.screenPreset, seat: cinemaPrefs.seat)
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
         }
