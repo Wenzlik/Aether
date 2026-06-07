@@ -239,9 +239,16 @@ final class AppSession {
     /// source mid-session (which surfaced as a black cinema on re-entry).
     private var hasStarted = false
 
+    /// `true` from launch until `start()` finishes restoring sources + running
+    /// first-time discovery. While it's `true` an empty `connectedSources` means
+    /// "still connecting", not "no source" — so the tabs show a loading state
+    /// instead of flashing the welcome / empty state before discovery lands.
+    private(set) var isStartingUp = true
+
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        defer { isStartingUp = false }
 
         // 0. Hydrate resume points from disk + a one-shot iCloud read, then
         //    start listening for external iCloud changes (other devices on
