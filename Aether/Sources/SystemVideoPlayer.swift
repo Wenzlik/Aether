@@ -112,6 +112,18 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         #endif
     }
 
+    /// Player teardown (the view was dismissed): stop the player and **release
+    /// the `.playback` audio session** so the app drops its background-audio
+    /// assertion and can be suspended — otherwise the session stays active after
+    /// playback ends and keeps the app awake (battery / heat). `.notifyOthers…`
+    /// lets other apps' audio resume.
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
+        controller.player?.pause()
+        #if os(iOS) || os(tvOS)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
+    }
+
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
         context.coordinator.onDismiss = onDismiss
         if controller.player !== player {

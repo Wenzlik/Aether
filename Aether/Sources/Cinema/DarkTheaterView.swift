@@ -60,10 +60,13 @@ struct DarkTheaterView: View {
             refs.dock = root.findEntity(named: Self.dockEntityName)
             applyLayout()
 
-            // Floating glass control (size + seat), parked near the viewer — NOT
-            // a child of the room, so it stays reachable as the seat slides it.
+            // Floating glass control (size + seat), parked low and close to the
+            // viewer — NOT a child of the room (stays put as the seat slides).
+            // Low + near so it sits *below* the screen rectangle (even at the
+            // largest preset / during playback the docked video doesn't cover
+            // it) and stays reachable. Tune Y on device.
             if let panel = attachments.entity(for: Self.controlPanelID) {
-                panel.position = SIMD3<Float>(0, 0.9, -1.4)
+                panel.position = SIMD3<Float>(0, 0.35, -1.15)
                 content.add(panel)
             }
         } attachments: {
