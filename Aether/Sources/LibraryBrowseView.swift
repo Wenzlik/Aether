@@ -20,6 +20,10 @@ struct LibraryBrowseView: View {
     @Binding var navigationPath: NavigationPath
     /// Every connected source — aggregated + deduplicated by `UnifiedLibrary`.
     let connectedSources: [any MediaSource]
+    /// `true` while `AppSession` is still starting up / discovering. An empty
+    /// `connectedSources` then means "still connecting" → show loading, not the
+    /// "connect a source" empty state.
+    let isConnecting: Bool
     /// Backs the unified aggregator's offline fold-in.
     let downloadStore: DownloadStore?
     let resumeStore: ResumeStore
@@ -36,6 +40,10 @@ struct LibraryBrowseView: View {
 
     @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
+    /// `true` once at least one `load()` has completed. Distinguishes "empty
+    /// because we haven't loaded yet" (→ loading) from "loaded and genuinely
+    /// empty" (→ empty state), so a refresh never flashes the empty state.
+    @State private var hasLoaded = false
     @State private var loadError: String?
 
     /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
@@ -141,30 +149,41 @@ struct LibraryBrowseView: View {
         if isSearching {
             // Unified search across every connected source (same as Home / Search).
             MediaSearchResults(sources: connectedSources, query: searchQuery)
+        } else if !rails.isEmpty {
+            // Have content → always show it, including while a refresh runs (so a
+            // pull-to-refresh never blanks to an empty/loading state).
+            railsContent
         } else if connectedSources.isEmpty {
-            AetherEmptyState(
-                glyph: "rectangle.stack",
-                title: "No library yet",
-                message: "Connect a source and your Aether library appears here.",
-                action: .init(label: "Add a source", run: onAddSource)
-            )
-        } else if let loadError, rails.isEmpty {
+            // Empty sources: "still connecting" during startup → loading; only
+            // once startup has settled is it genuinely "no source connected".
+            if isConnecting {
+                AetherLoadingState(.rails(count: 2))
+                    .padding(.top, AetherDesign.Spacing.l)
+            } else {
+                AetherEmptyState(
+                    glyph: "rectangle.stack",
+                    title: "No library yet",
+                    message: "Connect a source and your Aether library appears here.",
+                    action: .init(label: "Add a source", run: onAddSource)
+                )
+            }
+        } else if let loadError {
             AetherErrorState(
                 title: "Couldn't load your library",
                 message: loadError,
                 retry: .init { Task { await load() } }
             )
-        } else if isLoading && rails.isEmpty {
+        } else if isLoading || !hasLoaded {
+            // Loading, or first load not finished yet → loading (never empty).
             AetherLoadingState(.rails(count: 2))
                 .padding(.top, AetherDesign.Spacing.l)
-        } else if rails.isEmpty {
+        } else {
+            // Loaded, connected, and genuinely empty.
             AetherEmptyState(
                 glyph: "tray",
                 title: "Library is empty",
                 message: "Add some movies or shows to a connected source and they'll surface here."
             )
-        } else {
-            railsContent
         }
     }
 
@@ -322,6 +341,7 @@ struct LibraryBrowseView: View {
 
     private func load() async {
         loadError = nil
+        defer { hasLoaded = true }
         guard !connectedSources.isEmpty else {
             rails = .empty
             return

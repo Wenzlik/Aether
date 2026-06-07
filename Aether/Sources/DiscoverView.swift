@@ -20,6 +20,10 @@ struct DiscoverView: View {
     @Binding var navigationPath: NavigationPath
     /// Every connected source — aggregated + deduplicated by `UnifiedLibrary`.
     let connectedSources: [any MediaSource]
+    /// `true` while `AppSession` is still starting up / discovering. While it is,
+    /// an empty result means "still connecting" → show loading, not the empty
+    /// state.
+    let isConnecting: Bool
     /// Backs the unified aggregator's offline fold-in.
     let downloadStore: DownloadStore?
     let resumeStore: ResumeStore
@@ -35,6 +39,9 @@ struct DiscoverView: View {
     @State private var topRated: [UnifiedMediaItem] = []
     @State private var genreRails: [GenreRail] = []
     @State private var isLoading = false
+    /// `true` once at least one `load()` has completed — so the empty state only
+    /// shows after a real completed load, never during the first load / refresh.
+    @State private var hasLoaded = false
     @State private var loadError: String?
 
     /// One genre's rail. `id` is the genre name so SwiftUI can diff the rails.
@@ -76,29 +83,37 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var content: some View {
-        if connectedSources.isEmpty {
-            AetherEmptyState(
-                glyph: "sparkles",
-                title: "Nothing to discover yet",
-                message: "Connect a source and Discover surfaces titles you might have forgotten about."
-            )
-        } else if let loadError, isEmpty {
+        if !isEmpty {
+            // Have content → keep it shown, even while a refresh is running.
+            rails
+        } else if connectedSources.isEmpty {
+            // Empty sources: loading while still connecting at startup; only a
+            // settled startup means "no source connected".
+            if isConnecting {
+                AetherLoadingState(.rails(count: 2))
+                    .padding(.top, AetherDesign.Spacing.l)
+            } else {
+                AetherEmptyState(
+                    glyph: "sparkles",
+                    title: "Nothing to discover yet",
+                    message: "Connect a source and Discover surfaces titles you might have forgotten about."
+                )
+            }
+        } else if let loadError {
             AetherErrorState(
                 title: "Couldn't build Discover",
                 message: loadError,
                 retry: .init { Task { await load() } }
             )
-        } else if isLoading && isEmpty {
+        } else if isLoading || !hasLoaded {
             AetherLoadingState(.rails(count: 2))
                 .padding(.top, AetherDesign.Spacing.l)
-        } else if isEmpty {
+        } else {
             AetherEmptyState(
                 glyph: "tray",
                 title: "Library is empty",
                 message: "Add some movies or shows to a connected source and they'll surface here."
             )
-        } else {
-            rails
         }
     }
 
@@ -195,6 +210,7 @@ struct DiscoverView: View {
 
     private func load() async {
         loadError = nil
+        defer { hasLoaded = true }
 
         guard !connectedSources.isEmpty else {
             resetRails()
