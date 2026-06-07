@@ -39,11 +39,10 @@ public enum CinemaScreenPreset: String, Sendable, Hashable, CaseIterable, Codabl
         case .medium: return 3.0
         case .large:  return 5.0
         // Sizing is relative to the authored dock (= `.medium`, ×1.0). Tuned on
-        // device 2026-06-07: Medium/Large felt right; IMAX trimmed a little and
-        // Wall pulled down a lot (the old ×4.0 read "giant"). relativeScale now
-        // 1.0 / 1.67 / 2.33 / 3.0.
+        // device 2026-06-07: Medium/Large felt right, IMAX ok; Wall kept reading
+        // too big (×4.0 → ×3.0 → ×2.67). relativeScale now 1.0 / 1.67 / 2.33 / 2.67.
         case .imax:   return 7.0
-        case .wall:   return 9.0
+        case .wall:   return 8.0
         }
     }
 
