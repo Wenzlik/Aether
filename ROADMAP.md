@@ -104,17 +104,53 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
   `AVPlayerViewController` docked into an immersive Dark Theater via the system
   docking pattern; single-source-of-truth `CinemaManager`; reliable enter/exit.
   No custom rendering or controls.
-- 🟡 **Phase 2 — Enhanced Cinema (0.5.5)** — *environment shipped (Track A,
-  code-only):* image-based lighting, glossy reflective floor, dark skybox,
-  cove + screen-bloom accents, grounding shadows, "house-lights-down" dimming,
-  progressive immersion. *Remaining (Track B, needs authored Reality Composer
-  Pro `.usda` assets):* a custom `DockingRegion` for real Medium/Large/IMAX/Wall
-  screen-size presets and a literal moving-video floor reflection
-  (`Reflection_Specular`). On-device lighting/scale tuning also pending.
+- ✅ **Phase 2 — Enhanced Cinema (0.5.5)** — image-based lighting, glossy
+  reflective floor, dark skybox, cove + screen-bloom accents, grounding shadows,
+  "house-lights-down" dimming, progressive immersion (code-only environment).
+- ✅ **Phase 2b — Authored Dark Theater + in-cinema controls (0.5.8)** — the
+  Reality Composer Pro `AetherDarkTheater.usda` (real `DockingRegion`) replaces
+  the procedural room (procedural stays as fallback); a single immersive space;
+  an in-cinema control panel for **screen size** (Medium/Large/IMAX/Wall) and
+  **seat** (Front/Middle/Back, stadium rake). Because visionOS reads the dock
+  only at attach, a live size/seat change triggers a brief re-dock to re-fit.
+  *On-device verification (re-dock feel, scale tuning) pending TestFlight.*
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
 - ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
 
 Notes: [`docs/next-steps/visionos-cinema.md`](docs/next-steps/visionos-cinema.md).
+
+---
+
+## 🚧 0.6.0 UX/UI Refresh — "Cassiopeia"
+
+A coordinated, product-level design pass across iOS / iPadOS / tvOS / visionOS —
+make Aether feel like a premium media product, not a technical client. Built as
+one release (foundation-first, then ripple). Full spec + milestone breakdown:
+[`docs/next-steps/ux-refresh-060.md`](docs/next-steps/ux-refresh-060.md).
+
+- ✅ **Brand colour** — primary accent violet → premium blue `#6A8BFF`
+  (`accentBright #5B7CFF`); purple demoted to a subtle secondary; warning →
+  orange (distinct from brand gold). The `Palette.accent` repoint re-skins every
+  interactive surface at once.
+- ✅ **Layered backgrounds** — flat black → a three-stop gradient
+  (`#0B0D12 / #111827 / #0A0A0F`) + faint brand blooms, applied on every screen
+  through one shared `aetherScreenBackground()` modifier (player stays black).
+- ✅ **Premium tvOS focus** — lift + soft blue glow (`premiumFocus`) instead of
+  hard white outlines / accent boxes, across cards, buttons, and rows.
+- ✅ **Continue-Watching progress** integrated into the artwork (frosted strip +
+  blue fill), not a detached line.
+- ✅ **Detail** — Resume leads, Restart secondary, the oversized "More" button
+  demoted to a compact menu.
+- ✅ **Search** — discovery rails before typing instead of a blank page.
+- ✅ **Discover** — reordered as a discovery hub (Featured → Recently Added →
+  Top Rated → genres → Picked for You).
+- ✅ **Compact nav header** — brand mark inline beside search, reclaiming the
+  vertical banner.
+- ◻️ **Deferred to 0.6.x** — the full logo-into-nav-bar / visionOS ornament
+  migration, and extracting a single shared rail component (consistency). The
+  riskiest, device-only bits; everything else is in 0.6.0.
+
+Notes: [`docs/next-steps/ux-refresh-060.md`](docs/next-steps/ux-refresh-060.md).
 
 ---
 
