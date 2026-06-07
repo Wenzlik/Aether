@@ -558,7 +558,9 @@ struct UnifiedLibraryAggregatorTests {
                               libs: [], itemsByLib: [:], failsLibraries: true)
 
         let library = UnifiedLibrary(sources: [plex, jelly, dead])
-        let movies = await library.unifiedItems(kind: .movie)
+        // forceRefresh so the process-shared TTL cache (keyed by source set)
+        // never serves another test's mock catalog.
+        let movies = await library.unifiedItems(kind: .movie, forceRefresh: true)
 
         #expect(movies.count == 1)
         #expect(movies[0].sources.map(\.kind) == [.plex, .jellyfin])
@@ -589,7 +591,7 @@ struct UnifiedHomeRailsTests {
                         libs: [movieLib, showLib],
                         itemsByLib: [movieLib.id: [movie], showLib.id: [show]])
 
-        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore(), forceRefresh: true)
         #expect(rails.movies.count == 1)
         #expect(rails.shows.count == 1)
         #expect(rails.movies.first?.title == "Matrix")
@@ -611,7 +613,7 @@ struct UnifiedHomeRailsTests {
         let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
                         libs: [lib], itemsByLib: [lib.id: [a, b]])
 
-        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore(), forceRefresh: true)
         #expect(rails.recentlyAdded.first?.title == "B")
         #expect(rails.recentlyReleased.first?.title == "A")
         #expect(rails.recentlyAdded.count == 2)
@@ -625,7 +627,7 @@ struct UnifiedHomeRailsTests {
         let stub = Stub(id: .plex(serverID: "s1"), displayName: "Plex",
                         libs: [lib], itemsByLib: [lib.id: [undated]])
 
-        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore())
+        let rails = await UnifiedLibrary(sources: [stub]).homeRails(resumeStore: ResumeStore(), forceRefresh: true)
         #expect(rails.recentlyAdded.count == 1)         // fallback kept it
         #expect(rails.recentlyReleased.isEmpty)         // no release date → hidden
     }

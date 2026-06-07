@@ -33,7 +33,17 @@ public actor UnifiedLibrary {
     /// All unified titles of `kind` across connected sources. Fault-tolerant: a
     /// source that fails to list libraries or items is skipped, not fatal, so a
     /// slow/down server never blanks the feed.
-    public func unifiedItems(kind: MediaItem.Kind) async -> [UnifiedMediaItem] {
+    public func unifiedItems(kind: MediaItem.Kind, forceRefresh: Bool = false) async -> [UnifiedMediaItem] {
+        // Serve a recent result if one exists — Home, Library, Discover, Search
+        // and the grid all build from this, so without a cache every tab switch /
+        // appearance re-hits every server and re-runs the dedup. The cache is
+        // process-shared (call sites make their own `UnifiedLibrary`), keyed by
+        // the connected-source set, short-TTL. Pull-to-refresh passes
+        // `forceRefresh` to bypass it and re-stamp the cache.
+        let key = cacheKey(kind: kind)
+        if !forceRefresh, let cached = await UnifiedLibraryCache.shared.items(for: key) {
+            return cached
+        }
         // Fan out across sources concurrently (and each source's libraries
         // concurrently) instead of serially — the serial version made Home /
         // Library wait for the slowest server's last library before first paint.
@@ -57,7 +67,17 @@ public actor UnifiedLibrary {
             return all
         }
         let downloaded = await downloadedTask
-        return Self.merge(items, downloaded: downloaded, serverNames: serverNames)
+        let merged = Self.merge(items, downloaded: downloaded, serverNames: serverNames)
+        await UnifiedLibraryCache.shared.set(merged, for: key)
+        return merged
+    }
+
+    /// Cache key for `unifiedItems(kind:)` — the kind plus the sorted connected
+    /// source ids, so a different source set (sign-in/out, source switch) is a
+    /// natural cache miss rather than serving another account's catalog.
+    private func cacheKey(kind: MediaItem.Kind) -> String {
+        let srcs = sources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+        return "\(kind)|\(srcs)"
     }
 
     private func downloadedIDs() async -> Set<MediaID> {
@@ -68,11 +88,13 @@ public actor UnifiedLibrary {
     /// Build the unified Home rails: deduplicated Movies / TV Shows, plus
     /// cross-source Continue Watching (best resume across a title's sources) and
     /// the Downloaded titles. Fault-tolerant via `unifiedItems`.
-    public func homeRails(resumeStore: ResumeStore, limit: Int = 30) async -> UnifiedRails {
+    public func homeRails(resumeStore: ResumeStore, limit: Int = 30, forceRefresh: Bool = false) async -> UnifiedRails {
         // Movies and shows aggregate concurrently (each already fans out in
-        // parallel internally).
-        async let moviesTask = unifiedItems(kind: .movie)
-        async let showsTask = unifiedItems(kind: .show)
+        // parallel internally). The catalog comes from `unifiedItems` (cached);
+        // Continue Watching below is recomputed from the live `resumeStore` every
+        // call, so resume state stays fresh even on a cache hit.
+        async let moviesTask = unifiedItems(kind: .movie, forceRefresh: forceRefresh)
+        async let showsTask = unifiedItems(kind: .show, forceRefresh: forceRefresh)
         let movies = await moviesTask
         let shows = await showsTask
 
@@ -276,5 +298,32 @@ public actor UnifiedLibrary {
             // not), so "Recently Added" still works when only one server dates it.
             dateAdded: items.compactMap(\.dateAdded).max() ?? lead.dateAdded
         )
+    }
+}
+
+// MARK: - Shared TTL cache
+
+/// Process-wide, short-TTL cache for the deduplicated per-kind unified catalog,
+/// keyed by `kind + connected-source set`. Lets Home / Library / Discover /
+/// Search / the grid reuse one aggregation instead of each re-fetching every
+/// server and re-running the dedup on every tab switch / appearance. Bounded by
+/// a short TTL (so new server content still surfaces) and bypassed by
+/// pull-to-refresh (`forceRefresh`). `UnifiedMediaItem` is `Sendable`, so it's
+/// safe to hand across the actor.
+private actor UnifiedLibraryCache {
+    static let shared = UnifiedLibraryCache()
+
+    private struct Entry { let items: [UnifiedMediaItem]; let at: ContinuousClock.Instant }
+    private var store: [String: Entry] = [:]
+    private let ttl: Duration = .seconds(45)
+    private let clock = ContinuousClock()
+
+    func items(for key: String) -> [UnifiedMediaItem]? {
+        guard let entry = store[key], entry.at.duration(to: clock.now) < ttl else { return nil }
+        return entry.items
+    }
+
+    func set(_ items: [UnifiedMediaItem], for key: String) {
+        store[key] = Entry(items: items, at: clock.now)
     }
 }
