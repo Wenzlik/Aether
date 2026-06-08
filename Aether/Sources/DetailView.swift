@@ -1882,6 +1882,15 @@ struct DetailView: View {
     // MARK: - Player dismiss
 
     private func presentPlayer(fromStart: Bool) async {
+        #if os(visionOS)
+        // Auto-Enter Cinema (Settings): start playback straight in the immersive
+        // theater instead of the windowed player. Routed before the guard so
+        // watchInCinema()'s own isPreparingPlayback guard takes effect.
+        if CinemaPreferencesStore().autoEnterCinema {
+            await watchInCinema(fromStart: fromStart)
+            return
+        }
+        #endif
         guard !isPreparingPlayback else { return }
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
@@ -1923,7 +1932,7 @@ struct DetailView: View {
     /// to open the Dark Theater. The system then docks the fullscreen player
     /// into the immersive space — native controls, native sizing. `nil` startAt
     /// resumes from the saved point, mirroring the Resume button.
-    private func watchInCinema() async {
+    private func watchInCinema(fromStart: Bool = false) async {
         guard !isPreparingPlayback else { return }
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
@@ -1932,14 +1941,15 @@ struct DetailView: View {
             configuredItem = hydrated
         }
         playbackItem = current
-        playbackStartAt = resume != nil ? nil : 0
+        playbackStartAt = fromStart ? 0 : (resume != nil ? nil : 0)
         launchingInCinema = true   // auto-expand so it docks into the theater
-        // Open with the user's persisted screen size + seat (changeable live
+        // Open with the resolved entry size + seat — the Settings defaults, or
+        // the last-used config when "Remember Last Setup" is on (changeable live
         // in-cinema). Read transiently from UserDefaults — Detail doesn't carry
         // the store, and the value is the source of truth.
         let cinemaPrefs = CinemaPreferencesStore()
         cinema.present(current, source: source, startAt: playbackStartAt,
-                       preset: cinemaPrefs.screenPreset, seat: cinemaPrefs.seat)
+                       preset: cinemaPrefs.entryScreenPreset, seat: cinemaPrefs.entrySeat)
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
         }
