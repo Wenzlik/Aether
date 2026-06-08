@@ -88,7 +88,7 @@ struct SettingsView: View {
                     .padding(.top, AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
                     .frame(maxWidth: isWide ? 1100 : 820, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .task {
                     await refreshCapacity()
@@ -166,37 +166,32 @@ struct SettingsView: View {
     private var wideDashboard: some View {
         HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                controlSections
+                leftColumnSections
             }
             .frame(maxWidth: .infinity, alignment: .top)
             // tvOS: mark each column a focus section so a Right/Left press jumps
-            // between them. Without this, the right column's only focusable row
-            // (Clear Image Cache, below non-focusable status rows) had no
-            // horizontally-aligned target and focus could never reach it.
+            // between them.
             .aetherFocusSection()
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                dashboardCards
+                rightColumnSections
             }
             .frame(maxWidth: .infinity, alignment: .top)
             .aetherFocusSection()
         }
     }
 
-    /// iPhone: a single column. Source health lives inline in the Sources
-    /// section (the Offline row), so the phone doesn't need the *status* cards
-    /// the wide dashboard shows — but the **Cache** card has no other home, so
-    /// it's appended here too (otherwise "Clear Image Cache" was invisible on
-    /// iPhone, where only this column renders).
+    /// iPhone: a single column — both groups stacked.
     private var compactColumn: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            controlSections
-            imageCacheCard
+            leftColumnSections
+            rightColumnSections
         }
     }
 
+    /// Left column (wide) — the "what to play / from where" configuration.
     @ViewBuilder
-    private var controlSections: some View {
+    private var leftColumnSections: some View {
         accountSection
         sourcesSection
         #if !os(tvOS)
@@ -206,6 +201,13 @@ struct SettingsView: View {
         #if os(visionOS)
         cinemaSection
         #endif
+    }
+
+    /// Right column (wide) — personalization, support/info, and the status +
+    /// cache cards. (The redundant "Connected Sources" status card was removed —
+    /// the Sources section already shows each source's connection state.)
+    @ViewBuilder
+    private var rightColumnSections: some View {
         appearanceSection
         #if os(iOS)
         appIconSection
@@ -217,6 +219,10 @@ struct SettingsView: View {
         if developerUnlocked {
             developerSection
         }
+        #if !os(tvOS)
+        storageSummaryCard
+        #endif
+        imageCacheCard
     }
 
     #if os(iOS)
@@ -380,15 +386,6 @@ struct SettingsView: View {
     }
     #endif
 
-    @ViewBuilder
-    private var dashboardCards: some View {
-        connectedSourcesCard
-        #if !os(tvOS)
-        storageSummaryCard
-        #endif
-        imageCacheCard
-    }
-
     /// Artwork disk-cache size + a manual clear. Auto-evicted under a cap too,
     /// but this gives the user direct control. All platforms (posters cache
     /// everywhere).
@@ -405,32 +402,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Dashboard cards (status, right column)
-
-    /// At-a-glance health for every source — Library shows *media*, Settings
-    /// shows *sources*. Plex / Jellyfin read Online or Not connected; Offline
-    /// reports the downloaded size (non-tvOS).
-    private var connectedSourcesCard: some View {
-        AetherSettingsSection("Connected Sources") {
-            AetherSettingsRow(
-                label: "Plex",
-                systemImage: "play.circle.fill",
-                status: viewModel.isPlexSignedIn ? .positive("Online") : .notConnected
-            )
-            AetherSettingsRow(
-                label: "Jellyfin",
-                systemImage: "rectangle.stack.badge.play.fill",
-                status: viewModel.isJellyfinSignedIn ? .positive("Online") : .notConnected
-            )
-            #if !os(tvOS)
-            AetherSettingsRow(
-                label: "Offline",
-                systemImage: "arrow.down.circle.fill",
-                value: hasDownloads ? formatBytes(totalDownloadBytes) : "Empty"
-            )
-            #endif
-        }
-    }
 
     #if !os(tvOS)
     /// Device-level storage at a glance: how much Aether's downloads use, and
@@ -467,10 +438,6 @@ struct SettingsView: View {
             if case let .completed(_, size) = status { return acc + size }
             return acc
         } ?? 0
-    }
-
-    private var hasDownloads: Bool {
-        !(downloads?.snapshot.completed.isEmpty ?? true)
     }
 
     /// Read the volume Aether's downloads live on. Fails silently (capacity
@@ -1062,6 +1029,7 @@ private struct WhatsNewSheet: View {
             .padding(.top, AetherDesign.Spacing.l)
 
             ScrollView {
+              VStack(alignment: .leading, spacing: 0) {   // tvOS: one focusable scroll body
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                     ForEach(bullets, id: \.self) { bullet in
                         HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
@@ -1114,6 +1082,8 @@ private struct WhatsNewSheet: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.s)
                 }
+              }
+              .tvOSScrollFocusable()
             }
 
             AetherButton("Done", role: .secondary, action: onClose)

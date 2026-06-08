@@ -11,6 +11,9 @@ screen toward a complete product hub. Refinement, not a redesign.
 
 ### Added
 
+- **Recent searches** (#190) — the Search tab now remembers your recent queries
+  and shows them as tappable chips before you type; tap one to re-run it, or
+  Clear to forget them. Persisted, de-duplicated, and capped.
 - **Support section** (iOS / iPadOS / visionOS) — Report a Bug, Feature Request,
   Send Diagnostics, and Contact Developer, each opening the system Mail composer
   to `aether@zmrhal.cz` (with a `mailto:` fallback when no mail account is set up).
@@ -47,14 +50,15 @@ screen toward a complete product hub. Refinement, not a redesign.
 
 ### Fixed
 
-- **Home / Library loading & refresh** — the empty / "connected but no libraries"
-  states no longer render as a half-screen band, and they're now scrollable so
-  pull-to-refresh works on them (previously they could get stuck). Loading shows
-  the branded Aether animation instead of skeleton rails, the app auto-refreshes
-  when it returns to the foreground, and a connected source that returns empty (a
+- **Home / Library / Discover loading & refresh** — the empty / "connected but no
+  libraries" states no longer render as a half-screen band, and they're now
+  scrollable so pull-to-refresh works on them (previously they could get stuck).
+  Loading shows a calm animated-dots indicator, the app auto-refreshes when it
+  returns to the foreground, and a connected source that returns empty (a
   transient first-load) auto-retries once so it self-heals. Crucially, a refresh
-  that briefly comes back empty no longer blanks the screen — the existing
-  library stays put instead of flashing "Library is empty".
+  that briefly comes back empty no longer blanks the screen — the existing content
+  stays put instead of flashing "Library is empty". Discover now shares the same
+  loading/empty/refresh behaviour.
 - **Resume position no longer runs away** — pausing repeatedly could record a
   position that compounded past the runtime (e.g. 1h → 2.5h → 5h on a 2h film),
   which then broke "Resume". `PlaybackSession` recorded `currentTime()` plus a
@@ -64,6 +68,18 @@ screen toward a complete product hub. Refinement, not a redesign.
   from the old bug) resets to the start instead of failing to play.
 - **Cinema Mode resume prompt** (visionOS) — "Watch in Cinema" now offers
   **Continue** or **Start Over** when a resume point exists.
+- **Settings layout** — removed the redundant "Connected Sources" status card
+  (the Sources section already shows each source's connection state). On the
+  wide layout (iPad / tvOS / visionOS) the sections are split across two columns
+  (configuration left; personalization, info and storage right), and the whole
+  surface is centered instead of left-hugging — so tvOS uses the full width.
+- **tvOS info sheets** — About / Diagnostics / What's New now scroll with the
+  Siri Remote and use the full width (previously a narrow column that couldn't
+  be scrolled).
+- **Search no longer collapses while typing** (#189) — the results area kept its
+  intrinsic height during the loading phase, shrinking the screen to ~half and
+  breaking tap-/swipe-to-dismiss-keyboard. The loading + empty states now fill
+  the screen, so the layout stays put and the keyboard dismisses like elsewhere.
 
 ## [0.6.0] — Unreleased · "Cassiopeia"
 

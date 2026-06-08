@@ -461,7 +461,7 @@ struct HomeView: View {
     // MARK: - Loading & error states
 
     private var loadingState: some View {
-        AetherVideoLoader(caption: "Loading your library…")
+        AetherLoadingDots(caption: "Loading your library…")
     }
 
     private func errorState(_ message: String) -> some View {
