@@ -33,6 +33,14 @@ new data.
   icons (Download · Watch status · Source · Details), then the row stays clean
   forever (dismissed by "Got it" or by tapping an icon).
 
+### Fixed
+
+- **Series source switching** (#194) — alternate sources for a TV show no longer
+  show as "Unavailable" in the Detail source picker. A show/season is a container
+  you switch to and browse (it carries no stream URL of its own), so availability
+  now treats containers as switchable on any source that has them, while a
+  movie/episode without a resolvable stream stays correctly gated.
+
 ### Performance
 
 - **Instant library on launch** (#197) — Home, Library and Discover now paint the

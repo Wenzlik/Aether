@@ -308,7 +308,13 @@ public actor UnifiedLibrary {
                     kind: kind,
                     item: item,
                     serverName: serverNames[item.id.source],
-                    playable: item.streamURL != nil
+                    // A show / season is a *container*: you switch to it and
+                    // browse its episodes, so it's "available" on any source
+                    // that has it even though the container itself carries no
+                    // streamURL. Only a leaf (movie / episode) needs a
+                    // resolvable stream. Without this, every series' alternate
+                    // source showed as "Unavailable" in the picker (#194).
+                    playable: item.kind.isContainer || item.streamURL != nil
                 ))
             }
         }

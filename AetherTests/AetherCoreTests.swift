@@ -487,6 +487,30 @@ struct UnifiedLibraryTests {
         #expect(u[0].preferredSource?.kind == .plex)
     }
 
+    @Test("a show container is switchable on every source that has it (#194)")
+    func showContainerPlayableAcrossSources() {
+        func show(_ source: MediaSourceID, _ id: String) -> MediaItem {
+            MediaItem(id: .init(source: source, rawValue: id), title: "Severance",
+                      kind: .show, guids: MediaGuids(tvdb: "371980"))
+        }
+        let u = UnifiedLibrary.merge([show(.plex(serverID: "s1"), "1"),
+                                      show(.jellyfin(serverID: "j1"), "9")])
+        #expect(u.count == 1)
+        #expect(u[0].sources.count == 2)
+        // Both switchable even though a series container has no streamURL — the
+        // bug was both showing as "Unavailable".
+        let allPlayable = u[0].sources.allSatisfy(\.playable)
+        #expect(allPlayable)
+        #expect(u[0].preferredSource != nil)
+    }
+
+    @Test("a movie with no resolvable stream is still unavailable (leaf gating intact)")
+    func movieWithoutStreamUnavailable() {
+        let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603", stream: false)])
+        #expect(u.count == 1)
+        #expect(u[0].sources.first?.playable == false)
+    }
+
     @Test("cross-provider: merges on a shared IMDB even when one lacks TMDB")
     func crossProvider() {
         let u = UnifiedLibrary.merge([plex("1", "Matrix", tmdb: "603", imdb: "tt0133093"),
