@@ -269,6 +269,7 @@ struct DetailView: View {
                             .font(AetherDesign.Typography.heroTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                         metadataRow
+                        genresRow
                         mediaBadges
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
@@ -294,9 +295,7 @@ struct DetailView: View {
                     }
 
                     if let summary = item.summary {
-                        Text(summary)
-                            .font(AetherDesign.Typography.body)
-                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        AetherExpandableText(summary)
                             .padding(.horizontal, AetherDesign.Spacing.l)
                             .frame(maxWidth: 720, alignment: .leading)
                     }
@@ -358,6 +357,7 @@ struct DetailView: View {
                         .font(AetherDesign.Typography.heroTitle)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                     metadataRow
+                    genresRow
                     mediaBadges
 
                     if !item.kind.isContainer {
@@ -365,11 +365,15 @@ struct DetailView: View {
                     }
 
                     if let summary = item.summary {
-                        Text(summary)
-                            .font(AetherDesign.Typography.body)
-                            .foregroundStyle(AetherDesign.Palette.textSecondary)
-                            .lineLimit(item.kind.isContainer ? 3 : 6)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if item.kind.isContainer {
+                            Text(summary)
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            AetherExpandableText(summary)
+                        }
                     }
 
                     if !item.kind.isContainer, current.streamURL != nil {
@@ -510,6 +514,8 @@ struct DetailView: View {
                     sourceBadge
                     Spacer(minLength: 0)
                 }
+
+                genresRow
 
                 mediaBadges
 
@@ -977,10 +983,43 @@ struct DetailView: View {
     /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
     /// is always included when known, on every layout.
     private var metadataRow: some View {
-        Text(metadataParts.joined(separator: " • "))
-            .font(AetherDesign.Typography.metadata)
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Text(metadataParts.joined(separator: " • "))
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+            if let rating = current.contentRating {
+                contentRatingBadge(rating)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The source's age/content classification as a thin-bordered badge —
+    /// "PG-13", "TV-MA", "15" — sitting in the metadata line the way Infuse
+    /// and Apple TV render it. Only shown when the source provided one.
+    private func contentRatingBadge(_ rating: String) -> some View {
+        Text(rating)
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(AetherDesign.Palette.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(AetherDesign.Palette.textTertiary.opacity(0.6), lineWidth: 1)
+            )
+    }
+
+    /// "Drama • Biography • History" — the genres line under the metadata, so the
+    /// kind of title reads at a glance. Capped at four to avoid wrapping; hidden
+    /// when the source carries none.
+    @ViewBuilder
+    private var genresRow: some View {
+        if !current.genres.isEmpty {
+            Text(current.genres.prefix(4).joined(separator: " • "))
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var metadataParts: [String] {
@@ -1197,98 +1236,133 @@ struct DetailView: View {
     private var actionRow: some View {
         if current.streamURL != nil {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                if resume != nil {
-                    resumeButtons
-                } else {
-                    playButton
-                }
+                // Level 1 — one dominant primary action (Resume or Play).
+                if resume != nil { resumeButton } else { playButton }
+                // Level 2 — Restart, only when a resume point exists.
+                if resume != nil { restartButton }
                 #if os(visionOS)
                 watchInCinemaButton
                 #endif
-                if shouldShowDownloadControl {
-                    downloadControl
-                }
-                moreActionsMenu
+                // Level 3 — everything else as compact, equal-weight icon buttons.
+                compactActionRow
             }
         } else {
             unavailableState
         }
     }
 
-    /// Secondary actions folded into one unobtrusive menu, so the hero stays
-    /// playback-first (replaces the big "Mark as Watched" button). Surfaces
-    /// Mark Watched/Unwatched, source switching, and the full technical readout.
-    @ViewBuilder
-    private var moreActionsMenu: some View {
-        Menu {
+    /// Tertiary actions as a row of compact circular icon buttons (Infuse-style)
+    /// so they never compete with Resume/Play. Each is a focusable `Button` /
+    /// `Menu`, so the whole row is reachable left/right by the tvOS remote.
+    private var compactActionRow: some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            if shouldShowDownloadControl {
+                downloadIconButton
+            }
             if source != nil {
-                Button {
+                AetherIconButton(
+                    systemImage: isWatched ? "eye.fill" : "eye",
+                    accessibilityLabel: isWatched ? "Mark as unwatched" : "Mark as watched",
+                    isActive: isWatched
+                ) {
                     Task { await toggleWatched() }
-                } label: {
-                    Label(
-                        isWatched ? "Mark as Unwatched" : "Mark as Watched",
-                        systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle"
-                    )
                 }
             }
-
             if availableSources.count > 1 {
-                Menu {
-                    ForEach(availableSources) { src in
-                        Button {
-                            selectSource(src)
-                        } label: {
-                            if src.item.id == activeItem.id {
-                                Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(src.serverName ?? src.kind.displayName)
-                            }
-                        }
-                        .disabled(!src.playable)
-                    }
-                } label: {
-                    Label("Choose Source", systemImage: "rectangle.2.swap")
-                }
+                sourceMenuButton
             }
-
             if current.mediaInfo != nil {
-                Button {
+                AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                     presentedSelector = .technicalDetails
-                } label: {
-                    Label("Technical Details", systemImage: "info.circle")
                 }
             }
-        } label: {
-            moreMenuLabel
+            Spacer(minLength: 0)
         }
     }
 
-    /// Tertiary "More" — deliberately the smallest action so it never competes
-    /// with Resume. A compact circular icon on touch / spatial UI; on tvOS a
-    /// small labelled chip stays (an icon-only target is hard for the focus
-    /// engine to surface).
-    @ViewBuilder
-    private var moreMenuLabel: some View {
-        #if os(tvOS)
-        HStack(spacing: AetherDesign.Spacing.xs) {
-            Image(systemName: "ellipsis")
-            Text("More")
+    /// Source switcher as a compact icon `Menu` (only shown when the title is on
+    /// more than one source). Mirrors the "Available Sources" section's switching.
+    private var sourceMenuButton: some View {
+        Menu {
+            ForEach(availableSources) { src in
+                Button {
+                    selectSource(src)
+                } label: {
+                    if src.item.id == activeItem.id {
+                        Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(src.serverName ?? src.kind.displayName)
+                    }
+                }
+                .disabled(!src.playable)
+            }
+        } label: {
+            AetherIconCircleLabel(systemImage: "rectangle.2.swap")
         }
-        .font(AetherDesign.Typography.metadata)
-        .foregroundStyle(AetherDesign.Palette.textSecondary)
-        .padding(.vertical, AetherDesign.Spacing.s)
-        .padding(.horizontal, AetherDesign.Spacing.m)
-        .background(AetherDesign.Materials.card, in: Capsule())
-        .contentShape(Capsule())
-        #else
-        Image(systemName: "ellipsis")
-            .font(AetherDesign.Typography.cardTitle)
-            .foregroundStyle(AetherDesign.Palette.textSecondary)
-            .frame(width: 46, height: 46)
-            .background(AetherDesign.Materials.card, in: Circle())
-            .contentShape(Circle())
-            .accessibilityLabel("More actions")
-        #endif
+        .accessibilityLabel("Switch source")
+    }
+
+    /// Download as a compact icon `Menu`: the glyph reflects the current state,
+    /// and the menu offers the state-appropriate actions (download / pause /
+    /// resume / cancel / delete / retry), with the live status as a header.
+    private var downloadIconButton: some View {
+        Menu {
+            downloadMenuContent
+        } label: {
+            AetherIconCircleLabel(
+                systemImage: downloadGlyph,
+                isActive: isDownloaded
+            )
+        }
+        .accessibilityLabel("Download")
+    }
+
+    /// True once the title is fully downloaded — tints the download icon as "done".
+    private var isDownloaded: Bool {
+        if case .completed = downloadStatus { return true }
+        return false
+    }
+
+    private var downloadGlyph: String {
+        switch downloadStatus {
+        case .notDownloaded:            return "arrow.down.circle"
+        case .queued, .downloading:     return "arrow.down.circle.dotted"
+        case .paused:                   return "pause.circle"
+        case .completed:                return "checkmark.circle.fill"
+        case .failed:                   return "exclamationmark.circle"
+        case .expired:                  return "arrow.clockwise.circle"
+        }
+    }
+
+    @ViewBuilder
+    private var downloadMenuContent: some View {
+        switch downloadStatus {
+        case .notDownloaded:
+            Button {
+                presentedSelector = .downloadQuality
+            } label: { Label("Download", systemImage: "arrow.down.circle") }
+            .disabled(isEnqueuingDownload)
+        case .queued:
+            Text("Queued")
+            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+        case let .downloading(fraction):
+            Text("Downloading · \(percentString(fraction))")
+            Button { Task { await pauseDownload() } } label: { Label("Pause", systemImage: "pause") }
+            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+        case let .paused(fraction):
+            Text("Paused at \(percentString(fraction))")
+            Button { Task { await resumeDownload() } } label: { Label("Resume", systemImage: "play") }
+            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+        case let .completed(_, size):
+            Text("Downloaded · \(formatBytes(size))")
+            Button(role: .destructive) { Task { await removeDownload() } } label: { Label("Delete Download", systemImage: "trash") }
+        case let .failed(reason):
+            Text("Failed · \(reason)")
+            Button { Task { await retryDownload() } } label: { Label("Retry", systemImage: "arrow.clockwise") }
+        case .expired:
+            Text("Expired")
+            Button { Task { await retryDownload() } } label: { Label("Re-download", systemImage: "arrow.clockwise") }
+        }
     }
 
     /// Displayed watched state — the optimistic override wins over the hydrated
@@ -1312,93 +1386,6 @@ struct DetailView: View {
     private var shouldShowDownloadControl: Bool {
         guard downloadManager != nil, source?.supportsDownloads == true else { return false }
         return true
-    }
-
-    /// The state-driven Download surface. Renders as a primary "Download"
-    /// button when nothing's recorded; otherwise morphs into a disclosure
-    /// row that shows the current status and acts as the primary in-line
-    /// action for that state (Pause / Resume / Delete / Retry).
-    @ViewBuilder
-    private var downloadControl: some View {
-        switch downloadStatus {
-        case .notDownloaded:
-            AetherButton(
-                isEnqueuingDownload ? "Starting…" : "Download",
-                systemImage: "arrow.down.circle",
-                role: .secondary
-            ) {
-                presentedSelector = .downloadQuality
-            }
-            .disabled(isEnqueuingDownload)
-
-        case .queued:
-            downloadStatusRow(
-                value: "Queued",
-                actionLabel: "Cancel"
-            ) { Task { await cancelDownload() } }
-
-        case let .downloading(fraction):
-            downloadStatusRow(
-                value: "Downloading · \(percentString(fraction))",
-                actionLabel: "Pause"
-            ) { Task { await pauseDownload() } }
-
-        case let .paused(fraction):
-            downloadStatusRow(
-                value: "Paused at \(percentString(fraction))",
-                actionLabel: "Resume"
-            ) { Task { await resumeDownload() } }
-
-        case let .completed(_, size):
-            downloadStatusRow(
-                value: "Downloaded · \(formatBytes(size))",
-                actionLabel: "Delete"
-            ) { Task { await removeDownload() } }
-
-        case let .failed(reason):
-            downloadStatusRow(
-                value: "Failed · \(reason)",
-                actionLabel: "Retry"
-            ) { Task { await retryDownload() } }
-
-        case .expired:
-            downloadStatusRow(
-                value: "Expired",
-                actionLabel: "Re-download"
-            ) { Task { await retryDownload() } }
-        }
-    }
-
-    /// One-row layout: status text on the left, single trailing action on
-    /// the right. Each transient download state collapses to this so
-    /// the row's geometry doesn't shift as progress ticks.
-    private func downloadStatusRow(
-        value: String,
-        actionLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: AetherDesign.Spacing.m) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.accent)
-                .frame(width: 28)
-            Text(value)
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: AetherDesign.Spacing.s)
-            Button(actionLabel, action: action)
-                .buttonStyle(.plain)
-                .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.accent)
-        }
-        .padding(.vertical, AetherDesign.Spacing.m)
-        .padding(.horizontal, AetherDesign.Spacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                .fill(AetherDesign.Materials.card)
-        )
     }
 
     /// "47%" — keeps the row stable as progress ticks (no decimals,
@@ -1461,42 +1448,37 @@ struct DetailView: View {
     }
     #endif
 
-    /// Resume exists: **Resume** (primary, with a resume-from caption) and
-    /// **Restart** (secondary) sitting side-by-side, each expanding to
-    /// equal width. "Restart" is the Apple-TV-app's name for the same
-    /// action — short enough to fit alongside Resume on iPhone without
-    /// the row wrapping to two lines. The "Resume from 1:23" caption
-    /// stays beneath the row, leading-aligned, so it pairs with Resume
-    /// (which is on the left).
-    private var resumeButtons: some View {
+    /// Level 1 — the single dominant primary when a resume point exists, with a
+    /// "Resume from m:ss" caption beneath it. (Restart is a separate, lighter
+    /// Level-2 button below, so the hierarchy reads at a glance.)
+    private var resumeButton: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                AetherButton(
-                    isPreparingPlayback ? "Preparing…" : "Resume",
-                    systemImage: "play.fill",
-                    role: .primary
-                ) {
-                    Task { await presentPlayer(fromStart: false) }
-                }
-                .frame(maxWidth: .infinity)
-                .disabled(isPreparingPlayback)
-
-                AetherButton(
-                    "Restart",
-                    systemImage: "backward.end.fill",
-                    role: .secondary
-                ) {
-                    Task { await presentPlayer(fromStart: true) }
-                }
-                .frame(maxWidth: .infinity)
-                .disabled(isPreparingPlayback)
+            AetherButton(
+                isPreparingPlayback ? "Preparing…" : "Resume",
+                systemImage: "play.fill",
+                role: .primary
+            ) {
+                Task { await presentPlayer(fromStart: false) }
             }
+            .disabled(isPreparingPlayback)
 
             Text("Resume from \(formatPosition(resume?.position ?? .zero))")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .padding(.leading, AetherDesign.Spacing.xs)
         }
+    }
+
+    /// Level 2 — Restart, secondary emphasis, sitting under Resume.
+    private var restartButton: some View {
+        AetherButton(
+            "Restart",
+            systemImage: "backward.end.fill",
+            role: .secondary
+        ) {
+            Task { await presentPlayer(fromStart: true) }
+        }
+        .disabled(isPreparingPlayback)
     }
 
     private var unavailableState: some View {
@@ -1755,24 +1737,60 @@ struct DetailView: View {
     @ViewBuilder
     private var mediaSection: some View {
         let info = current.mediaInfo
-        AetherSettingsSection("Media Information") {
+        AetherSettingsSection("Technical Details") {
             if let video = videoLine(info) {
                 AetherSettingsRow(label: "Video", value: video)
             }
             if let audio = audioLine(info) {
                 AetherSettingsRow(label: "Audio", value: audio)
             }
-            if let bitrate = info?.bitrateKbps {
-                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            if let subtitles = subtitleSummary {
+                AetherSettingsRow(label: "Subtitles", value: subtitles)
             }
             if let hdrBadge = hdrBadge(info) {
                 AetherSettingsRow(label: "HDR", value: hdrBadge)
+            }
+            if let bitrate = info?.bitrateKbps, bitrate > 0 {
+                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            }
+            if let size = info?.fileSizeBytes, size > 0 {
+                AetherSettingsRow(label: "File Size", value: formatFileSize(size))
             }
             AetherSettingsRow(label: "Playback", status: playbackModeStatus)
             if let source {
                 AetherSettingsRow(label: "Source", value: source.displayName)
             }
         }
+    }
+
+    /// Subtitle languages as a compact list — "English, Czech, Spanish +2".
+    /// Localises the track's language code when present (Plex sends "eng" /
+    /// "ces"), else falls back to the track's display title. Only the
+    /// transcode path carries per-track subtitle metadata, so this stays
+    /// hidden for direct-play items rather than showing a half-truth.
+    private var subtitleSummary: String? {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for track in current.subtitleTracks {
+            guard let name = subtitleName(track) else { continue }
+            if seen.insert(name.lowercased()).inserted { ordered.append(name) }
+        }
+        guard !ordered.isEmpty else { return nil }
+        let shown = ordered.prefix(4).joined(separator: ", ")
+        return ordered.count > 4 ? "\(shown) +\(ordered.count - 4)" : shown
+    }
+
+    private func subtitleName(_ track: MediaSubtitleTrack) -> String? {
+        if let code = track.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {
+            return Locale.current.localizedString(forLanguageCode: code) ?? code
+        }
+        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
+    /// Human-readable file size ("12.4 GB") from a raw byte count.
+    private func formatFileSize(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func videoLine(_ info: MediaInfo?) -> String? {

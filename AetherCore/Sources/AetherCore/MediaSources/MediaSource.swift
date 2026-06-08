@@ -312,6 +312,10 @@ public struct MediaInfo: Sendable, Hashable {
     /// Source file container, e.g. `"mp4"`, `"mkv"`. Used as a heuristic for
     /// the projected playback mode on Detail (mp4/mov/m4v → Direct Play).
     public let container: String?
+    /// Total size of the source file in **bytes** (Plex `Part.size`, Jellyfin
+    /// `MediaSourceInfo.Size`). Rendered human-readable ("12.4 GB") in the
+    /// Technical Details section. `nil` when the source didn't report it.
+    public let fileSizeBytes: Int64?
 
     public init(
         videoCodec: String? = nil,
@@ -321,7 +325,8 @@ public struct MediaInfo: Sendable, Hashable {
         bitrateKbps: Int? = nil,
         isHDR: Bool = false,
         isDolbyVision: Bool = false,
-        container: String? = nil
+        container: String? = nil,
+        fileSizeBytes: Int64? = nil
     ) {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
@@ -331,6 +336,7 @@ public struct MediaInfo: Sendable, Hashable {
         self.isHDR = isHDR
         self.isDolbyVision = isDolbyVision
         self.container = container
+        self.fileSizeBytes = fileSizeBytes
     }
 }
 

@@ -4,6 +4,50 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.2] — Unreleased
+
+Detail-screen redesign toward Infuse-level information density while keeping
+Aether's cinematic identity. Built in phases; this build ships **Phase 1**
+(action hierarchy + information architecture) and **Phase 3** (technical details
++ new data plumbing).
+
+### Added
+
+- **Content rating** — the source's age classification (PG-13, TV-MA, 15, …)
+  now appears as a thin-bordered badge in the Detail metadata line, on both Plex
+  (`contentRating`) and Jellyfin (`OfficialRating`).
+- **Technical Details** section (renamed from "Media Information") now also lists
+  **Subtitles** (languages) and **File Size** alongside Video / Audio / HDR /
+  Bitrate / Playback / Source.
+- **Jellyfin codec/quality info** — Jellyfin items now surface the same
+  resolution / HDR / Dolby Vision / codec badges and technical details Plex
+  already had. Jellyfin's `MediaStreams` (and file `Size`) are mapped into the
+  shared `MediaInfo` (previously Plex-only).
+
+### Changed
+
+- **Action hierarchy on Detail** — instead of a stack of equal-weight buttons,
+  there's now **one dominant primary** (Resume or Play), a lighter **Restart**
+  beneath it, and a **compact icon row** for everything else (Download · Mark
+  Watched · Source · Technical Details) — Infuse-style circular icon buttons that
+  no longer compete with Play. The "More" menu is gone; its actions live in the
+  icon row. Download is a compact icon whose glyph reflects its state, with the
+  management actions (pause / resume / cancel / delete / retry) in its menu.
+- **Genres** now appear under the metadata line on movies and episodes (not just
+  shows), so the kind of title reads at a glance.
+- **Description collapses** to a few lines with a **More / Less** toggle, so a
+  long synopsis no longer pushes the rest of the page down.
+- **tvOS focus** — the compact icon buttons are focusable and reachable by the
+  Siri Remote (lift + glow on focus).
+
+### Notes
+
+- Phase 2 (Cast & Crew rail) and Phase 4 (server-synced Favorite + Trailer)
+  follow — they need new model/connector plumbing.
+- File size and per-track subtitle metadata are only carried on the transcode
+  path / when the source reports them, so those rows appear when available
+  rather than always.
+
 ## [0.6.1] — Unreleased
 
 Settings & product-experience polish — Settings grows from a configuration
