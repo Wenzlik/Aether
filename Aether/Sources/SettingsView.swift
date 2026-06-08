@@ -49,6 +49,18 @@ struct SettingsView: View {
         case downloads
     }
 
+    #if !os(tvOS)
+    /// Which Support flow sheet is open. tvOS has no mail composer, so the whole
+    /// Support section is compiled out there.
+    private enum SupportSheet: String, Identifiable {
+        case reportBug, featureRequest, contact
+        var id: String { rawValue }
+    }
+    @State private var supportSheet: SupportSheet?
+    /// `mailto:` fallback when no Mail account is configured.
+    @Environment(\.openURL) private var openURL
+    #endif
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -107,6 +119,9 @@ struct SettingsView: View {
                 bullets: viewModel.whatsNewBullets
             ) { isWhatsNewPresented = false }
         }
+        #if !os(tvOS)
+        .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
+        #endif
     }
 
     // MARK: - Header
@@ -184,6 +199,9 @@ struct SettingsView: View {
         #if os(iOS)
         appIconSection
         #endif
+        #if !os(tvOS)
+        supportSection
+        #endif
         aboutSection
     }
 
@@ -219,25 +237,123 @@ struct SettingsView: View {
     #endif
 
     #if os(visionOS)
-    /// Cinema (visionOS): the default screen-size the immersive theater opens
-    /// with. Each size is its own authored environment; the picker persists the
-    /// choice via `CinemaPreferencesStore`.
+    /// Cinema (visionOS): the home for immersive-playback preferences — the
+    /// default screen size + seat the theater opens with, the environment, and
+    /// the auto-enter / remember-last behaviour. All persist via
+    /// `CinemaPreferencesStore`; the size/seat can still be changed live in the
+    /// docked player's Theater tab.
     private var cinemaSection: some View {
         AetherSettingsSection("Cinema") {
-            Picker(
-                "Screen Size",
+            cinemaMenuRow(
+                "Default Screen Size",
+                systemImage: "rectangle.expand.vertical",
+                description: "The size Cinema Mode opens with. You can still resize during playback.",
                 selection: Binding(
-                    get: { viewModel.cinemaPreferences.screenPreset },
-                    set: { viewModel.cinemaPreferences.screenPreset = $0 }
+                    get: { viewModel.cinemaPreferences.defaultScreenPreset },
+                    set: { viewModel.cinemaPreferences.defaultScreenPreset = $0 }
+                ),
+                options: CinemaScreenPreset.ordered,
+                label: \.displayName
+            )
+            cinemaMenuRow(
+                "Default Seating",
+                systemImage: "chair.lounge.fill",
+                description: "Where you sit when the theater opens.",
+                selection: Binding(
+                    get: { viewModel.cinemaPreferences.defaultSeat },
+                    set: { viewModel.cinemaPreferences.defaultSeat = $0 }
+                ),
+                options: CinemaSeat.ordered,
+                label: \.displayName
+            )
+            cinemaMenuRow(
+                "Environment",
+                systemImage: "theatermasks.fill",
+                description: "The space rendered around the screen.",
+                selection: Binding(
+                    get: { viewModel.cinemaPreferences.environment },
+                    set: { viewModel.cinemaPreferences.environment = $0 }
+                ),
+                options: CinemaEnvironment.available,
+                label: \.displayName
+            )
+            cinemaToggleRow(
+                "Auto-Enter Cinema",
+                systemImage: "sparkles.tv.fill",
+                description: "Enter Cinema Mode automatically when playback starts.",
+                isOn: Binding(
+                    get: { viewModel.cinemaPreferences.autoEnterCinema },
+                    set: { viewModel.cinemaPreferences.autoEnterCinema = $0 }
                 )
-            ) {
-                ForEach(CinemaScreenPreset.ordered, id: \.self) { preset in
-                    Text(preset.displayName).tag(preset)
+            )
+            cinemaToggleRow(
+                "Remember Last Setup",
+                systemImage: "clock.arrow.circlepath",
+                description: "Reopen with your last screen size and seat instead of the defaults.",
+                isOn: Binding(
+                    get: { viewModel.cinemaPreferences.rememberLastSetup },
+                    set: { viewModel.cinemaPreferences.rememberLastSetup = $0 }
+                )
+            )
+        }
+    }
+
+    /// A Cinema settings row: icon + title + muted description, trailing inline
+    /// menu picker. Matches the frosted-card row rhythm without a chevron.
+    @ViewBuilder
+    private func cinemaMenuRow<T: Hashable>(
+        _ title: String,
+        systemImage: String,
+        description: String? = nil,
+        selection: Binding<T>,
+        options: [T],
+        label: @escaping (T) -> String
+    ) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            cinemaRowLabel(title, systemImage: systemImage, description: description)
+            Spacer(minLength: AetherDesign.Spacing.s)
+            Picker(title, selection: selection) {
+                ForEach(options, id: \.self) { Text(label($0)).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(AetherDesign.Palette.accent)
+        }
+        .padding(AetherDesign.Spacing.m)
+    }
+
+    /// A Cinema settings row with a trailing toggle.
+    @ViewBuilder
+    private func cinemaToggleRow(
+        _ title: String,
+        systemImage: String,
+        description: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            cinemaRowLabel(title, systemImage: systemImage, description: description)
+        }
+        .tint(AetherDesign.Palette.accent)
+        .padding(AetherDesign.Spacing.m)
+    }
+
+    @ViewBuilder
+    private func cinemaRowLabel(_ title: String, systemImage: String, description: String?) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            Image(systemName: systemImage)
+                .foregroundStyle(AetherDesign.Palette.accent)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let description {
+                    Text(description)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .pickerStyle(.menu)
-            .padding(.horizontal, AetherDesign.Spacing.l)
-            .padding(.vertical, AetherDesign.Spacing.s)
         }
     }
     #endif
@@ -713,6 +829,57 @@ struct SettingsView: View {
         if code == "off" { return "Off" }
         return PlaybackLanguage.displayName(for: code)
     }
+
+    #if !os(tvOS)
+    /// Support — Report a Bug / Feature Request / Contact Developer. Each opens
+    /// the system Mail composer to `aether@zmrhal.cz` (with a `mailto:` fallback
+    /// when no mail account is configured). Compiled out on tvOS (no MessageUI).
+    private var supportSection: some View {
+        AetherSettingsSection("Support") {
+            AetherSettingsRow(label: "Report a Bug", systemImage: "ladybug.fill", value: nil) {
+                supportSheet = .reportBug
+            }
+            AetherSettingsRow(label: "Feature Request", systemImage: "lightbulb.fill", value: nil) {
+                supportSheet = .featureRequest
+            }
+            AetherSettingsRow(label: "Contact Developer", systemImage: "envelope.fill", value: nil) {
+                contactDeveloper()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func supportSheetView(for sheet: SupportSheet) -> some View {
+        switch sheet {
+        case .reportBug:
+            ReportBugSheet(theme: viewModel.appearance.preference.displayName) { supportSheet = nil }
+        case .featureRequest:
+            FeatureRequestSheet { supportSheet = nil }
+        case .contact:
+            MailComposeView(
+                recipient: SupportDiagnostics.supportEmail,
+                subject: "Aether — Hello",
+                body: "\n\n\(SupportDiagnostics.featureRequestFooter())",
+                attachment: nil
+            ) { supportSheet = nil }
+            .ignoresSafeArea()
+        }
+    }
+
+    /// Contact the developer: present the Mail composer, or fall back to a
+    /// `mailto:` link when the device has no Mail account.
+    private func contactDeveloper() {
+        if MailComposeView.canSend {
+            supportSheet = .contact
+        } else if let url = aetherMailtoURL(
+            recipient: SupportDiagnostics.supportEmail,
+            subject: "Aether — Hello",
+            body: "\n\n\(SupportDiagnostics.featureRequestFooter())"
+        ) {
+            openURL(url)
+        }
+    }
+    #endif
 
     /// About — one tappable Version row that opens the **What's New** modal
     /// (`WhatsNewSheet`). Same pattern on every platform: the changelog
