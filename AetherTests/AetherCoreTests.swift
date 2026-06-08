@@ -41,6 +41,22 @@ struct PlaybackSessionTests {
         )
     }
 
+    @Test("sanitizedResume clamps corrupt / out-of-range saved points")
+    func sanitizedResumeClamps() {
+        let twoHours = Duration.seconds(7200)
+        // In-range resume is kept.
+        #expect(PlaybackSession.sanitizedResume(3600, runtime: twoHours) == 3600)
+        // At/over the runtime → start over (the pre-fix bug could save 5h on a 2h film).
+        #expect(PlaybackSession.sanitizedResume(7200, runtime: twoHours) == 0)
+        #expect(PlaybackSession.sanitizedResume(18000, runtime: twoHours) == 0)
+        // Non-positive / non-finite → 0.
+        #expect(PlaybackSession.sanitizedResume(0, runtime: twoHours) == 0)
+        #expect(PlaybackSession.sanitizedResume(-5, runtime: twoHours) == 0)
+        #expect(PlaybackSession.sanitizedResume(.nan, runtime: twoHours) == 0)
+        // Unknown runtime → keep a positive value (can't bound it).
+        #expect(PlaybackSession.sanitizedResume(3600, runtime: nil) == 3600)
+    }
+
     @Test("idle → loading → playing → paused on a valid item")
     func transitions() async {
         let session = PlaybackSession(resumeStore: ResumeStore(), resumeWriteInterval: .seconds(60))

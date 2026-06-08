@@ -44,6 +44,13 @@ struct HomeView: View {
     /// the first load or a refresh shows loading / keeps content instead of
     /// flashing the welcome / empty state.
     @State private var hasLoaded = false
+    /// Guards a single automatic retry when a connected source returns an empty
+    /// feed (often a transient first-load on Plex), so a transient empty
+    /// self-heals instead of sticking. Reset once real content arrives.
+    @State private var autoRetried = false
+    /// Reload when the app returns to the foreground (non-destructive — content
+    /// stays on screen through the refresh).
+    @Environment(\.scenePhase) private var scenePhase
     /// Bound to the system search bar (`.searchable` modifier). When
     /// non-empty, Home swaps its rails for `MediaSearchResults`. Same
     /// search surface Library offers — both tabs let the user reach the
@@ -91,6 +98,12 @@ struct HomeView: View {
         }
         // Reload when the connected set changes (sign-in / discovery / sign-out).
         .task(id: taskKey) { await load() }
+        // Auto-refresh when the app returns to the foreground — keeps content on
+        // screen (non-destructive) and lets a stale/empty feed self-heal without
+        // a manual pull.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load() } }
+        }
     }
 
     /// `true` when at least one source is connected → render unified rails.
@@ -150,17 +163,25 @@ struct HomeView: View {
             // Unified search across every connected source.
             MediaSearchResults(sources: connectedSources, query: searchQuery)
         } else if let loadError {
-            errorState(loadError)
+            AetherCenteredScrollState { errorState(loadError) }
         } else if !isContentEmpty {
             // Have content → always show it, even while a refresh is running, so
             // pull-to-refresh never blanks to a loading/empty/welcome state.
             if usesUnified { unifiedRailsContent } else { railsContent }
         } else if isConnecting || isLoading || !hasLoaded {
             // Still starting up, loading, or the first load hasn't finished —
-            // show loading rather than flashing "connect Plex" / "empty".
-            loadingState
+            // show the branded loading animation rather than flashing
+            // "connect Plex" / "empty". Centered + pull-to-refreshable.
+            AetherCenteredScrollState { loadingState }
         } else {
-            emptyState
+            // Signed-out welcome owns its own full-screen layout; the connected
+            // empty states are centered + pull-to-refreshable so they never
+            // render as a band and can be re-pulled if they were transient.
+            if isPlexSignedIn || usesUnified {
+                AetherCenteredScrollState { emptyState }
+            } else {
+                emptyState
+            }
         }
     }
 
@@ -440,8 +461,7 @@ struct HomeView: View {
     // MARK: - Loading & error states
 
     private var loadingState: some View {
-        AetherLoadingState(.rails(count: 2))
-            .padding(.top, AetherDesign.Spacing.l)
+        AetherVideoLoader(caption: "Loading your library…")
     }
 
     private func errorState(_ message: String) -> some View {
@@ -474,9 +494,18 @@ struct HomeView: View {
             defer { isLoading = false }
             let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
             let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
-            rails = built
-            // Mirror Continue Watching into `feed` so the shared section renders.
-            feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
+            if built.isEmpty, !rails.isEmpty {
+                // A refresh came back empty but we already have content on screen —
+                // almost always a transient source hiccup (a server that briefly
+                // returns no libraries). Keep what's showing instead of blanking
+                // it to an empty state, and retry once.
+                scheduleAutoRetryIfNeeded()
+            } else {
+                rails = built
+                // Mirror Continue Watching into `feed` so the shared section renders.
+                feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
+                if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+            }
             // Warm the artwork cache for the rails we're about to show.
             AetherImageCache.shared.prefetch(
                 built.recentlyAdded.map(\.posterURL)
@@ -504,6 +533,21 @@ struct HomeView: View {
         } catch {
             feed = .empty
             loadError = error.localizedDescription
+        }
+    }
+
+    /// One automatic retry when a connected source returns an empty feed — Plex
+    /// often returns nothing on the very first request after connecting, which
+    /// otherwise leaves the user stuck on an empty state. Bounded to a single
+    /// attempt (guarded by `autoRetried`); manual pull-to-refresh and the
+    /// foreground reload cover anything beyond that.
+    private func scheduleAutoRetryIfNeeded() {
+        guard !autoRetried, !connectedSources.isEmpty else { return }
+        autoRetried = true
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, isContentEmpty else { return }
+            await load(forceRefresh: true)
         }
     }
 }

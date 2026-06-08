@@ -95,14 +95,16 @@ public actor PlaybackSession {
         return String(UInt(bitPattern: ObjectIdentifier(object).hashValue) & 0xFFFFFF, radix: 16)
     }
 
-    /// Content seconds represented by the player's `currentTime() == 0`.
-    ///
-    /// A Plex transcode started at `offset` emits a fresh HLS timeline whose
-    /// zero is the offset point, so `currentTime()` is *relative* to the start
-    /// of playback, not absolute. We add this base back when recording resume
-    /// points and reporting position. Always `0` for direct-play (the player
-    /// seeks to the absolute time, so `currentTime()` is already absolute).
-    private var baseOffsetSeconds: Double = 0
+    // NOTE: there is deliberately NO "base offset" added to `currentTime()`.
+    // Earlier code assumed a Plex transcode started at an offset emits an HLS
+    // timeline whose zero is the offset, and added the offset back when
+    // recording resume / reporting position. In practice `AVPlayer.currentTime()`
+    // for the universal transcoder is the *absolute* content time on every path
+    // — direct play, client-seek, and a server-baked offset alike — so adding
+    // the offset double-counted and made resume run away (1h → 2.5h → 5h on a
+    // 2h film, which then broke "Resume"). Position now comes straight from
+    // `currentTime()`, clamped to the content duration. `ResolvedPlayback`
+    // still reports the baked offset, but only the URL builder uses it.
 
     /// Optional offline catalogue. When set, `prepare(item:source:startAt:)`
     /// checks for a completed download before asking the source for a
@@ -160,12 +162,18 @@ public actor PlaybackSession {
         // few seconds), and we'd rather sit in loading than flash a failure.
         state = PlaybackState(status: .loading, item: item)
 
-        let resumeSeconds: Double
+        var resumeSeconds: Double
         if let explicitStart {
             resumeSeconds = explicitStart
         } else {
             resumeSeconds = await persistedResumeSeconds(for: item.id)
         }
+        // Guard against a corrupt / out-of-range saved point — e.g. one left over
+        // from the pre-fix resume bug that could record a position *beyond* the
+        // runtime. A resume past the end would bake a transcode start past EOF
+        // (warm-up fails → "Resume" doesn't play) and can't self-heal because no
+        // playback ever starts. Treat at/over the runtime as "start over".
+        resumeSeconds = Self.sanitizedResume(resumeSeconds, runtime: item.runtime)
 
         // Offline override: if the item has a completed download on disk,
         // **and** AVPlayer can actually decode it, play from there —
@@ -213,7 +221,6 @@ public actor PlaybackSession {
         }
 
         activeTranscodeSessionID = resolved.transcodeSessionID
-        baseOffsetSeconds = resolved.baseOffsetSeconds
         let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
         let (player, itemID) = await MainActor.run { () -> (AVPlayer, String) in
@@ -271,14 +278,13 @@ public actor PlaybackSession {
         state.position = position
     }
 
-    /// Seek to an absolute **content** position (seconds), accounting for the
-    /// transcode base offset — `AVPlayer.currentTime()` is relative to the
-    /// transcode start, so the player target is `content − base`. Used by Skip
-    /// Intro / Skip Credits, which work in absolute content time from the
-    /// segment data. (`base` is 0 for direct play, so this is a plain seek.)
+    /// Seek to an absolute **content** position (seconds). The player timeline is
+    /// absolute on every path (see the note by `prepare`), so this is a plain
+    /// seek to `target`. Used by Skip Intro / Skip Credits, which work in
+    /// absolute content time from the segment data.
     public func skip(toContentSeconds target: Double) async {
         guard let avPlayer else { return }
-        let playerSeconds = max(0, target - baseOffsetSeconds)
+        let playerSeconds = max(0, target)
         let cmTime = CMTime(seconds: playerSeconds, preferredTimescale: 600)
         await MainActor.run {
             avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
@@ -293,7 +299,7 @@ public actor PlaybackSession {
         guard let avPlayer else { return Self.durationSeconds(state.position) }
         let elapsed = await MainActor.run { avPlayer.currentTime().seconds }
         guard elapsed.isFinite, !elapsed.isNaN else { return Self.durationSeconds(state.position) }
-        return baseOffsetSeconds + elapsed
+        return elapsed
     }
 
     public func stop() async {
@@ -438,12 +444,19 @@ public actor PlaybackSession {
 
     private func writeResumeNow() async {
         guard let item = state.item, let player = avPlayer else { return }
-        let elapsed = await MainActor.run { player.currentTime().seconds }
+        let (elapsed, durationSeconds) = await MainActor.run {
+            (player.currentTime().seconds, player.currentItem?.duration.seconds ?? .nan)
+        }
         guard elapsed.isFinite, !elapsed.isNaN else { return }
-        // `currentTime()` is relative to the transcode start; add the base to
-        // get the absolute content position. `baseOffsetSeconds` is 0 for
-        // direct-play, where `currentTime()` is already absolute.
-        let position = Duration.seconds(baseOffsetSeconds + elapsed)
+        // The player timeline is absolute (see the note by `prepare`), so the
+        // content position is `currentTime()` directly. Clamp to the duration so
+        // a bad reading can never persist a resume point beyond the runtime —
+        // an over-the-end resume is exactly what broke "Resume" before.
+        var seconds = max(0, elapsed)
+        if durationSeconds.isFinite, durationSeconds > 0 {
+            seconds = min(seconds, durationSeconds)
+        }
+        let position = Duration.seconds(seconds)
         state.position = position
         await resumeStore.record(.init(mediaID: item.id, position: position))
     }
@@ -485,7 +498,6 @@ public actor PlaybackSession {
     }
 
     private func teardownPlayer() async {
-        baseOffsetSeconds = 0
         // Stop the server transcode session so Plex frees it immediately rather
         // than reaping it later (and so a stale one can't linger).
         if let sessionID = activeTranscodeSessionID {
@@ -506,5 +518,18 @@ public actor PlaybackSession {
     static func durationSeconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
+    /// Clamp a resume position to a sane range for `runtime`. A non-finite or
+    /// non-positive value, or one at/beyond the runtime (corrupt data, or a
+    /// title watched to the end), resets to `0` ("start over") — resuming past
+    /// the end would bake a transcode start past EOF and fail to play.
+    static func sanitizedResume(_ seconds: Double, runtime: Duration?) -> Double {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        if let runtime {
+            let total = durationSeconds(runtime)
+            if total > 0, seconds >= total { return 0 }
+        }
+        return seconds
     }
 }
