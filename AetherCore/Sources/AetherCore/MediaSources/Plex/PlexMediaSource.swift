@@ -817,6 +817,7 @@ public actor PlexMediaSource: MediaSource {
             parentID: dto.parentRatingKey.map { MediaID(source: id, rawValue: $0) },
             genres: dto.genres,
             communityRating: dto.audienceRating ?? dto.rating,
+            contentRating: dto.contentRating?.nonEmptyTrimmed,
             releaseDate: dto.releaseDate,
             dateAdded: dto.dateAdded,
             seasonCount: dto.childCount,

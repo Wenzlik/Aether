@@ -983,10 +983,30 @@ struct DetailView: View {
     /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
     /// is always included when known, on every layout.
     private var metadataRow: some View {
-        Text(metadataParts.joined(separator: " • "))
-            .font(AetherDesign.Typography.metadata)
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Text(metadataParts.joined(separator: " • "))
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+            if let rating = current.contentRating {
+                contentRatingBadge(rating)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The source's age/content classification as a thin-bordered badge —
+    /// "PG-13", "TV-MA", "15" — sitting in the metadata line the way Infuse
+    /// and Apple TV render it. Only shown when the source provided one.
+    private func contentRatingBadge(_ rating: String) -> some View {
+        Text(rating)
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(AetherDesign.Palette.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(AetherDesign.Palette.textTertiary.opacity(0.6), lineWidth: 1)
+            )
     }
 
     /// "Drama • Biography • History" — the genres line under the metadata, so the
@@ -1717,24 +1737,60 @@ struct DetailView: View {
     @ViewBuilder
     private var mediaSection: some View {
         let info = current.mediaInfo
-        AetherSettingsSection("Media Information") {
+        AetherSettingsSection("Technical Details") {
             if let video = videoLine(info) {
                 AetherSettingsRow(label: "Video", value: video)
             }
             if let audio = audioLine(info) {
                 AetherSettingsRow(label: "Audio", value: audio)
             }
-            if let bitrate = info?.bitrateKbps {
-                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            if let subtitles = subtitleSummary {
+                AetherSettingsRow(label: "Subtitles", value: subtitles)
             }
             if let hdrBadge = hdrBadge(info) {
                 AetherSettingsRow(label: "HDR", value: hdrBadge)
+            }
+            if let bitrate = info?.bitrateKbps, bitrate > 0 {
+                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            }
+            if let size = info?.fileSizeBytes, size > 0 {
+                AetherSettingsRow(label: "File Size", value: formatFileSize(size))
             }
             AetherSettingsRow(label: "Playback", status: playbackModeStatus)
             if let source {
                 AetherSettingsRow(label: "Source", value: source.displayName)
             }
         }
+    }
+
+    /// Subtitle languages as a compact list — "English, Czech, Spanish +2".
+    /// Localises the track's language code when present (Plex sends "eng" /
+    /// "ces"), else falls back to the track's display title. Only the
+    /// transcode path carries per-track subtitle metadata, so this stays
+    /// hidden for direct-play items rather than showing a half-truth.
+    private var subtitleSummary: String? {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for track in current.subtitleTracks {
+            guard let name = subtitleName(track) else { continue }
+            if seen.insert(name.lowercased()).inserted { ordered.append(name) }
+        }
+        guard !ordered.isEmpty else { return nil }
+        let shown = ordered.prefix(4).joined(separator: ", ")
+        return ordered.count > 4 ? "\(shown) +\(ordered.count - 4)" : shown
+    }
+
+    private func subtitleName(_ track: MediaSubtitleTrack) -> String? {
+        if let code = track.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {
+            return Locale.current.localizedString(forLanguageCode: code) ?? code
+        }
+        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
+    /// Human-readable file size ("12.4 GB") from a raw byte count.
+    private func formatFileSize(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func videoLine(_ info: MediaInfo?) -> String? {

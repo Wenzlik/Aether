@@ -162,6 +162,9 @@ public enum JellyfinAPI {
         public let parentIndexNumber: Int?
         /// For an episode: the series title (`SeriesName`).
         public let seriesName: String?
+        /// Age / content classification (`OfficialRating`), e.g. "PG-13",
+        /// "TV-MA", "15". Rendered as a badge in the Detail metadata line.
+        public let officialRating: String?
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
@@ -240,8 +243,39 @@ public enum JellyfinAPI {
             mediaSources?.first?.id
         }
 
+        /// Content rating cleaned of blank server strings.
+        public var contentRating: String? { officialRating?.nonEmptyTrimmed }
+
         private var firstStreams: [MediaStream] {
             mediaSources?.first?.mediaStreams ?? []
+        }
+
+        /// Codec / resolution / channels / HDR / bitrate / file size for the
+        /// Detail screen — mapped from the first media source's video + audio
+        /// streams. Backfills the `MediaInfo` Jellyfin previously left `nil`,
+        /// so codec badges + Technical Details work for Jellyfin as they do
+        /// for Plex. Returns `nil` when there's no media source at all.
+        public var sourceMediaInfo: MediaInfo? {
+            guard let source = mediaSources?.first else { return nil }
+            let streams = source.mediaStreams ?? []
+            let video = streams.first { $0.type == "Video" }
+            let audio = streams.first { $0.type == "Audio" && ($0.isDefault ?? false) }
+                ?? streams.first { $0.type == "Audio" }
+            // Stream bitrate is bits/s; MediaInfo wants kbps. Prefer the video
+            // stream's own rate, fall back to the source-level bitrate.
+            let bitsPerSecond = video?.bitRate ?? source.bitrate
+            let kbps = bitsPerSecond.map { $0 / 1000 }
+            return MediaInfo(
+                videoCodec: video?.codec?.nonEmptyTrimmed,
+                audioCodec: audio?.codec?.nonEmptyTrimmed,
+                audioChannels: audio?.channels,
+                videoResolution: video?.resolutionLabel,
+                bitrateKbps: kbps,
+                isHDR: video?.isHDR ?? false,
+                isDolbyVision: video?.isDolbyVision ?? false,
+                container: source.container?.nonEmptyTrimmed,
+                fileSizeBytes: source.size
+            )
         }
 
         public var audioTracks: [MediaAudioTrack] {
@@ -297,6 +331,7 @@ public enum JellyfinAPI {
             case indexNumber = "IndexNumber"
             case parentIndexNumber = "ParentIndexNumber"
             case seriesName = "SeriesName"
+            case officialRating = "OfficialRating"
         }
     }
 
@@ -304,11 +339,18 @@ public enum JellyfinAPI {
         public let id: String?
         public let container: String?
         public let mediaStreams: [MediaStream]?
+        /// Source file size in **bytes** (`Size`). `nil` when not reported.
+        public let size: Int64?
+        /// Overall source bitrate in **bits per second** (`Bitrate`). Used as a
+        /// fallback when the video stream itself doesn't carry a bitrate.
+        public let bitrate: Int?
 
         enum CodingKeys: String, CodingKey {
             case id = "Id"
             case container = "Container"
             case mediaStreams = "MediaStreams"
+            case size = "Size"
+            case bitrate = "Bitrate"
         }
     }
 
@@ -321,11 +363,49 @@ public enum JellyfinAPI {
         public let channels: Int?
         public let isDefault: Bool?
         public let isForced: Bool?
+        /// Video stream pixel width / height (`Width` / `Height`). Used to label
+        /// the resolution ("4K", "1080p") when present on the video stream.
+        public let width: Int?
+        public let height: Int?
+        /// `VideoRange` is "SDR" / "HDR"; `VideoRangeType` is finer-grained
+        /// ("HDR10", "HLG", "DOVI", "DOVIWithHDR10"). Together they drive the
+        /// HDR / Dolby-Vision badges.
+        public let videoRange: String?
+        public let videoRangeType: String?
+        /// Per-stream bitrate in **bits per second** (`BitRate`).
+        public let bitRate: Int?
 
         public var bestTitle: String {
             [displayTitle, language]
                 .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .first { !$0.isEmpty } ?? "Track \(index)"
+        }
+
+        /// True when this video stream carries HDR (HDR10 / HLG / Dolby Vision).
+        public var isHDR: Bool {
+            if videoRange?.localizedCaseInsensitiveContains("hdr") == true { return true }
+            if let t = videoRangeType?.lowercased() {
+                return t.contains("hdr") || t.contains("hlg") || t.contains("dovi")
+            }
+            return false
+        }
+
+        /// True when this video stream is tagged Dolby Vision.
+        public var isDolbyVision: Bool {
+            videoRangeType?.localizedCaseInsensitiveContains("dovi") == true
+        }
+
+        /// Resolution label ("4K", "1080p", "720p") derived from `width`/`height`.
+        public var resolutionLabel: String? {
+            guard let height else { return nil }
+            switch height {
+            case 1601...:   return "4K"
+            case 1081...1600: return "1440p"
+            case 721...1080:  return "1080p"
+            case 577...720:   return "720p"
+            case 1...576:     return "480p"
+            default:          return nil
+            }
         }
 
         enum CodingKeys: String, CodingKey {
@@ -337,6 +417,11 @@ public enum JellyfinAPI {
             case channels = "Channels"
             case isDefault = "IsDefault"
             case isForced = "IsForced"
+            case width = "Width"
+            case height = "Height"
+            case videoRange = "VideoRange"
+            case videoRangeType = "VideoRangeType"
+            case bitRate = "BitRate"
         }
     }
 }

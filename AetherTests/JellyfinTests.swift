@@ -80,6 +80,37 @@ struct JellyfinDecodingTests {
         #expect(dto.audioTracks.first?.isSelected == true)
         #expect(dto.subtitleTracks.map(\.id) == ["2"])
     }
+
+    @Test("BaseItemDto backfills MediaInfo from MediaStreams + decodes OfficialRating/Size")
+    func sourceMediaInfoBackfill() throws {
+        let json = #"""
+        {"Id":"42","Name":"Movie","Type":"Movie","OfficialRating":"PG-13",
+         "MediaSources":[{"Id":"42","Container":"mkv","Size":12884901888,"Bitrate":18000000,"MediaStreams":[
+           {"Index":0,"Type":"Video","Codec":"hevc","Width":3840,"Height":2160,"VideoRange":"HDR","VideoRangeType":"DOVI","BitRate":16000000},
+           {"Index":1,"Type":"Audio","Codec":"eac3","Channels":6,"IsDefault":true}
+         ]}]}
+        """#
+        let dto = try decoder.decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        let info = try #require(dto.sourceMediaInfo)
+        #expect(info.videoCodec == "hevc")
+        #expect(info.videoResolution == "4K")
+        #expect(info.audioCodec == "eac3")
+        #expect(info.audioChannels == 6)
+        #expect(info.isHDR)
+        #expect(info.isDolbyVision)
+        #expect(info.container == "mkv")
+        #expect(info.fileSizeBytes == 12_884_901_888)
+        #expect(info.bitrateKbps == 16_000)        // video stream BitRate (bits/s) → kbps
+        #expect(dto.contentRating == "PG-13")
+    }
+
+    @Test("BaseItemDto with no MediaSources yields nil MediaInfo, blank rating → nil")
+    func sourceMediaInfoAbsent() throws {
+        let json = #"{"Id":"7","Name":"Bare","Type":"Movie","OfficialRating":"  "}"#
+        let dto = try decoder.decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        #expect(dto.sourceMediaInfo == nil)
+        #expect(dto.contentRating == nil)
+    }
 }
 
 @Suite("Jellyfin — Quick Connect flow")

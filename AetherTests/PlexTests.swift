@@ -675,6 +675,27 @@ struct PlexLibraryDecodingTests {
         let response = try JSONDecoder().decode(PlexAPI.LibraryItemsResponse.self, from: Data(json.utf8))
         #expect(response.mediaContainer.metadata == nil)
     }
+
+    @Test("Metadata decodes contentRating + Part.size → sourceMediaInfo.fileSizeBytes")
+    func decodesContentRatingAndFileSize() throws {
+        let json = #"""
+        {
+          "ratingKey":"123","type":"movie","title":"Parasite",
+          "contentRating":"R",
+          "Media":[{
+            "videoCodec":"hevc","audioCodec":"eac3","videoResolution":"4k",
+            "bitrate":18000,"container":"mkv","audioChannels":6,
+            "Part":[{"id":17905,"key":"/library/parts/17905/file.mkv","size":12884901888}]
+          }]
+        }
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        #expect(dto.contentRating == "R")
+        let info = try #require(dto.sourceMediaInfo)
+        #expect(info.fileSizeBytes == 12_884_901_888)
+        #expect(info.videoResolution == "4K")
+        #expect(info.videoCodec == "hevc")
+    }
 }
 
 @Suite("Plex — PlexMediaSource library + items + mapping")
