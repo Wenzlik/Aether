@@ -45,6 +45,11 @@ struct LibraryBrowseView: View {
     /// empty" (→ empty state), so a refresh never flashes the empty state.
     @State private var hasLoaded = false
     @State private var loadError: String?
+    /// One automatic retry on an empty result (transient first-load), so the
+    /// library self-heals instead of sticking on an empty state.
+    @State private var autoRetried = false
+    /// Reload (non-destructively) when the app returns to the foreground.
+    @Environment(\.scenePhase) private var scenePhase
 
     /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
     @State private var searchQuery = ""
@@ -95,6 +100,9 @@ struct LibraryBrowseView: View {
             }
         }
         .task(id: sourcesKey) { await load() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load() } }
+        }
     }
 
     /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
@@ -149,33 +157,41 @@ struct LibraryBrowseView: View {
             // Empty sources: "still connecting" during startup → loading; only
             // once startup has settled is it genuinely "no source connected".
             if isConnecting {
-                AetherLoadingState(.rails(count: 2))
-                    .padding(.top, AetherDesign.Spacing.l)
+                AetherCenteredScrollState {
+                    AetherVideoLoader(caption: "Loading your library…")
+                }
             } else {
-                AetherEmptyState(
-                    glyph: "rectangle.stack",
-                    title: "No library yet",
-                    message: "Connect a source and your Aether library appears here.",
-                    action: .init(label: "Add a source", run: onAddSource)
-                )
+                AetherCenteredScrollState {
+                    AetherEmptyState(
+                        glyph: "rectangle.stack",
+                        title: "No library yet",
+                        message: "Connect a source and your Aether library appears here.",
+                        action: .init(label: "Add a source", run: onAddSource)
+                    )
+                }
             }
         } else if let loadError {
-            AetherErrorState(
-                title: "Couldn't load your library",
-                message: loadError,
-                retry: .init { Task { await load() } }
-            )
+            AetherCenteredScrollState {
+                AetherErrorState(
+                    title: "Couldn't load your library",
+                    message: loadError,
+                    retry: .init { Task { await load() } }
+                )
+            }
         } else if isLoading || !hasLoaded {
-            // Loading, or first load not finished yet → loading (never empty).
-            AetherLoadingState(.rails(count: 2))
-                .padding(.top, AetherDesign.Spacing.l)
+            // Loading, or first load not finished yet → branded loader (never empty).
+            AetherCenteredScrollState {
+                AetherVideoLoader(caption: "Loading your library…")
+            }
         } else {
-            // Loaded, connected, and genuinely empty.
-            AetherEmptyState(
-                glyph: "tray",
-                title: "Library is empty",
-                message: "Add some movies or shows to a connected source and they'll surface here."
-            )
+            // Loaded, connected, and genuinely empty — centered + pull-to-refreshable.
+            AetherCenteredScrollState {
+                AetherEmptyState(
+                    glyph: "tray",
+                    title: "Library is empty",
+                    message: "Add some movies or shows to a connected source and they'll surface here."
+                )
+            }
         }
     }
 
@@ -346,6 +362,20 @@ struct LibraryBrowseView: View {
         AetherImageCache.shared.prefetch(
             built.movies.map(\.posterURL) + built.shows.map(\.posterURL)
         )
+        if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+    }
+
+    /// One automatic retry when a connected source returns empty (often a
+    /// transient first-load), so the library self-heals instead of sticking.
+    /// Bounded by `autoRetried`; pull-to-refresh + foreground reload cover more.
+    private func scheduleAutoRetryIfNeeded() {
+        guard !autoRetried, !connectedSources.isEmpty else { return }
+        autoRetried = true
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, rails.isEmpty else { return }
+            await load(forceRefresh: true)
+        }
     }
 }
 
