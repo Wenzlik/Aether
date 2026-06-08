@@ -132,6 +132,19 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Jellyfin has a per-user favorite (`UserData.IsFavorite`).
+    public nonisolated var supportsFavorites: Bool { true }
+
+    /// Toggle favorite on the server: `POST` (favorite) / `DELETE` (unfavorite)
+    /// `/Users/{userId}/FavoriteItems/{itemId}`, flipping `UserData.IsFavorite`
+    /// so it syncs across clients. Best-effort — failures are swallowed.
+    public func setFavorite(_ id: MediaID, to favorite: Bool) async {
+        guard id.source == self.id else { return }
+        var request = makeRequest(path: "/Users/\(userID)/FavoriteItems/\(id.rawValue)")
+        request.httpMethod = favorite ? "POST" : "DELETE"
+        _ = try? await api.data(for: request)
+    }
+
     /// Skip segments via Jellyfin's MediaSegments API (10.10+). Returns `[]` on
     /// older servers / no data — skip controls then stay hidden.
     public func segments(for id: MediaID) async -> [PlaybackSegment] {
@@ -360,6 +373,7 @@ public actor JellyfinMediaSource: MediaSource {
             episodeNumber: kind == .episode ? dto.indexNumber : nil,
             guids: dto.guids,
             isWatched: dto.isWatched,
+            isFavorite: dto.isFavorite,
             parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) },
             genres: dto.genreList,
             cast: cast,

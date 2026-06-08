@@ -107,6 +107,16 @@ public protocol MediaSource: Sendable {
     /// returns `[]` when the source has no recommendation data, so the rail just
     /// stays hidden. Default: none.
     func related(to id: MediaID) async -> [MediaItem]
+
+    /// Whether the source has a server-synced **favorite** concept. Jellyfin
+    /// does (`UserData.IsFavorite`); Plex doesn't (no per-item favorite in the
+    /// PMS API), so its favorite star is hidden. Default: `false`.
+    var supportsFavorites: Bool { get }
+
+    /// Set the item's **favorite** state on the server, so it syncs across
+    /// clients. Best-effort + non-throwing. Default: no-op for sources without
+    /// a favorite concept.
+    func setFavorite(_ id: MediaID, to favorite: Bool) async
 }
 
 public extension MediaSource {
@@ -144,6 +154,12 @@ public extension MediaSource {
 
     /// Default: no recommendation data. Plex / Jellyfin override.
     func related(to id: MediaID) async -> [MediaItem] { [] }
+
+    /// Default: no favorite concept. Jellyfin overrides.
+    var supportsFavorites: Bool { false }
+
+    /// Default: no server-side favorite to update. Jellyfin overrides.
+    func setFavorite(_ id: MediaID, to favorite: Bool) async {}
 
     /// Generic next-episode resolver: hydrate the item, fetch its season's
     /// episodes, return the one after it. Works for any source that fills in

@@ -76,6 +76,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// "watched" checkmark on posters / episode rows; reflects watched-anywhere,
     /// not just in-Aether playback.
     public let isWatched: Bool
+    /// Whether the item is favorited on the *source* (Jellyfin
+    /// `UserData.IsFavorite`). Server-synced where supported; always `false` on
+    /// sources without a favorite concept (Plex has none). Drives the Detail
+    /// favorite star.
+    public let isFavorite: Bool
     /// For episodes: the parent **season**'s id (Plex `parentRatingKey`,
     /// Jellyfin `ParentId`). Lets Auto-Play-Next fetch the season's episodes and
     /// pick the next one. `nil` for movies / when the source didn't provide it.
@@ -143,6 +148,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         selectedQuality: PlaybackQuality = .original,
         guids: MediaGuids = MediaGuids(),
         isWatched: Bool = false,
+        isFavorite: Bool = false,
         parentID: MediaID? = nil,
         genres: [String] = [],
         cast: [CastMember] = [],
@@ -179,6 +185,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.selectedQuality = selectedQuality
         self.guids = guids
         self.isWatched = isWatched
+        self.isFavorite = isFavorite
         self.parentID = parentID
         self.genres = genres
         self.cast = cast
