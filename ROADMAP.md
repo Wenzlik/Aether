@@ -163,10 +163,16 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
 - ✅ **Phase 2b — Authored Dark Theater + in-cinema controls (0.5.8)** — the
   Reality Composer Pro `AetherDarkTheater.usda` (real `DockingRegion`) replaces
   the procedural room (procedural stays as fallback); a single immersive space;
-  an in-cinema control panel for **screen size** (Medium/Large/IMAX/Wall) and
-  **seat** (Front/Middle/Back, stadium rake). Because visionOS reads the dock
-  only at attach, a live size/seat change triggers a brief re-dock to re-fit.
+  in-cinema controls for **screen size** (Medium/Large/IMAX/Wall) and **seat**
+  (Front/Middle/Back, stadium rake). Because visionOS reads the dock only at
+  attach, a live size/seat change triggers a brief re-dock to re-fit.
   *On-device verification (re-dock feel, scale tuning) pending TestFlight.*
+- ✅ **Phase 2c — Controls in the native player (0.6.0)** — Screen-size + Seat
+  moved off the floating RealityKit panel into the native AVKit transport bar as
+  cycling contextual actions next to Back. A RealityKit attachment can't
+  composite over the system-docked video (it hid behind the larger screens); the
+  transport bar renders in front and shows/hides with the system controls, so
+  nothing clutters the view while watching.
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
 - ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
 
