@@ -7,8 +7,22 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 ## [0.6.2] — Unreleased
 
 Detail-screen redesign toward Infuse-level information density while keeping
-Aether's cinematic identity. Built in phases; this is **Phase 1** (action
-hierarchy + information architecture — no new data).
+Aether's cinematic identity. Built in phases; this build ships **Phase 1**
+(action hierarchy + information architecture) and **Phase 3** (technical details
++ new data plumbing).
+
+### Added
+
+- **Content rating** — the source's age classification (PG-13, TV-MA, 15, …)
+  now appears as a thin-bordered badge in the Detail metadata line, on both Plex
+  (`contentRating`) and Jellyfin (`OfficialRating`).
+- **Technical Details** section (renamed from "Media Information") now also lists
+  **Subtitles** (languages) and **File Size** alongside Video / Audio / HDR /
+  Bitrate / Playback / Source.
+- **Jellyfin codec/quality info** — Jellyfin items now surface the same
+  resolution / HDR / Dolby Vision / codec badges and technical details Plex
+  already had. Jellyfin's `MediaStreams` (and file `Size`) are mapped into the
+  shared `MediaInfo` (previously Plex-only).
 
 ### Changed
 
@@ -28,9 +42,11 @@ hierarchy + information architecture — no new data).
 
 ### Notes
 
-- Phase 2 (Cast & Crew rail), Phase 3 (a Technical Details section + Jellyfin
-  MediaInfo backfill + file size + content rating), and Phase 4 (server-synced
-  Favorite + Trailer) follow — they need new model/connector plumbing.
+- Phase 2 (Cast & Crew rail) and Phase 4 (server-synced Favorite + Trailer)
+  follow — they need new model/connector plumbing.
+- File size and per-track subtitle metadata are only carried on the transcode
+  path / when the source reports them, so those rows appear when available
+  rather than always.
 
 ## [0.6.1] — Unreleased
 

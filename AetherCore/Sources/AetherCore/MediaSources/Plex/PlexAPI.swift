@@ -284,6 +284,9 @@ public enum PlexAPI {
         /// Audience / critic rating (0–10).
         public let audienceRating: Double?
         public let rating: Double?
+        /// Age / content classification, e.g. `"PG-13"`, `"TV-MA"`, `"15"`.
+        /// Plex JSON key `contentRating`.
+        public let contentRating: String?
         /// Genre tags (`{"tag": "Sci-Fi"}`). JSON key capital `Genre`.
         public let genreTags: [Tag]?
 
@@ -390,6 +393,7 @@ public enum PlexAPI {
             originallyAvailableAt: String? = nil,
             audienceRating: Double? = nil,
             rating: Double? = nil,
+            contentRating: String? = nil,
             genreTags: [Tag]? = nil
         ) {
             self.ratingKey = ratingKey
@@ -415,6 +419,7 @@ public enum PlexAPI {
             self.originallyAvailableAt = originallyAvailableAt
             self.audienceRating = audienceRating
             self.rating = rating
+            self.contentRating = contentRating
             self.genreTags = genreTags
         }
 
@@ -518,7 +523,8 @@ public enum PlexAPI {
                     || video?.colorTrc?.localizedCaseInsensitiveContains("hlg") == true
                     || video?.dovi == true,
                 isDolbyVision: video?.dovi == true,
-                container: media.container
+                container: media.container,
+                fileSizeBytes: part?.size
             )
         }
 
@@ -538,6 +544,7 @@ public enum PlexAPI {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case grandparentTitle, parentIndex, parentRatingKey, index, viewCount
             case childCount, leafCount, viewedLeafCount, addedAt, originallyAvailableAt, audienceRating, rating
+            case contentRating
             case media = "Media"
             case externalGuids = "Guid"
             case markers = "Marker"
@@ -588,16 +595,19 @@ public enum PlexAPI {
             /// Relative path to the original file, e.g.
             /// `/library/parts/12345/1700000000/file.mkv`.
             public let key: String?
+            /// Source file size in **bytes** (Plex `size`). `nil` when absent.
+            public let size: Int64?
             public let stream: [Stream]?
 
-            public init(id: String? = nil, key: String?, stream: [Stream]? = nil) {
+            public init(id: String? = nil, key: String?, size: Int64? = nil, stream: [Stream]? = nil) {
                 self.id = id
                 self.key = key
+                self.size = size
                 self.stream = stream
             }
 
             enum CodingKeys: String, CodingKey {
-                case id, key
+                case id, key, size
                 case stream = "Stream"
             }
 
@@ -611,6 +621,7 @@ public enum PlexAPI {
                     id = nil
                 }
                 key = try container.decodeIfPresent(String.self, forKey: .key)
+                size = try container.decodeIfPresent(Int64.self, forKey: .size)
                 stream = try container.decodeIfPresent([Stream].self, forKey: .stream)
             }
 

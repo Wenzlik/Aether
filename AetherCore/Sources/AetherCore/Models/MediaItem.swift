@@ -1,5 +1,15 @@
 import Foundation
 
+extension String {
+    /// Trimmed of surrounding whitespace, or `nil` if the result is empty.
+    /// Used by the source connectors to coalesce blank server strings
+    /// (content rating, codec labels) into a clean optional.
+    var nonEmptyTrimmed: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// A unified, source-agnostic media item.
 ///
 /// Both Plex and Synology connectors map their native types into `MediaItem`
@@ -75,6 +85,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Community / audience rating (≈0–10) when the source provides one — for
     /// "Top Rated". `nil` when unknown.
     public let communityRating: Double?
+    /// Age / content classification as the source labels it — Plex
+    /// `contentRating` / Jellyfin `OfficialRating` (e.g. "PG-13", "TV-MA",
+    /// "15"). Rendered as a boxed badge in the Detail metadata line. `nil`
+    /// when the source didn't provide one.
+    public let contentRating: String?
     /// Original release / premiere date — for "Recently Released".
     public let releaseDate: Date?
     /// When the item was added to the library — for an accurate "Recently Added".
@@ -128,6 +143,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         parentID: MediaID? = nil,
         genres: [String] = [],
         communityRating: Double? = nil,
+        contentRating: String? = nil,
         releaseDate: Date? = nil,
         dateAdded: Date? = nil,
         seasonCount: Int? = nil,
@@ -162,6 +178,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.parentID = parentID
         self.genres = genres
         self.communityRating = communityRating
+        self.contentRating = contentRating
         self.releaseDate = releaseDate
         self.dateAdded = dateAdded
         self.seasonCount = seasonCount
