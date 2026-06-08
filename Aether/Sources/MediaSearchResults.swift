@@ -39,15 +39,20 @@ struct MediaSearchResults: View {
                 title: "Nothing to search yet",
                 message: "Connect a source and your movies and shows become searchable here."
             )
+            // Fill the screen so the results area never collapses to its intrinsic
+            // height while typing (which shrank the view and broke tap/scroll
+            // keyboard dismissal). Matches the discovery state's full-screen frame.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if isLoading && items.isEmpty {
-            AetherLoadingState(.inline)
-                .padding(.top, AetherDesign.Spacing.l)
+            AetherLoadingDots(caption: "Searching…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if results.isEmpty {
             AetherEmptyState(
                 glyph: "questionmark.circle",
                 title: "No matches",
                 message: "Nothing in your library matches “\(query)”."
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {

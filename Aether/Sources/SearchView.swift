@@ -36,6 +36,8 @@ struct SearchView: View {
     @State private var discovery: UnifiedRails = .empty
     @State private var isLoadingDiscovery = false
     @State private var hasLoadedDiscovery = false
+    /// Recent submitted queries, shown as tappable chips before typing.
+    @State private var recentSearches = RecentSearchesStore()
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -74,6 +76,7 @@ struct SearchView: View {
         HStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.small)
             AetherSearchField(text: $query, prompt: "Search your library", focus: $searchFocused)
+                .onSubmit { recentSearches.record(query) }
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
@@ -103,28 +106,67 @@ struct SearchView: View {
         } else if discoveryIsEmpty && (isLoadingDiscovery || !hasLoadedDiscovery) {
             AetherLoadingState(.rails(count: 2))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if discoveryIsEmpty {
-            AetherEmptyState(
-                glyph: "magnifyingglass",
-                title: "Search your library",
-                message: "Find a movie or show across every connected source — start typing above."
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                    Text("Find anything across every connected source — or pick up where you left off below.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .padding(.horizontal, AetherDesign.Spacing.l)
+                    if !recentSearches.recent.isEmpty {
+                        recentSearchesSection
+                    }
                     if !discovery.recentlyAdded.isEmpty {
                         rail(title: "Recently Added", items: discovery.recentlyAdded)
                     }
                     if !discovery.recentlyReleased.isEmpty {
                         rail(title: "Recently Released", items: discovery.recentlyReleased)
                     }
+                    if recentSearches.recent.isEmpty && discoveryIsEmpty {
+                        AetherEmptyState(
+                            glyph: "magnifyingglass",
+                            title: "Search your library",
+                            message: "Find a movie or show across every connected source — start typing above."
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, AetherDesign.Spacing.xl)
+                    }
                 }
                 .padding(.vertical, AetherDesign.Spacing.l)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Recent submitted queries as tappable chips, with a Clear affordance.
+    /// Tapping a chip re-runs that search.
+    private var recentSearchesSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            HStack {
+                AetherSectionHeader(title: "Recent Searches")
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Button("Clear") { recentSearches.clear() }
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .buttonStyle(.plain)
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AetherDesign.Spacing.s) {
+                    ForEach(recentSearches.recent, id: \.self) { recentQuery in
+                        Button {
+                            query = recentQuery
+                            searchFocused = false
+                        } label: {
+                            Text(recentQuery)
+                                .font(AetherDesign.Typography.metadata)
+                                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                .padding(.horizontal, AetherDesign.Spacing.m)
+                                .padding(.vertical, AetherDesign.Spacing.s)
+                                .background(AetherDesign.Materials.card, in: Capsule())
+                                .overlay { Capsule().strokeBorder(AetherDesign.Palette.separator, lineWidth: 1) }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
             }
         }
     }
