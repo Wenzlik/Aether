@@ -70,3 +70,30 @@ struct AetherCenteredScrollState<Content: View>: View {
         }
     }
 }
+
+/// Layout constants for the full-screen info sheets (About / Diagnostics /
+/// What's New). Wider on tvOS so they use the available space instead of a
+/// phone-width column centred on a 16:9 screen.
+enum AetherSheetLayout {
+    static var maxContentWidth: CGFloat {
+        #if os(tvOS)
+        return 1320
+        #else
+        return 680
+        #endif
+    }
+}
+
+extension View {
+    /// tvOS: make otherwise-unfocusable scroll content focusable so the Siri
+    /// Remote can scroll it (a ScrollView of plain text has no focus target and
+    /// can't be scrolled). No-op on every other platform.
+    @ViewBuilder
+    func tvOSScrollFocusable() -> some View {
+        #if os(tvOS)
+        self.focusable()
+        #else
+        self
+        #endif
+    }
+}

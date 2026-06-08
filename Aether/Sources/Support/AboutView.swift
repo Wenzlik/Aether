@@ -35,8 +35,9 @@ struct AboutView: View {
                 footer
             }
             .padding(AetherDesign.Spacing.l)
-            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: AetherSheetLayout.maxContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .tvOSScrollFocusable()
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
