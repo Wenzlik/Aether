@@ -417,9 +417,13 @@ public struct ResolvedPlayback: Sendable, Equatable {
     /// **not** seek in that case — the offset is baked into the stream. Direct
     /// play is `false`: the player seeks client-side.
     public let isServerTranscode: Bool
-    /// Content seconds at the stream's `t = 0` — the baked-in transcode offset,
-    /// or `0` for direct play. The session adds this back when recording
-    /// resume points so saved positions stay absolute.
+    /// The transcode start offset baked into the URL (or `0`). **Informational
+    /// only** — `PlaybackSession` does NOT add this to `currentTime()`. In
+    /// practice `AVPlayer.currentTime()` is the absolute content time on every
+    /// path here (direct play, client-seek, and server-baked offset alike), so
+    /// adding it back double-counted and made resume points run away. Do not
+    /// re-introduce an add-back without verifying the transcoder's timeline on
+    /// device (see the note in `PlaybackSession.prepare`).
     public let baseOffsetSeconds: Double
     /// When non-nil, the player should seek to this absolute content second
     /// after the item is ready. Used for direct play and for **small transcode

@@ -56,6 +56,11 @@ struct DetailView: View {
     /// visionOS: the current player presentation was launched via "Watch in
     /// Cinema" → auto-expand so it docks into the Dark Theater without a tap.
     @State private var launchingInCinema = false
+    #if os(visionOS)
+    /// visionOS: drives the "Continue or Start Over" prompt before entering
+    /// Cinema Mode when a resume point exists.
+    @State private var showCinemaResumePrompt = false
+    #endif
     @State private var children: [MediaItem] = []
     @State private var isLoadingChildren = false
     /// Similar titles for the "More Like This" rail (source recommendations).
@@ -1424,17 +1429,35 @@ struct DetailView: View {
     #if os(visionOS)
     /// visionOS-only: enter Cinema Mode — the same title on a cinematic screen
     /// in a dedicated immersive space, driven by the same `PlaybackSession`.
-    /// Resumes from the saved point when one exists, else starts from the top,
-    /// matching the Play / Resume button above it.
+    /// Enters Cinema Mode. When a resume point exists, first asks whether to
+    /// continue or start over (the immersive entry has no Resume/Restart pair of
+    /// its own); otherwise starts from the top.
     private var watchInCinemaButton: some View {
         AetherButton(
             "Watch in Cinema",
             systemImage: "visionpro",
             role: .secondary
         ) {
-            Task { await watchInCinema() }
+            if resume != nil {
+                showCinemaResumePrompt = true
+            } else {
+                Task { await watchInCinema(fromStart: false) }
+            }
         }
         .disabled(isPreparingPlayback)
+        .confirmationDialog(
+            "Watch in Cinema",
+            isPresented: $showCinemaResumePrompt,
+            titleVisibility: .visible
+        ) {
+            Button(resume.map { "Continue from \(formatPosition($0.position))" } ?? "Continue") {
+                Task { await watchInCinema(fromStart: false) }
+            }
+            Button("Start Over") {
+                Task { await watchInCinema(fromStart: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
     #endif
 

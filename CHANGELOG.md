@@ -54,6 +54,15 @@ screen toward a complete product hub. Refinement, not a redesign.
   through a refresh, the app auto-refreshes when it returns to the foreground, and
   a connected source that returns empty (a transient first-load) auto-retries once
   so it self-heals.
+- **Resume position no longer runs away** — pausing repeatedly could record a
+  position that compounded past the runtime (e.g. 1h → 2.5h → 5h on a 2h film),
+  which then broke "Resume". `PlaybackSession` recorded `currentTime()` plus a
+  transcode "base offset", but the player timeline is already absolute on every
+  path, so the offset was double-counted; it's been removed. Saved positions are
+  now clamped to the runtime, and a corrupt/out-of-range saved point (left over
+  from the old bug) resets to the start instead of failing to play.
+- **Cinema Mode resume prompt** (visionOS) — "Watch in Cinema" now offers
+  **Continue** or **Start Over** when a resume point exists.
 
 ## [0.6.0] — Unreleased · "Cassiopeia"
 
