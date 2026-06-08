@@ -26,40 +26,27 @@ import AVKit
 ///
 /// Used on iOS, tvOS, and visionOS (all have UIKit + AVKit).
 ///
-/// **Cinema controls live in the transport bar (visionOS).** Screen size + seat
-/// are surfaced as native `contextualActions` next to `Back` — *not* as a
-/// floating RealityKit panel. Two reasons, both reported on device: (1) a
-/// RealityKit attachment can't composite over the system-docked video, so at the
-/// largest screen sizes a floating panel hides *behind* the picture; native
-/// chrome renders in the system layer, always in front. (2) Contextual actions
-/// appear and disappear *with* the native transport bar, so there's no always-
-/// visible handle cluttering the view while watching. See `CinemaControlBinding`.
-/// Bridges the Cinema size/seat controls into the native AVKit transport bar as
-/// contextual actions. Each is a single cycling button — tap "Screen" to step up
-/// a size (wrapping `Wall → Medium`), tap "Seat" to step a row — with the current
-/// value shown in the title (e.g. `Screen · Large`). The closures read/mutate
-/// `CinemaManager`; built by `DetailView` on visionOS, `nil` for every windowed
-/// (non-cinema) playback, which surfaces only `Back`. Closures are `@MainActor`
-/// because they touch the main-actor `CinemaManager` and run from the (main-
-/// actor) `UIAction` handler.
-struct CinemaControlBinding {
-    /// Current screen-size label, read fresh whenever the actions are rebuilt so
-    /// the button title reflects the live size after a cycle.
-    var sizeTitle: @MainActor () -> String
-    /// Advance the screen size to the next preset (`wall → medium` wraps).
-    var cycleSize: @MainActor () -> Void
-    /// Current seat label.
-    var seatTitle: @MainActor () -> String
-    /// Advance the seat to the next row (`back → front` wraps).
-    var cycleSeat: @MainActor () -> Void
-}
-
+/// **Cinema controls live in the player's Info panel (visionOS).** Screen size +
+/// seat are surfaced via `customInfoViewControllers` — the documented, Destination
+/// Video–proven surface that renders as a tab in the native player's info panel,
+/// reached by tapping the video, and that *rides along while the video is docked*
+/// in the immersive cinema (the `.expanded` experience). This replaces an earlier
+/// `contextualActions` attempt: per Apple's docs `contextualActions` is shown
+/// **only while the transport bar is hidden** (so it vanished the moment the user
+/// tapped to reveal the native controls) and is meant for transient single prompts
+/// like "Skip Intro" — the wrong surface for a persistent two-axis menu.
+/// `transportBarCustomMenuItems` (inline buttons by the scrubber) is tvOS-only and
+/// unavailable on visionOS, so the Info panel is the supported placement. See
+/// `CinemaInfoControls`. The hosting view controllers are built by `DetailView`
+/// and passed in via `makeCinemaInfoControllers`; `nil` for windowed playback.
 struct SystemVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     let onDismiss: () -> Void
-    /// visionOS Cinema only: surfaces Screen-size + Seat cyclers in the native
-    /// transport bar. `nil` for windowed playback (Back-only chrome).
-    let cinemaControls: CinemaControlBinding?
+    /// visionOS Cinema only: builds the `customInfoViewControllers` (Screen-size +
+    /// Seat panel) for the player's info panel. A maker closure (not the built
+    /// controllers) so they're constructed exactly once, in `makeUIViewController`.
+    /// `nil` for windowed playback (no cinema tab).
+    let makeCinemaInfoControllers: (() -> [UIViewController])?
     /// visionOS only: when `true`, request the **expanded** experience once the
     /// controller is in the hierarchy, so the player auto-docks into the open
     /// immersive space without the user tapping the expand control. Used by
@@ -76,13 +63,13 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         player: AVPlayer,
         preferExpanded: Bool = false,
         redockToken: UUID? = nil,
-        cinemaControls: CinemaControlBinding? = nil,
+        makeCinemaInfoControllers: (() -> [UIViewController])? = nil,
         onDismiss: @escaping () -> Void = {}
     ) {
         self.player = player
         self.preferExpanded = preferExpanded
         self.redockToken = redockToken
-        self.cinemaControls = cinemaControls
+        self.makeCinemaInfoControllers = makeCinemaInfoControllers
         self.onDismiss = onDismiss
     }
 
@@ -109,12 +96,20 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         // we just stop the system from auto-starting it.
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         controller.videoGravity = .resizeAspect
-        // Transport-bar actions: Back, plus (in Cinema) the live Screen-size +
-        // Seat cyclers. Built on the Coordinator so a cycle can re-set them with
-        // the updated title. See `Coordinator.applyContextualActions`.
-        context.coordinator.controller = controller
-        context.coordinator.cinemaControls = cinemaControls
-        context.coordinator.applyContextualActions()
+        controller.contextualActions = [
+            UIAction(
+                title: "Back",
+                image: UIImage(systemName: "chevron.backward")
+            ) { [weak coordinator = context.coordinator] _ in
+                coordinator?.dismiss()
+            }
+        ]
+        // Cinema Screen-size + Seat controls as a tab in the player's Info panel
+        // (`customInfoViewControllers`) — shown when the user taps the video and
+        // opens the info panel, and persists while docked. Built once here.
+        if let makeCinemaInfoControllers {
+            controller.customInfoViewControllers = makeCinemaInfoControllers()
+        }
         // Cinema auto-expand (when `preferExpanded`) is requested in
         // `updateUIViewController` via `experienceController.transition(to:)`,
         // once the controller is in the hierarchy. We never touch
@@ -162,10 +157,6 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
             controller.player = player
         }
         #if os(visionOS)
-        // Keep the cinema control closures current (the representable is recreated
-        // on SwiftUI updates). Titles only change via a cycle handler, which
-        // re-applies the actions itself, so we don't rebuild them here.
-        context.coordinator.cinemaControls = cinemaControls
         // Auto-expand once, after the controller is in the hierarchy: transition
         // to the expanded experience so it docks into the open immersive space
         // without a manual tap on the system expand control. (Documented AVKit
@@ -210,47 +201,6 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         var didRequestExpand = false
         /// Last re-dock token acted on, so each size/seat change re-docks once.
         var lastRedockToken: UUID?
-        #if os(visionOS)
-        /// The docked-player controller, so a cycler can re-set the contextual
-        /// actions with a refreshed title after changing size/seat.
-        weak var controller: AVPlayerViewController?
-        /// Cinema size/seat bridge; `nil` for windowed playback (Back-only).
-        var cinemaControls: CinemaControlBinding?
-
-        /// Build the transport-bar contextual actions — `Back`, plus the live
-        /// Screen-size + Seat cyclers when in Cinema — and set them on the
-        /// controller. Each cycler re-invokes this so its button title reflects
-        /// the new value. Idempotent; safe to call repeatedly.
-        @MainActor
-        func applyContextualActions() {
-            guard let controller else { return }
-            var actions = [
-                UIAction(
-                    title: "Back",
-                    image: UIImage(systemName: "chevron.backward")
-                ) { [weak self] _ in
-                    self?.dismiss()
-                }
-            ]
-            if let controls = cinemaControls {
-                actions.append(UIAction(
-                    title: "Screen · \(controls.sizeTitle())",
-                    image: UIImage(systemName: "arrow.up.left.and.arrow.down.right")
-                ) { [weak self] _ in
-                    controls.cycleSize()
-                    self?.applyContextualActions()
-                })
-                actions.append(UIAction(
-                    title: "Seat · \(controls.seatTitle())",
-                    image: UIImage(systemName: "chair.lounge")
-                ) { [weak self] _ in
-                    controls.cycleSeat()
-                    self?.applyContextualActions()
-                })
-            }
-            controller.contextualActions = actions
-        }
-        #endif
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss

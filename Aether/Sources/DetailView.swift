@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit   // UIViewController / UIHostingController for the visionOS cinema Info-panel tab
+#endif
 import AetherCore
 
 struct DetailView: View {
@@ -94,23 +97,26 @@ struct DetailView: View {
     @Environment(CinemaManager.self) private var cinema
     /// Re-dock signal for the docked player (size/seat changed live in-cinema).
     private var cinemaRedockToken: UUID? { cinema.redockToken }
-    /// Screen-size + Seat controls surfaced inside the native AVKit transport bar
-    /// (replaces the old floating RealityKit panel). Only for a Cinema launch;
-    /// windowed playback gets Back-only chrome. Closures capture `cinema` (the
-    /// reference), not `self`.
-    private var cinemaControls: CinemaControlBinding? {
+    /// Builds the Screen-size + Seat controls as a tab in the native player's Info
+    /// panel (`customInfoViewControllers`). Only for a Cinema launch; windowed
+    /// playback gets no cinema tab. A maker closure (run once, in
+    /// `makeUIViewController`) returning a `UIHostingController` whose SwiftUI
+    /// content observes `cinema` for live selection + writes back on tap. Captures
+    /// `cinema` (the reference), not `self`.
+    private var makeCinemaInfoControllers: (() -> [UIViewController])? {
         guard launchingInCinema else { return nil }
         let cinema = self.cinema
-        return CinemaControlBinding(
-            sizeTitle: { cinema.screenPreset.displayName },
-            cycleSize: { cinema.setScreenPreset(cinema.screenPreset.next) },
-            seatTitle: { cinema.seat.displayName },
-            cycleSeat: { cinema.setSeat(cinema.seat.next) }
-        )
+        return {
+            let host = UIHostingController(rootView: CinemaInfoControls(cinema: cinema))
+            host.title = "Theater"
+            host.preferredContentSize = CGSize(width: 480, height: 260)
+            host.view.backgroundColor = .clear   // let the Info panel material show through
+            return [host]
+        }
     }
     #else
     private var cinemaRedockToken: UUID? { nil }
-    private var cinemaControls: CinemaControlBinding? { nil }
+    private var makeCinemaInfoControllers: (() -> [UIViewController])? { nil }
     #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
@@ -186,7 +192,7 @@ struct DetailView: View {
                     startAt: playbackStartAt,
                     preferExpanded: launchingInCinema,
                     redockToken: cinemaRedockToken,
-                    cinemaControls: cinemaControls,
+                    makeCinemaInfoControllers: makeCinemaInfoControllers,
                     playbackPreferences: playbackPreferences,
                     onDismiss: dismissPlayer
                 )

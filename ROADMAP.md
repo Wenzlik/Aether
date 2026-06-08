@@ -96,6 +96,59 @@ Notes: [`docs/next-steps/0.3-offline.md`](docs/next-steps/0.3-offline.md).
 
 ---
 
+## ✅ 0.4 Premium UX — "Andromeda"
+
+The polish milestone — where Aether earns the "premium" label — plus the
+performance work that made it feel fast. Shipped across the 0.4.x line.
+
+- ✅ **Immersive Movie Detail** — cinematic hero-background layout, typography-led
+  metadata, responsive wide layout (`0.4.4`).
+- ✅ **Player track controls** — subtitle / audio selection through the native
+  transport; chrome auto-hides in sync.
+- ✅ **Skip segments** — source-agnostic `PlaybackSegment` with Plex / Jellyfin
+  providers, Skip Intro / Skip Credits / Auto-Play-Next.
+- ✅ **Watched state** — source-synced checkmark + write-back, manual Mark as
+  Watched / Unwatched on Detail.
+- ✅ **Manual refresh** — pull-to-refresh on iOS + tvOS Reload button, with poster
+  prefetch.
+- ✅ **tvOS focus polish** — intentional focused/unfocused states across cards,
+  rows, and selectors; tab pop-to-root on re-selection (`0.4.2`).
+- ✅ **Artwork pipeline** — `AetherImageCache` (memory + disk, in-flight dedup,
+  ImageIO downsampling, prefetch), bounded disk cache with LRU eviction + Clear
+  Image Cache (`0.4.3`/`0.4.4`).
+- ✅ **Versioning + codenames** — constellation codenames (Andromeda → Boötes →
+  Cassiopeia) and release-process docs (`0.4.1`).
+
+**Shipped in staging** (awaiting a TestFlight build to land in main).
+
+---
+
+## ✅ 0.5 Unified Library — "Boötes"
+
+Make the *source* an implementation detail. Users stop thinking Plex / Jellyfin /
+offline and think **Movies / TV Shows / Downloads**.
+
+- ✅ **Unified aggregation** — a single `UnifiedMediaItem` aggregates every source
+  behind a title (dedup by external IDs — Plex `includeGuids` / Jellyfin
+  `ProviderIds`), with source priority and automatic best-source playback;
+  downloads are just another source. Parallelized for faster first paint, with a
+  short-TTL aggregation cache.
+- ✅ **Home / Library / Discover, redefined** — Home is *watch now* (Continue
+  Watching, Recently Added, Recently Released, Downloaded); Library is your
+  *collection* (Movies / TV Shows / Downloads with counts, sortable & genre
+  filtered "See all" grid); Discover is a hub (Featured, Top Rated, per-genre
+  rails).
+- ✅ **Redesigned Series Detail** — Next Up card, inline season selector, inline
+  episodes, run-span + season/episode counts, status (continuing vs ended).
+- ✅ **Rich metadata plumbing** — `MediaItem` carries genres, community rating,
+  release/added dates, season/episode counts, end-year and continuing status from
+  both connectors.
+
+**Shipped in staging.** Notes:
+[`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-library.md).
+
+---
+
 ## 🚧 Vision Pro Cinema
 
 Immersive, native cinema playback on Apple Vision Pro (visionOS only).
@@ -110,10 +163,17 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
 - ✅ **Phase 2b — Authored Dark Theater + in-cinema controls (0.5.8)** — the
   Reality Composer Pro `AetherDarkTheater.usda` (real `DockingRegion`) replaces
   the procedural room (procedural stays as fallback); a single immersive space;
-  an in-cinema control panel for **screen size** (Medium/Large/IMAX/Wall) and
-  **seat** (Front/Middle/Back, stadium rake). Because visionOS reads the dock
-  only at attach, a live size/seat change triggers a brief re-dock to re-fit.
+  in-cinema controls for **screen size** (Medium/Large/IMAX/Wall) and **seat**
+  (Front/Middle/Back, stadium rake). Because visionOS reads the dock only at
+  attach, a live size/seat change triggers a brief re-dock to re-fit.
   *On-device verification (re-dock feel, scale tuning) pending TestFlight.*
+- ✅ **Phase 2c — Controls in the native player (0.6.0)** — Screen-size + Seat
+  moved off the floating RealityKit panel into the native player's **Info panel**
+  as a "Theater" tab (`customInfoViewControllers`, the Destination Video pattern).
+  A RealityKit attachment can't composite over the system-docked video (it hid
+  behind the larger screens), and `contextualActions` only show while the
+  transport bar is hidden (so they vanished on tap); the Info-panel tab renders in
+  front, is reached by tapping the docked video, and persists while docked.
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
 - ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
 
@@ -154,28 +214,10 @@ Notes: [`docs/next-steps/ux-refresh-060.md`](docs/next-steps/ux-refresh-060.md).
 
 ---
 
-## ⬜ Unified Library (next major milestone — proposed 0.5.0)
+## ⬜ Search & Filtering (proposed 0.7)
 
-Make the *source* an implementation detail. Users stop thinking Plex /
-Jellyfin / offline and think **Movies / TV Shows / Downloads**. A single
-`UnifiedMediaItem` aggregates every source behind a title (dedup by external
-IDs), with source priority and automatic best-source playback; downloads
-become just another source. Includes a navigation refactor, Settings cleanup,
-and an Emby connector, and is designed so future catalog-only connectors slot
-in.
-
-Notes: [`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-library.md).
-
-> Numbering: the user designates this **0.5.0**. The "0.4 Premium UX" /
-> "0.5 Distribution" entries below predate the shipped 0.4.0 and need
-> reconciling — left as-is for now.
-
----
-
-## ⬜ Search & Filtering (proposed 0.6)
-
-Builds on Unified Library: richer, **source-agnostic** filtering that works the
-same whether content comes from Offline / Plex / Jellyfin / Emby. Filter by
+Builds on the Unified Library: richer, **source-agnostic** filtering that works
+the same whether content comes from Offline / Plex / Jellyfin / Emby. Filter by
 **audio language**, **subtitle language** (+ forced / SDH), **video** (4K · 1080p
 · HDR · Dolby Vision · HEVC · H.264), **audio format** (stereo · 5.1 · 7.1 ·
 Atmos · DTS · DTS-HD MA · TrueHD), and **source** — behind a compact Apple-TV /
@@ -196,43 +238,54 @@ Notes: [`docs/next-steps/0.6-search-filtering.md`](docs/next-steps/0.6-search-fi
 
 ---
 
-## ⬜ 0.4 Premium UX
+## ⬜ More Sources
 
-The polish milestone. This is where Aether earns the "premium" label.
+New connectors that slot into the Unified Library — each is just another
+`MediaSource` behind the same titles.
 
-- Immersive detail screens — cinematic backdrops, typography-led metadata, soft depth
-- Cinematic transitions between library, detail, and player
-- Player overlays — chrome that fades, gestures that feel right, scrubbing that feels expensive
-- Subtitle and audio track controls (selection, sizing, positioning)
-- tvOS focus polish — every focusable element has intentional focused/unfocused states; section focus works; remote feels great
-
-**Definition of done:** a stranger can use the app on Apple TV without instructions and the experience feels at home next to the system TV app.
+- ⬜ **Emby connector** — auth + libraries + items + playback, alongside Plex /
+  Jellyfin. ([#171](https://github.com/Wenzlik/Aether/issues/171))
+- ⬜ **SMB / DLNA** — browse and play from network shares / DLNA servers without a
+  media-server backend. ([#172](https://github.com/Wenzlik/Aether/issues/172))
+- ⬜ **Local Library & file uploads** — import / play local files on-device.
+  ([#173](https://github.com/Wenzlik/Aether/issues/173))
+- ⬜ **Synology connector** *(optional, deprioritized)* — DSM session or Video
+  Station auth, shares + collections + items, direct play + transcode fallback.
+  Lower priority now that Jellyfin covers the "second source" goal.
+  ([#15](https://github.com/Wenzlik/Aether/issues/15))
 
 ---
 
-## ⬜ 0.5 Distribution
+## ⬜ Distribution (proposed 0.8 / 1.0 readiness)
 
-Get it into people's hands without embarrassment.
+Get it into people's hands without embarrassment. The Xcode Cloud → TestFlight
+pipeline already feeds `main`; the rest of this milestone is the App-Store-ready
+layer.
 
-- Xcode Cloud-backed internal TestFlight pipeline
-- Localization scaffolding (`Localizable.xcstrings`) and at least English + Czech
-- Accessibility: VoiceOver labels, Dynamic Type on iOS, sufficient contrast, focus reachability on tvOS
-- App Store preparation: privacy manifest, screenshots, store copy, support URL
+- ✅ **Xcode Cloud-backed internal TestFlight pipeline.**
+- ⬜ **Localization scaffolding** (`Localizable.xcstrings`) and at least English +
+  Czech.
+- ⬜ **Accessibility** — VoiceOver labels, Dynamic Type on iOS, sufficient
+  contrast, focus reachability on tvOS.
+- ⬜ **App Store preparation** — privacy manifest, screenshots, store copy,
+  support URL.
 
-**Definition of done:** a TestFlight invite link works on iPhone, iPad, and Apple TV; accessibility audit passes; the App Store listing is reviewable.
+**Definition of done:** a TestFlight invite link works on iPhone, iPad, and Apple
+TV; accessibility audit passes; the App Store listing is reviewable.
 
 Notes: [`docs/next-steps/0.5-distribution.md`](docs/next-steps/0.5-distribution.md).
 
 ---
 
-## Beyond 0.5
+## Beyond
 
 Captured as ideas, not promises. Lives in [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) under "Future ideas."
 
 Examples currently on the table:
 
+- Disk budget with explicit cap + LRU eviction for downloads *(carried from 0.3)*
+- SwiftData-backed persistent ResumeStore + offline write outbox *(carried from 0.3)*
 - iCloud sync of resume state across devices when no media server is reachable
-- Shared watchlists between Plex and Synology libraries
 - Apple Watch now-playing surface
 - Picture-in-picture on iPad with multi-touch gestures
-- Personal "watch with friends" via SharePlay
+- Personal "watch with friends" via SharePlay (Vision Pro Cinema Phase 4)
