@@ -165,6 +165,26 @@ public enum JellyfinAPI {
         /// Age / content classification (`OfficialRating`), e.g. "PG-13",
         /// "TV-MA", "15". Rendered as a badge in the Detail metadata line.
         public let officialRating: String?
+        /// Cast + crew (`People`), returned when `People` is in `Fields`.
+        public let people: [BaseItemPerson]?
+
+        /// One cast/crew entry. `type` is "Actor" / "Director" / "Writer" / …;
+        /// `role` is the character for actors. `primaryImageTag` keys the
+        /// headshot at `/Items/{id}/Images/Primary`.
+        public struct BaseItemPerson: Decodable, Sendable, Equatable {
+            public let id: String?
+            public let name: String?
+            public let role: String?
+            public let type: String?
+            public let primaryImageTag: String?
+            enum CodingKeys: String, CodingKey {
+                case id = "Id"
+                case name = "Name"
+                case role = "Role"
+                case type = "Type"
+                case primaryImageTag = "PrimaryImageTag"
+            }
+        }
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
@@ -332,6 +352,7 @@ public enum JellyfinAPI {
             case parentIndexNumber = "ParentIndexNumber"
             case seriesName = "SeriesName"
             case officialRating = "OfficialRating"
+            case people = "People"
         }
     }
 

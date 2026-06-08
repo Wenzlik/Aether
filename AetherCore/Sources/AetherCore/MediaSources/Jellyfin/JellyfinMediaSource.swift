@@ -68,7 +68,7 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "ParentId", value: libraryID.rawValue),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
+            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating,People"),
             // Per Jellyfin docs, play state (UserData.Played) comes via this flag,
             // not a `Fields` value — it's the watched-checkmark source.
             URLQueryItem(name: "enableUserData", value: "true"),
@@ -90,7 +90,7 @@ public actor JellyfinMediaSource: MediaSource {
             path: "/Users/\(userID)/Items",
             queryItems: [
                 URLQueryItem(name: "ParentId", value: id.rawValue),
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating,People"),
                 URLQueryItem(name: "enableUserData", value: "true"),
                 URLQueryItem(name: "SortBy", value: "SortName"),
                 URLQueryItem(name: "SortOrder", value: "Ascending")
@@ -105,7 +105,7 @@ public actor JellyfinMediaSource: MediaSource {
         let request = makeRequest(
             path: "/Users/\(userID)/Items/\(id.rawValue)",
             queryItems: [
-                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating,People"),
                 URLQueryItem(name: "enableUserData", value: "true")
             ]
         )
@@ -337,6 +337,7 @@ public actor JellyfinMediaSource: MediaSource {
             posterPath: "/Items/\(dto.id)/Images/Primary", posterTag: dto.imageTags?["Primary"],
             backdropPath: "/Items/\(dto.id)/Images/Backdrop", backdropTag: dto.backdropImageTags?.first
         )
+        let cast = mapCast(dto.people)
         return MediaItem(
             id: .init(source: id, rawValue: dto.id),
             title: dto.name ?? "Untitled",
@@ -361,6 +362,7 @@ public actor JellyfinMediaSource: MediaSource {
             isWatched: dto.isWatched,
             parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) },
             genres: dto.genreList,
+            cast: cast,
             communityRating: dto.communityRating,
             contentRating: dto.contentRating,
             releaseDate: dto.releaseDate,
@@ -372,6 +374,30 @@ public actor JellyfinMediaSource: MediaSource {
             unwatchedEpisodeCount: dto.userData?.unplayedItemCount,
             artwork: artwork
         )
+    }
+
+    // MARK: - Cast & Crew
+
+    /// Map Jellyfin `People` to `CastMember`s — actors first (with their
+    /// character), then key crew (director / writer). Headshots come from the
+    /// person's Primary image, sized like a poster. Capped for the rail.
+    private func mapCast(_ people: [JellyfinAPI.BaseItemDto.BaseItemPerson]?) -> [CastMember] {
+        guard let people else { return [] }
+        let actors = people.filter { $0.type == "Actor" }
+        let crew = people.filter { $0.type == "Director" || $0.type == "Writer" }
+        return (actors + crew).prefix(20).enumerated().compactMap { index, person in
+            guard let name = person.name?.nonEmptyTrimmed else { return nil }
+            let photoURL: URL? = person.id?.nonEmptyTrimmed.flatMap { personID in
+                ArtworkSource(provider: .jellyfin, base: baseURL, token: accessToken,
+                              posterPath: "/Items/\(personID)/Images/Primary",
+                              posterTag: person.primaryImageTag,
+                              backdropPath: nil).posterURL(.thumbnail)
+            }
+            let role = person.role?.nonEmptyTrimmed
+                ?? (person.type == "Actor" ? nil : person.type?.nonEmptyTrimmed)
+            return CastMember(id: person.id ?? "\(index)-\(name)", name: name,
+                              role: role, photoURL: photoURL)
+        }
     }
 
     // MARK: - Helpers

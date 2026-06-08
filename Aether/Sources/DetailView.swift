@@ -305,6 +305,11 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
+                    if !item.kind.isContainer {
+                        castSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
+
                     if !item.kind.isContainer, current.mediaInfo != nil {
                         technicalDetailsSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
@@ -381,6 +386,9 @@ struct DetailView: View {
                         }
                     }
 
+                    if !item.kind.isContainer {
+                        castSection
+                    }
                     if !item.kind.isContainer, current.streamURL != nil {
                         playbackSection
                     }
@@ -509,6 +517,7 @@ struct DetailView: View {
                 AetherExpandableText(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
+            castSection
             if availableSources.count > 1 {
                 availableSourcesSection
                     .frame(maxWidth: 720, alignment: .leading)
@@ -1226,6 +1235,76 @@ struct DetailView: View {
                 .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
         }
+    }
+
+    // MARK: - Cast & Crew
+
+    /// Horizontal rail of cast + key crew with circular headshots — the biggest
+    /// information-density gap vs. Infuse. Hidden when the source carries none.
+    @ViewBuilder
+    private var castSection: some View {
+        if !current.cast.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text("Cast & Crew")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+                        ForEach(current.cast) { member in castCard(member) }
+                    }
+                    .padding(.vertical, AetherDesign.Spacing.xxs)
+                    .padding(.horizontal, 2)
+                }
+                #if os(tvOS)
+                .focusSection()
+                #endif
+            }
+        }
+    }
+
+    private func castCard(_ member: CastMember) -> some View {
+        VStack(spacing: AetherDesign.Spacing.xs) {
+            castPhoto(member)
+            Text(member.name)
+                .font(AetherDesign.Typography.caption.weight(.medium))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .lineLimit(1)
+            if let role = member.role {
+                Text(role)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(width: castPhotoSize)
+        .multilineTextAlignment(.center)
+        #if os(tvOS)
+        .focusable()
+        .premiumFocus()
+        #endif
+    }
+
+    private func castPhoto(_ member: CastMember) -> some View {
+        let size = castPhotoSize
+        return ZStack {
+            Circle().fill(AetherDesign.Palette.surfaceElevated)
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.38))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+            if member.photoURL != nil {
+                CachedAsyncImage(url: member.photoURL, aspectRatio: 1, maxPixel: ArtworkTier.thumbnail.maxPixel)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var castPhotoSize: CGFloat {
+        #if os(tvOS)
+        140
+        #else
+        84
+        #endif
     }
 
     // MARK: - Available Sources (manual source override)

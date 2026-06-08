@@ -29,6 +29,10 @@ new data.
 
 ### Added
 
+- **Cast & Crew** — the Detail screen now shows a horizontal rail of cast (with
+  the characters they play) and key crew, with circular headshots, on movies and
+  episodes. Pulled from Plex (`Role`) and Jellyfin (`People`); closes the biggest
+  information-density gap vs. Infuse.
 - **First-use hint** for the compact icon row — a one-time caption names the
   icons (Download · Watch status · Source · Details), then the row stays clean
   forever (dismissed by "Got it" or by tapping an icon).

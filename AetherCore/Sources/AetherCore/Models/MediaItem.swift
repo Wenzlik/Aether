@@ -82,6 +82,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     public let parentID: MediaID?
     /// Catalogue genres (e.g. "Sci-Fi", "Drama") — drives Discover genre rails.
     public let genres: [String]
+    /// Top-billed cast and key crew, in the source's billing order. Drives the
+    /// Detail "Cast & Crew" rail. Empty when the source provided none.
+    public let cast: [CastMember]
     /// Community / audience rating (≈0–10) when the source provides one — for
     /// "Top Rated". `nil` when unknown.
     public let communityRating: Double?
@@ -142,6 +145,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         isWatched: Bool = false,
         parentID: MediaID? = nil,
         genres: [String] = [],
+        cast: [CastMember] = [],
         communityRating: Double? = nil,
         contentRating: String? = nil,
         releaseDate: Date? = nil,
@@ -177,6 +181,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.isWatched = isWatched
         self.parentID = parentID
         self.genres = genres
+        self.cast = cast
         self.communityRating = communityRating
         self.contentRating = contentRating
         self.releaseDate = releaseDate
@@ -470,6 +475,27 @@ public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable, Codable {
             isForced: isForced,
             isSelected: selected
         )
+    }
+}
+
+/// A cast or crew member for the Detail "Cast & Crew" rail — an actor with the
+/// character they play, or key crew (director / writer) with their job. The
+/// `photoURL` is a ready-to-load, server-resized headshot (tokenised on-device,
+/// like the rest of the artwork) or `nil` when the source has no image.
+public struct CastMember: Identifiable, Hashable, Sendable, Codable {
+    public let id: String
+    /// The person's name, e.g. "Ryan Gosling".
+    public let name: String
+    /// The character they play ("Neil Armstrong") or, for crew, their job
+    /// ("Director"). `nil` when the source didn't provide one.
+    public let role: String?
+    public let photoURL: URL?
+
+    public init(id: String, name: String, role: String? = nil, photoURL: URL? = nil) {
+        self.id = id
+        self.name = name
+        self.role = role
+        self.photoURL = photoURL
     }
 }
 
