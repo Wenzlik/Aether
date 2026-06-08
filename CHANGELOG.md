@@ -50,10 +50,11 @@ screen toward a complete product hub. Refinement, not a redesign.
 - **Home / Library loading & refresh** — the empty / "connected but no libraries"
   states no longer render as a half-screen band, and they're now scrollable so
   pull-to-refresh works on them (previously they could get stuck). Loading shows
-  the branded Aether animation instead of skeleton rails, content stays on screen
-  through a refresh, the app auto-refreshes when it returns to the foreground, and
-  a connected source that returns empty (a transient first-load) auto-retries once
-  so it self-heals.
+  the branded Aether animation instead of skeleton rails, the app auto-refreshes
+  when it returns to the foreground, and a connected source that returns empty (a
+  transient first-load) auto-retries once so it self-heals. Crucially, a refresh
+  that briefly comes back empty no longer blanks the screen — the existing
+  library stays put instead of flashing "Library is empty".
 - **Resume position no longer runs away** — pausing repeatedly could record a
   position that compounded past the runtime (e.g. 1h → 2.5h → 5h on a 2h film),
   which then broke "Resume". `PlaybackSession` recorded `currentTime()` plus a

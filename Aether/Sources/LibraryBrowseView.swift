@@ -358,11 +358,18 @@ struct LibraryBrowseView: View {
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
         let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
-        rails = built
-        AetherImageCache.shared.prefetch(
-            built.movies.map(\.posterURL) + built.shows.map(\.posterURL)
-        )
-        if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+        if built.isEmpty, !rails.isEmpty {
+            // A refresh came back empty but we already have content — almost always
+            // a transient source hiccup. Keep the current library on screen instead
+            // of flashing "Library is empty", and retry once.
+            scheduleAutoRetryIfNeeded()
+        } else {
+            rails = built
+            AetherImageCache.shared.prefetch(
+                built.movies.map(\.posterURL) + built.shows.map(\.posterURL)
+            )
+            if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+        }
     }
 
     /// One automatic retry when a connected source returns empty (often a
