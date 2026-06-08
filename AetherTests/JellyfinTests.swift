@@ -111,6 +111,25 @@ struct JellyfinDecodingTests {
         #expect(dto.sourceMediaInfo == nil)
         #expect(dto.contentRating == nil)
     }
+
+    @Test("BaseItemDto decodes People (cast + crew)")
+    func decodesPeople() throws {
+        let json = #"""
+        {"Id":"42","Name":"First Man","Type":"Movie","People":[
+          {"Id":"p1","Name":"Ryan Gosling","Role":"Neil Armstrong","Type":"Actor","PrimaryImageTag":"abc"},
+          {"Id":"p2","Name":"Damien Chazelle","Type":"Director"}
+        ]}
+        """#
+        let dto = try decoder.decode(JellyfinAPI.BaseItemDto.self, from: Data(json.utf8))
+        let people = try #require(dto.people)
+        #expect(people.count == 2)
+        #expect(people[0].name == "Ryan Gosling")
+        #expect(people[0].role == "Neil Armstrong")
+        #expect(people[0].type == "Actor")
+        #expect(people[0].primaryImageTag == "abc")
+        #expect(people[1].type == "Director")
+        #expect(people[1].role == nil)
+    }
 }
 
 @Suite("Jellyfin — Quick Connect flow")
