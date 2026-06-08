@@ -173,6 +173,9 @@ struct DiscoverView: View {
             AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
 
             NavigationLink(value: item) {
+                #if os(tvOS)
+                featuredHeroTV(item)
+                #else
                 AetherCard.hero(
                     title: item.title,
                     subtitle: item.year.map(String.init),
@@ -180,11 +183,61 @@ struct DiscoverView: View {
                 )
                 .frame(maxWidth: .infinity)
                 .frame(height: heroHeight)
+                #endif
             }
             .buttonStyle(.plain)
             .padding(.horizontal, AetherDesign.Spacing.l)
         }
     }
+
+    #if os(tvOS)
+    /// tvOS Featured presentation: a constrained 16:9 artwork (the card *is* the
+    /// artwork — no oversized focus panel or empty letterbox) that lifts gently
+    /// on focus, with title / year / genres / synopsis beside it so the section
+    /// reads as a purposeful recommendation rather than a giant focus box.
+    /// Tapping opens Detail, where Play / Resume live.
+    private func featuredHeroTV(_ item: UnifiedMediaItem) -> some View {
+        HStack(alignment: .center, spacing: AetherDesign.Spacing.xl) {
+            CachedAsyncImage(
+                url: item.backdropURL(.backdropLarge) ?? item.posterURL,
+                aspectRatio: 16.0 / 9.0,
+                maxPixel: ArtworkTier.backdropLarge.maxPixel
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+            .frame(width: 760)
+            .premiumFocus(scale: 1.04)
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                Text(item.title)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(2)
+                if let meta = featuredMetaLine(item) {
+                    Text(meta)
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(1)
+                }
+                if let overview = item.overview, !overview.isEmpty {
+                    Text(overview)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// "2018 · Drama · Biography" — year then up to two genres.
+    private func featuredMetaLine(_ item: UnifiedMediaItem) -> String? {
+        var parts: [String] = []
+        if let year = item.year { parts.append(String(year)) }
+        parts.append(contentsOf: item.genres.prefix(2))
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+    #endif
 
     private var heroHeight: CGFloat {
         #if os(tvOS)

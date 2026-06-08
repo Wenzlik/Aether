@@ -383,7 +383,7 @@ struct DetailView: View {
                                 .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
                         } else {
-                            AetherExpandableText(summary)
+                            synopsis(summary)
                         }
                     }
 
@@ -511,11 +511,27 @@ struct DetailView: View {
     /// Below-hero section stack, shared by the cinematic and banner movie
     /// layouts. Description → Available Sources → Technical Details →
     /// More Like This → Playback settings (config dead last).
+    /// Synopsis treatment: a 3-line teaser on tvOS (users browse visually from
+    /// across the room and the expand control is another focus stop), expandable
+    /// More/Less on touch + spatial.
+    @ViewBuilder
+    private func synopsis(_ summary: String) -> some View {
+        #if os(tvOS)
+        Text(summary)
+            .font(AetherDesign.Typography.body)
+            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+        #else
+        AetherExpandableText(summary)
+        #endif
+    }
+
     @ViewBuilder
     private var movieBelowHero: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
             if let summary = item.summary {
-                AetherExpandableText(summary)
+                synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
             castSection
@@ -1263,49 +1279,78 @@ struct DetailView: View {
         }
     }
 
+    @ViewBuilder
     private func castCard(_ member: CastMember) -> some View {
-        VStack(spacing: AetherDesign.Spacing.xs) {
-            castPhoto(member)
-            Text(member.name)
-                .font(AetherDesign.Typography.caption.weight(.medium))
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .lineLimit(1)
-            if let role = member.role {
-                Text(role)
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(width: castPhotoSize)
-        .multilineTextAlignment(.center)
+        // tvOS: wrap in a plain Button so it's reliably focusable and the
+        // focus-reading card lights up (a bare `.focusable()` propagated focus
+        // too weakly). Other platforms render the calm static card.
         #if os(tvOS)
-        .focusable()
-        .premiumFocus()
-        #endif
-    }
-
-    private func castPhoto(_ member: CastMember) -> some View {
-        let size = castPhotoSize
-        return ZStack {
-            Circle().fill(AetherDesign.Palette.surfaceElevated)
-            Image(systemName: "person.fill")
-                .font(.system(size: size * 0.38))
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-            if member.photoURL != nil {
-                CachedAsyncImage(url: member.photoURL, aspectRatio: 1, maxPixel: ArtworkTier.thumbnail.maxPixel)
-            }
+        Button(action: {}) {
+            CastCardContent(member: member, size: castPhotoSize)
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
+        .buttonStyle(.plain)
+        #else
+        CastCardContent(member: member, size: castPhotoSize)
+        #endif
     }
 
     private var castPhotoSize: CGFloat {
         #if os(tvOS)
-        140
+        180   // larger cards on TV — cast is a first-class browse destination
         #else
         84
         #endif
+    }
+
+    /// One cast/crew card. Reads `\.isFocused` directly so tvOS focus is
+    /// unmistakable from across the room — a big scale jump, an accent ring on
+    /// the headshot, a blue glow, and a lift. On platforms with no focus engine
+    /// it renders the calm static card unchanged.
+    private struct CastCardContent: View {
+        let member: CastMember
+        let size: CGFloat
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            VStack(spacing: AetherDesign.Spacing.xs) {
+                photo
+                Text(member.name)
+                    .font(AetherDesign.Typography.caption.weight(.medium))
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(1)
+                if let role = member.role {
+                    Text(role)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(isFocused ? AetherDesign.Palette.textSecondary : AetherDesign.Palette.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: size)
+            .multilineTextAlignment(.center)
+            .scaleEffect(isFocused ? 1.18 : 1.0)
+            .animation(AetherDesign.Motion.focus, value: isFocused)
+        }
+
+        private var photo: some View {
+            ZStack {
+                Circle().fill(AetherDesign.Palette.surfaceElevated)
+                Image(systemName: "person.fill")
+                    .font(.system(size: size * 0.38))
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                if member.photoURL != nil {
+                    CachedAsyncImage(url: member.photoURL, aspectRatio: 1, maxPixel: ArtworkTier.thumbnail.maxPixel)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay {
+                Circle().strokeBorder(AetherDesign.Palette.accent, lineWidth: isFocused ? 4 : 0)
+            }
+            .shadow(
+                color: AetherDesign.Palette.accent.opacity(isFocused ? 0.7 : 0.0),
+                radius: isFocused ? 24 : 0, y: isFocused ? 10 : 0
+            )
+        }
     }
 
     // MARK: - Available Sources (manual source override)
@@ -1427,7 +1472,13 @@ struct DetailView: View {
                 #endif
                 // Level 3 — everything else as compact, equal-weight icon buttons.
                 compactActionRow
+                // The first-use hint is a touch affordance (tap "Got it" / tap an
+                // icon). On tvOS it created an unreachable focus dead-zone, and
+                // the remote already moves focus across the labelled icons — so
+                // it's iOS / iPadOS / visionOS only.
+                #if !os(tvOS)
                 compactActionHint
+                #endif
             }
         } else {
             unavailableState
@@ -2026,6 +2077,19 @@ struct DetailView: View {
     /// the rows live in the same frosted card `AetherSettingsSection` uses.
     @ViewBuilder
     private var technicalDetailsSection: some View {
+        // tvOS: always-expanded (no toggle). The collapsible disclosure animated
+        // a layout/height change inside the focusable ScrollView, which could
+        // corrupt focus geometry — scrolling down to More Like This and back up
+        // sometimes lost the top menu. A static section avoids that and also
+        // matches the "richer, always-visible tech details on TV" feedback.
+        #if os(tvOS)
+        mediaSection
+        #else
+        collapsibleTechnicalDetailsSection
+        #endif
+    }
+
+    private var collapsibleTechnicalDetailsSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
             Button {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
