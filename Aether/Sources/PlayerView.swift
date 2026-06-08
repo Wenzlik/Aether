@@ -53,9 +53,9 @@ struct PlayerView: View {
     /// visionOS only: bumped when the cinema size/seat changes, so the docked
     /// player re-docks to re-fit. `nil` for windowed playback.
     let redockToken: UUID?
-    /// visionOS Cinema only: surfaces Screen-size + Seat cyclers in the native
-    /// transport bar. `nil` for windowed playback.
-    let cinemaControls: CinemaControlBinding?
+    /// visionOS Cinema only: builds the Screen-size + Seat panel for the player's
+    /// Info panel (`customInfoViewControllers`). `nil` for windowed playback.
+    let makeCinemaInfoControllers: (() -> [UIViewController])?
 
     init(
         item: MediaItem,
@@ -64,7 +64,7 @@ struct PlayerView: View {
         startAt: Double? = nil,
         preferExpanded: Bool = false,
         redockToken: UUID? = nil,
-        cinemaControls: CinemaControlBinding? = nil,
+        makeCinemaInfoControllers: (() -> [UIViewController])? = nil,
         playbackPreferences: PlaybackPreferencesStore? = nil,
         onDismiss: @escaping () -> Void
     ) {
@@ -73,7 +73,7 @@ struct PlayerView: View {
         self.startAt = startAt
         self.preferExpanded = preferExpanded
         self.redockToken = redockToken
-        self.cinemaControls = cinemaControls
+        self.makeCinemaInfoControllers = makeCinemaInfoControllers
         self.playbackPreferences = playbackPreferences
         self.onDismiss = onDismiss
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
@@ -90,7 +90,7 @@ struct PlayerView: View {
                     player: player,
                     preferExpanded: preferExpanded,
                     redockToken: redockToken,
-                    cinemaControls: cinemaControls,
+                    makeCinemaInfoControllers: makeCinemaInfoControllers,
                     onDismiss: {
                         Task { await dismissPlayer() }
                     }

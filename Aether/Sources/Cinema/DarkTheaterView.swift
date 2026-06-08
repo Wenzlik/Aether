@@ -46,13 +46,13 @@ struct DarkTheaterView: View {
 
     var body: some View {
         // No SwiftUI/RealityKit attachment for the controls: Screen-size + Seat
-        // live in the native AVKit transport bar as `contextualActions` (see
-        // `SystemVideoPlayer` / `CinemaControlBinding`). A floating attachment
-        // can't composite over the system-docked video — at the larger screen
-        // sizes it hid *behind* the picture — and an always-visible handle
-        // cluttered the view. The transport bar is rendered in the system layer
-        // (always in front) and shows/hides with the native controls. This view
-        // is now purely the environment.
+        // live in the native player's Info panel as a "Theater" tab (see
+        // `SystemVideoPlayer` → `customInfoViewControllers` / `CinemaInfoControls`).
+        // A floating attachment can't composite over the system-docked video — at
+        // the larger screen sizes it hid *behind* the picture — and an always-
+        // visible handle cluttered the view. The Info-panel tab renders in the
+        // system layer (always in front) and is reached by tapping the docked
+        // video. This view is now purely the environment.
         RealityView { content in
             // Prefer the authored Dark Theater (its `DockingRegion` sizes the
             // docked screen + reflective floor); fall back to the procedural
@@ -383,9 +383,10 @@ private final class CinemaSceneRefs {
 }
 
 // The in-cinema Screen-size + Seat controls used to live here as a floating
-// `CinemaControlPanel` attachment. They now live in the native AVKit transport
-// bar (see `SystemVideoPlayer` → `CinemaControlBinding`): a RealityKit
-// attachment can't composite over the system-docked video (it hid behind the
-// larger screens), and the always-visible handle cluttered the view. Transport-
-// bar contextual actions render in front and appear/hide with the native chrome.
+// `CinemaControlPanel` attachment. They now live in the native player's Info
+// panel as a "Theater" tab (see `CinemaInfoControls` +
+// `SystemVideoPlayer.customInfoViewControllers`): a RealityKit attachment can't
+// composite over the system-docked video (it hid behind the larger screens), and
+// an always-visible handle cluttered the view. The Info-panel tab renders in
+// front, survives docking, and is reached by tapping the docked video.
 #endif

@@ -168,11 +168,12 @@ Immersive, native cinema playback on Apple Vision Pro (visionOS only).
   attach, a live size/seat change triggers a brief re-dock to re-fit.
   *On-device verification (re-dock feel, scale tuning) pending TestFlight.*
 - ✅ **Phase 2c — Controls in the native player (0.6.0)** — Screen-size + Seat
-  moved off the floating RealityKit panel into the native AVKit transport bar as
-  cycling contextual actions next to Back. A RealityKit attachment can't
-  composite over the system-docked video (it hid behind the larger screens); the
-  transport bar renders in front and shows/hides with the system controls, so
-  nothing clutters the view while watching.
+  moved off the floating RealityKit panel into the native player's **Info panel**
+  as a "Theater" tab (`customInfoViewControllers`, the Destination Video pattern).
+  A RealityKit attachment can't composite over the system-docked video (it hid
+  behind the larger screens), and `contextualActions` only show while the
+  transport bar is hidden (so they vanished on tap); the Info-panel tab renders in
+  front, is reached by tapping the docked video, and persists while docked.
 - ⬜ **Phase 3 — More environments** — Nebula / Deep Space / Orbit Station.
 - ⬜ **Phase 4 — Advanced** — SharePlay synchronized viewing, Spatial Personas.
 
