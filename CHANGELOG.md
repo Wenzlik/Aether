@@ -29,6 +29,12 @@ cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
   Rated → genres → Picked for You).
 - **Compact navigation header** — the brand mark sits inline beside search
   instead of a large centered banner, reclaiming vertical space.
+- **visionOS Cinema controls in the native player** — the in-cinema Screen-size
+  and Seat controls move out of a floating panel and into the native AVKit
+  transport bar as cycling actions next to Back ("Screen · Large", "Seat ·
+  Middle"). They now render in front of the docked screen at every size (the
+  floating panel hid behind the largest screens) and appear/hide with the system
+  controls, so nothing lingers over the picture while watching.
 
 ### Notes
 
