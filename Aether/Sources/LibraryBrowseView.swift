@@ -158,7 +158,7 @@ struct LibraryBrowseView: View {
             // once startup has settled is it genuinely "no source connected".
             if isConnecting {
                 AetherCenteredScrollState {
-                    AetherVideoLoader(caption: "Loading your library…")
+                    AetherLoadingDots(caption: "Loading your library…")
                 }
             } else {
                 AetherCenteredScrollState {
@@ -181,7 +181,7 @@ struct LibraryBrowseView: View {
         } else if isLoading || !hasLoaded {
             // Loading, or first load not finished yet → branded loader (never empty).
             AetherCenteredScrollState {
-                AetherVideoLoader(caption: "Loading your library…")
+                AetherLoadingDots(caption: "Loading your library…")
             }
         } else {
             // Loaded, connected, and genuinely empty — centered + pull-to-refreshable.
