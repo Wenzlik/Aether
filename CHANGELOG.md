@@ -65,6 +65,14 @@ screen toward a complete product hub. Refinement, not a redesign.
   from the old bug) resets to the start instead of failing to play.
 - **Cinema Mode resume prompt** (visionOS) — "Watch in Cinema" now offers
   **Continue** or **Start Over** when a resume point exists.
+- **Settings layout** — removed the redundant "Connected Sources" status card
+  (the Sources section already shows each source's connection state). On the
+  wide layout (iPad / tvOS / visionOS) the sections are split across two columns
+  (configuration left; personalization, info and storage right), and the whole
+  surface is centered instead of left-hugging — so tvOS uses the full width.
+- **tvOS info sheets** — About / Diagnostics / What's New now scroll with the
+  Siri Remote and use the full width (previously a narrow column that couldn't
+  be scrolled).
 
 ## [0.6.0] — Unreleased · "Cassiopeia"
 
