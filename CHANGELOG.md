@@ -4,6 +4,34 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.2] — Unreleased
+
+Detail-screen redesign toward Infuse-level information density while keeping
+Aether's cinematic identity. Built in phases; this is **Phase 1** (action
+hierarchy + information architecture — no new data).
+
+### Changed
+
+- **Action hierarchy on Detail** — instead of a stack of equal-weight buttons,
+  there's now **one dominant primary** (Resume or Play), a lighter **Restart**
+  beneath it, and a **compact icon row** for everything else (Download · Mark
+  Watched · Source · Technical Details) — Infuse-style circular icon buttons that
+  no longer compete with Play. The "More" menu is gone; its actions live in the
+  icon row. Download is a compact icon whose glyph reflects its state, with the
+  management actions (pause / resume / cancel / delete / retry) in its menu.
+- **Genres** now appear under the metadata line on movies and episodes (not just
+  shows), so the kind of title reads at a glance.
+- **Description collapses** to a few lines with a **More / Less** toggle, so a
+  long synopsis no longer pushes the rest of the page down.
+- **tvOS focus** — the compact icon buttons are focusable and reachable by the
+  Siri Remote (lift + glow on focus).
+
+### Notes
+
+- Phase 2 (Cast & Crew rail), Phase 3 (a Technical Details section + Jellyfin
+  MediaInfo backfill + file size + content rating), and Phase 4 (server-synced
+  Favorite + Trailer) follow — they need new model/connector plumbing.
+
 ## [0.6.1] — Unreleased
 
 Settings & product-experience polish — Settings grows from a configuration
