@@ -43,6 +43,11 @@ struct DiscoverView: View {
     /// shows after a real completed load, never during the first load / refresh.
     @State private var hasLoaded = false
     @State private var loadError: String?
+    /// One automatic retry on an empty result (transient first-load), so Discover
+    /// self-heals instead of sticking on an empty state.
+    @State private var autoRetried = false
+    /// Reload (non-destructively) when the app returns to the foreground.
+    @Environment(\.scenePhase) private var scenePhase
 
     /// One genre's rail. `id` is the genre name so SwiftUI can diff the rails.
     private struct GenreRail: Identifiable {
@@ -70,6 +75,9 @@ struct DiscoverView: View {
                 )
         }
         .task(id: sourcesKey) { await load() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load() } }
+        }
     }
 
     /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
@@ -90,30 +98,38 @@ struct DiscoverView: View {
             // Empty sources: loading while still connecting at startup; only a
             // settled startup means "no source connected".
             if isConnecting {
-                AetherLoadingState(.rails(count: 2))
-                    .padding(.top, AetherDesign.Spacing.l)
+                AetherCenteredScrollState {
+                    AetherLoadingDots(caption: "Loading Discover…")
+                }
             } else {
-                AetherEmptyState(
-                    glyph: "sparkles",
-                    title: "Nothing to discover yet",
-                    message: "Connect a source and Discover surfaces titles you might have forgotten about."
-                )
+                AetherCenteredScrollState {
+                    AetherEmptyState(
+                        glyph: "sparkles",
+                        title: "Nothing to discover yet",
+                        message: "Connect a source and Discover surfaces titles you might have forgotten about."
+                    )
+                }
             }
         } else if let loadError {
-            AetherErrorState(
-                title: "Couldn't build Discover",
-                message: loadError,
-                retry: .init { Task { await load() } }
-            )
+            AetherCenteredScrollState {
+                AetherErrorState(
+                    title: "Couldn't build Discover",
+                    message: loadError,
+                    retry: .init { Task { await load() } }
+                )
+            }
         } else if isLoading || !hasLoaded {
-            AetherLoadingState(.rails(count: 2))
-                .padding(.top, AetherDesign.Spacing.l)
+            AetherCenteredScrollState {
+                AetherLoadingDots(caption: "Loading Discover…")
+            }
         } else {
-            AetherEmptyState(
-                glyph: "tray",
-                title: "Library is empty",
-                message: "Add some movies or shows to a connected source and they'll surface here."
-            )
+            AetherCenteredScrollState {
+                AetherEmptyState(
+                    glyph: "tray",
+                    title: "Library is empty",
+                    message: "Add some movies or shows to a connected source and they'll surface here."
+                )
+            }
         }
     }
 
@@ -229,9 +245,14 @@ struct DiscoverView: View {
         let all = movies + shows
 
         guard !all.isEmpty else {
-            resetRails()
+            // A refresh came back empty: if we already have content on screen
+            // (transient source hiccup), keep it; only blank when we had nothing.
+            // Retry once either way so a transient empty self-heals.
+            if isEmpty { resetRails() }
+            scheduleAutoRetryIfNeeded()
             return
         }
+        autoRetried = false   // real content available → reset the retry budget
 
         // Hero: one random pick. Random Picks: shuffled, hero excluded.
         let pick = all.randomElement()
@@ -281,6 +302,19 @@ struct DiscoverView: View {
         recentlyAdded = []
         topRated = []
         genreRails = []
+    }
+
+    /// One automatic retry when a connected source returns empty (often a
+    /// transient first-load), so Discover self-heals instead of sticking.
+    /// Bounded by `autoRetried`; pull-to-refresh + foreground reload cover more.
+    private func scheduleAutoRetryIfNeeded() {
+        guard !autoRetried, !connectedSources.isEmpty else { return }
+        autoRetried = true
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, isEmpty else { return }
+            await load(forceRefresh: true)
+        }
     }
 
     /// The catalog's most common genres (most frequent first), capped to a few
