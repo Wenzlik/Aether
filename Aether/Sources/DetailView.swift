@@ -94,8 +94,23 @@ struct DetailView: View {
     @Environment(CinemaManager.self) private var cinema
     /// Re-dock signal for the docked player (size/seat changed live in-cinema).
     private var cinemaRedockToken: UUID? { cinema.redockToken }
+    /// Screen-size + Seat controls surfaced inside the native AVKit transport bar
+    /// (replaces the old floating RealityKit panel). Only for a Cinema launch;
+    /// windowed playback gets Back-only chrome. Closures capture `cinema` (the
+    /// reference), not `self`.
+    private var cinemaControls: CinemaControlBinding? {
+        guard launchingInCinema else { return nil }
+        let cinema = self.cinema
+        return CinemaControlBinding(
+            sizeTitle: { cinema.screenPreset.displayName },
+            cycleSize: { cinema.setScreenPreset(cinema.screenPreset.next) },
+            seatTitle: { cinema.seat.displayName },
+            cycleSeat: { cinema.setSeat(cinema.seat.next) }
+        )
+    }
     #else
     private var cinemaRedockToken: UUID? { nil }
+    private var cinemaControls: CinemaControlBinding? { nil }
     #endif
 
     /// Which selector sheet is open. Audio / Subtitles / Quality are the
@@ -171,6 +186,7 @@ struct DetailView: View {
                     startAt: playbackStartAt,
                     preferExpanded: launchingInCinema,
                     redockToken: cinemaRedockToken,
+                    cinemaControls: cinemaControls,
                     playbackPreferences: playbackPreferences,
                     onDismiss: dismissPlayer
                 )
