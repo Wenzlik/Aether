@@ -470,12 +470,22 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
-    /// Compact Account (§1/§2): one row per service. A connected source shows
-    /// just its server name and opens a detail sheet (status + Sign Out) on tap —
-    /// destructive actions no longer sit permanently on screen, and a healthy
-    /// "Connected" badge is dropped (we only flag a source when it needs the
-    /// user — not connected). A disconnected service offers a Connect action.
+    /// Compact Account (§1/§2). On iOS / iPadOS / visionOS each connected service
+    /// is one row that opens a detail sheet (status + Sign Out) — destructive
+    /// actions no longer sit permanently on screen, and a healthy "Connected"
+    /// badge is dropped. **tvOS uses an inline variant instead:** modal sheets are
+    /// fiddly to focus with the Siri Remote (the sheet's Sign Out was unreachable),
+    /// and there's room here, so Sign Out stays a directly-focusable row.
+    @ViewBuilder
     private var accountSection: some View {
+        #if os(tvOS)
+        accountSectionInline
+        #else
+        accountSectionCompact
+        #endif
+    }
+
+    private var accountSectionCompact: some View {
         AetherSettingsSection("Account") {
             if viewModel.isPlexSignedIn {
                 AetherSettingsRow(
@@ -496,6 +506,36 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if os(tvOS)
+    /// tvOS Account: server shown as a plain row, with Sign Out as its own
+    /// directly-focusable destructive row (no sheet to get trapped behind).
+    private var accountSectionInline: some View {
+        AetherSettingsSection("Account") {
+            if viewModel.isPlexSignedIn {
+                AetherSettingsRow(label: "Plex", value: viewModel.connectedServerName ?? "Connected")
+                AetherSettingsRow(
+                    label: isSigningOut ? "Signing out…" : "Sign Out of Plex",
+                    actionRole: .destructive
+                ) { Task { await performSignOut() } }
+                .disabled(isSigningOut)
+            } else {
+                AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
+            }
+
+            if viewModel.isJellyfinSignedIn {
+                AetherSettingsRow(label: "Jellyfin", value: viewModel.jellyfinServerName ?? "Connected")
+                AetherSettingsRow(
+                    label: isSigningOutJellyfin ? "Signing out…" : "Sign Out of Jellyfin",
+                    actionRole: .destructive
+                ) { Task { await performSignOutJellyfin() } }
+                .disabled(isSigningOutJellyfin)
+            } else {
+                AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
+            }
+        }
+    }
+    #endif
 
     /// Per-source detail sheet opened from the compact Account rows.
     @ViewBuilder
