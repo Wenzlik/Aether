@@ -43,6 +43,12 @@ new data.
 
 ### Fixed
 
+- **Cast & Crew / content rating / favorite not showing on Detail** (0.6.3 build 2
+  hotfix) — `MediaItem.copy()` didn't carry the new `cast`, `contentRating`, and
+  `isFavorite` fields, so every Detail hydration (which always re-applies the
+  quality preference through `copy()`) silently stripped them. The Cast & Crew
+  rail, the content-rating badge, and the favorite heart now persist after the
+  screen loads.
 - **Series source switching** (#194) — alternate sources for a TV show no longer
   show as "Unavailable" in the Detail source picker. A show/season is a container
   you switch to and browse (it carries no stream URL of its own), so availability
