@@ -154,6 +154,99 @@ struct FeatureRequestSheet: View {
     }
 }
 
+// MARK: - Send Diagnostics
+
+/// Generates the readable, token-free diagnostics report, lets the user preview
+/// it, then emails it (report in the body + attached as `aether-diagnostics.txt`).
+struct SendDiagnosticsSheet: View {
+    let gather: () async -> DiagnosticsSnapshot
+    let onClose: () -> Void
+
+    @State private var report: String?
+    @State private var showingMail = false
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                    Text("Send Diagnostics")
+                        .font(AetherDesign.Typography.sectionTitle)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Text("Review the report below, then send it to the developer. No tokens, passwords, or account details are included.")
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                }
+
+                if let report {
+                    Text(report)
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AetherDesign.Spacing.m)
+                        .background(AetherDesign.Materials.card, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                                .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+                        }
+                    AetherButton("Send via Mail", systemImage: "envelope.fill", role: .primary) {
+                        send(report)
+                    }
+                } else {
+                    ProgressView()
+                        .tint(AetherDesign.Palette.accent)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                }
+            }
+            .padding(AetherDesign.Spacing.l)
+            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .aetherScreenBackground()
+        .overlay(alignment: .topTrailing) {
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .padding(AetherDesign.Spacing.m)
+            }
+            .buttonStyle(.plain)
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .task {
+            if report == nil { report = await gather().report() }
+        }
+        .sheet(isPresented: $showingMail) {
+            MailComposeView(
+                recipient: SupportDiagnostics.supportEmail,
+                subject: "Aether Diagnostics",
+                body: "Diagnostics report attached.\n\n\(report ?? "")",
+                attachment: (
+                    data: Data((report ?? "").utf8),
+                    mimeType: "text/plain",
+                    fileName: "aether-diagnostics.txt"
+                )
+            ) { showingMail = false; onClose() }
+            .ignoresSafeArea()
+        }
+    }
+
+    private func send(_ report: String) {
+        if MailComposeView.canSend {
+            showingMail = true
+        } else if let url = aetherMailtoURL(
+            recipient: SupportDiagnostics.supportEmail,
+            subject: "Aether Diagnostics",
+            body: report
+        ) {
+            openURL(url)
+            onClose()
+        }
+    }
+}
+
 // MARK: - Shared form scaffolding
 
 /// A consistent sheet shell for the Support forms — title, subtitle, the form

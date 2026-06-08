@@ -53,13 +53,22 @@ struct SettingsView: View {
     /// Which Support flow sheet is open. tvOS has no mail composer, so the whole
     /// Support section is compiled out there.
     private enum SupportSheet: String, Identifiable {
-        case reportBug, featureRequest, contact
+        case reportBug, featureRequest, contact, sendDiagnostics
         var id: String { rawValue }
     }
     @State private var supportSheet: SupportSheet?
     /// `mailto:` fallback when no Mail account is configured.
     @Environment(\.openURL) private var openURL
     #endif
+
+    /// About / Diagnostics info sheets (all platforms).
+    private enum InfoSheet: String, Identifiable {
+        case about, diagnostics
+        var id: String { rawValue }
+    }
+    @State private var infoSheet: InfoSheet?
+    /// Hidden developer mode, unlocked by tapping the wordmark in About.
+    @AppStorage("developer.unlocked") private var developerUnlocked = false
 
     var body: some View {
         NavigationStack {
@@ -116,9 +125,11 @@ struct SettingsView: View {
             WhatsNewSheet(
                 version: viewModel.versionString,
                 codename: viewModel.releaseCodename,
-                bullets: viewModel.whatsNewBullets
+                bullets: viewModel.whatsNewBullets,
+                history: viewModel.releaseHistory
             ) { isWhatsNewPresented = false }
         }
+        .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
         #endif
@@ -203,6 +214,9 @@ struct SettingsView: View {
         supportSection
         #endif
         aboutSection
+        if developerUnlocked {
+            developerSection
+        }
     }
 
     #if os(iOS)
@@ -211,20 +225,28 @@ struct SettingsView: View {
     private var appIconSection: some View {
         AetherSettingsSection("App Icon") {
             if appIconStore.isSupported {
-                Picker(
-                    "Icon",
-                    selection: Binding(
-                        get: { appIconStore.current },
-                        set: { appIconStore.select($0) }
-                    )
-                ) {
-                    ForEach(AetherAppIcon.allCases) { icon in
-                        Text(icon.displayName).tag(icon)
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    Text("Choose how Aether appears on your Home Screen.")
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: AetherDesign.Spacing.s)
+                    Picker(
+                        "App Icon",
+                        selection: Binding(
+                            get: { appIconStore.current },
+                            set: { appIconStore.select($0) }
+                        )
+                    ) {
+                        ForEach(AetherAppIcon.allCases) { icon in
+                            Text(icon.displayName).tag(icon)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .tint(AetherDesign.Palette.accent)
                 }
-                .pickerStyle(.menu)
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.vertical, AetherDesign.Spacing.s)
+                .padding(AetherDesign.Spacing.m)
             } else {
                 Text("Not available on this device.")
                     .font(AetherDesign.Typography.metadata)
@@ -669,6 +691,7 @@ struct SettingsView: View {
         AetherSettingsSection("Appearance") {
             AetherDisclosureRow(
                 label: "Theme",
+                description: "Match the system, or force Dark or Light.",
                 value: viewModel.appearance.preference.displayName,
                 systemImage: "paintbrush.fill"
             ) {
@@ -836,13 +859,16 @@ struct SettingsView: View {
     /// when no mail account is configured). Compiled out on tvOS (no MessageUI).
     private var supportSection: some View {
         AetherSettingsSection("Support") {
-            AetherSettingsRow(label: "Report a Bug", systemImage: "ladybug.fill", value: nil) {
+            AetherSettingsRow(label: "Report a Bug", description: "Something not working? Your build and device are attached automatically.", systemImage: "ladybug.fill", value: nil) {
                 supportSheet = .reportBug
             }
-            AetherSettingsRow(label: "Feature Request", systemImage: "lightbulb.fill", value: nil) {
+            AetherSettingsRow(label: "Feature Request", description: "Suggest an idea for a future version.", systemImage: "lightbulb.fill", value: nil) {
                 supportSheet = .featureRequest
             }
-            AetherSettingsRow(label: "Contact Developer", systemImage: "envelope.fill", value: nil) {
+            AetherSettingsRow(label: "Send Diagnostics", description: "Email a readable report of app state — no account details.", systemImage: "stethoscope", value: nil) {
+                supportSheet = .sendDiagnostics
+            }
+            AetherSettingsRow(label: "Contact Developer", description: "Get in touch with the developer directly.", systemImage: "envelope.fill", value: nil) {
                 contactDeveloper()
             }
         }
@@ -855,6 +881,8 @@ struct SettingsView: View {
             ReportBugSheet(theme: viewModel.appearance.preference.displayName) { supportSheet = nil }
         case .featureRequest:
             FeatureRequestSheet { supportSheet = nil }
+        case .sendDiagnostics:
+            SendDiagnosticsSheet(gather: { await viewModel.gatherDiagnostics() }) { supportSheet = nil }
         case .contact:
             MailComposeView(
                 recipient: SupportDiagnostics.supportEmail,
@@ -887,6 +915,12 @@ struct SettingsView: View {
     /// stays a single calm row no matter how long the list grows.
     private var aboutSection: some View {
         AetherSettingsSection("About") {
+            AetherSettingsRow(label: "About Aether", description: "What Aether is, who made it, and where it's going.", systemImage: "sparkles", value: nil) {
+                infoSheet = .about
+            }
+            AetherSettingsRow(label: "Diagnostics", description: "A readable snapshot of sources, library, downloads, and cache.", systemImage: "waveform.path.ecg", value: nil) {
+                infoSheet = .diagnostics
+            }
             Button {
                 isWhatsNewPresented = true
             } label: {
@@ -916,6 +950,35 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(viewModel.versionRowLabel). What's New.")
             .accessibilityHint("Opens what's new in this version")
+        }
+    }
+
+    @ViewBuilder
+    private func infoSheetView(for sheet: InfoSheet) -> some View {
+        switch sheet {
+        case .about:
+            AboutView(versionLabel: viewModel.versionRowLabel) { infoSheet = nil }
+        case .diagnostics:
+            DiagnosticsView(gather: { await viewModel.gatherDiagnostics() }) { infoSheet = nil }
+        }
+    }
+
+    /// Hidden developer mode (unlocked by tapping the wordmark in About). Internal
+    /// build / device / cache facts — not a polished surface, just the details.
+    private var developerSection: some View {
+        AetherSettingsSection("Developer") {
+            AetherSettingsRow(label: "Version", value: viewModel.versionString)
+            AetherSettingsRow(label: "Build", value: viewModel.buildString)
+            if let commit = viewModel.commitString {
+                AetherSettingsRow(label: "Commit", value: commit)
+            }
+            AetherSettingsRow(label: "Platform", value: SupportDiagnostics.platformName)
+            AetherSettingsRow(label: "Device", value: SupportDiagnostics.deviceModel())
+            AetherSettingsRow(label: "OS", value: SupportDiagnostics.osVersion)
+            AetherSettingsRow(label: "Image Cache", value: formatBytes(Int64(imageCacheBytes)))
+            AetherSettingsRow(label: "Lock Developer Mode", actionRole: .destructive) {
+                developerUnlocked = false
+            }
         }
     }
 
@@ -977,7 +1040,13 @@ private struct WhatsNewSheet: View {
     let version: String
     let codename: String
     let bullets: [String]
+    var history: [ReleaseNote] = []
     let onClose: () -> Void
+
+    /// Previous releases (everything but the current version).
+    private var pastReleases: [ReleaseNote] {
+        history.filter { $0.version != version }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
@@ -1014,6 +1083,37 @@ private struct WhatsNewSheet: View {
                         .fill(AetherDesign.Materials.card)
                 )
                 .padding(.horizontal, AetherDesign.Spacing.l)
+
+                if !pastReleases.isEmpty {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                        Text("RELEASE HISTORY")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .tracking(0.6)
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                            ForEach(pastReleases) { release in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(release.codename.map { "\(release.version) · \($0)" } ?? release.version)
+                                        .font(AetherDesign.Typography.cardTitle)
+                                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                    Text(release.summary)
+                                        .font(AetherDesign.Typography.metadata)
+                                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(AetherDesign.Spacing.l)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                                .fill(AetherDesign.Materials.card)
+                        )
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.s)
+                }
             }
 
             AetherButton("Done", role: .secondary, action: onClose)

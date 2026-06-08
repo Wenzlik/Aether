@@ -12,11 +12,24 @@ screen toward a complete product hub. Refinement, not a redesign.
 ### Added
 
 - **Support section** (iOS / iPadOS / visionOS) — Report a Bug, Feature Request,
-  and Contact Developer, each opening the system Mail composer to
-  `aether@zmrhal.cz` (with a `mailto:` fallback when no mail account is set up).
+  Send Diagnostics, and Contact Developer, each opening the system Mail composer
+  to `aether@zmrhal.cz` (with a `mailto:` fallback when no mail account is set up).
   Bug reports collect a Subject, Description, and Category (Playback / Library /
   UI / Downloads / Cinema / Other) and auto-attach a **token-free** footer:
   version, build, platform, device model, OS, theme, timestamp. Excluded on tvOS.
+- **Send Diagnostics** — generates a readable, **token-free** report (app, sources,
+  library counts, downloads, cache, playback prefs), shows a preview, then emails
+  it with the report attached. No tokens, passwords, or account details.
+- **Diagnostics screen** — a user-facing read-only snapshot: sources, library
+  counts, downloads, cache, and build/commit. Available on every platform.
+- **About Aether** — a dedicated screen with the wordmark, "Personal media,
+  beautifully played.", the author, and links. (Tapping the logo seven times
+  unlocks a hidden Developer section with build / device / cache internals.)
+- **What's New release history** — previous releases are listed beneath the
+  current release's highlights.
+- **Clearer settings** — per-row descriptions explain what settings do
+  (e.g. App Icon: "Choose how Aether appears on your Home Screen"), and the
+  Appearance picker offers **System / Dark / Light** (default System).
 - **visionOS Cinema preferences** — the Cinema settings section becomes the home
   for immersive-playback defaults: **Default Screen Size**, **Default Seating**,
   **Environment**, plus **Auto-Enter Cinema** (start playback straight in the

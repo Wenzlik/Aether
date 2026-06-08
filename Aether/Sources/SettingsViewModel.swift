@@ -118,18 +118,32 @@ final class SettingsViewModel {
     /// process). Update this when `MARKETING_VERSION` bumps to a new version.
     let releaseCodename = "Cassiopeia"
 
-    /// Headline features shipped to date, surfaced in the About section's
-    /// "What's New" disclosure. Cumulative — the section showcases what
-    /// Aether actually does today rather than churning per-release notes;
-    /// the full per-version log lives in `CHANGELOG.md`.
+    /// Headline highlights for the **current** release, surfaced in What's New.
+    /// Previous releases appear below under "Release History" (`releaseHistory`);
+    /// the full per-version log lives in `CHANGELOG.md`. Update when the version
+    /// bumps.
     let whatsNewBullets: [String] = [
-        "A refreshed look — a premium blue identity over layered, cinematic backgrounds",
-        "Calmer focus on Apple TV — items lift and glow instead of hard white outlines",
-        "Continue Watching progress now reads right on the artwork",
-        "Search comes alive before you type, with discovery rails",
-        "Cleaner detail pages — Resume leads, secondary actions step back",
-        "Home is your watch-now dashboard; Library is your full collection",
-        "A premium dark screening room in Cinema mode on Apple Vision Pro"
+        "A new Support hub — report a bug or request a feature right from Settings",
+        "Send Diagnostics — email a readable, private app report (no account details)",
+        "A dedicated Diagnostics screen — sources, library, downloads and cache at a glance",
+        "Cinema preferences on Apple Vision Pro — default screen size, seat, auto-enter and remember-last",
+        "A warmer, more intimate screening room in Cinema mode",
+        "An About screen, clearer setting descriptions, and a System theme option"
+    ]
+
+    /// Past releases, newest first — shown under "Release History" in What's New.
+    /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
+    let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.1", codename: "Cassiopeia",
+                    summary: "Settings & product-experience polish — a Support hub, Cinema preferences, diagnostics, and About."),
+        ReleaseNote(version: "0.6.0", codename: "Cassiopeia",
+                    summary: "A cinematic UX refresh across every platform — premium blue identity, layered backgrounds, calmer focus."),
+        ReleaseNote(version: "0.5.0", codename: "Cinema",
+                    summary: "Cinema Mode on Apple Vision Pro — a premium dark screening room with the screen docked in an immersive space."),
+        ReleaseNote(version: "0.4.5", codename: nil,
+                    summary: "Unified Library — Plex and Jellyfin titles deduplicated into one collection."),
+        ReleaseNote(version: "0.3.0", codename: nil,
+                    summary: "Offline downloads with background transfers and resume recovery."),
     ]
 
     private func infoString(_ key: String) -> String? {
@@ -137,6 +151,67 @@ final class SettingsViewModel {
             return nil
         }
         return value
+    }
+
+    // MARK: - Diagnostics
+
+    /// Gather a token-free snapshot of app state for the Diagnostics screen and
+    /// the "Send Diagnostics" email. Async — library counts come off the
+    /// `UnifiedLibrary` actor and the image-cache size scans the cache dir.
+    func gatherDiagnostics() async -> DiagnosticsSnapshot {
+        let library = session.makeUnifiedLibrary()
+        // Movies + shows are independent — count them concurrently.
+        async let movies = library.unifiedItems(kind: .movie).count
+        async let shows = library.unifiedItems(kind: .show).count
+        let movieCount = await movies
+        let showCount = await shows
+        let downloadCount = await session.downloadStore?.snapshot().completed.count ?? 0
+        let downloadBytes = await session.downloadStore?.totalCompletedSizeBytes() ?? 0
+        let imageCacheBytes = await Task.detached { Int64(AetherImageCache.shared.diskUsageBytes()) }.value
+
+        // Source rows carry only the *kind* + friendly display name — NEVER the
+        // server URL / host that `MediaSourceID.stableKey` embeds (keeps the
+        // snapshot token-free). "Signed in" reflects what we actually know
+        // (the source is configured), not a live reachability probe.
+        let sources = session.connectedSources.enumerated().map { index, source -> DiagnosticsSnapshot.SourceLine in
+            let kind: String
+            switch source.id {
+            case .plex:     kind = "plex"
+            case .jellyfin: kind = "jellyfin"
+            case .synology: kind = "synology"
+            case .mock:     kind = "mock"
+            }
+            return DiagnosticsSnapshot.SourceLine(id: "\(kind)-\(index)", name: source.displayName, status: "Signed in")
+        }
+
+        let prefs = session.playbackPreferences
+        let audio: String = {
+            guard let code = prefs.defaultAudioLanguage, !code.isEmpty else { return "Source default" }
+            return PlaybackLanguage.displayName(for: code)
+        }()
+        let subtitle: String = {
+            guard let code = prefs.defaultSubtitleLanguage, !code.isEmpty else { return "Source default" }
+            return code == "off" ? "Off" : PlaybackLanguage.displayName(for: code)
+        }()
+
+        return DiagnosticsSnapshot(
+            appVersion: SupportDiagnostics.appVersion,
+            buildNumber: SupportDiagnostics.buildNumber,
+            commit: SupportDiagnostics.commit,
+            platform: SupportDiagnostics.platformName,
+            deviceModel: SupportDiagnostics.deviceModel(),
+            osVersion: SupportDiagnostics.osVersion,
+            theme: appearance.preference.displayName,
+            sources: sources,
+            movieCount: movieCount,
+            showCount: showCount,
+            downloadCount: downloadCount,
+            downloadBytes: downloadBytes,
+            imageCacheBytes: imageCacheBytes,
+            audioPreference: audio,
+            subtitlePreference: subtitle,
+            generatedAt: Date()
+        )
     }
 
     // MARK: - Actions
@@ -161,4 +236,12 @@ final class SettingsViewModel {
     func signOutOfJellyfin() async {
         await session.signOutOfJellyfin()
     }
+}
+
+/// One past release, shown in the What's New "Release History" list.
+struct ReleaseNote: Identifiable, Sendable {
+    var id: String { version }
+    let version: String
+    let codename: String?
+    let summary: String
 }
