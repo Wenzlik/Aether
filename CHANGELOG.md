@@ -12,6 +12,15 @@ new data.
 
 ### Changed
 
+- **Settings refresh** (0.6.3 build 4) — a calmer, less "admin panel" Settings:
+  - **Account** is now one compact row per service (`Plex — DS418`); tapping opens
+    a detail sheet with the server, status, and Sign Out. The rarely-used
+    destructive action no longer sits permanently on screen, and a healthy
+    "Connected" badge is dropped — a source is only flagged when it needs you.
+  - **Playback** rows lost their per-row icons — the section title is context
+    enough, so the list reads as preferences, not a dashboard.
+  - **What's New** moved into the **Support** section (alongside Report a Bug /
+    Feature Request / Diagnostics).
 - **iPhone-portrait movie layout** is now a **banner**, not a full-screen poster:
   a short backdrop band with the title, metadata, genres, badges and the action
   row stacked beneath it, so **Title · Metadata · Genres · Resume · Restart land
@@ -43,6 +52,10 @@ new data.
 
 ### Fixed
 
+- **Library "Show all" title pinned on tvOS** (0.6.3 build 4) — the grid's
+  "Movies" / "TV Shows" heading used `.navigationTitle`, which tvOS pins
+  permanently (it overlapped the grid while scrolling). It's now an in-scroll
+  heading on tvOS that scrolls away with the content, as it does on iOS.
 - **tvOS Detail focus & layout** (0.6.3 build 3) —
   - The "Got it" first-use hint was a touch affordance with no reachable focus on
     tvOS (a dead focus zone); it's now iOS / iPadOS / visionOS only.
