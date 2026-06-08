@@ -67,6 +67,16 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
     @State private var infoSheet: InfoSheet?
+
+    /// Which connected source's detail sheet is open. Tapping a compact Account
+    /// row opens it; it holds the server, status, and the (rarely-used,
+    /// previously always-exposed) Sign Out action.
+    private enum AccountSheet: String, Identifiable {
+        case plex, jellyfin
+        var id: String { rawValue }
+    }
+    @State private var accountSheet: AccountSheet?
+
     /// Hidden developer mode, unlocked by tapping the wordmark in About.
     @AppStorage("developer.unlocked") private var developerUnlocked = false
 
@@ -130,6 +140,7 @@ struct SettingsView: View {
             ) { isWhatsNewPresented = false }
         }
         .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
+        .sheet(item: $accountSheet) { sheet in accountSheetView(for: sheet) }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
         #endif
@@ -459,48 +470,55 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    /// Compact Account (§1/§2): one row per service. A connected source shows
+    /// just its server name and opens a detail sheet (status + Sign Out) on tap —
+    /// destructive actions no longer sit permanently on screen, and a healthy
+    /// "Connected" badge is dropped (we only flag a source when it needs the
+    /// user — not connected). A disconnected service offers a Connect action.
     private var accountSection: some View {
         AetherSettingsSection("Account") {
-            AetherSettingsRow(
-                label: "Plex",
-                systemImage: "play.circle.fill",
-                status: viewModel.plexAccountStatus,
-                action: viewModel.isPlexSignedIn ? nil : { viewModel.connect() }
-            )
-
-            if let serverDetail = viewModel.connectedServerDetail {
-                AetherSettingsRow(label: serverDetail, systemImage: "server.rack", value: nil)
-            }
-
             if viewModel.isPlexSignedIn {
                 AetherSettingsRow(
-                    label: isSigningOut ? "Signing out…" : "Sign Out of Plex",
-                    systemImage: "rectangle.portrait.and.arrow.right",
-                    actionRole: .destructive
-                ) {
-                    Task { await performSignOut() }
-                }
-                .disabled(isSigningOut)
+                    label: "Plex",
+                    value: viewModel.connectedServerName ?? "Connected"
+                ) { accountSheet = .plex }
+            } else {
+                AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
             }
 
             if viewModel.isJellyfinSignedIn {
                 AetherSettingsRow(
                     label: "Jellyfin",
-                    systemImage: "rectangle.stack.badge.play.fill",
-                    status: .connected
-                )
-                if let name = viewModel.jellyfinServerName {
-                    AetherSettingsRow(label: "Server: \(name)", systemImage: "server.rack", value: nil)
-                }
-                AetherSettingsRow(
-                    label: isSigningOutJellyfin ? "Signing out…" : "Sign Out of Jellyfin",
-                    systemImage: "rectangle.portrait.and.arrow.right",
-                    actionRole: .destructive
-                ) {
-                    Task { await performSignOutJellyfin() }
-                }
-                .disabled(isSigningOutJellyfin)
+                    value: viewModel.jellyfinServerName ?? "Connected"
+                ) { accountSheet = .jellyfin }
+            } else {
+                AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
             }
+        }
+    }
+
+    /// Per-source detail sheet opened from the compact Account rows.
+    @ViewBuilder
+    private func accountSheetView(for sheet: AccountSheet) -> some View {
+        switch sheet {
+        case .plex:
+            SourceAccountSheet(
+                title: "Plex",
+                serverName: viewModel.connectedServerName,
+                status: .connected,
+                isSigningOut: isSigningOut,
+                onSignOut: { Task { await performSignOut(); accountSheet = nil } },
+                onClose: { accountSheet = nil }
+            )
+        case .jellyfin:
+            SourceAccountSheet(
+                title: "Jellyfin",
+                serverName: viewModel.jellyfinServerName,
+                status: .connected,
+                isSigningOut: isSigningOutJellyfin,
+                onSignOut: { Task { await performSignOutJellyfin(); accountSheet = nil } },
+                onClose: { accountSheet = nil }
+            )
         }
     }
 
@@ -594,53 +612,48 @@ struct SettingsView: View {
     /// were product facts, not preferences — Settings should hold
     /// configurable choices, not boast about what the app can do.
     private var playbackSection: some View {
+        // Icons dropped from these rows (§4): the "PLAYBACK" section title already
+        // gives context, and an icon on every value row read as an admin panel.
         AetherSettingsSection("Playback") {
             AetherDisclosureRow(
                 label: "Default Quality",
-                value: viewModel.playbackPreferences.defaultQuality.displayName,
-                systemImage: "slider.horizontal.3"
+                value: viewModel.playbackPreferences.defaultQuality.displayName
             ) {
                 openPicker = .quality
             }
             AetherDisclosureRow(
                 label: "Audio Language",
-                value: languageLabel(viewModel.playbackPreferences.defaultAudioLanguage),
-                systemImage: "speaker.wave.2.fill"
+                value: languageLabel(viewModel.playbackPreferences.defaultAudioLanguage)
             ) {
                 openPicker = .audio
             }
             AetherDisclosureRow(
                 label: "Subtitle Language",
-                value: subtitleLabel(viewModel.playbackPreferences.defaultSubtitleLanguage),
-                systemImage: "captions.bubble.fill"
+                value: subtitleLabel(viewModel.playbackPreferences.defaultSubtitleLanguage)
             ) {
                 openPicker = .subtitles
             }
             AetherDisclosureRow(
                 label: "Skip Intro",
-                value: viewModel.playbackPreferences.skipIntro.displayName,
-                systemImage: "forward.end.fill"
+                value: viewModel.playbackPreferences.skipIntro.displayName
             ) {
                 openPicker = .skipIntro
             }
             AetherDisclosureRow(
                 label: "Skip Credits",
-                value: viewModel.playbackPreferences.skipCredits.displayName,
-                systemImage: "forward.fill"
+                value: viewModel.playbackPreferences.skipCredits.displayName
             ) {
                 openPicker = .skipCredits
             }
             AetherDisclosureRow(
                 label: "Auto-Play Next Episode",
-                value: viewModel.playbackPreferences.autoPlayNext ? "On" : "Off",
-                systemImage: "play.square.stack.fill"
+                value: viewModel.playbackPreferences.autoPlayNext ? "On" : "Off"
             ) {
                 openPicker = .autoPlayNext
             }
             AetherDisclosureRow(
                 label: "Next Episode Countdown",
-                value: "\(viewModel.playbackPreferences.nextEpisodeCountdown)s",
-                systemImage: "timer"
+                value: "\(viewModel.playbackPreferences.nextEpisodeCountdown)s"
             ) {
                 openPicker = .countdown
             }
@@ -837,6 +850,9 @@ struct SettingsView: View {
             }
             AetherSettingsRow(label: "Contact Developer", description: "Get in touch with the developer directly.", systemImage: "envelope.fill", value: nil) {
                 contactDeveloper()
+            }
+            AetherSettingsRow(label: "What's New", description: "Release notes for this and past versions.", systemImage: "sparkles", value: viewModel.versionString) {
+                isWhatsNewPresented = true
             }
         }
     }
