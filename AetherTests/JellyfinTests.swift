@@ -330,6 +330,16 @@ struct JellyfinWatchedTests {
         #expect(!dto.isWatched)
     }
 
+    @Test("UserData.IsFavorite → isFavorite")
+    func favoriteDecodes() throws {
+        let yes = #"{"Id":"42","Name":"X","Type":"Movie","UserData":{"IsFavorite":true}}"#
+        let no  = #"{"Id":"42","Name":"X","Type":"Movie","UserData":{"IsFavorite":false}}"#
+        let none = #"{"Id":"42","Name":"X","Type":"Movie"}"#
+        #expect(try JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(yes.utf8)).isFavorite)
+        #expect(try !JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(no.utf8)).isFavorite)
+        #expect(try !JSONDecoder().decode(JellyfinAPI.BaseItemDto.self, from: Data(none.utf8)).isFavorite)
+    }
+
     @Test("No UserData → not watched")
     func noUserData() throws {
         let json = #"{"Id":"42","Name":"X","Type":"Movie"}"#

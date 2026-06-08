@@ -47,6 +47,7 @@ struct DetailView: View {
     /// item's server value so the UI flips instantly. `nil` = use the item's own
     /// `isWatched`. Reset when the active source changes.
     @State private var watchedOverride: Bool?
+    @State private var favoriteOverride: Bool?
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
@@ -1407,6 +1408,7 @@ struct DetailView: View {
         related = []
         resume = nil
         watchedOverride = nil   // the new source carries its own watched state
+        favoriteOverride = nil  // …and its own favorite state
         overrideItem = (src.item.id == item.id) ? nil : src.item
     }
 
@@ -1465,6 +1467,7 @@ struct DetailView: View {
         var items: [String] = []
         if shouldShowDownloadControl { items.append("Download") }
         if source != nil { items.append("Watch status") }
+        if source?.supportsFavorites == true { items.append("Favorite") }
         if availableSources.count > 1 { items.append("Source") }
         if current.mediaInfo != nil { items.append("Details") }
         return items
@@ -1491,6 +1494,16 @@ struct DetailView: View {
                 ) {
                     dismissIconHint()
                     Task { await toggleWatched() }
+                }
+            }
+            if source?.supportsFavorites == true {
+                AetherIconButton(
+                    systemImage: isFavorite ? "heart.fill" : "heart",
+                    accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
+                    isActive: isFavorite
+                ) {
+                    dismissIconHint()
+                    Task { await toggleFavorite() }
                 }
             }
             if availableSources.count > 1 {
@@ -1604,6 +1617,17 @@ struct DetailView: View {
         } else {
             await source.markUnwatched(activeItem.id)
         }
+    }
+
+    /// Favorite state — the optimistic override wins over the source's value so
+    /// the heart flips instantly on tap.
+    private var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
+
+    private func toggleFavorite() async {
+        guard let source, source.supportsFavorites else { return }
+        let next = !isFavorite
+        favoriteOverride = next   // optimistic
+        await source.setFavorite(activeItem.id, to: next)
     }
 
     /// True when a Download surface should appear below the play buttons —

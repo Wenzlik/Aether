@@ -29,6 +29,10 @@ new data.
 
 ### Added
 
+- **Favorite** — a heart in the Detail action row toggles the title's favorite
+  state on the server, synced across clients. Available on Jellyfin
+  (`UserData.IsFavorite`); hidden on Plex, which has no per-item favorite in its
+  API.
 - **Cast & Crew** — the Detail screen now shows a horizontal rail of cast (with
   the characters they play) and key crew, with circular headshots, on movies and
   episodes. Pulled from Plex (`Role`) and Jellyfin (`People`); closes the biggest

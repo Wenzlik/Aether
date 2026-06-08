@@ -191,13 +191,17 @@ public enum JellyfinAPI {
             /// For a season / series: how many episodes are still unplayed
             /// (`UnplayedItemCount`). Drives Series Detail's On Deck.
             public let unplayedItemCount: Int?
-            public init(played: Bool? = nil, unplayedItemCount: Int? = nil) {
+            /// Whether the item is favorited (`IsFavorite`).
+            public let isFavorite: Bool?
+            public init(played: Bool? = nil, unplayedItemCount: Int? = nil, isFavorite: Bool? = nil) {
                 self.played = played
                 self.unplayedItemCount = unplayedItemCount
+                self.isFavorite = isFavorite
             }
             enum CodingKeys: String, CodingKey {
                 case played = "Played"
                 case unplayedItemCount = "UnplayedItemCount"
+                case isFavorite = "IsFavorite"
             }
         }
 
@@ -212,6 +216,9 @@ public enum JellyfinAPI {
 
         /// Whether the user has watched this item, per Jellyfin's play state.
         public var isWatched: Bool { userData?.played ?? false }
+
+        /// Whether the item is favorited, per Jellyfin's per-user data.
+        public var isFavorite: Bool { userData?.isFavorite ?? false }
 
         /// Genres as a non-optional list.
         public var genreList: [String] { genres ?? [] }
