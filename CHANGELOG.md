@@ -4,6 +4,35 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.3] — Unreleased
+
+Detail-screen redesign, **layout & UX pass** — a smaller, platform-aware hero
+and a more efficient reading order, especially on iPhone. Pure presentation; no
+new data.
+
+### Changed
+
+- **iPhone-portrait movie layout** is now a **banner**, not a full-screen poster:
+  a short backdrop band with the title, metadata, genres, badges and the action
+  row stacked beneath it, so **Title · Metadata · Genres · Resume · Restart land
+  above the fold** and content starts higher. Landscape, iPad, tvOS and visionOS
+  keep the cinematic full-bleed hero (each with its own height) — the layout is
+  no longer one set of proportions scaled to fit.
+- **Shorter hero** across the board (the embedded description moved out), so
+  sections like More Like This start higher.
+- **Description now follows the actions** instead of preceding them — the first
+  decision is "play this?", then "what's it about?".
+- **Technical Details is collapsible** and starts tucked — rich info without
+  padding out the page.
+- **Available Sources** reads as a first-class section (Unified Library framing),
+  showing which connected source is playing and letting you switch.
+
+### Added
+
+- **First-use hint** for the compact icon row — a one-time caption names the
+  icons (Download · Watch status · Source · Details), then the row stays clean
+  forever (dismissed by "Got it" or by tapping an icon).
+
 ## [0.6.2] — Unreleased
 
 Detail-screen redesign toward Infuse-level information density while keeping
