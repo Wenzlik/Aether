@@ -3,7 +3,7 @@ import Foundation
 /// A source kind, ordered by **playback priority** (raw value = priority, lower
 /// wins). Offline first (no bandwidth, works on a plane), then the servers.
 /// `emby` is reserved for the upcoming connector.
-public enum MediaSourceKind: Int, Comparable, Sendable, Hashable {
+public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
     case offline = 0
     case plex = 1
     case jellyfin = 2
@@ -35,7 +35,7 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable {
 /// One concrete source behind a unified title — the real per-source `MediaItem`
 /// plus display metadata. Playback/download reuse `item` through the existing
 /// `MediaSource`, so the unified layer adds no new playback path.
-public struct UnifiedSource: Identifiable, Hashable, Sendable {
+public struct UnifiedSource: Identifiable, Hashable, Sendable, Codable {
     public let kind: MediaSourceKind
     public let item: MediaItem
     public let serverName: String?
@@ -63,7 +63,7 @@ public struct UnifiedSource: Identifiable, Hashable, Sendable {
 /// A title aggregated across every source that has it — the unit the unified UI
 /// renders. The source becomes an implementation detail: one row, multiple
 /// sources behind it.
-public struct UnifiedMediaItem: Identifiable, Hashable, Sendable {
+public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
     public let id: String          // derived from the strongest shared external id
     public let title: String
     public let year: Int?

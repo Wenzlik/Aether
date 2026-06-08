@@ -33,6 +33,16 @@ new data.
   icons (Download · Watch status · Source · Details), then the row stays clean
   forever (dismissed by "Got it" or by tapping an icon).
 
+### Performance
+
+- **Instant library on launch** (#197) — Home, Library and Discover now paint the
+  **last known catalog immediately** from a persisted on-device snapshot instead
+  of flashing a loading state while every server is re-queried. If the snapshot is
+  more than an hour old it still shows instantly, then refreshes silently in the
+  background; a first-ever launch (no snapshot) loads as before. Pull-to-refresh
+  still forces a full refetch, and the snapshot is cleared on sign-out. Stored
+  only on-device, in the app's cache.
+
 ## [0.6.2] — Unreleased
 
 Detail-screen redesign toward Infuse-level information density while keeping

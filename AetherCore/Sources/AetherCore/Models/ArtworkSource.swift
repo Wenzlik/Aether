@@ -9,8 +9,8 @@ import Foundation
 /// The per-tier URL construction (Plex `/photo/:/transcode`, Jellyfin
 /// `fillWidth`/`format=Webp`) lives here — the single source of truth both
 /// connectors build into. Cross-platform (module rule #4).
-public struct ArtworkSource: Sendable, Hashable {
-    public enum Provider: Sendable, Hashable { case plex, jellyfin }
+public struct ArtworkSource: Sendable, Hashable, Codable {
+    public enum Provider: Sendable, Hashable, Codable { case plex, jellyfin }
 
     public let provider: Provider
     /// Server base URL (scheme + host + port).

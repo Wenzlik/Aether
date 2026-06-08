@@ -901,3 +901,118 @@ struct DownloadJobPosterTests {
         #expect(copy.localPosterPath == "9.poster")
     }
 }
+
+@Suite("AetherCore — UnifiedLibrary snapshot (#197)")
+struct UnifiedLibrarySnapshotTests {
+    /// A counting source so we can assert the snapshot path does *not* fan out.
+    private actor CountingSource: MediaSource {
+        let id: MediaSourceID
+        let displayName = "Counting"
+        let lib: Library
+        let item: MediaItem
+        private(set) var libraryCalls = 0
+        init(serverID: String) {
+            self.id = .plex(serverID: serverID)
+            self.lib = Library(id: .init(source: .plex(serverID: serverID), rawValue: "m"), title: "Movies", kind: .movie)
+            self.item = MediaItem(id: .init(source: .plex(serverID: serverID), rawValue: "1"), title: "Matrix",
+                                  kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        }
+        func libraries() async throws -> [Library] { libraryCalls += 1; return [lib] }
+        func items(in id: Library.ID) async throws -> [MediaItem] { [item] }
+        func calls() -> Int { libraryCalls }
+    }
+
+    private func sampleItems() -> [UnifiedMediaItem] {
+        let plex = MediaItem(id: .init(source: .plex(serverID: "s1"), rawValue: "1"), title: "Matrix",
+                             kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        return UnifiedLibrary.merge([plex])
+    }
+
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aether-snap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    @Test("snapshot persists and round-trips across store instances")
+    func roundTrip() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let items = sampleItems()
+
+        await UnifiedLibrarySnapshotStore(directory: dir)
+            .save(items, for: "movie|plex.s1", at: Date(timeIntervalSince1970: 1000))
+
+        // A fresh instance over the same directory reads it back from disk.
+        let snap = try #require(
+            await UnifiedLibrarySnapshotStore(directory: dir).snapshot(for: "movie|plex.s1")
+        )
+        #expect(snap.items.count == items.count)
+        #expect(snap.items.first?.title == "Matrix")
+        #expect(snap.savedAt == Date(timeIntervalSince1970: 1000))
+    }
+
+    @Test("staleness gate: <1h fresh, >=1h stale, absent stale")
+    func staleness() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = UnifiedLibrarySnapshotStore(directory: dir)
+        let now = Date(timeIntervalSince1970: 100_000)
+
+        await store.save(sampleItems(), for: "k", at: now.addingTimeInterval(-30 * 60))   // 30 min
+        #expect(try #require(await store.snapshot(for: "k")).age(asOf: now) < UnifiedLibrary.snapshotStaleness)
+
+        await store.save(sampleItems(), for: "k", at: now.addingTimeInterval(-90 * 60))   // 90 min
+        #expect(try #require(await store.snapshot(for: "k")).age(asOf: now) >= UnifiedLibrary.snapshotStaleness)
+
+        #expect(await store.snapshot(for: "missing") == nil)
+    }
+
+    @Test("clearAll removes the snapshot from disk")
+    func clearAll() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = UnifiedLibrarySnapshotStore(directory: dir)
+        await store.save(sampleItems(), for: "k", at: Date())
+        await store.clearAll()
+        #expect(await store.snapshot(for: "k") == nil)
+        // The file is gone, so a fresh instance sees nothing either.
+        #expect(await UnifiedLibrarySnapshotStore(directory: dir).snapshot(for: "k") == nil)
+    }
+
+    @Test("a fresh snapshot is served without fanning out to sources")
+    func servesSnapshotWithoutFetch() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Unique source id so the process-shared in-memory cache can't collide.
+        let store = UnifiedLibrarySnapshotStore(directory: dir)
+        await store.save(sampleItems(), for: "movie|plex.snaptest", at: Date())
+
+        let src = CountingSource(serverID: "snaptest")
+        let library = UnifiedLibrary(sources: [src], snapshotStore: store)
+        let movies = await library.unifiedItems(kind: .movie)   // no forceRefresh
+
+        #expect(movies.count == 1)
+        #expect(movies.first?.title == "Matrix")
+        #expect(await src.calls() == 0)                          // served from disk, no network
+        #expect(await library.isStale(kind: .movie) == false)
+    }
+
+    @Test("a stale snapshot still serves instantly but reports stale")
+    func staleSnapshotServesButFlagsRefresh() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = UnifiedLibrarySnapshotStore(directory: dir)
+        await store.save(sampleItems(), for: "movie|plex.staletest",
+                         at: Date().addingTimeInterval(-2 * 3600))   // 2h old
+
+        let src = CountingSource(serverID: "staletest")
+        let library = UnifiedLibrary(sources: [src], snapshotStore: store)
+        let movies = await library.unifiedItems(kind: .movie)
+
+        #expect(movies.count == 1)              // instant, from the stale snapshot
+        #expect(await src.calls() == 0)         // still no blocking fetch on the read path
+        #expect(await library.isStale(kind: .movie) == true)   // caller should background-refresh
+    }
+}
