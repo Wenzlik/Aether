@@ -62,15 +62,6 @@ public enum CinemaScreenPreset: String, Sendable, Hashable, CaseIterable, Codabl
     /// The order the size switcher presents, smallest → largest.
     public static let ordered: [CinemaScreenPreset] = [.medium, .large, .imax, .wall]
 
-    /// The next size in `ordered`, wrapping `wall → medium`. Drives the
-    /// single-button "Screen" cycler in the native transport bar: each tap steps
-    /// up one size, then wraps to the smallest.
-    public var next: CinemaScreenPreset {
-        let all = Self.ordered
-        let i = all.firstIndex(of: self) ?? 0
-        return all[(i + 1) % all.count]
-    }
-
     /// The app-wide default until the user picks one (then `CinemaPreferences`
     /// remembers it).
     public static let `default`: CinemaScreenPreset = .medium

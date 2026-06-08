@@ -51,14 +51,6 @@ public enum CinemaSeat: String, Sendable, Hashable, CaseIterable, Codable {
     /// The order the seat switcher presents, closest → farthest.
     public static let ordered: [CinemaSeat] = [.front, .middle, .back]
 
-    /// The next seat in `ordered`, wrapping `back → front`. Drives the
-    /// single-button "Seat" cycler in the native transport bar.
-    public var next: CinemaSeat {
-        let all = Self.ordered
-        let i = all.firstIndex(of: self) ?? 0
-        return all[(i + 1) % all.count]
-    }
-
     /// App-wide default until the user picks one (then `CinemaPreferences`
     /// remembers it).
     public static let `default`: CinemaSeat = .middle
