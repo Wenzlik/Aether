@@ -494,10 +494,18 @@ struct HomeView: View {
             defer { isLoading = false }
             let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
             let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
-            rails = built
-            // Mirror Continue Watching into `feed` so the shared section renders.
-            feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
-            if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+            if built.isEmpty, !rails.isEmpty {
+                // A refresh came back empty but we already have content on screen —
+                // almost always a transient source hiccup (a server that briefly
+                // returns no libraries). Keep what's showing instead of blanking
+                // it to an empty state, and retry once.
+                scheduleAutoRetryIfNeeded()
+            } else {
+                rails = built
+                // Mirror Continue Watching into `feed` so the shared section renders.
+                feed = HomeFeed(featured: [], continueWatching: built.continueWatching, libraries: [])
+                if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
+            }
             // Warm the artwork cache for the rails we're about to show.
             AetherImageCache.shared.prefetch(
                 built.recentlyAdded.map(\.posterURL)
