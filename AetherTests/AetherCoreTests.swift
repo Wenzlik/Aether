@@ -261,6 +261,27 @@ struct PlaybackURLLifecycleTests {
         #expect(switched.streamURL == originalURL) // URL is identical
     }
 
+    @Test("copy() (via selecting…) preserves cast / contentRating / isFavorite")
+    func copyPreservesNewFields() {
+        // Regression: these three fields were added to MediaItem (Phases 2/3/4)
+        // but omitted from the private copy() helper, so every Detail hydration
+        // (applyingPreferences → selectingQuality → copy) silently stripped them
+        // — the Cast & Crew rail, content-rating badge, and favorite heart all
+        // vanished on appear.
+        let item = MediaItem(
+            id: .init(source: .jellyfin(serverID: "j"), rawValue: "1"),
+            title: "First Man", kind: .movie,
+            isFavorite: true,
+            cast: [CastMember(id: "p1", name: "Ryan Gosling", role: "Neil Armstrong")],
+            contentRating: "PG-13"
+        )
+        let copied = item.selectingQuality(.original)
+        #expect(copied.cast.count == 1)
+        #expect(copied.cast.first?.name == "Ryan Gosling")
+        #expect(copied.contentRating == "PG-13")
+        #expect(copied.isFavorite)
+    }
+
     @Test("stop() stops the active transcode session")
     func stopStopsTranscodeSession() async {
         let spy = SpyPlaybackSource()
