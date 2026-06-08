@@ -513,6 +513,15 @@ struct HomeView: View {
                     + built.downloaded.map(\.posterURL)
                     + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
             )
+            // Stale-while-revalidate (#197): the catalog we just painted may be a
+            // persisted snapshot served instantly on a cold launch. If it's past
+            // the 1-hour window, refresh silently in the background — content
+            // stays on screen (the spinner only shows over an empty view).
+            if !forceRefresh, !built.isEmpty {
+                let staleMovies = await library.isStale(kind: .movie)
+                let staleShows = await library.isStale(kind: .show)
+                if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
+            }
             return
         }
 

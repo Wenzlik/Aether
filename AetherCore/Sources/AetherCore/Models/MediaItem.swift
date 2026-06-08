@@ -14,7 +14,7 @@ extension String {
 ///
 /// Both Plex and Synology connectors map their native types into `MediaItem`
 /// so views, navigation, and playback never have to branch on the source.
-public struct MediaItem: Identifiable, Hashable, Sendable {
+public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     public let id: MediaID
     public let title: String
     public let kind: Kind
@@ -331,7 +331,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
 /// External catalogue identifiers for a title — the basis for recognising the
 /// same movie/show across sources (Plex, Jellyfin, offline) in Unified Library.
-public struct MediaGuids: Hashable, Sendable {
+public struct MediaGuids: Hashable, Sendable, Codable {
     public var tmdb: String?
     public var imdb: String?
     public var tvdb: String?
@@ -364,7 +364,7 @@ public struct MediaGuids: Hashable, Sendable {
     }
 }
 
-public struct MediaAudioTrack: Identifiable, Hashable, Sendable {
+public struct MediaAudioTrack: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let title: String
     public let languageCode: String?
@@ -419,7 +419,7 @@ public struct MediaAudioTrack: Identifiable, Hashable, Sendable {
     }
 }
 
-public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable {
+public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let title: String
     public let languageCode: String?

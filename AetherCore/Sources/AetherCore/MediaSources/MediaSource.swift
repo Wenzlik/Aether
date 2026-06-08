@@ -298,7 +298,7 @@ public enum PlaybackQuality: String, Sendable, Hashable, CaseIterable, Codable {
 /// Pre-playback media information shown on the Detail screen: codecs, file
 /// resolution, source bitrate, HDR/Dolby Vision badges. Populated from Plex
 /// metadata, used purely for display.
-public struct MediaInfo: Sendable, Hashable {
+public struct MediaInfo: Sendable, Hashable, Codable {
     public let videoCodec: String?
     public let audioCodec: String?
     public let audioChannels: Int?
