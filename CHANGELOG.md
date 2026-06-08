@@ -11,6 +11,9 @@ screen toward a complete product hub. Refinement, not a redesign.
 
 ### Added
 
+- **Recent searches** (#190) — the Search tab now remembers your recent queries
+  and shows them as tappable chips before you type; tap one to re-run it, or
+  Clear to forget them. Persisted, de-duplicated, and capped.
 - **Support section** (iOS / iPadOS / visionOS) — Report a Bug, Feature Request,
   Send Diagnostics, and Contact Developer, each opening the system Mail composer
   to `aether@zmrhal.cz` (with a `mailto:` fallback when no mail account is set up).
@@ -73,6 +76,10 @@ screen toward a complete product hub. Refinement, not a redesign.
 - **tvOS info sheets** — About / Diagnostics / What's New now scroll with the
   Siri Remote and use the full width (previously a narrow column that couldn't
   be scrolled).
+- **Search no longer collapses while typing** (#189) — the results area kept its
+  intrinsic height during the loading phase, shrinking the screen to ~half and
+  breaking tap-/swipe-to-dismiss-keyboard. The loading + empty states now fill
+  the screen, so the layout stays put and the keyboard dismisses like elsewhere.
 
 ## [0.6.0] — Unreleased · "Cassiopeia"
 
