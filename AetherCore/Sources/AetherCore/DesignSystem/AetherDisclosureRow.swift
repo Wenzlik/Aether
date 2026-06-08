@@ -23,17 +23,21 @@ import SwiftUI
 /// ```
 public struct AetherDisclosureRow: View {
     public let label: String
+    /// Optional muted second line under the label explaining the setting.
+    public let description: String?
     public let value: String?
     public let systemImage: String?
     public let action: () -> Void
 
     public init(
         label: String,
+        description: String? = nil,
         value: String?,
         systemImage: String? = nil,
         action: @escaping () -> Void
     ) {
         self.label = label
+        self.description = description
         self.value = value
         self.systemImage = systemImage
         self.action = action
@@ -48,9 +52,17 @@ public struct AetherDisclosureRow: View {
                         .foregroundStyle(AetherDesign.Palette.accent)
                         .frame(width: 28)
                 }
-                Text(label)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    if let description {
+                        Text(description)
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Spacer(minLength: AetherDesign.Spacing.s)
                 if let value, !value.isEmpty {
                     Text(value)

@@ -24,17 +24,22 @@ public struct AetherSettingsRow: View {
     }
 
     public let label: String
+    /// Optional muted second line under the label — a short explanation of what
+    /// the setting does ("Choose how Aether appears on your Home Screen").
+    public let description: String?
     public let systemImage: String?
     public let style: Style
     public let action: (() -> Void)?
 
     public init(
         label: String,
+        description: String? = nil,
         systemImage: String? = nil,
         value: String?,
         action: (() -> Void)? = nil
     ) {
         self.label = label
+        self.description = description
         self.systemImage = systemImage
         self.style = .value(value)
         self.action = action
@@ -42,11 +47,13 @@ public struct AetherSettingsRow: View {
 
     public init(
         label: String,
+        description: String? = nil,
         systemImage: String? = nil,
         status: AetherStatus,
         action: (() -> Void)? = nil
     ) {
         self.label = label
+        self.description = description
         self.systemImage = systemImage
         self.style = .status(status)
         self.action = action
@@ -54,11 +61,13 @@ public struct AetherSettingsRow: View {
 
     public init(
         label: String,
+        description: String? = nil,
         systemImage: String? = nil,
         actionRole: ActionRole,
         action: @escaping () -> Void
     ) {
         self.label = label
+        self.description = description
         self.systemImage = systemImage
         self.style = .action(role: actionRole)
         self.action = action
@@ -85,9 +94,17 @@ public struct AetherSettingsRow: View {
                     .frame(width: 28)
             }
 
-            Text(label)
-                .font(AetherDesign.Typography.body)
-                .foregroundStyle(labelColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(labelColor)
+                if let description {
+                    Text(description)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
 
             Spacer(minLength: AetherDesign.Spacing.s)
 

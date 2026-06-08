@@ -4,6 +4,47 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.1] — Unreleased
+
+Settings & product-experience polish — Settings grows from a configuration
+screen toward a complete product hub. Refinement, not a redesign.
+
+### Added
+
+- **Support section** (iOS / iPadOS / visionOS) — Report a Bug, Feature Request,
+  Send Diagnostics, and Contact Developer, each opening the system Mail composer
+  to `aether@zmrhal.cz` (with a `mailto:` fallback when no mail account is set up).
+  Bug reports collect a Subject, Description, and Category (Playback / Library /
+  UI / Downloads / Cinema / Other) and auto-attach a **token-free** footer:
+  version, build, platform, device model, OS, theme, timestamp. Excluded on tvOS.
+- **Send Diagnostics** — generates a readable, **token-free** report (app, sources,
+  library counts, downloads, cache, playback prefs), shows a preview, then emails
+  it with the report attached. No tokens, passwords, or account details.
+- **Diagnostics screen** — a user-facing read-only snapshot: sources, library
+  counts, downloads, cache, and build/commit. Available on every platform.
+- **About Aether** — a dedicated screen with the wordmark, "Personal media,
+  beautifully played.", the author, and links. (Tapping the logo seven times
+  unlocks a hidden Developer section with build / device / cache internals.)
+- **What's New release history** — previous releases are listed beneath the
+  current release's highlights.
+- **Clearer settings** — per-row descriptions explain what settings do
+  (e.g. App Icon: "Choose how Aether appears on your Home Screen"), and the
+  Appearance picker offers **System / Dark / Light** (default System).
+- **visionOS Cinema preferences** — the Cinema settings section becomes the home
+  for immersive-playback defaults: **Default Screen Size**, **Default Seating**,
+  **Environment**, plus **Auto-Enter Cinema** (start playback straight in the
+  theater) and **Remember Last Setup** (reopen with the last-used size/seat
+  instead of the defaults).
+- **visionOS Cinema controls in the native player** — the in-cinema Screen-size
+  and Seat controls live in the native player's **Info panel** as a "Theater" tab
+  (the `customInfoViewControllers` surface Apple's Destination Video sample uses).
+  Reached by tapping the docked video, they render in front of the screen at every
+  size and persist while the video is docked.
+- **Warmer Cinema environment** — the Dark Theater is retuned from a cool violet
+  room to an **intimate warm screening room**: dark-wood walls + floor, warm
+  tungsten lighting, a warm aisle glow at the screen base, and soft warm cove
+  bands along the side walls. Authored `.usda` scene and procedural fallback both.
+
 ## [0.6.0] — Unreleased · "Cassiopeia"
 
 Coordinated UX/UI refresh across iOS, iPadOS, tvOS and visionOS — a premium,
@@ -29,13 +70,6 @@ cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
   Rated → genres → Picked for You).
 - **Compact navigation header** — the brand mark sits inline beside search
   instead of a large centered banner, reclaiming vertical space.
-- **visionOS Cinema controls in the native player** — the in-cinema Screen-size
-  and Seat controls move out of a floating panel and into the native player's
-  **Info panel** as a "Theater" tab (the same `customInfoViewControllers` surface
-  Apple's Destination Video sample uses). Reached by tapping the docked video,
-  they render in front of the screen at every size (the floating panel hid behind
-  the largest screens) and persist while the video is docked — so nothing lingers
-  over the picture while watching.
 
 ### Notes
 
