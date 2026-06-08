@@ -14,7 +14,7 @@ extension String {
 ///
 /// Both Plex and Synology connectors map their native types into `MediaItem`
 /// so views, navigation, and playback never have to branch on the source.
-public struct MediaItem: Identifiable, Hashable, Sendable {
+public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     public let id: MediaID
     public let title: String
     public let kind: Kind
@@ -76,12 +76,20 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// "watched" checkmark on posters / episode rows; reflects watched-anywhere,
     /// not just in-Aether playback.
     public let isWatched: Bool
+    /// Whether the item is favorited on the *source* (Jellyfin
+    /// `UserData.IsFavorite`). Server-synced where supported; always `false` on
+    /// sources without a favorite concept (Plex has none). Drives the Detail
+    /// favorite star.
+    public let isFavorite: Bool
     /// For episodes: the parent **season**'s id (Plex `parentRatingKey`,
     /// Jellyfin `ParentId`). Lets Auto-Play-Next fetch the season's episodes and
     /// pick the next one. `nil` for movies / when the source didn't provide it.
     public let parentID: MediaID?
     /// Catalogue genres (e.g. "Sci-Fi", "Drama") — drives Discover genre rails.
     public let genres: [String]
+    /// Top-billed cast and key crew, in the source's billing order. Drives the
+    /// Detail "Cast & Crew" rail. Empty when the source provided none.
+    public let cast: [CastMember]
     /// Community / audience rating (≈0–10) when the source provides one — for
     /// "Top Rated". `nil` when unknown.
     public let communityRating: Double?
@@ -140,8 +148,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         selectedQuality: PlaybackQuality = .original,
         guids: MediaGuids = MediaGuids(),
         isWatched: Bool = false,
+        isFavorite: Bool = false,
         parentID: MediaID? = nil,
         genres: [String] = [],
+        cast: [CastMember] = [],
         communityRating: Double? = nil,
         contentRating: String? = nil,
         releaseDate: Date? = nil,
@@ -175,8 +185,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.selectedQuality = selectedQuality
         self.guids = guids
         self.isWatched = isWatched
+        self.isFavorite = isFavorite
         self.parentID = parentID
         self.genres = genres
+        self.cast = cast
         self.communityRating = communityRating
         self.contentRating = contentRating
         self.releaseDate = releaseDate
@@ -331,7 +343,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
 /// External catalogue identifiers for a title — the basis for recognising the
 /// same movie/show across sources (Plex, Jellyfin, offline) in Unified Library.
-public struct MediaGuids: Hashable, Sendable {
+public struct MediaGuids: Hashable, Sendable, Codable {
     public var tmdb: String?
     public var imdb: String?
     public var tvdb: String?
@@ -364,7 +376,7 @@ public struct MediaGuids: Hashable, Sendable {
     }
 }
 
-public struct MediaAudioTrack: Identifiable, Hashable, Sendable {
+public struct MediaAudioTrack: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let title: String
     public let languageCode: String?
@@ -419,7 +431,7 @@ public struct MediaAudioTrack: Identifiable, Hashable, Sendable {
     }
 }
 
-public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable {
+public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let title: String
     public let languageCode: String?
@@ -470,6 +482,27 @@ public struct MediaSubtitleTrack: Identifiable, Hashable, Sendable {
             isForced: isForced,
             isSelected: selected
         )
+    }
+}
+
+/// A cast or crew member for the Detail "Cast & Crew" rail — an actor with the
+/// character they play, or key crew (director / writer) with their job. The
+/// `photoURL` is a ready-to-load, server-resized headshot (tokenised on-device,
+/// like the rest of the artwork) or `nil` when the source has no image.
+public struct CastMember: Identifiable, Hashable, Sendable, Codable {
+    public let id: String
+    /// The person's name, e.g. "Ryan Gosling".
+    public let name: String
+    /// The character they play ("Neil Armstrong") or, for crew, their job
+    /// ("Director"). `nil` when the source didn't provide one.
+    public let role: String?
+    public let photoURL: URL?
+
+    public init(id: String, name: String, role: String? = nil, photoURL: URL? = nil) {
+        self.id = id
+        self.name = name
+        self.role = role
+        self.photoURL = photoURL
     }
 }
 

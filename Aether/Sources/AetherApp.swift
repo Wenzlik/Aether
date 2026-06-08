@@ -439,6 +439,9 @@ final class AppSession {
     func signOutOfPlex() async {
         do { try await keychain.removeValue(for: Self.plexTokenKey) } catch { }
         do { try await plexServerStore?.clear() } catch { }
+        // Drop the cross-launch library snapshot so a signed-out account's
+        // catalog can't be read off disk (#197).
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
         plexServer = nil
         plexSource = nil
         discoveryState = .idle
@@ -563,6 +566,7 @@ final class AppSession {
 
     func signOutOfJellyfin() async {
         do { try await jellyfinServerStore?.clear() } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
         jellyfinServer = nil
         jellyfinSource = nil
         isJellyfinSignedIn = false

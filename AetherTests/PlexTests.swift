@@ -696,6 +696,26 @@ struct PlexLibraryDecodingTests {
         #expect(info.videoResolution == "4K")
         #expect(info.videoCodec == "hevc")
     }
+
+    @Test("Metadata decodes Role (cast) entries")
+    func decodesRoles() throws {
+        let json = #"""
+        {
+          "ratingKey":"123","type":"movie","title":"First Man",
+          "Role":[
+            {"tag":"Ryan Gosling","role":"Neil Armstrong","thumb":"/library/metadata/1/role/1"},
+            {"tag":"Claire Foy","role":"Janet Armstrong"}
+          ]
+        }
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        let roles = try #require(dto.roles)
+        #expect(roles.count == 2)
+        #expect(roles[0].tag == "Ryan Gosling")
+        #expect(roles[0].role == "Neil Armstrong")
+        #expect(roles[0].thumb == "/library/metadata/1/role/1")
+        #expect(roles[1].thumb == nil)
+    }
 }
 
 @Suite("Plex — PlexMediaSource library + items + mapping")

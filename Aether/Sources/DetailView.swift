@@ -47,6 +47,7 @@ struct DetailView: View {
     /// item's server value so the UI flips instantly. `nil` = use the item's own
     /// `isWatched`. Reset when the active source changes.
     @State private var watchedOverride: Bool?
+    @State private var favoriteOverride: Bool?
     @State private var isPlayerPresented = false
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
@@ -92,6 +93,11 @@ struct DetailView: View {
     /// True while a Download is being prepared (quality picker → enqueue) so
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
+    /// Technical Details starts tucked — rich info without cluttering the page.
+    @State private var technicalDetailsExpanded = false
+    /// First-use discoverability for the bare compact icon row: captions show
+    /// beneath the icons until the user taps one, then never again (persisted).
+    @AppStorage("aether.detail.iconHintSeen") private var iconHintSeen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
@@ -300,8 +306,13 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
+                    if !item.kind.isContainer {
+                        castSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
+
                     if !item.kind.isContainer, current.mediaInfo != nil {
-                        mediaSection
+                        technicalDetailsSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                             .frame(maxWidth: 720, alignment: .leading)
                     }
@@ -376,11 +387,14 @@ struct DetailView: View {
                         }
                     }
 
+                    if !item.kind.isContainer {
+                        castSection
+                    }
                     if !item.kind.isContainer, current.streamURL != nil {
                         playbackSection
                     }
                     if !item.kind.isContainer, current.mediaInfo != nil {
-                        mediaSection
+                        technicalDetailsSection
                     }
                     if availableSources.count > 1 {
                         availableSourcesSection
@@ -471,25 +485,116 @@ struct DetailView: View {
     private func movieContent(_ size: CGSize) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                movieHero(size)
-
-                // Below the fold: discovery first, then configuration (kept
-                // secondary — most users never touch playback settings).
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                    relatedRail
-                    if current.streamURL != nil {
-                        playbackSection
-                            .frame(maxWidth: 720, alignment: .leading)
-                    }
-                    if availableSources.count > 1 {
-                        availableSourcesSection
-                            .frame(maxWidth: 720, alignment: .leading)
-                    }
+                // Cinematic surfaces (tvOS / visionOS / landscape) keep the
+                // full-bleed hero with the actions embedded over the backdrop.
+                // iPhone portrait gets an efficient banner: a shorter backdrop
+                // band with the title / metadata / actions stacked *below* it,
+                // so the first decision ("play this?") is reachable without
+                // scrolling and the backdrop stops behaving like a poster.
+                if isCinematicHero(size) {
+                    movieHero(size)
+                } else {
+                    movieBanner(size)
                 }
-                .padding(.horizontal, AetherDesign.Spacing.l)
+
+                // Below the hero — same order on every platform: what-it's-about,
+                // then the richer sections, then discovery, with playback config
+                // kept last (most users never touch it). §5: description follows
+                // the actions, never precedes them.
+                movieBelowHero
+                    .padding(.horizontal, AetherDesign.Spacing.l)
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// Below-hero section stack, shared by the cinematic and banner movie
+    /// layouts. Description → Available Sources → Technical Details →
+    /// More Like This → Playback settings (config dead last).
+    @ViewBuilder
+    private var movieBelowHero: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            if let summary = item.summary {
+                AetherExpandableText(summary)
+                    .frame(maxWidth: 720, alignment: .leading)
+            }
+            castSection
+            if availableSources.count > 1 {
+                availableSourcesSection
+                    .frame(maxWidth: 720, alignment: .leading)
+            }
+            if current.mediaInfo != nil {
+                technicalDetailsSection
+                    .frame(maxWidth: 720, alignment: .leading)
+            }
+            relatedRail
+            if current.streamURL != nil {
+                playbackSection
+                    .frame(maxWidth: 720, alignment: .leading)
+            }
+        }
+    }
+
+    /// True when the hero should be the full-bleed cinematic stage (actions
+    /// embedded over the backdrop): tvOS / visionOS always, and any landscape
+    /// surface. iPhone *portrait* (compact width) gets the banner instead;
+    /// iPad portrait stays cinematic (it has the room and read well already).
+    private func isCinematicHero(_ size: CGSize) -> Bool {
+        #if os(tvOS) || os(visionOS)
+        return true
+        #else
+        if size.width > size.height { return true }   // landscape → cinematic
+        return hSizeClass != .compact                 // portrait: iPhone → banner, iPad → cinematic
+        #endif
+    }
+
+    /// iPhone-portrait movie layout: a shorter backdrop *banner* with the title,
+    /// metadata, genres, badges and the action row stacked beneath it (not
+    /// overlaid). Prioritises information density over cinematic scale on a
+    /// small display — Title · Metadata · Genres · Resume · Restart land above
+    /// the fold.
+    private func movieBanner(_ size: CGSize) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            CachedAsyncImage(
+                url: activeItem.backdropURL(.backdrop) ?? activeItem.posterURL(.detail),
+                maxPixel: ArtworkTier.backdrop.maxPixel
+            )
+                .frame(width: size.width, height: compactHeroHeight(size))
+                .clipped()
+                .overlay(alignment: .bottom) { bannerScrim }
+
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text(item.title)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                metadataRow
+                genresRow
+                mediaBadges
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+
+            if !item.kind.isContainer {
+                actionRow
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+            }
+        }
+    }
+
+    /// A short bottom fade on the banner backdrop so the title below it reads
+    /// against the image edge without the heavy full-hero scrim.
+    private var bannerScrim: some View {
+        LinearGradient(
+            colors: [.clear, AetherDesign.Palette.background.opacity(0.85)],
+            startPoint: .center,
+            endPoint: .bottom
+        )
+    }
+
+    /// Banner height for iPhone portrait — a 16:9-ish band capped at roughly a
+    /// third of the viewport, so it reads as a backdrop treatment rather than a
+    /// full-screen poster (the §7 complaint).
+    private func compactHeroHeight(_ size: CGSize) -> CGFloat {
+        min(size.width * 9.0 / 16.0, size.height * 0.34)
     }
 
     private func movieHero(_ size: CGSize) -> some View {
@@ -519,14 +624,8 @@ struct DetailView: View {
 
                 mediaBadges
 
-                if let summary = item.summary {
-                    Text(summary)
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
+                // Description moved out of the hero (§5): it now follows the
+                // actions in `movieBelowHero`, so the play decision comes first.
                 actionRow
             }
             .padding(AetherDesign.Spacing.l)
@@ -552,10 +651,15 @@ struct DetailView: View {
     /// Hero height: most of the screen on tvOS / landscape (cinematic), a tall
     /// upper portion in portrait so the content still hints at scroll below.
     private func movieHeroHeight(_ size: CGSize) -> CGFloat {
+        // Trimmed from the earlier 0.80–0.82: with the description no longer
+        // embedded the hero needs less height, reclaiming vertical space for
+        // the content below while staying cinematic on the big surfaces.
         #if os(tvOS)
-        return size.height * 0.80
+        return size.height * 0.74
         #else
-        return size.width > size.height ? size.height * 0.82 : size.height * 0.60
+        // Landscape stays cinematic but a touch shorter; iPad portrait (the
+        // only portrait surface still routed here) gets a calmer half-screen.
+        return size.width > size.height ? size.height * 0.72 : size.height * 0.52
         #endif
     }
 
@@ -1134,6 +1238,76 @@ struct DetailView: View {
         }
     }
 
+    // MARK: - Cast & Crew
+
+    /// Horizontal rail of cast + key crew with circular headshots — the biggest
+    /// information-density gap vs. Infuse. Hidden when the source carries none.
+    @ViewBuilder
+    private var castSection: some View {
+        if !current.cast.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                Text("Cast & Crew")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+                        ForEach(current.cast) { member in castCard(member) }
+                    }
+                    .padding(.vertical, AetherDesign.Spacing.xxs)
+                    .padding(.horizontal, 2)
+                }
+                #if os(tvOS)
+                .focusSection()
+                #endif
+            }
+        }
+    }
+
+    private func castCard(_ member: CastMember) -> some View {
+        VStack(spacing: AetherDesign.Spacing.xs) {
+            castPhoto(member)
+            Text(member.name)
+                .font(AetherDesign.Typography.caption.weight(.medium))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .lineLimit(1)
+            if let role = member.role {
+                Text(role)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(width: castPhotoSize)
+        .multilineTextAlignment(.center)
+        #if os(tvOS)
+        .focusable()
+        .premiumFocus()
+        #endif
+    }
+
+    private func castPhoto(_ member: CastMember) -> some View {
+        let size = castPhotoSize
+        return ZStack {
+            Circle().fill(AetherDesign.Palette.surfaceElevated)
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.38))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+            if member.photoURL != nil {
+                CachedAsyncImage(url: member.photoURL, aspectRatio: 1, maxPixel: ArtworkTier.thumbnail.maxPixel)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var castPhotoSize: CGFloat {
+        #if os(tvOS)
+        140
+        #else
+        84
+        #endif
+    }
+
     // MARK: - Available Sources (manual source override)
 
     /// Lists every source that has this title. The active one is checked; the
@@ -1143,9 +1317,16 @@ struct DetailView: View {
     @ViewBuilder
     private var availableSourcesSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            Text("Available Sources")
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text("Available Sources")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                // Unified Library framing — this title exists on more than one
+                // connected server; the row marks which one is playing.
+                Text("Play this title from any connected source.")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
 
             VStack(spacing: AetherDesign.Spacing.xs) {
                 ForEach(availableSources) { src in
@@ -1227,6 +1408,7 @@ struct DetailView: View {
         related = []
         resume = nil
         watchedOverride = nil   // the new source carries its own watched state
+        favoriteOverride = nil  // …and its own favorite state
         overrideItem = (src.item.id == item.id) ? nil : src.item
     }
 
@@ -1245,10 +1427,55 @@ struct DetailView: View {
                 #endif
                 // Level 3 — everything else as compact, equal-weight icon buttons.
                 compactActionRow
+                compactActionHint
             }
         } else {
             unavailableState
         }
+    }
+
+    /// First-use discoverability for the bare icon row (§4, "bare + first-use
+    /// hint"): a one-time caption naming the icons that are actually present,
+    /// dismissed by "Got it" — or by tapping an icon, since that *is* discovery.
+    /// `iconHintSeen` persists, so the row is clean forever after.
+    @ViewBuilder
+    private var compactActionHint: some View {
+        let items = compactActionHintItems
+        if !iconHintSeen, !items.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.xs) {
+                Image(systemName: "hand.tap")
+                    .font(.caption2)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                Text(items.joined(separator: " · "))
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Button("Got it") { dismissIconHint() }
+                    .font(AetherDesign.Typography.caption.weight(.semibold))
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                    .buttonStyle(.plain)
+                    .premiumFocus()
+            }
+            .padding(.top, AetherDesign.Spacing.xxs)
+            .transition(.opacity)
+        }
+    }
+
+    /// Labels for whichever compact icons are currently visible, left-to-right.
+    private var compactActionHintItems: [String] {
+        var items: [String] = []
+        if shouldShowDownloadControl { items.append("Download") }
+        if source != nil { items.append("Watch status") }
+        if source?.supportsFavorites == true { items.append("Favorite") }
+        if availableSources.count > 1 { items.append("Source") }
+        if current.mediaInfo != nil { items.append("Details") }
+        return items
+    }
+
+    private func dismissIconHint() {
+        guard !iconHintSeen else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { iconHintSeen = true }
     }
 
     /// Tertiary actions as a row of compact circular icon buttons (Infuse-style)
@@ -1265,7 +1492,18 @@ struct DetailView: View {
                     accessibilityLabel: isWatched ? "Mark as unwatched" : "Mark as watched",
                     isActive: isWatched
                 ) {
+                    dismissIconHint()
                     Task { await toggleWatched() }
+                }
+            }
+            if source?.supportsFavorites == true {
+                AetherIconButton(
+                    systemImage: isFavorite ? "heart.fill" : "heart",
+                    accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
+                    isActive: isFavorite
+                ) {
+                    dismissIconHint()
+                    Task { await toggleFavorite() }
                 }
             }
             if availableSources.count > 1 {
@@ -1273,6 +1511,7 @@ struct DetailView: View {
             }
             if current.mediaInfo != nil {
                 AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
+                    dismissIconHint()
                     presentedSelector = .technicalDetails
                 }
             }
@@ -1378,6 +1617,17 @@ struct DetailView: View {
         } else {
             await source.markUnwatched(activeItem.id)
         }
+    }
+
+    /// Favorite state — the optimistic override wins over the source's value so
+    /// the heart flips instantly on tap.
+    private var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
+
+    private func toggleFavorite() async {
+        guard let source, source.supportsFavorites else { return }
+        let next = !isFavorite
+        favoriteOverride = next   // optimistic
+        await source.setFavorite(activeItem.id, to: next)
     }
 
     /// True when a Download surface should appear below the play buttons —
@@ -1734,31 +1984,84 @@ struct DetailView: View {
     /// resolution come from Plex metadata as the file is on disk; the
     /// "Playback" line is a best-effort guess based on container + quality.
     /// The server's actual decision is taken when Play is pressed.
+    /// The Technical Details rows, shared by the always-expanded sheet
+    /// (`mediaSection`) and the collapsible on-page section.
+    @ViewBuilder
+    private func mediaInfoRows(_ info: MediaInfo?) -> some View {
+        if let video = videoLine(info) {
+            AetherSettingsRow(label: "Video", value: video)
+        }
+        if let audio = audioLine(info) {
+            AetherSettingsRow(label: "Audio", value: audio)
+        }
+        if let subtitles = subtitleSummary {
+            AetherSettingsRow(label: "Subtitles", value: subtitles)
+        }
+        if let hdrBadge = hdrBadge(info) {
+            AetherSettingsRow(label: "HDR", value: hdrBadge)
+        }
+        if let bitrate = info?.bitrateKbps, bitrate > 0 {
+            AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+        }
+        if let size = info?.fileSizeBytes, size > 0 {
+            AetherSettingsRow(label: "File Size", value: formatFileSize(size))
+        }
+        AetherSettingsRow(label: "Playback", status: playbackModeStatus)
+        if let source {
+            AetherSettingsRow(label: "Source", value: source.displayName)
+        }
+    }
+
+    /// Always-expanded section — used inside the Technical Details *sheet*
+    /// (reached from the compact icon row).
     @ViewBuilder
     private var mediaSection: some View {
-        let info = current.mediaInfo
         AetherSettingsSection("Technical Details") {
-            if let video = videoLine(info) {
-                AetherSettingsRow(label: "Video", value: video)
+            mediaInfoRows(current.mediaInfo)
+        }
+    }
+
+    /// On-page **collapsible** Technical Details — defaults collapsed so the
+    /// info is available without padding out the page (§6). The header toggles;
+    /// the rows live in the same frosted card `AetherSettingsSection` uses.
+    @ViewBuilder
+    private var technicalDetailsSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    technicalDetailsExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: AetherDesign.Spacing.xs) {
+                    Text("Technical Details".uppercased())
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .tracking(0.6)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .rotationEffect(.degrees(technicalDetailsExpanded ? 0 : -90))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                .contentShape(Rectangle())
             }
-            if let audio = audioLine(info) {
-                AetherSettingsRow(label: "Audio", value: audio)
-            }
-            if let subtitles = subtitleSummary {
-                AetherSettingsRow(label: "Subtitles", value: subtitles)
-            }
-            if let hdrBadge = hdrBadge(info) {
-                AetherSettingsRow(label: "HDR", value: hdrBadge)
-            }
-            if let bitrate = info?.bitrateKbps, bitrate > 0 {
-                AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
-            }
-            if let size = info?.fileSizeBytes, size > 0 {
-                AetherSettingsRow(label: "File Size", value: formatFileSize(size))
-            }
-            AetherSettingsRow(label: "Playback", status: playbackModeStatus)
-            if let source {
-                AetherSettingsRow(label: "Source", value: source.displayName)
+            .buttonStyle(.plain)
+            .premiumFocus()
+
+            if technicalDetailsExpanded {
+                VStack(spacing: 0) {
+                    mediaInfoRows(current.mediaInfo)
+                }
+                .background(
+                    AetherDesign.Materials.card,
+                    in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                        .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+                }
+                .transition(.opacity)
             }
         }
     }

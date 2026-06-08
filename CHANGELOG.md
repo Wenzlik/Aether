@@ -4,6 +4,61 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.3] — Unreleased
+
+Detail-screen redesign, **layout & UX pass** — a smaller, platform-aware hero
+and a more efficient reading order, especially on iPhone. Pure presentation; no
+new data.
+
+### Changed
+
+- **iPhone-portrait movie layout** is now a **banner**, not a full-screen poster:
+  a short backdrop band with the title, metadata, genres, badges and the action
+  row stacked beneath it, so **Title · Metadata · Genres · Resume · Restart land
+  above the fold** and content starts higher. Landscape, iPad, tvOS and visionOS
+  keep the cinematic full-bleed hero (each with its own height) — the layout is
+  no longer one set of proportions scaled to fit.
+- **Shorter hero** across the board (the embedded description moved out), so
+  sections like More Like This start higher.
+- **Description now follows the actions** instead of preceding them — the first
+  decision is "play this?", then "what's it about?".
+- **Technical Details is collapsible** and starts tucked — rich info without
+  padding out the page.
+- **Available Sources** reads as a first-class section (Unified Library framing),
+  showing which connected source is playing and letting you switch.
+
+### Added
+
+- **Favorite** — a heart in the Detail action row toggles the title's favorite
+  state on the server, synced across clients. Available on Jellyfin
+  (`UserData.IsFavorite`); hidden on Plex, which has no per-item favorite in its
+  API.
+- **Cast & Crew** — the Detail screen now shows a horizontal rail of cast (with
+  the characters they play) and key crew, with circular headshots, on movies and
+  episodes. Pulled from Plex (`Role`) and Jellyfin (`People`); closes the biggest
+  information-density gap vs. Infuse.
+- **First-use hint** for the compact icon row — a one-time caption names the
+  icons (Download · Watch status · Source · Details), then the row stays clean
+  forever (dismissed by "Got it" or by tapping an icon).
+
+### Fixed
+
+- **Series source switching** (#194) — alternate sources for a TV show no longer
+  show as "Unavailable" in the Detail source picker. A show/season is a container
+  you switch to and browse (it carries no stream URL of its own), so availability
+  now treats containers as switchable on any source that has them, while a
+  movie/episode without a resolvable stream stays correctly gated.
+
+### Performance
+
+- **Instant library on launch** (#197) — Home, Library and Discover now paint the
+  **last known catalog immediately** from a persisted on-device snapshot instead
+  of flashing a loading state while every server is re-queried. If the snapshot is
+  more than an hour old it still shows instantly, then refreshes silently in the
+  background; a first-ever launch (no snapshot) loads as before. Pull-to-refresh
+  still forces a full refetch, and the snapshot is cleared on sign-out. Stored
+  only on-device, in the app's cache.
+
 ## [0.6.2] — Unreleased
 
 Detail-screen redesign toward Infuse-level information density while keeping

@@ -776,6 +776,17 @@ public actor PlexMediaSource: MediaSource {
             provider: .plex, base: base, token: accessToken,
             posterPath: dto.thumb, backdropPath: dto.art
         )
+        // Cast & Crew (Plex `Role`). Headshots go through the same photo
+        // transcoder as posters via an ArtworkSource pinned to the role thumb.
+        let cast: [CastMember] = (dto.roles ?? []).prefix(20).enumerated().compactMap { index, role in
+            guard let name = role.tag?.nonEmptyTrimmed else { return nil }
+            let photoURL = role.thumb?.nonEmptyTrimmed.flatMap {
+                ArtworkSource(provider: .plex, base: base, token: accessToken,
+                              posterPath: $0, backdropPath: nil).posterURL(.thumbnail)
+            }
+            return CastMember(id: "\(index)-\(name)", name: name,
+                              role: role.role?.nonEmptyTrimmed, photoURL: photoURL)
+        }
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,
@@ -816,6 +827,7 @@ public actor PlexMediaSource: MediaSource {
             // Season ratingKey → the id Auto-Play-Next pulls siblings from.
             parentID: dto.parentRatingKey.map { MediaID(source: id, rawValue: $0) },
             genres: dto.genres,
+            cast: cast,
             communityRating: dto.audienceRating ?? dto.rating,
             contentRating: dto.contentRating?.nonEmptyTrimmed,
             releaseDate: dto.releaseDate,

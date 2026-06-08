@@ -289,10 +289,26 @@ public enum PlexAPI {
         public let contentRating: String?
         /// Genre tags (`{"tag": "Sci-Fi"}`). JSON key capital `Genre`.
         public let genreTags: [Tag]?
+        /// Cast entries (`{"tag": actor, "role": character, "thumb": photo}`),
+        /// returned on the detail endpoint. JSON key capital `Role`.
+        public let roles: [Role]?
 
         public struct Tag: Decodable, Sendable, Equatable {
             public let tag: String?
             public init(tag: String? = nil) { self.tag = tag }
+        }
+
+        /// One cast member: `tag` = actor name, `role` = character, `thumb` =
+        /// a Plex-proxied (or external) headshot path.
+        public struct Role: Decodable, Sendable, Equatable {
+            public let tag: String?
+            public let role: String?
+            public let thumb: String?
+            public init(tag: String? = nil, role: String? = nil, thumb: String? = nil) {
+                self.tag = tag
+                self.role = role
+                self.thumb = thumb
+            }
         }
 
         public struct GuidEntry: Decodable, Sendable, Equatable {
@@ -394,7 +410,8 @@ public enum PlexAPI {
             audienceRating: Double? = nil,
             rating: Double? = nil,
             contentRating: String? = nil,
-            genreTags: [Tag]? = nil
+            genreTags: [Tag]? = nil,
+            roles: [Role]? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -421,6 +438,7 @@ public enum PlexAPI {
             self.rating = rating
             self.contentRating = contentRating
             self.genreTags = genreTags
+            self.roles = roles
         }
 
         public var kind: MediaItem.Kind {
@@ -549,6 +567,7 @@ public enum PlexAPI {
             case externalGuids = "Guid"
             case markers = "Marker"
             case genreTags = "Genre"
+            case roles = "Role"
         }
 
         public struct Media: Decodable, Sendable, Equatable {

@@ -370,6 +370,13 @@ struct LibraryBrowseView: View {
             )
             if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
         }
+        // Stale-while-revalidate (#197): a cold launch paints the persisted
+        // snapshot instantly; refresh silently if it's past the 1-hour window.
+        if !forceRefresh, !built.isEmpty {
+            let staleMovies = await library.isStale(kind: .movie)
+            let staleShows = await library.isStale(kind: .show)
+            if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
+        }
     }
 
     /// One automatic retry when a connected source returns empty (often a

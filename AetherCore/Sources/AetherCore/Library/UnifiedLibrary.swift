@@ -18,10 +18,21 @@ import Foundation
 public actor UnifiedLibrary {
     private let sources: [any MediaSource]
     private let downloads: DownloadStore?
+    private let snapshotStore: UnifiedLibrarySnapshotStore
 
-    public init(sources: [any MediaSource], downloads: DownloadStore? = nil) {
+    /// A persisted snapshot older than this is still served instantly on a cold
+    /// launch, but the view is told to refresh it in the background (issue #197).
+    /// Distinct from `UnifiedLibraryCache`'s 45 s in-session reuse TTL.
+    public static let snapshotStaleness: TimeInterval = 3600   // 1 hour
+
+    public init(
+        sources: [any MediaSource],
+        downloads: DownloadStore? = nil,
+        snapshotStore: UnifiedLibrarySnapshotStore = .shared
+    ) {
         self.sources = sources
         self.downloads = downloads
+        self.snapshotStore = snapshotStore
     }
 
     /// Server display names keyed by source id, derived from the sources
@@ -41,8 +52,20 @@ public actor UnifiedLibrary {
         // the connected-source set, short-TTL. Pull-to-refresh passes
         // `forceRefresh` to bypass it and re-stamp the cache.
         let key = cacheKey(kind: kind)
-        if !forceRefresh, let cached = await UnifiedLibraryCache.shared.items(for: key) {
-            return cached
+        if !forceRefresh {
+            if let cached = await UnifiedLibraryCache.shared.items(for: key) {
+                return cached
+            }
+            // Cold in-memory cache (e.g. a fresh launch): serve the persisted
+            // snapshot instantly — any age, no network — so the library never
+            // flashes a loading state when we already know what was there. The
+            // caller refreshes in the background when `isStale(kind:)` is true.
+            // Only a first-ever launch with no snapshot falls through to the
+            // blocking fan-out below (the sole place a loading state appears).
+            if let snapshot = await snapshotStore.snapshot(for: key) {
+                await UnifiedLibraryCache.shared.set(snapshot.items, for: key)
+                return snapshot.items
+            }
         }
         // Fan out across sources concurrently (and each source's libraries
         // concurrently) instead of serially — the serial version made Home /
@@ -69,7 +92,25 @@ public actor UnifiedLibrary {
         let downloaded = await downloadedTask
         let merged = Self.merge(items, downloaded: downloaded, serverNames: serverNames)
         await UnifiedLibraryCache.shared.set(merged, for: key)
+        // Re-stamp the cross-launch snapshot with the fresh catalog so the next
+        // cold start paints it instantly.
+        await snapshotStore.save(merged, for: key, at: Date())
         return merged
+    }
+
+    /// Whether the persisted snapshot for `kind` is past the 1-hour staleness
+    /// threshold (or absent). Views call this after painting the instant
+    /// snapshot to decide whether to kick a silent background refresh.
+    public func isStale(kind: MediaItem.Kind, asOf now: Date = Date()) async -> Bool {
+        let key = cacheKey(kind: kind)
+        guard let snapshot = await snapshotStore.snapshot(for: key) else { return true }
+        return snapshot.age(asOf: now) >= Self.snapshotStaleness
+    }
+
+    /// Drop every persisted snapshot — call on sign-out or a connected-source
+    /// change so a previous login's catalog can't surface on the next launch.
+    public func clearSnapshots() async {
+        await snapshotStore.clearAll()
     }
 
     /// Cache key for `unifiedItems(kind:)` — the kind plus the sorted connected
@@ -267,7 +308,13 @@ public actor UnifiedLibrary {
                     kind: kind,
                     item: item,
                     serverName: serverNames[item.id.source],
-                    playable: item.streamURL != nil
+                    // A show / season is a *container*: you switch to it and
+                    // browse its episodes, so it's "available" on any source
+                    // that has it even though the container itself carries no
+                    // streamURL. Only a leaf (movie / episode) needs a
+                    // resolvable stream. Without this, every series' alternate
+                    // source showed as "Unavailable" in the picker (#194).
+                    playable: item.kind.isContainer || item.streamURL != nil
                 ))
             }
         }

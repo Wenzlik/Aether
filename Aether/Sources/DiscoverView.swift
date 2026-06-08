@@ -254,6 +254,15 @@ struct DiscoverView: View {
         }
         autoRetried = false   // real content available → reset the retry budget
 
+        // Stale-while-revalidate (#197): a cold launch paints the persisted
+        // snapshot instantly; refresh silently if it's past the 1-hour window
+        // (content stays on screen — the spinner only shows over an empty view).
+        if !forceRefresh {
+            let staleMovies = await library.isStale(kind: .movie)
+            let staleShows = await library.isStale(kind: .show)
+            if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
+        }
+
         // Hero: one random pick. Random Picks: shuffled, hero excluded.
         let pick = all.randomElement()
         hero = pick

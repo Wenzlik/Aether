@@ -165,19 +165,43 @@ public enum JellyfinAPI {
         /// Age / content classification (`OfficialRating`), e.g. "PG-13",
         /// "TV-MA", "15". Rendered as a badge in the Detail metadata line.
         public let officialRating: String?
+        /// Cast + crew (`People`), returned when `People` is in `Fields`.
+        public let people: [BaseItemPerson]?
+
+        /// One cast/crew entry. `type` is "Actor" / "Director" / "Writer" / …;
+        /// `role` is the character for actors. `primaryImageTag` keys the
+        /// headshot at `/Items/{id}/Images/Primary`.
+        public struct BaseItemPerson: Decodable, Sendable, Equatable {
+            public let id: String?
+            public let name: String?
+            public let role: String?
+            public let type: String?
+            public let primaryImageTag: String?
+            enum CodingKeys: String, CodingKey {
+                case id = "Id"
+                case name = "Name"
+                case role = "Role"
+                case type = "Type"
+                case primaryImageTag = "PrimaryImageTag"
+            }
+        }
 
         public struct UserData: Decodable, Sendable, Equatable {
             public let played: Bool?
             /// For a season / series: how many episodes are still unplayed
             /// (`UnplayedItemCount`). Drives Series Detail's On Deck.
             public let unplayedItemCount: Int?
-            public init(played: Bool? = nil, unplayedItemCount: Int? = nil) {
+            /// Whether the item is favorited (`IsFavorite`).
+            public let isFavorite: Bool?
+            public init(played: Bool? = nil, unplayedItemCount: Int? = nil, isFavorite: Bool? = nil) {
                 self.played = played
                 self.unplayedItemCount = unplayedItemCount
+                self.isFavorite = isFavorite
             }
             enum CodingKeys: String, CodingKey {
                 case played = "Played"
                 case unplayedItemCount = "UnplayedItemCount"
+                case isFavorite = "IsFavorite"
             }
         }
 
@@ -192,6 +216,9 @@ public enum JellyfinAPI {
 
         /// Whether the user has watched this item, per Jellyfin's play state.
         public var isWatched: Bool { userData?.played ?? false }
+
+        /// Whether the item is favorited, per Jellyfin's per-user data.
+        public var isFavorite: Bool { userData?.isFavorite ?? false }
 
         /// Genres as a non-optional list.
         public var genreList: [String] { genres ?? [] }
@@ -332,6 +359,7 @@ public enum JellyfinAPI {
             case parentIndexNumber = "ParentIndexNumber"
             case seriesName = "SeriesName"
             case officialRating = "OfficialRating"
+            case people = "People"
         }
     }
 
