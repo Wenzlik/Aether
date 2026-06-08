@@ -16,9 +16,10 @@ import AetherCore
 /// point — the system owns rendering, sizing, and controls.
 ///
 /// **V2 (Enhanced Cinema):** the empty black-wall / gray-floor / purple-line look
-/// is replaced with image-based lighting from a code-drawn dark-violet gradient,
-/// a glossy clearcoat floor that pools the room + screen glow, an enclosing dark
-/// skybox, restrained emissive cove strips + a screen-bloom panel, grounding
+/// is replaced with image-based lighting from a code-drawn warm dark gradient
+/// (intimate screening-room amber, matched to the authored scene), a glossy
+/// clearcoat floor that pools the room + screen glow, an enclosing dark skybox,
+/// restrained warm emissive cove strips + a screen-bloom panel, grounding
 /// shadows, and a gentle "lights dimming" passthrough fade on enter. It is still
 /// 100% procedural — no Reality Composer Pro assets — so it ships with no asset
 /// pipeline and stays the reliable fallback. (Real Medium/Large/IMAX docking
@@ -178,7 +179,7 @@ struct DarkTheaterView: View {
         let root = Entity()
         root.name = "DarkTheater"
 
-        // Draw the dark-violet gradient once; both the IBL and the skybox use it
+        // Draw the warm dark gradient once; both the IBL and the skybox use it
         // (it also carries the screen-glow band, so the "bloom" lives in the
         // lighting/reflection — never as an opaque panel between the audience and
         // the system-docked screen).
@@ -232,7 +233,7 @@ struct DarkTheaterView: View {
     @MainActor
     private static func makeFloor() -> Entity {
         var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(tint: color(0x0B0B0F))
+        material.baseColor = .init(tint: color(0x150F0A))   // warm dark wood
         material.roughness = .init(floatLiteral: 0.18)
         material.metallic = .init(floatLiteral: 0.0)
         material.clearcoat = .init(floatLiteral: 1.0)
@@ -272,12 +273,12 @@ struct DarkTheaterView: View {
     private static func makeKeyLight() -> Entity {
         let entity = Entity()
         entity.name = "KeyLight"
-        entity.components.set(DirectionalLightComponent(color: color(0xFFF4E6), intensity: 220))
+        entity.components.set(DirectionalLightComponent(color: color(0xFFD9A0), intensity: 180))
         entity.orientation = simd_quatf(angle: -.pi * 0.34, axis: [1, 0, 0])
         return entity
     }
 
-    /// Thin, dim violet emissive cove strips — a restrained brand accent that
+    /// Thin, dim warm emissive cove strips — a restrained amber accent that
     /// reads as architectural cove lighting, not two lamps (replaces V1's two
     /// bright point lights). The "front" run sits *behind* the screen plane so it
     /// glows at the base of the far wall rather than as a line between the
@@ -288,7 +289,7 @@ struct DarkTheaterView: View {
         func strip(_ name: String, width: Float, depth: Float, at position: SIMD3<Float>) -> Entity {
             let entity = ModelEntity(
                 mesh: .generatePlane(width: width, depth: depth),
-                materials: [UnlitMaterial(color: color(0x2C1F52))]
+                materials: [UnlitMaterial(color: color(0x553014))]
             )
             entity.name = name
             entity.position = position
@@ -304,8 +305,8 @@ struct DarkTheaterView: View {
     // MARK: - Procedural gradient
 
     /// Draw a 1024×512 equirectangular gradient used for both the IBL and the
-    /// skybox: near-black at the nadir, rising to a charcoal-violet zenith, with a
-    /// soft brighter glow toward the upper-front. The glow sits high on purpose —
+    /// skybox: near-black at the nadir, rising to a warm amber-brown zenith, with a
+    /// soft brighter warm glow toward the upper-front. The glow sits high on purpose —
     /// a flat floor's reflection samples the *upper* hemisphere, so that's where
     /// the on-floor pool comes from. Brightness + exact placement need on-device
     /// tuning (equirectangular yaw and Simulator lighting are unreliable here). No
@@ -319,12 +320,12 @@ struct DarkTheaterView: View {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
 
-        // Vertical gradient: near-black nadir → charcoal-violet zenith. The top
+        // Vertical gradient: near-black nadir → warm amber-brown zenith. The top
         // carries the most energy because that's what the floor reflects.
         let colors = [
-            color(0x050507).cgColor,   // nadir — floor never reflects this
-            color(0x100D20).cgColor,   // horizon
-            color(0x241D44).cgColor,   // zenith — charcoal violet, the floor's source
+            color(0x070402).cgColor,   // nadir — floor never reflects this
+            color(0x16100A).cgColor,   // horizon
+            color(0x2E2010).cgColor,   // zenith — warm amber-brown, the floor's source
         ] as CFArray
         guard let gradient = CGGradient(
             colorsSpace: colorSpace, colors: colors, locations: [0.0, 0.5, 1.0]
@@ -341,7 +342,7 @@ struct DarkTheaterView: View {
         // floor. Kept restrained so the room still reads dark.
         if let glow = CGGradient(
             colorsSpace: colorSpace,
-            colors: [color(0x4A4072).cgColor, color(0x241D44).withAlphaComponent(0).cgColor] as CFArray,
+            colors: [color(0x5A3E1E).cgColor, color(0x2E2010).withAlphaComponent(0).cgColor] as CFArray,
             locations: [0.0, 1.0]
         ) {
             let center = CGPoint(x: CGFloat(width) / 2, y: CGFloat(height) * 0.80)

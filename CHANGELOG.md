@@ -36,6 +36,11 @@ cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
   they render in front of the screen at every size (the floating panel hid behind
   the largest screens) and persist while the video is docked — so nothing lingers
   over the picture while watching.
+- **Warmer Cinema environment** — the Dark Theater is retuned from a cool
+  violet room to an **intimate warm screening room**: dark-wood walls + floor,
+  warm tungsten lighting, a warm aisle glow at the screen base, and soft warm
+  cove bands along the side walls. Both the authored `.usda` scene and the
+  procedural fallback are warmed to match.
 
 ### Notes
 
