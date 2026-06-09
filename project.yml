@@ -40,6 +40,10 @@ settings:
 packages:
   AetherCore:
     path: AetherCore
+  # Official VideoLAN VLCKit, vendored locally (scripts/fetch_vlckit.sh) — the
+  # fallback player for containers AVFoundation can't open (mkv). See #173.
+  VLCKit:
+    path: Vendor/VLCKit
 
 targets:
   # Single multiplatform target. One bundle ID
@@ -71,6 +75,8 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
+      - package: VLCKit
+        product: VLCKit
     info:
       path: Aether/SupportingFiles/Info.plist
       properties:

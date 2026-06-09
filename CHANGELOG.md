@@ -16,6 +16,13 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   the epic (filename parsing #206, the `.local` source id #207) shipped first.
   *Fast-follows: TV show/season grouping, share-sheet import, browser upload
   (#209), metadata matching (#210) + manual editing (#211).*
+- **mkv (and other non-native formats) play locally** — files AVFoundation can't
+  open (Matroska / AVI / …) now play through a bundled **VLCKit** engine, chosen
+  automatically per file (`PlaybackEngine`); everything AVPlayer supports keeps
+  the native player (controls / PiP / AirPlay). v1 has play/pause + progress;
+  scrubbing, audio/subtitle selection and resume on this engine are fast-follows.
+  Uses the official VideoLAN VLCKit (LGPL-2.1; vendored, not committed — fetched
+  by `scripts/fetch_vlckit.sh`).
 
 ## [0.6.3] — Unreleased
 
