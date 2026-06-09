@@ -1280,3 +1280,57 @@ struct PlaybackEngineTests {
         #expect(PlaybackEngine.engine(for: item) == .system)
     }
 }
+
+@Suite("AetherCore — TMDbClient (#210)")
+struct TMDbClientTests {
+    private struct StubAPI: APIClient {
+        let json: String
+        func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            (Data(json.utf8),
+             HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    @Test("matches a movie → id / title / year / overview / poster URL")
+    func matchMovie() async {
+        let json = #"""
+        {"results":[{"id":27205,"title":"Inception","release_date":"2010-07-15",
+          "overview":"A thief who steals secrets.","poster_path":"/abc.jpg","backdrop_path":"/bd.jpg"}]}
+        """#
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .match(title: "Inception", year: 2010, isEpisode: false)
+        #expect(m?.tmdbID == 27205)
+        #expect(m?.title == "Inception")
+        #expect(m?.year == 2010)
+        #expect(m?.overview == "A thief who steals secrets.")
+        #expect(m?.posterURL?.absoluteString == "https://image.tmdb.org/t/p/w500/abc.jpg")
+        #expect(m?.backdropURL?.absoluteString == "https://image.tmdb.org/t/p/w1280/bd.jpg")
+    }
+
+    @Test("matches a TV show via name / first_air_date")
+    func matchTV() async {
+        let json = #"""
+        {"results":[{"id":95396,"name":"Severance","first_air_date":"2022-02-18","overview":"Mark."}]}
+        """#
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .match(title: "Severance", year: nil, isEpisode: true)
+        #expect(m?.tmdbID == 95396)
+        #expect(m?.title == "Severance")
+        #expect(m?.year == 2022)
+        #expect(m?.posterURL == nil)   // no poster_path in this result
+    }
+
+    @Test("empty key disables matching")
+    func emptyKey() async {
+        let client = TMDbClient(apiKey: "  ", api: StubAPI(json: #"{"results":[]}"#))
+        #expect(client.isConfigured == false)
+        #expect(await client.match(title: "X", year: nil, isEpisode: false) == nil)
+    }
+
+    @Test("no results → nil")
+    func noResults() async {
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: #"{"results":[]}"#))
+            .match(title: "Nope", year: nil, isEpisode: false)
+        #expect(m == nil)
+    }
+}

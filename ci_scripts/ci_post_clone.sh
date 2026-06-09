@@ -52,8 +52,25 @@ fi
 
 echo "ci_post_clone: using $("$XCODEGEN" --version 2>/dev/null | tr '\n' ' ')"
 
-echo "ci_post_clone: running xcodegen generate in $WORKSPACE"
 cd "$WORKSPACE"
+
+# Fetch the vendored VLCKit xcframework (a local SPM binaryTarget the app links
+# but doesn't commit — see scripts/fetch_vlckit.sh). Without it, xcodebuild
+# can't resolve the package. No cache here (fresh VM per build), so it
+# re-downloads (~522 MB) each archive — acceptable for the TestFlight cadence.
+echo "ci_post_clone: fetching VLCKit"
+bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+
+# Inject the TMDb API key (Local Library metadata, #210) from the Xcode Cloud
+# workflow environment variable into the gitignored xcconfig the build reads.
+# Unset ⇒ matching just stays disabled (no failure). The key never lives in the
+# repo (public) — only in the Xcode Cloud workflow + the resulting binary.
+if [ -n "${TMDB_API_KEY:-}" ]; then
+  echo "ci_post_clone: injecting TMDb key into Config/Secrets.xcconfig"
+  printf 'TMDB_API_KEY = %s\n' "$TMDB_API_KEY" > "$WORKSPACE/Config/Secrets.xcconfig"
+fi
+
+echo "ci_post_clone: running xcodegen generate in $WORKSPACE"
 "$XCODEGEN" generate
 
 echo "ci_post_clone: done"

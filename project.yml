@@ -77,6 +77,10 @@ targets:
         product: AetherCore
       - package: VLCKit
         product: VLCKit
+    # Base xcconfig that pulls in the (gitignored) TMDb key — see Config/.
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
     info:
       path: Aether/SupportingFiles/Info.plist
       properties:
@@ -88,6 +92,10 @@ targets:
         # is what shows if the stamp ever fails to run. Surfaced in Settings →
         # About; unlike CFBundleVersion it's meaningful on local builds too.
         AetherGitCommit: dev
+        # TMDb v3 API key for Local Library metadata matching (#210). Injected
+        # from Config/Secrets.xcconfig (gitignored) / Xcode Cloud; empty in CI +
+        # clean checkouts, which simply disables matching.
+        TMDBAPIKey: "$(TMDB_API_KEY)"
         ITSAppUsesNonExemptEncryption: false
         # iOS / iPadOS / visionOS read the launch screen + scene manifest;
         # tvOS ignores them harmlessly.

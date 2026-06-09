@@ -148,6 +148,24 @@ final class AppSession {
         localItemCount = await localLibraryStore.count()
     }
 
+    /// TMDb v3 key, injected at build time (Info.plist ← Config/Secrets.xcconfig
+    /// or Xcode Cloud). Empty ⇒ Local Library metadata matching is disabled.
+    var tmdbAPIKey: String {
+        ((Bundle.main.object(forInfoDictionaryKey: "TMDBAPIKey") as? String) ?? "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Enrich a freshly-imported local item with TMDb metadata (poster /
+    /// overview / canonical title). Best-effort: no-op without a key or on any
+    /// failure, leaving the inferred title in place.
+    func matchLocalMetadata(for item: LocalLibraryStore.Item) async {
+        guard !tmdbAPIKey.isEmpty else { return }
+        if let match = await TMDbClient(apiKey: tmdbAPIKey, api: api)
+            .match(title: item.title, year: item.year, isEpisode: item.isEpisode) {
+            await localLibraryStore.setMatch(match, for: item.id)
+        }
+    }
+
     // MARK: - Downloads
 
     /// Single-source-of-truth for download state. `nil` until `start()` has

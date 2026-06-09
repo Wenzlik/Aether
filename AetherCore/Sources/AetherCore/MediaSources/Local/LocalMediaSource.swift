@@ -80,11 +80,15 @@ public actor LocalMediaSource: MediaSource {
     }
 
     private func movieItem(_ item: LocalLibraryStore.Item) -> MediaItem {
-        MediaItem(
+        let m = item.metadata
+        return MediaItem(
             id: .init(source: id, rawValue: item.id),
-            title: item.title,
+            title: m?.title ?? item.title,
             kind: .movie,
-            year: item.year,
+            year: m?.year ?? item.year,
+            summary: m?.overview,
+            posterURL: m?.posterURL,
+            backdropURL: m?.backdropURL,
             streamURL: store.fileURL(for: item),
             dateAdded: item.addedAt
         )
@@ -92,10 +96,15 @@ public actor LocalMediaSource: MediaSource {
 
     private func showContainer(series: String, episodes: [LocalLibraryStore.Item]) -> MediaItem {
         let seasons = Set(episodes.compactMap(\.season))
+        // Episodes of a series share the matched TV show — use the first match.
+        let m = episodes.compactMap(\.metadata).first
         return MediaItem(
             id: showID(for: series),
-            title: series,
+            title: m?.title ?? series,
             kind: .show,
+            summary: m?.overview,
+            posterURL: m?.posterURL,
+            backdropURL: m?.backdropURL,
             dateAdded: episodes.map(\.addedAt).max(),
             seasonCount: seasons.isEmpty ? nil : seasons.count,
             episodeCount: episodes.count
@@ -103,12 +112,15 @@ public actor LocalMediaSource: MediaSource {
     }
 
     private func episodeItem(_ item: LocalLibraryStore.Item, showID: MediaID) -> MediaItem {
-        MediaItem(
+        let m = item.metadata
+        return MediaItem(
             id: .init(source: id, rawValue: item.id),
             title: item.episode.map { "Episode \($0)" } ?? item.title,
             kind: .episode,
+            summary: m?.overview,
+            posterURL: m?.posterURL,
             streamURL: store.fileURL(for: item),
-            seriesTitle: item.title,
+            seriesTitle: m?.title ?? item.title,
             seasonNumber: item.season,
             episodeNumber: item.episode,
             parentID: showID,
