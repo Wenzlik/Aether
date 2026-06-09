@@ -49,6 +49,8 @@ struct DetailView: View {
     @State private var watchedOverride: Bool?
     @State private var favoriteOverride: Bool?
     @State private var isPlayerPresented = false
+    /// Set when a local file needs the VLCKit engine (mkv etc.) instead of AVKit.
+    @State private var vlcPlayback: VLCPlayback?
     @State private var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
@@ -241,6 +243,10 @@ struct DetailView: View {
             // snapshot at presentation — always non-nil, always
             // correct.
             playbackSelectorSheet(for: selector)
+        }
+        .fullScreenCover(item: $vlcPlayback) { playback in
+            VLCPlayerView(url: playback.url) { vlcPlayback = nil }
+                .ignoresSafeArea()
         }
         #if os(visionOS)
         .onChange(of: cinema.isActive) { _, active in
@@ -2289,6 +2295,12 @@ struct DetailView: View {
 
     // MARK: - Player dismiss
 
+    /// Identifies a file routed to the VLCKit engine (for `.fullScreenCover`).
+    private struct VLCPlayback: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
     private func presentPlayer(fromStart: Bool) async {
         #if os(visionOS)
         // Auto-Enter Cinema (Settings): start playback straight in the immersive
@@ -2311,6 +2323,14 @@ struct DetailView: View {
             configuredItem = hydrated
         }
         playbackItem = current
+
+        // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
+        // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
+        // for now (fast-follow on this engine).
+        if let url = current.streamURL, PlaybackEngine.engine(for: url) == .vlc {
+            vlcPlayback = VLCPlayback(url: url)
+            return
+        }
 
         // `0` forces a restart; `nil` lets the session resume from the
         // persisted point.

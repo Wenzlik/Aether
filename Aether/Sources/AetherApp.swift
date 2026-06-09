@@ -132,6 +132,53 @@ final class AppSession {
     let cinemaPreferences: CinemaPreferencesStore
     let appearance: AppearancePreferenceStore
 
+    // MARK: - Local Library
+
+    /// On-device files Aether owns (#173). The store is always present; the
+    /// source is folded into `connectedSources` only once something's been
+    /// imported, so a fresh server-less install still shows the welcome state.
+    let localLibraryStore = LocalLibraryStore()
+    let localSource: LocalMediaSource
+    /// Cached count of imported files (refreshed on launch + after import), so
+    /// the synchronous `connectedSources` can decide whether to include Local.
+    private(set) var localItemCount = 0
+
+    /// Re-read the imported-file count (after an import or removal).
+    func refreshLocalLibrary() async {
+        localItemCount = await localLibraryStore.count()
+    }
+
+    /// TMDb v3 key, injected at build time (Info.plist ← Config/Secrets.xcconfig
+    /// or Xcode Cloud). Empty ⇒ Local Library metadata matching is disabled.
+    var tmdbAPIKey: String {
+        ((Bundle.main.object(forInfoDictionaryKey: "TMDBAPIKey") as? String) ?? "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Enrich a freshly-imported local item with TMDb metadata (poster /
+    /// overview / canonical title). Best-effort: no-op without a key or on any
+    /// failure, leaving the inferred title in place.
+    func matchLocalMetadata(for item: LocalLibraryStore.Item) async {
+        guard !tmdbAPIKey.isEmpty else { return }
+        if let match = await TMDbClient(apiKey: tmdbAPIKey, api: api)
+            .match(title: item.title, year: item.year, isEpisode: item.isEpisode) {
+            await localLibraryStore.setMatch(match, for: item.id)
+        }
+    }
+
+    /// Whether TMDb matching is available (a key was built in).
+    var isTMDbConfigured: Bool { !tmdbAPIKey.isEmpty }
+
+    /// Fill in metadata for items imported before a key was present — matches
+    /// every still-unmatched item. (Matching otherwise only runs at import.)
+    func rematchLocalMetadata() async {
+        guard isTMDbConfigured else { return }
+        for item in await localLibraryStore.allItems() where item.metadata == nil {
+            await matchLocalMetadata(for: item)
+        }
+        await refreshLocalLibrary()
+    }
+
     // MARK: - Downloads
 
     /// Single-source-of-truth for download state. `nil` until `start()` has
@@ -228,6 +275,7 @@ final class AppSession {
         self.playbackPreferences = PlaybackPreferencesStore()
         self.cinemaPreferences = CinemaPreferencesStore()
         self.appearance = AppearancePreferenceStore()
+        self.localSource = LocalMediaSource(store: localLibraryStore)
     }
 
     // MARK: - Lifecycle
@@ -268,6 +316,10 @@ final class AppSession {
         // 3. Pick the active source (persisted choice, else whatever connected).
         activeSourceKind = await loadActiveSourceKind()
         refreshActiveSource()
+
+        // 3b. Count any previously-imported Local Library files so it folds into
+        //     `connectedSources` from first paint.
+        await refreshLocalLibrary()
 
         // 4. Boot the downloads pipeline. The store reads its JSON file off
         //    disk; the manager rebinds any in-flight URLSession tasks from
@@ -368,6 +420,10 @@ final class AppSession {
         var list: [any MediaSource] = []
         if let plexSource { list.append(plexSource) }
         if let jellyfinSource { list.append(jellyfinSource) }
+        // Local is on-device + always available, but only counts as a connected
+        // source once it has content — otherwise a fresh server-less install
+        // would never show the "connect a source" welcome state.
+        if localItemCount > 0 { list.append(localSource) }
         return list
     }
 

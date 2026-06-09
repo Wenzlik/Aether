@@ -228,6 +228,8 @@ private struct WirePoint: Codable {
         case .synology(let host):
             kind = "synology"
             param = host
+        case .local:
+            kind = "local"
         }
         self.sourceKind = kind
         self.sourceParam = param
@@ -254,6 +256,8 @@ private struct WirePoint: Codable {
         case "synology":
             guard let param = sourceParam else { return nil }
             source = .synology(host: param)
+        case "local":
+            source = .local
         default:
             return nil
         }

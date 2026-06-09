@@ -180,6 +180,7 @@ final class SettingsViewModel {
             case .jellyfin: kind = "jellyfin"
             case .synology: kind = "synology"
             case .mock:     kind = "mock"
+            case .local:    kind = "local"
             }
             return DiagnosticsSnapshot.SourceLine(id: "\(kind)-\(index)", name: source.displayName, status: "Signed in")
         }
@@ -224,6 +225,30 @@ final class SettingsViewModel {
     /// Open the Jellyfin sign-in flow (server URL + Quick Connect).
     func connectJellyfin() {
         session.presentSignIn(.jellyfin)
+    }
+
+    // MARK: - Local Library
+
+    /// Number of files imported into the on-device Local Library.
+    var localItemCount: Int { session.localItemCount }
+
+    /// Whether TMDb matching is available (a key was built in) — gates the
+    /// "Re-match metadata" action.
+    var isTMDbConfigured: Bool { session.isTMDbConfigured }
+
+    /// Fill in posters/details for titles imported before the key was set.
+    func rematchLocalMetadata() async { await session.rematchLocalMetadata() }
+
+    /// Copy the picked files into the Local Library store, then refresh the
+    /// count so the source folds into `connectedSources`.
+    func importLocalMedia(_ urls: [URL]) async {
+        for url in urls {
+            if let item = try? await session.localLibraryStore.importFile(at: url) {
+                // Best-effort TMDb match (poster / overview) when a key is built in.
+                await session.matchLocalMetadata(for: item)
+            }
+        }
+        await session.refreshLocalLibrary()
     }
 
     /// Clear the Plex token + selected server and reset app state. Home returns

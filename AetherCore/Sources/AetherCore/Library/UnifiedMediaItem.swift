@@ -8,16 +8,20 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
     case plex = 1
     case jellyfin = 2
     case emby = 3
+    /// On-device Local Library — lowest priority (a server copy of the same
+    /// title is preferred for playback when one exists).
+    case local = 4
 
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 
     /// The streaming kind for a concrete `MediaSourceID`. Offline is derived
     /// separately (from the downloads store), not from an id. `nil` for kinds
-    /// that aren't part of the unified priority yet (mock, Synology).
+    /// that aren't part of the unified priority (mock, Synology).
     public init?(streaming source: MediaSourceID) {
         switch source {
         case .plex:     self = .plex
         case .jellyfin: self = .jellyfin
+        case .local:    self = .local
         case .synology, .mock: return nil
         }
     }
@@ -28,6 +32,7 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
         case .plex:     return "Plex"
         case .jellyfin: return "Jellyfin"
         case .emby:     return "Emby"
+        case .local:    return "Local"
         }
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import AetherCore
+import UniformTypeIdentifiers
 
 /// Aether's settings surface — a full-screen tab destination (no longer a
 /// modal). Calm, factual, four grouped focusable cards: Account, Sources,
@@ -23,6 +24,8 @@ struct SettingsView: View {
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
     @State private var isWhatsNewPresented = false
+    @State private var isImportingLocal = false
+    @State private var isRematching = false
     @State private var openPicker: PrefPicker?
     /// Device volume stats for the Storage Summary card. `nil` until the probe
     /// runs (and stays nil if it fails) — the free-space row just hides.
@@ -206,6 +209,7 @@ struct SettingsView: View {
         accountSection
         sourcesSection
         #if !os(tvOS)
+        localLibrarySection
         downloadsSection
         #endif
         playbackSection
@@ -612,6 +616,60 @@ struct SettingsView: View {
 
         return AetherSettingsRow(label: label, systemImage: glyph, status: status, action: action)
     }
+
+    // MARK: - Local Library
+
+    /// Import on-device media files (Files / document picker) to play without a
+    /// server (#173). tvOS has no document picker, so it compiles out there.
+    #if !os(tvOS)
+    private var localLibrarySection: some View {
+        AetherSettingsSection("Local Library") {
+            AetherSettingsRow(
+                label: "Import Media…",
+                description: "Add video files from Files to play without a server.",
+                systemImage: "square.and.arrow.down",
+                value: nil
+            ) {
+                isImportingLocal = true
+            }
+            if viewModel.localItemCount > 0 {
+                let n = viewModel.localItemCount
+                AetherSettingsRow(label: "Imported", value: "\(n) item\(n == 1 ? "" : "s")")
+                if viewModel.isTMDbConfigured {
+                    AetherSettingsRow(
+                        label: isRematching ? "Matching…" : "Re-match Metadata",
+                        description: "Fetch posters & details for titles imported before a key was set.",
+                        systemImage: "arrow.clockwise",
+                        value: nil
+                    ) {
+                        guard !isRematching else { return }
+                        isRematching = true
+                        Task { await viewModel.rematchLocalMetadata(); isRematching = false }
+                    }
+                    .disabled(isRematching)
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $isImportingLocal,
+            allowedContentTypes: localImportTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            guard case let .success(urls) = result, !urls.isEmpty else { return }
+            Task { await viewModel.importLocalMedia(urls) }
+        }
+    }
+
+    /// Video UTTypes the picker accepts, plus dynamic types for containers
+    /// without a built-in UTI (mkv / avi / ts) so they're still selectable.
+    private var localImportTypes: [UTType] {
+        var types: [UTType] = [.movie, .video, .audiovisualContent, .mpeg4Movie, .quickTimeMovie]
+        for ext in ["mkv", "avi", "ts", "m2ts", "webm"] {
+            if let t = UTType(filenameExtension: ext) { types.append(t) }
+        }
+        return types
+    }
+    #endif
 
     // MARK: - Downloads
 

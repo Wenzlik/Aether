@@ -34,12 +34,16 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.6.3"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "0.6.4"
+    CURRENT_PROJECT_VERSION: "1"
 
 packages:
   AetherCore:
     path: AetherCore
+  # Official VideoLAN VLCKit, vendored locally (scripts/fetch_vlckit.sh) — the
+  # fallback player for containers AVFoundation can't open (mkv). See #173.
+  VLCKit:
+    path: Vendor/VLCKit
 
 targets:
   # Single multiplatform target. One bundle ID
@@ -71,6 +75,12 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
+      - package: VLCKit
+        product: VLCKit
+    # Base xcconfig that pulls in the (gitignored) TMDb key — see Config/.
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
     info:
       path: Aether/SupportingFiles/Info.plist
       properties:
@@ -82,6 +92,10 @@ targets:
         # is what shows if the stamp ever fails to run. Surfaced in Settings →
         # About; unlike CFBundleVersion it's meaningful on local builds too.
         AetherGitCommit: dev
+        # TMDb v3 API key for Local Library metadata matching (#210). Injected
+        # from Config/Secrets.xcconfig (gitignored) / Xcode Cloud; empty in CI +
+        # clean checkouts, which simply disables matching.
+        TMDBAPIKey: "$(TMDB_API_KEY)"
         ITSAppUsesNonExemptEncryption: false
         # iOS / iPadOS / visionOS read the launch screen + scene manifest;
         # tvOS ignores them harmlessly.

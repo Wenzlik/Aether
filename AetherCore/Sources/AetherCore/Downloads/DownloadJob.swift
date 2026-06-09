@@ -239,6 +239,8 @@ extension MediaSourceID: Codable {
                 )
             }
             self = .synology(host: parameter)
+        case "local":
+            self = .local
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind, in: container,
@@ -261,6 +263,8 @@ extension MediaSourceID: Codable {
         case .synology(let host):
             try container.encode("synology", forKey: .kind)
             try container.encode(host, forKey: .parameter)
+        case .local:
+            try container.encode("local", forKey: .kind)
         }
     }
 }

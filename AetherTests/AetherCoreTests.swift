@@ -1061,3 +1061,276 @@ struct UnifiedLibrarySnapshotTests {
         #expect(await library.isStale(kind: .movie) == true)   // caller should background-refresh
     }
 }
+
+@Suite("AetherCore — MediaSourceID .local (#207)")
+struct MediaSourceIDLocalTests {
+    @Test("stableKey + Codable round-trip for .local")
+    func localRoundTrips() throws {
+        #expect(MediaSourceID.local.stableKey == "local")
+        let data = try JSONEncoder().encode(MediaSourceID.local)
+        #expect(try JSONDecoder().decode(MediaSourceID.self, from: data) == .local)
+    }
+
+    @Test("existing source ids still round-trip unchanged")
+    func othersRoundTrip() throws {
+        for id in [MediaSourceID.mock, .plex(serverID: "s1"), .jellyfin(serverID: "j1"), .synology(host: "h")] {
+            let data = try JSONEncoder().encode(id)
+            #expect(try JSONDecoder().decode(MediaSourceID.self, from: data) == id)
+        }
+    }
+
+    @Test(".local maps to the Local streaming kind (#208), lowest priority")
+    func localStreamingKind() {
+        #expect(MediaSourceKind(streaming: .local) == .local)
+        #expect(MediaSourceKind.local > .jellyfin)   // servers preferred over local
+    }
+}
+
+@Suite("AetherCore — TitleInference (#206)")
+struct TitleInferenceTests {
+    @Test("movies: title + year, junk stripped")
+    func movies() {
+        let cases: [(String, String, Int?)] = [
+            ("Movie Name (2019) 1080p.mkv", "Movie Name", 2019),
+            ("Movie.Name.2019.x265.mkv", "Movie Name", 2019),
+            ("Blade Runner 2049 (2017) 2160p BluRay x265.mkv", "Blade Runner 2049", 2017),
+            ("The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv", "The Matrix", 1999),
+            ("Parasite (2019) [1080p] [WEBRip].mp4", "Parasite", 2019),
+            ("Inception.mkv", "Inception", nil),
+        ]
+        for (file, title, year) in cases {
+            let t = TitleInference(filename: file)
+            #expect(t.title == title, "title for \(file): got \(t.title)")
+            #expect(t.year == year, "year for \(file): got \(String(describing: t.year))")
+            #expect(t.kind == .movie)
+        }
+    }
+
+    @Test("episodes: season + episode + show title")
+    func episodes() {
+        let cases: [(String, String, Int, Int)] = [
+            ("Show.Name.S01E02.mkv", "Show Name", 1, 2),
+            ("Show Name - 1x02 - Title.mkv", "Show Name", 1, 2),
+            ("Breaking.Bad.S05E14.1080p.x265.mkv", "Breaking Bad", 5, 14),
+            ("Severance S01E09 720p.mkv", "Severance", 1, 9),
+            ("The Wire S1E1.mp4", "The Wire", 1, 1),
+        ]
+        for (file, title, season, episode) in cases {
+            let t = TitleInference(filename: file)
+            #expect(t.title == title, "title for \(file): got \(t.title)")
+            #expect(t.season == season, "season for \(file): got \(String(describing: t.season))")
+            #expect(t.episode == episode, "episode for \(file): got \(String(describing: t.episode))")
+            #expect(t.kind == .episode)
+            #expect(t.isEpisode)
+        }
+    }
+
+    @Test("season folder + bare episode number → uses folder season")
+    func seasonFolder() {
+        let t = TitleInference(filename: "E04 - Some Title.mkv",
+                               pathComponents: ["Breaking Bad", "Season 03"])
+        #expect(t.season == 3)
+        #expect(t.episode == 4)
+        #expect(t.kind == .episode)
+    }
+
+    @Test("resolution 1920x1080 is not mistaken for an episode marker")
+    func resolutionNotEpisode() {
+        let t = TitleInference(filename: "Some Movie 2018 1920x1080 x264.mkv")
+        #expect(t.title == "Some Movie")
+        #expect(t.year == 2018)
+        #expect(t.season == nil)
+        #expect(t.episode == nil)
+    }
+
+    @Test("title falls back to the show folder when the filename is just a number")
+    func folderFallback() {
+        let t = TitleInference(filename: "04.mkv", pathComponents: ["The Office", "Season 02"])
+        #expect(t.season == 2)
+        #expect(t.episode == 4)
+        #expect(t.title == "The Office")
+    }
+}
+
+@Suite("AetherCore — Local Library (#208)")
+struct LocalLibraryTests {
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aether-local-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+    private func sourceFile(_ name: String) throws -> URL {
+        // Unique *directory*, clean filename — so lastPathComponent (what
+        // inference reads) matches a real import, not a UUID-prefixed temp name.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try Data("video-bytes".utf8).write(to: url)
+        return url
+    }
+
+    @Test("import copies the file, infers metadata, persists across instances")
+    func importPersists() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Inception (2010) 1080p.mp4")
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        #expect(item.title == "Inception")
+        #expect(item.year == 2010)
+        #expect(!item.isEpisode)
+        #expect(FileManager.default.fileExists(atPath: store.fileURL(for: item).path))
+
+        // A fresh instance over the same directory reads the persisted index.
+        let reopened = LocalLibraryStore(directory: dir)
+        let all = await reopened.allItems()
+        #expect(all.count == 1)
+        #expect(all.first?.title == "Inception")
+    }
+
+    @Test("a movie import surfaces as a flat, playable movie")
+    func movieMapping() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Inception (2010).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        _ = try await store.importFile(at: src)
+        let source = LocalMediaSource(store: store)
+
+        #expect(source.id == .local)
+        let libs = try await source.libraries()
+        let movieLib = try #require(libs.first { $0.kind == .movie })
+        #expect(libs.contains { $0.kind == .show } == false)   // no episodes → no TV library
+        let items = try await source.items(in: movieLib.id)
+        #expect(items.count == 1)
+        #expect(items[0].title == "Inception")
+        #expect(items[0].kind == .movie)
+        #expect(items[0].streamURL != nil)
+    }
+
+    @Test("episodes group into a show container with playable children")
+    func episodeGrouping() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let e1 = try sourceFile("Severance.S01E01.mkv")
+        let e2 = try sourceFile("Severance.S01E02.mkv")
+        let movie = try sourceFile("Dune (2021).mp4")
+        defer { [e1, e2, movie].forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        let store = LocalLibraryStore(directory: dir)
+        for f in [e1, e2, movie] { _ = try await store.importFile(at: f) }
+        let source = LocalMediaSource(store: store)
+
+        let libs = try await source.libraries()
+        #expect(libs.contains { $0.kind == .movie })
+        let showLib = try #require(libs.first { $0.kind == .show })
+
+        let shows = try await source.items(in: showLib.id)
+        #expect(shows.count == 1)                       // one container for "Severance"
+        let show = shows[0]
+        #expect(show.kind == .show)
+        #expect(show.title == "Severance")
+        #expect(show.episodeCount == 2)
+        #expect(show.streamURL == nil)                  // containers aren't directly playable
+
+        let episodes = try await source.children(of: show.id)
+        #expect(episodes.count == 2)
+        #expect(episodes[0].episodeNumber == 1)         // sorted by season/episode
+        #expect(episodes[1].episodeNumber == 2)
+        #expect(episodes.allSatisfy { $0.streamURL != nil && $0.kind == .episode })
+        #expect(episodes[0].seriesTitle == "Severance")
+    }
+
+    @Test("remove deletes the item and its file")
+    func remove() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Movie.2020.mkv")
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        let path = store.fileURL(for: item).path
+        #expect(FileManager.default.fileExists(atPath: path))
+        await store.remove(item.id)
+        #expect(await store.count() == 0)
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+}
+
+@Suite("AetherCore — PlaybackEngine (mkv #173)")
+struct PlaybackEngineTests {
+    private func eng(_ s: String) -> PlaybackEngine { .engine(for: URL(string: s)!) }
+
+    @Test("system for AVPlayer containers + HLS; VLC for mkv/avi/ts/webm")
+    func selection() {
+        #expect(eng("file:///x/Movie.mp4") == .system)
+        #expect(eng("file:///x/Movie.m4v") == .system)
+        #expect(eng("file:///x/Clip.mov") == .system)
+        #expect(eng("https://h/video/start.m3u8?session=1") == .system)
+        #expect(eng("file:///x/Movie.mkv") == .vlc)
+        #expect(eng("file:///x/Movie.avi") == .vlc)
+        #expect(eng("file:///x/Movie.ts") == .vlc)
+        #expect(eng("file:///x/Movie.webm") == .vlc)
+    }
+
+    @Test("no stream URL → system")
+    func noURL() {
+        let item = MediaItem(id: .init(source: .local, rawValue: "1"), title: "X", kind: .movie)
+        #expect(PlaybackEngine.engine(for: item) == .system)
+    }
+}
+
+@Suite("AetherCore — TMDbClient (#210)")
+struct TMDbClientTests {
+    private struct StubAPI: APIClient {
+        let json: String
+        func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            (Data(json.utf8),
+             HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    @Test("matches a movie → id / title / year / overview / poster URL")
+    func matchMovie() async {
+        let json = #"""
+        {"results":[{"id":27205,"title":"Inception","release_date":"2010-07-15",
+          "overview":"A thief who steals secrets.","poster_path":"/abc.jpg","backdrop_path":"/bd.jpg"}]}
+        """#
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .match(title: "Inception", year: 2010, isEpisode: false)
+        #expect(m?.tmdbID == 27205)
+        #expect(m?.title == "Inception")
+        #expect(m?.year == 2010)
+        #expect(m?.overview == "A thief who steals secrets.")
+        #expect(m?.posterURL?.absoluteString == "https://image.tmdb.org/t/p/w500/abc.jpg")
+        #expect(m?.backdropURL?.absoluteString == "https://image.tmdb.org/t/p/w1280/bd.jpg")
+    }
+
+    @Test("matches a TV show via name / first_air_date")
+    func matchTV() async {
+        let json = #"""
+        {"results":[{"id":95396,"name":"Severance","first_air_date":"2022-02-18","overview":"Mark."}]}
+        """#
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .match(title: "Severance", year: nil, isEpisode: true)
+        #expect(m?.tmdbID == 95396)
+        #expect(m?.title == "Severance")
+        #expect(m?.year == 2022)
+        #expect(m?.posterURL == nil)   // no poster_path in this result
+    }
+
+    @Test("empty key disables matching")
+    func emptyKey() async {
+        let client = TMDbClient(apiKey: "  ", api: StubAPI(json: #"{"results":[]}"#))
+        #expect(client.isConfigured == false)
+        #expect(await client.match(title: "X", year: nil, isEpisode: false) == nil)
+    }
+
+    @Test("no results → nil")
+    func noResults() async {
+        let m = await TMDbClient(apiKey: "k", api: StubAPI(json: #"{"results":[]}"#))
+            .match(title: "Nope", year: nil, isEpisode: false)
+        #expect(m == nil)
+    }
+}

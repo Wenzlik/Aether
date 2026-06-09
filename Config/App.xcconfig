@@ -1,0 +1,5 @@
+// Base build config. The TMDb key (Local Library metadata, #210) defaults to
+// empty here and is overridden by Config/Secrets.xcconfig when present
+// (gitignored). Empty key = metadata matching disabled.
+TMDB_API_KEY =
+#include? "Secrets.xcconfig"

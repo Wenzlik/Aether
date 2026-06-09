@@ -53,3 +53,10 @@ fastlane/test_output
 *.gcno
 *.profraw
 coverage/
+
+# Vendored VLCKit binary — fetched via scripts/fetch_vlckit.sh, not committed (~2.4 GB)
+Vendor/VLCKit/VLCKit.xcframework/
+Vendor/VLCKit/*.tar.xz
+
+# TMDb API key — local secret, set per developer / via Xcode Cloud
+Config/Secrets.xcconfig
