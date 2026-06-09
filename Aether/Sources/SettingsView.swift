@@ -464,6 +464,18 @@ struct SettingsView: View {
     /// (it was showing ~10 GB on a device with >100 GB free; #231).
     private func refreshCapacity() async {
         let url = URL(fileURLWithPath: NSHomeDirectory())
+        #if os(tvOS)
+        // volumeAvailableCapacityForImportantUsage is unavailable on tvOS; use
+        // the plain available-capacity key (the Storage card is iOS/visionOS-only
+        // anyway, so this just keeps the shared helper compiling).
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityKey,
+            .volumeTotalCapacityKey,
+        ]),
+              let free = values.volumeAvailableCapacity,
+              let total = values.volumeTotalCapacity else { return }
+        deviceCapacity = DeviceCapacity(free: Int64(free), total: Int64(total))
+        #else
         guard let values = try? url.resourceValues(forKeys: [
             .volumeAvailableCapacityForImportantUsageKey,
             .volumeTotalCapacityKey,
@@ -471,6 +483,7 @@ struct SettingsView: View {
               let free = values.volumeAvailableCapacityForImportantUsage,
               let total = values.volumeTotalCapacity else { return }
         deviceCapacity = DeviceCapacity(free: free, total: Int64(total))
+        #endif
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

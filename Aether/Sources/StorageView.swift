@@ -542,6 +542,19 @@ struct StorageView: View {
     /// a device with >100 GB free; #231).
     private func refreshCapacity() async {
         let url = URL(fileURLWithPath: NSHomeDirectory())
+        #if os(tvOS)
+        // volumeAvailableCapacityForImportantUsage is unavailable on tvOS.
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityKey,
+            .volumeTotalCapacityKey,
+        ]),
+              let free = values.volumeAvailableCapacity,
+              let total = values.volumeTotalCapacity else { return }
+        deviceCapacity = DeviceCapacity(
+            free: Int64(free),
+            total: Int64(total)
+        )
+        #else
         guard let values = try? url.resourceValues(forKeys: [
             .volumeAvailableCapacityForImportantUsageKey,
             .volumeTotalCapacityKey,
@@ -552,6 +565,7 @@ struct StorageView: View {
             free: free,
             total: Int64(total)
         )
+        #endif
     }
 
     // MARK: - Destructive actions
