@@ -511,6 +511,7 @@ struct StorageView: View {
         case .jellyfin: return "Jellyfin"
         case .synology: return "Synology"
         case .mock:     return "Mock"
+        case .local:    return "Local"
         }
     }
 
@@ -520,6 +521,7 @@ struct StorageView: View {
         case .jellyfin: return "rectangle.stack.badge.play.fill"
         case .synology: return "externaldrive.fill"
         case .mock:     return "questionmark.circle.fill"
+        case .local:    return "folder.fill"
         }
     }
 

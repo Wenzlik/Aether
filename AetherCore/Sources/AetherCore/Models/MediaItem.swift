@@ -520,12 +520,16 @@ public struct MediaID: Hashable, Sendable {
     }
 }
 
-/// Identifies which source (mock / Plex server / Synology share) an item came from.
+/// Identifies which source (mock / Plex server / Synology share / on-device
+/// Local Library) an item came from.
 public enum MediaSourceID: Hashable, Sendable {
     case mock
     case plex(serverID: String)
     case jellyfin(serverID: String)
     case synology(host: String)
+    /// The on-device Local Library (files Aether owns). Singular — one store
+    /// per device — so no associated value. See #173.
+    case local
 
     /// A stable, run-to-run identical string for this source. Suitable as a
     /// component of persistence keys (e.g. per-library preferences). The
@@ -542,6 +546,8 @@ public enum MediaSourceID: Hashable, Sendable {
             return "jellyfin.\(serverID)"
         case .synology(let host):
             return "synology.\(host)"
+        case .local:
+            return "local"
         }
     }
 }
