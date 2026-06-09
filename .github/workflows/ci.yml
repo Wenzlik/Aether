@@ -40,6 +40,16 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # VLCKit is a vendored binary (~2.4 GB) the app links but doesn't commit;
+      # cache it across runs and fetch on a miss before generating the project.
+      - name: Cache VLCKit
+        uses: actions/cache@v4
+        with:
+          path: Vendor/VLCKit/VLCKit.xcframework
+          key: vlckit-4.0.0a19
+      - name: Fetch VLCKit
+        run: ./scripts/fetch_vlckit.sh
+
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -86,16 +96,30 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # VLCKit is a vendored binary (~2.4 GB) the app links but doesn't commit;
+      # cache it across runs and fetch on a miss before generating the project.
+      - name: Cache VLCKit
+        uses: actions/cache@v4
+        with:
+          path: Vendor/VLCKit/VLCKit.xcframework
+          key: vlckit-4.0.0a19
+      - name: Fetch VLCKit
+        run: ./scripts/fetch_vlckit.sh
+
       - name: Generate Xcode project
         run: xcodegen generate
 
       - name: Build (${{ matrix.platform }} Simulator)
         run: |
           set -o pipefail
+          # arm64-only: the runner is Apple Silicon, and VLCKit's visionOS
+          # simulator slice is arm64 (x86_64 visionOS sims don't exist). Without
+          # this, the generic destination also builds x86_64 and fails to link.
           xcodebuild build \
             -project Aether.xcodeproj \
             -scheme Aether \
             -destination "generic/platform=${{ matrix.platform }} Simulator" \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \

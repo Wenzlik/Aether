@@ -98,6 +98,10 @@ struct AboutView: View {
             Text(versionLabel)
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
+            // Attribution for the bundled VLCKit engine (local mkv playback).
+            Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
             if developerUnlocked {
                 Label(justUnlocked ? "Developer Mode unlocked" : "Developer Mode enabled", systemImage: "hammer.fill")
                     .font(AetherDesign.Typography.caption)

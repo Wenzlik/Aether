@@ -1226,3 +1226,26 @@ struct LocalLibraryTests {
         #expect(!FileManager.default.fileExists(atPath: path))
     }
 }
+
+@Suite("AetherCore — PlaybackEngine (mkv #173)")
+struct PlaybackEngineTests {
+    private func eng(_ s: String) -> PlaybackEngine { .engine(for: URL(string: s)!) }
+
+    @Test("system for AVPlayer containers + HLS; VLC for mkv/avi/ts/webm")
+    func selection() {
+        #expect(eng("file:///x/Movie.mp4") == .system)
+        #expect(eng("file:///x/Movie.m4v") == .system)
+        #expect(eng("file:///x/Clip.mov") == .system)
+        #expect(eng("https://h/video/start.m3u8?session=1") == .system)
+        #expect(eng("file:///x/Movie.mkv") == .vlc)
+        #expect(eng("file:///x/Movie.avi") == .vlc)
+        #expect(eng("file:///x/Movie.ts") == .vlc)
+        #expect(eng("file:///x/Movie.webm") == .vlc)
+    }
+
+    @Test("no stream URL → system")
+    func noURL() {
+        let item = MediaItem(id: .init(source: .local, rawValue: "1"), title: "X", kind: .movie)
+        #expect(PlaybackEngine.engine(for: item) == .system)
+    }
+}
