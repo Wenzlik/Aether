@@ -207,7 +207,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var leftColumnSections: some View {
         accountSection
-        sourcesSection
         #if !os(tvOS)
         localLibrarySection
         downloadsSection
@@ -219,8 +218,9 @@ struct SettingsView: View {
     }
 
     /// Right column (wide) — personalization, support/info, and the status +
-    /// cache cards. (The redundant "Connected Sources" status card was removed —
-    /// the Sources section already shows each source's connection state.)
+    /// cache cards. (Connection state lives on the Account rows; the separate
+    /// "Connected Sources" card and the Sources section were both removed as
+    /// duplicates of Account — #224.)
     @ViewBuilder
     private var rightColumnSections: some View {
         appearanceSection
@@ -515,7 +515,7 @@ struct SettingsView: View {
             if viewModel.isPlexSignedIn {
                 AetherSettingsRow(
                     label: "Plex",
-                    value: viewModel.connectedServerName ?? "Connected"
+                    value: accountRowValue(.plex, serverName: viewModel.connectedServerName)
                 ) { accountSheet = .plex }
             } else {
                 AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
@@ -524,7 +524,7 @@ struct SettingsView: View {
             if viewModel.isJellyfinSignedIn {
                 AetherSettingsRow(
                     label: "Jellyfin",
-                    value: viewModel.jellyfinServerName ?? "Connected"
+                    value: accountRowValue(.jellyfin, serverName: viewModel.jellyfinServerName)
                 ) { accountSheet = .jellyfin }
             } else {
                 AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
@@ -538,7 +538,10 @@ struct SettingsView: View {
     private var accountSectionInline: some View {
         AetherSettingsSection("Account") {
             if viewModel.isPlexSignedIn {
-                AetherSettingsRow(label: "Plex", value: viewModel.connectedServerName ?? "Connected")
+                AetherSettingsRow(label: "Plex", value: accountRowValue(.plex, serverName: viewModel.connectedServerName))
+                if viewModel.canSwitchSources && !viewModel.isActiveSource(.plex) {
+                    AetherSettingsRow(label: "Set Plex as Active Source", actionRole: .primary) { viewModel.setActive(.plex) }
+                }
                 AetherSettingsRow(
                     label: isSigningOut ? "Signing out…" : "Sign Out of Plex",
                     actionRole: .destructive
@@ -549,7 +552,10 @@ struct SettingsView: View {
             }
 
             if viewModel.isJellyfinSignedIn {
-                AetherSettingsRow(label: "Jellyfin", value: viewModel.jellyfinServerName ?? "Connected")
+                AetherSettingsRow(label: "Jellyfin", value: accountRowValue(.jellyfin, serverName: viewModel.jellyfinServerName))
+                if viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin) {
+                    AetherSettingsRow(label: "Set Jellyfin as Active Source", actionRole: .primary) { viewModel.setActive(.jellyfin) }
+                }
                 AetherSettingsRow(
                     label: isSigningOutJellyfin ? "Signing out…" : "Sign Out of Jellyfin",
                     actionRole: .destructive
@@ -570,8 +576,10 @@ struct SettingsView: View {
             SourceAccountSheet(
                 title: "Plex",
                 serverName: viewModel.connectedServerName,
-                status: .connected,
+                status: (viewModel.canSwitchSources && viewModel.isActiveSource(.plex)) ? .neutral("Active") : .connected,
+                canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.plex),
                 isSigningOut: isSigningOut,
+                onSetActive: { viewModel.setActive(.plex); accountSheet = nil },
                 onSignOut: { Task { await performSignOut(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
@@ -579,63 +587,25 @@ struct SettingsView: View {
             SourceAccountSheet(
                 title: "Jellyfin",
                 serverName: viewModel.jellyfinServerName,
-                status: .connected,
+                status: (viewModel.canSwitchSources && viewModel.isActiveSource(.jellyfin)) ? .neutral("Active") : .connected,
+                canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin),
                 isSigningOut: isSigningOutJellyfin,
+                onSetActive: { viewModel.setActive(.jellyfin); accountSheet = nil },
                 onSignOut: { Task { await performSignOutJellyfin(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
         }
     }
 
-    private var sourcesSection: some View {
-        AetherSettingsSection("Sources") {
-            sourceRow(
-                kind: .plex,
-                label: "Plex",
-                glyph: "play.circle.fill",
-                connected: viewModel.isPlexSignedIn,
-                connect: { viewModel.connect() }
-            )
-            sourceRow(
-                kind: .jellyfin,
-                label: "Jellyfin",
-                glyph: "rectangle.stack.badge.play.fill",
-                connected: viewModel.isJellyfinSignedIn,
-                connect: { viewModel.connectJellyfin() }
-            )
-            AetherSettingsRow(label: "Synology", systemImage: "externaldrive.fill", status: viewModel.synologyStatus)
-        }
-    }
-
-    /// One source row: tap to connect when disconnected, or — when both sources
-    /// are connected — tap to make this the active (browsed) source. The active
-    /// one reads "Active".
-    private func sourceRow(
-        kind: AppSession.SourceKind,
-        label: String,
-        glyph: String,
-        connected: Bool,
-        connect: @escaping () -> Void
-    ) -> AetherSettingsRow {
-        let status: AetherStatus
-        if !connected {
-            status = .notConnected
-        } else if viewModel.canSwitchSources {
-            status = viewModel.isActiveSource(kind) ? .neutral("Active") : .connected
-        } else {
-            status = .connected
-        }
-
-        let action: (() -> Void)?
-        if !connected {
-            action = connect
-        } else if viewModel.canSwitchSources && !viewModel.isActiveSource(kind) {
-            action = { viewModel.setActive(kind) }
-        } else {
-            action = nil
-        }
-
-        return AetherSettingsRow(label: label, systemImage: glyph, status: status, action: action)
+    /// Trailing text for a connected Account row: the server name, with "· Active"
+    /// appended for the source the Library is currently browsing — but only when
+    /// more than one source is connected, so the tag actually distinguishes them.
+    /// (The standalone Sources section was removed; its active-source switch now
+    /// lives in each source's account sheet — #224.)
+    private func accountRowValue(_ kind: AppSession.SourceKind, serverName: String?) -> String {
+        let base = serverName ?? "Connected"
+        guard viewModel.canSwitchSources, viewModel.isActiveSource(kind) else { return base }
+        return "\(base) · Active"
     }
 
     // MARK: - Local Library
@@ -970,9 +940,8 @@ struct SettingsView: View {
             AetherSettingsRow(label: "Contact the Creator", description: "Get in touch with the person behind Aether.", systemImage: "envelope.fill", value: nil) {
                 contactDeveloper()
             }
-            AetherSettingsRow(label: "What's New", description: "Release notes for this and past versions.", systemImage: "sparkles", value: viewModel.versionString) {
-                isWhatsNewPresented = true
-            }
+            // "What's New" lives in About (the Version row opens it) — removed here
+            // to avoid the duplicate entry point (#224).
         }
     }
 
