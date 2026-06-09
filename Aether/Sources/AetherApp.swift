@@ -132,6 +132,22 @@ final class AppSession {
     let cinemaPreferences: CinemaPreferencesStore
     let appearance: AppearancePreferenceStore
 
+    // MARK: - Local Library
+
+    /// On-device files Aether owns (#173). The store is always present; the
+    /// source is folded into `connectedSources` only once something's been
+    /// imported, so a fresh server-less install still shows the welcome state.
+    let localLibraryStore = LocalLibraryStore()
+    let localSource: LocalMediaSource
+    /// Cached count of imported files (refreshed on launch + after import), so
+    /// the synchronous `connectedSources` can decide whether to include Local.
+    private(set) var localItemCount = 0
+
+    /// Re-read the imported-file count (after an import or removal).
+    func refreshLocalLibrary() async {
+        localItemCount = await localLibraryStore.count()
+    }
+
     // MARK: - Downloads
 
     /// Single-source-of-truth for download state. `nil` until `start()` has
@@ -228,6 +244,7 @@ final class AppSession {
         self.playbackPreferences = PlaybackPreferencesStore()
         self.cinemaPreferences = CinemaPreferencesStore()
         self.appearance = AppearancePreferenceStore()
+        self.localSource = LocalMediaSource(store: localLibraryStore)
     }
 
     // MARK: - Lifecycle
@@ -268,6 +285,10 @@ final class AppSession {
         // 3. Pick the active source (persisted choice, else whatever connected).
         activeSourceKind = await loadActiveSourceKind()
         refreshActiveSource()
+
+        // 3b. Count any previously-imported Local Library files so it folds into
+        //     `connectedSources` from first paint.
+        await refreshLocalLibrary()
 
         // 4. Boot the downloads pipeline. The store reads its JSON file off
         //    disk; the manager rebinds any in-flight URLSession tasks from
@@ -368,6 +389,10 @@ final class AppSession {
         var list: [any MediaSource] = []
         if let plexSource { list.append(plexSource) }
         if let jellyfinSource { list.append(jellyfinSource) }
+        // Local is on-device + always available, but only counts as a connected
+        // source once it has content — otherwise a fresh server-less install
+        // would never show the "connect a source" welcome state.
+        if localItemCount > 0 { list.append(localSource) }
         return list
     }
 
