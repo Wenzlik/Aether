@@ -17,6 +17,18 @@ public actor LocalLibraryStore {
         public let episode: Int?
         public let isEpisode: Bool
         public let addedAt: Date
+        /// TMDb match (poster / overview / canonical title), filled in after
+        /// import when a TMDb key is configured (#210). `nil` until matched.
+        public var metadata: TMDbMetadata? = nil
+    }
+
+    /// Attach (or clear) a TMDb match for an item, then persist. No-op if the
+    /// item is gone.
+    public func setMatch(_ metadata: TMDbMetadata?, for id: String) {
+        hydrate()
+        guard items[id] != nil else { return }
+        items[id]?.metadata = metadata
+        persist()
     }
 
     /// Media files live here; `mediaDir` is an immutable (`Sendable`) constant so

@@ -16,8 +16,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   files like `Severance.S01E02.mkv` nest under a show in TV Shows (drill show →
   episodes), while movies stay flat in Movies. Foundations (filename parsing
   #206, the `.local` source id #207) shipped first. *Fast-follows: share-sheet
-  import, browser upload (#209), metadata matching (#210) + manual editing
-  (#211).*
+  import, browser upload (#209), manual metadata editing (#211).*
+- **Local Library metadata from TMDb** (#210) — imported files get **posters,
+  a backdrop, overview and the canonical title/year** from The Movie Database
+  (movies + TV), matched automatically on import. The TMDb key is injected at
+  build time from the Xcode Cloud workflow environment (never committed to this
+  public repo); with no key, titles simply fall back to the filename.
 - **mkv (and other non-native formats) play locally** — files AVFoundation can't
   open (Matroska / AVI / …) now play through a bundled **VLCKit** engine, chosen
   automatically per file (`PlaybackEngine`); everything AVPlayer supports keeps

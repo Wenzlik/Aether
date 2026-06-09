@@ -236,7 +236,10 @@ final class SettingsViewModel {
     /// count so the source folds into `connectedSources`.
     func importLocalMedia(_ urls: [URL]) async {
         for url in urls {
-            _ = try? await session.localLibraryStore.importFile(at: url)
+            if let item = try? await session.localLibraryStore.importFile(at: url) {
+                // Best-effort TMDb match (poster / overview) when a key is built in.
+                await session.matchLocalMetadata(for: item)
+            }
         }
         await session.refreshLocalLibrary()
     }
