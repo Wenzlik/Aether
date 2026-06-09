@@ -52,6 +52,10 @@ new data.
 
 ### Fixed
 
+- **tvOS: Account Sign Out unreachable** (0.6.3 build 5) — the compact Account
+  row opened a detail sheet for Sign Out, but the sheet couldn't be reached with
+  the Siri Remote. tvOS now keeps Sign Out as a directly-focusable row inline
+  (no sheet); iOS / iPadOS / visionOS keep the compact row → sheet.
 - **Library "Show all" title pinned on tvOS** (0.6.3 build 4) — the grid's
   "Movies" / "TV Shows" heading used `.navigationTitle`, which tvOS pins
   permanently (it overlapped the grid while scrolling). It's now an in-scroll

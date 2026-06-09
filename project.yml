@@ -35,7 +35,7 @@ settings:
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
     MARKETING_VERSION: "0.6.3"
-    CURRENT_PROJECT_VERSION: "4"
+    CURRENT_PROJECT_VERSION: "5"
 
 packages:
   AetherCore:
