@@ -42,7 +42,7 @@ struct SettingsViewModelTests {
         session.plexServer = nil
 
         let viewModel = SettingsViewModel(session: session)
-        #expect(viewModel.plexAccountStatus == .positive("Signed in"))
+        #expect(viewModel.plexAccountStatus == .neutral("Signed in"))
         #expect(viewModel.connectedServerDetail == nil)
     }
 

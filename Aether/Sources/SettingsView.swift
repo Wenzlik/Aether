@@ -457,12 +457,20 @@ struct SettingsView: View {
 
     /// Read the volume Aether's downloads live on. Fails silently (capacity
     /// stays nil and the Free Space row just doesn't render).
+    ///
+    /// Uses `volumeAvailableCapacityForImportantUsage` — the realistic
+    /// free space iOS reports in Settings — not `.systemFreeSize`, which
+    /// reports only the much smaller space visible to the app's process
+    /// (it was showing ~10 GB on a device with >100 GB free; #231).
     private func refreshCapacity() async {
-        let path = NSHomeDirectory()
-        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path),
-              let free = attrs[.systemFreeSize] as? NSNumber,
-              let total = attrs[.systemSize] as? NSNumber else { return }
-        deviceCapacity = DeviceCapacity(free: free.int64Value, total: total.int64Value)
+        let url = URL(fileURLWithPath: NSHomeDirectory())
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeTotalCapacityKey,
+        ]),
+              let free = values.volumeAvailableCapacityForImportantUsage,
+              let total = values.volumeTotalCapacity else { return }
+        deviceCapacity = DeviceCapacity(free: free, total: Int64(total))
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -600,7 +608,7 @@ struct SettingsView: View {
         if !connected {
             status = .notConnected
         } else if viewModel.canSwitchSources {
-            status = viewModel.isActiveSource(kind) ? .positive("Active") : .connected
+            status = viewModel.isActiveSource(kind) ? .neutral("Active") : .connected
         } else {
             status = .connected
         }
@@ -932,7 +940,7 @@ struct SettingsView: View {
     }
 
     #if !os(tvOS)
-    /// Support — Report a Bug / Feature Request / Contact Developer. Each opens
+    /// Support — Report a Bug / Feature Request / Contact the Creator. Each opens
     /// the system Mail composer to `aether@zmrhal.cz` (with a `mailto:` fallback
     /// when no mail account is configured). Compiled out on tvOS (no MessageUI).
     private var supportSection: some View {
@@ -946,7 +954,7 @@ struct SettingsView: View {
             AetherSettingsRow(label: "Send Diagnostics", description: "Email a readable report of app state — no account details.", systemImage: "stethoscope", value: nil) {
                 supportSheet = .sendDiagnostics
             }
-            AetherSettingsRow(label: "Contact Developer", description: "Get in touch with the developer directly.", systemImage: "envelope.fill", value: nil) {
+            AetherSettingsRow(label: "Contact the Creator", description: "Get in touch with the person behind Aether.", systemImage: "envelope.fill", value: nil) {
                 contactDeveloper()
             }
             AetherSettingsRow(label: "What's New", description: "Release notes for this and past versions.", systemImage: "sparkles", value: viewModel.versionString) {
@@ -999,9 +1007,14 @@ struct SettingsView: View {
             AetherSettingsRow(label: "About Aether", description: "What Aether is, who made it, and where it's going.", systemImage: "sparkles", value: nil) {
                 infoSheet = .about
             }
+            // Diagnostics lives in Support → Send Diagnostics everywhere it can.
+            // tvOS has no MessageUI (the whole Support section is compiled out),
+            // so keep an in-app Diagnostics view here as tvOS's only access.
+            #if os(tvOS)
             AetherSettingsRow(label: "Diagnostics", description: "A readable snapshot of sources, library, downloads, and cache.", systemImage: "waveform.path.ecg", value: nil) {
                 infoSheet = .diagnostics
             }
+            #endif
             Button {
                 isWhatsNewPresented = true
             } label: {
