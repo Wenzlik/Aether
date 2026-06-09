@@ -1084,3 +1084,69 @@ struct MediaSourceIDLocalTests {
         #expect(MediaSourceKind(streaming: .local) == nil)
     }
 }
+
+@Suite("AetherCore — TitleInference (#206)")
+struct TitleInferenceTests {
+    @Test("movies: title + year, junk stripped")
+    func movies() {
+        let cases: [(String, String, Int?)] = [
+            ("Movie Name (2019) 1080p.mkv", "Movie Name", 2019),
+            ("Movie.Name.2019.x265.mkv", "Movie Name", 2019),
+            ("Blade Runner 2049 (2017) 2160p BluRay x265.mkv", "Blade Runner 2049", 2017),
+            ("The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv", "The Matrix", 1999),
+            ("Parasite (2019) [1080p] [WEBRip].mp4", "Parasite", 2019),
+            ("Inception.mkv", "Inception", nil),
+        ]
+        for (file, title, year) in cases {
+            let t = TitleInference(filename: file)
+            #expect(t.title == title, "title for \(file): got \(t.title)")
+            #expect(t.year == year, "year for \(file): got \(String(describing: t.year))")
+            #expect(t.kind == .movie)
+        }
+    }
+
+    @Test("episodes: season + episode + show title")
+    func episodes() {
+        let cases: [(String, String, Int, Int)] = [
+            ("Show.Name.S01E02.mkv", "Show Name", 1, 2),
+            ("Show Name - 1x02 - Title.mkv", "Show Name", 1, 2),
+            ("Breaking.Bad.S05E14.1080p.x265.mkv", "Breaking Bad", 5, 14),
+            ("Severance S01E09 720p.mkv", "Severance", 1, 9),
+            ("The Wire S1E1.mp4", "The Wire", 1, 1),
+        ]
+        for (file, title, season, episode) in cases {
+            let t = TitleInference(filename: file)
+            #expect(t.title == title, "title for \(file): got \(t.title)")
+            #expect(t.season == season, "season for \(file): got \(String(describing: t.season))")
+            #expect(t.episode == episode, "episode for \(file): got \(String(describing: t.episode))")
+            #expect(t.kind == .episode)
+            #expect(t.isEpisode)
+        }
+    }
+
+    @Test("season folder + bare episode number → uses folder season")
+    func seasonFolder() {
+        let t = TitleInference(filename: "E04 - Some Title.mkv",
+                               pathComponents: ["Breaking Bad", "Season 03"])
+        #expect(t.season == 3)
+        #expect(t.episode == 4)
+        #expect(t.kind == .episode)
+    }
+
+    @Test("resolution 1920x1080 is not mistaken for an episode marker")
+    func resolutionNotEpisode() {
+        let t = TitleInference(filename: "Some Movie 2018 1920x1080 x264.mkv")
+        #expect(t.title == "Some Movie")
+        #expect(t.year == 2018)
+        #expect(t.season == nil)
+        #expect(t.episode == nil)
+    }
+
+    @Test("title falls back to the show folder when the filename is just a number")
+    func folderFallback() {
+        let t = TitleInference(filename: "04.mkv", pathComponents: ["The Office", "Season 02"])
+        #expect(t.season == 2)
+        #expect(t.episode == 4)
+        #expect(t.title == "The Office")
+    }
+}
