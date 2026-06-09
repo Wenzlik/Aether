@@ -535,15 +535,37 @@ struct StorageView: View {
     /// Read the home directory's filesystem stats — the volume Aether's
     /// downloads live on. Fails silently (capacity stays nil and the
     /// "free of N GB" line just doesn't render).
+    ///
+    /// Uses `volumeAvailableCapacityForImportantUsage` — the realistic free
+    /// space iOS reports in Settings — not `.systemFreeSize`, which reports
+    /// only the space visible to the app's process (it was showing ~10 GB on
+    /// a device with >100 GB free; #231).
     private func refreshCapacity() async {
         let url = URL(fileURLWithPath: NSHomeDirectory())
-        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: url.path),
-              let free = attrs[.systemFreeSize] as? NSNumber,
-              let total = attrs[.systemSize] as? NSNumber else { return }
+        #if os(tvOS)
+        // volumeAvailableCapacityForImportantUsage is unavailable on tvOS.
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityKey,
+            .volumeTotalCapacityKey,
+        ]),
+              let free = values.volumeAvailableCapacity,
+              let total = values.volumeTotalCapacity else { return }
         deviceCapacity = DeviceCapacity(
-            free: free.int64Value,
-            total: total.int64Value
+            free: Int64(free),
+            total: Int64(total)
         )
+        #else
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeTotalCapacityKey,
+        ]),
+              let free = values.volumeAvailableCapacityForImportantUsage,
+              let total = values.volumeTotalCapacity else { return }
+        deviceCapacity = DeviceCapacity(
+            free: free,
+            total: Int64(total)
+        )
+        #endif
     }
 
     // MARK: - Destructive actions

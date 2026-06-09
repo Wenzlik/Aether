@@ -61,6 +61,10 @@ struct AboutView: View {
             Text("Personal media, beautifully played.")
                 .font(AetherDesign.Typography.cardTitle)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
+            Text("Aether is a native player for your own media — Plex, Jellyfin, and files on your device — built for Apple platforms with one cinematic interface across iPhone, iPad, Apple TV, and Vision Pro. No catalogue to rent, no account to sell: just your library, played well.")
+                .font(AetherDesign.Typography.body)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
