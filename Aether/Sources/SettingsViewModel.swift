@@ -180,6 +180,7 @@ final class SettingsViewModel {
             case .jellyfin: kind = "jellyfin"
             case .synology: kind = "synology"
             case .mock:     kind = "mock"
+            case .local:    kind = "local"
             }
             return DiagnosticsSnapshot.SourceLine(id: "\(kind)-\(index)", name: source.displayName, status: "Signed in")
         }

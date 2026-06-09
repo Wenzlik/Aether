@@ -1061,3 +1061,26 @@ struct UnifiedLibrarySnapshotTests {
         #expect(await library.isStale(kind: .movie) == true)   // caller should background-refresh
     }
 }
+
+@Suite("AetherCore — MediaSourceID .local (#207)")
+struct MediaSourceIDLocalTests {
+    @Test("stableKey + Codable round-trip for .local")
+    func localRoundTrips() throws {
+        #expect(MediaSourceID.local.stableKey == "local")
+        let data = try JSONEncoder().encode(MediaSourceID.local)
+        #expect(try JSONDecoder().decode(MediaSourceID.self, from: data) == .local)
+    }
+
+    @Test("existing source ids still round-trip unchanged")
+    func othersRoundTrip() throws {
+        for id in [MediaSourceID.mock, .plex(serverID: "s1"), .jellyfin(serverID: "j1"), .synology(host: "h")] {
+            let data = try JSONEncoder().encode(id)
+            #expect(try JSONDecoder().decode(MediaSourceID.self, from: data) == id)
+        }
+    }
+
+    @Test(".local is not part of the unified streaming priority yet")
+    func localNotStreamingYet() {
+        #expect(MediaSourceKind(streaming: .local) == nil)
+    }
+}

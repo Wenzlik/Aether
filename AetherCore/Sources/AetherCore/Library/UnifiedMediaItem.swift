@@ -18,7 +18,9 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
         switch source {
         case .plex:     self = .plex
         case .jellyfin: self = .jellyfin
-        case .synology, .mock: return nil
+        // `.local` isn't surfaced in the unified priority yet — the Local
+        // Library source + its `MediaSourceKind` land in #208.
+        case .synology, .mock, .local: return nil
         }
     }
 
