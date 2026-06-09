@@ -4,6 +4,19 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.4] — Unreleased
+
+### Added
+
+- **Local Library** (#173, v1) — play media that lives on the device, with no
+  Plex / Jellyfin server needed. Import video files from Files (Settings → Local
+  Library → Import Media…); Aether copies them into a managed store (excluded
+  from iCloud backup), infers a title / year from the filename, and surfaces them
+  in your unified Movies library to play directly. Foundations for the rest of
+  the epic (filename parsing #206, the `.local` source id #207) shipped first.
+  *Fast-follows: TV show/season grouping, share-sheet import, browser upload
+  (#209), metadata matching (#210) + manual editing (#211).*
+
 ## [0.6.3] — Unreleased
 
 Detail-screen redesign, **layout & UX pass** — a smaller, platform-aware hero

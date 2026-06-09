@@ -1079,9 +1079,10 @@ struct MediaSourceIDLocalTests {
         }
     }
 
-    @Test(".local is not part of the unified streaming priority yet")
-    func localNotStreamingYet() {
-        #expect(MediaSourceKind(streaming: .local) == nil)
+    @Test(".local maps to the Local streaming kind (#208), lowest priority")
+    func localStreamingKind() {
+        #expect(MediaSourceKind(streaming: .local) == .local)
+        #expect(MediaSourceKind.local > .jellyfin)   // servers preferred over local
     }
 }
 
@@ -1148,5 +1149,80 @@ struct TitleInferenceTests {
         #expect(t.season == 2)
         #expect(t.episode == 4)
         #expect(t.title == "The Office")
+    }
+}
+
+@Suite("AetherCore — Local Library (#208)")
+struct LocalLibraryTests {
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aether-local-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+    private func sourceFile(_ name: String) throws -> URL {
+        // Unique *directory*, clean filename — so lastPathComponent (what
+        // inference reads) matches a real import, not a UUID-prefixed temp name.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try Data("video-bytes".utf8).write(to: url)
+        return url
+    }
+
+    @Test("import copies the file, infers metadata, persists across instances")
+    func importPersists() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Inception (2010) 1080p.mp4")
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        #expect(item.title == "Inception")
+        #expect(item.year == 2010)
+        #expect(!item.isEpisode)
+        #expect(FileManager.default.fileExists(atPath: store.fileURL(for: item).path))
+
+        // A fresh instance over the same directory reads the persisted index.
+        let reopened = LocalLibraryStore(directory: dir)
+        let all = await reopened.allItems()
+        #expect(all.count == 1)
+        #expect(all.first?.title == "Inception")
+    }
+
+    @Test("LocalMediaSource maps imported items to playable MediaItems")
+    func sourceMapsItems() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Show.Name.S01E02.mkv")
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let store = LocalLibraryStore(directory: dir)
+        _ = try await store.importFile(at: src)
+        let source = LocalMediaSource(store: store)
+
+        #expect(source.id == .local)
+        let libs = try await source.libraries()
+        #expect(libs.count == 1)
+        let items = try await source.items(in: libs[0].id)
+        #expect(items.count == 1)
+        #expect(items[0].streamURL != nil)
+        #expect(items[0].id.source == .local)
+        #expect(items[0].title.contains("Show Name"))
+    }
+
+    @Test("remove deletes the item and its file")
+    func remove() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Movie.2020.mkv")
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        let path = store.fileURL(for: item).path
+        #expect(FileManager.default.fileExists(atPath: path))
+        await store.remove(item.id)
+        #expect(await store.count() == 0)
+        #expect(!FileManager.default.fileExists(atPath: path))
     }
 }

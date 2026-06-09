@@ -227,6 +227,20 @@ final class SettingsViewModel {
         session.presentSignIn(.jellyfin)
     }
 
+    // MARK: - Local Library
+
+    /// Number of files imported into the on-device Local Library.
+    var localItemCount: Int { session.localItemCount }
+
+    /// Copy the picked files into the Local Library store, then refresh the
+    /// count so the source folds into `connectedSources`.
+    func importLocalMedia(_ urls: [URL]) async {
+        for url in urls {
+            _ = try? await session.localLibraryStore.importFile(at: url)
+        }
+        await session.refreshLocalLibrary()
+    }
+
     /// Clear the Plex token + selected server and reset app state. Home returns
     /// to its welcome state; no app delete required.
     func signOut() async {
