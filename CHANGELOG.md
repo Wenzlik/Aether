@@ -21,7 +21,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   a backdrop, overview and the canonical title/year** from The Movie Database
   (movies + TV), matched automatically on import. The TMDb key is injected at
   build time from the Xcode Cloud workflow environment (never committed to this
-  public repo); with no key, titles simply fall back to the filename.
+  public repo); with no key, titles simply fall back to the filename. A
+  **Re-match Metadata** action (Settings → Local Library) backfills posters and
+  details for titles imported before a key was available.
 - **mkv (and other non-native formats) play locally** — files AVFoundation can't
   open (Matroska / AVI / …) now play through a bundled **VLCKit** engine, chosen
   automatically per file (`PlaybackEngine`); everything AVPlayer supports keeps

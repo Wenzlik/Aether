@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var isSigningOutJellyfin = false
     @State private var isWhatsNewPresented = false
     @State private var isImportingLocal = false
+    @State private var isRematching = false
     @State private var openPicker: PrefPicker?
     /// Device volume stats for the Storage Summary card. `nil` until the probe
     /// runs (and stays nil if it fails) — the free-space row just hides.
@@ -634,6 +635,19 @@ struct SettingsView: View {
             if viewModel.localItemCount > 0 {
                 let n = viewModel.localItemCount
                 AetherSettingsRow(label: "Imported", value: "\(n) item\(n == 1 ? "" : "s")")
+                if viewModel.isTMDbConfigured {
+                    AetherSettingsRow(
+                        label: isRematching ? "Matching…" : "Re-match Metadata",
+                        description: "Fetch posters & details for titles imported before a key was set.",
+                        systemImage: "arrow.clockwise",
+                        value: nil
+                    ) {
+                        guard !isRematching else { return }
+                        isRematching = true
+                        Task { await viewModel.rematchLocalMetadata(); isRematching = false }
+                    }
+                    .disabled(isRematching)
+                }
             }
         }
         .fileImporter(

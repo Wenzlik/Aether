@@ -166,6 +166,19 @@ final class AppSession {
         }
     }
 
+    /// Whether TMDb matching is available (a key was built in).
+    var isTMDbConfigured: Bool { !tmdbAPIKey.isEmpty }
+
+    /// Fill in metadata for items imported before a key was present — matches
+    /// every still-unmatched item. (Matching otherwise only runs at import.)
+    func rematchLocalMetadata() async {
+        guard isTMDbConfigured else { return }
+        for item in await localLibraryStore.allItems() where item.metadata == nil {
+            await matchLocalMetadata(for: item)
+        }
+        await refreshLocalLibrary()
+    }
+
     // MARK: - Downloads
 
     /// Single-source-of-truth for download state. `nil` until `start()` has
