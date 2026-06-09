@@ -1191,24 +1191,55 @@ struct LocalLibraryTests {
         #expect(all.first?.title == "Inception")
     }
 
-    @Test("LocalMediaSource maps imported items to playable MediaItems")
-    func sourceMapsItems() async throws {
+    @Test("a movie import surfaces as a flat, playable movie")
+    func movieMapping() async throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
-        let src = try sourceFile("Show.Name.S01E02.mkv")
-        defer { try? FileManager.default.removeItem(at: src) }
-
+        let src = try sourceFile("Inception (2010).mp4"); defer { try? FileManager.default.removeItem(at: src) }
         let store = LocalLibraryStore(directory: dir)
         _ = try await store.importFile(at: src)
         let source = LocalMediaSource(store: store)
 
         #expect(source.id == .local)
         let libs = try await source.libraries()
-        #expect(libs.count == 1)
-        let items = try await source.items(in: libs[0].id)
+        let movieLib = try #require(libs.first { $0.kind == .movie })
+        #expect(libs.contains { $0.kind == .show } == false)   // no episodes → no TV library
+        let items = try await source.items(in: movieLib.id)
         #expect(items.count == 1)
+        #expect(items[0].title == "Inception")
+        #expect(items[0].kind == .movie)
         #expect(items[0].streamURL != nil)
-        #expect(items[0].id.source == .local)
-        #expect(items[0].title.contains("Show Name"))
+    }
+
+    @Test("episodes group into a show container with playable children")
+    func episodeGrouping() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let e1 = try sourceFile("Severance.S01E01.mkv")
+        let e2 = try sourceFile("Severance.S01E02.mkv")
+        let movie = try sourceFile("Dune (2021).mp4")
+        defer { [e1, e2, movie].forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        let store = LocalLibraryStore(directory: dir)
+        for f in [e1, e2, movie] { _ = try await store.importFile(at: f) }
+        let source = LocalMediaSource(store: store)
+
+        let libs = try await source.libraries()
+        #expect(libs.contains { $0.kind == .movie })
+        let showLib = try #require(libs.first { $0.kind == .show })
+
+        let shows = try await source.items(in: showLib.id)
+        #expect(shows.count == 1)                       // one container for "Severance"
+        let show = shows[0]
+        #expect(show.kind == .show)
+        #expect(show.title == "Severance")
+        #expect(show.episodeCount == 2)
+        #expect(show.streamURL == nil)                  // containers aren't directly playable
+
+        let episodes = try await source.children(of: show.id)
+        #expect(episodes.count == 2)
+        #expect(episodes[0].episodeNumber == 1)         // sorted by season/episode
+        #expect(episodes[1].episodeNumber == 2)
+        #expect(episodes.allSatisfy { $0.streamURL != nil && $0.kind == .episode })
+        #expect(episodes[0].seriesTitle == "Severance")
     }
 
     @Test("remove deletes the item and its file")
