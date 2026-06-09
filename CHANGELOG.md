@@ -27,6 +27,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   fits a community-built app.
 - **About Aether gained a short "what & why"** (#224) — a one-paragraph
   description of what Aether is, rounding out the product page.
+- **Sources section merged into Account** (#224) — the separate Sources list
+  duplicated Account (same Plex/Jellyfin servers). Account is now the single
+  list: the server you're browsing shows an "Active" tag, and each source's
+  sheet gains a **Set as Active Source** action next to Sign Out (an inline row
+  on tvOS). The Synology "Planned" placeholder was dropped from the UI.
+- **One "What's New" entry point** (#224) — it was a row in Support *and* the
+  About → Version row. Removed the Support duplicate; the About "Version x.y.z
+  (build) → What's New" row is now the single place it lives.
 
 ### Added
 
