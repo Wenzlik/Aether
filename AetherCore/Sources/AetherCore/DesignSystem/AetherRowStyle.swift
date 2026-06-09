@@ -5,15 +5,20 @@ import SwiftUI
 /// (grey). Replaces the old plain-grey value text so connection state reads at
 /// a glance from couch distance — see `docs/ux/DESIGN_PRINCIPLES.md`.
 public enum AetherStatus: Sendable, Equatable {
-    /// Green — a capability is live (Available, Connected).
+    /// Green — a capability is live (Available).
     case positive(String)
     /// Red — something the user could act on is not set up (Not connected).
     case negative(String)
     /// Grey — informational, nothing to do yet (Planned).
     case muted(String)
+    /// Calm secondary text — a healthy steady state (Connected, Active, Signed
+    /// in). Deliberately *not* green: users only need colour when something is
+    /// wrong, so healthy states stay quiet and problem states (red) stand out.
+    /// See #224 §4.
+    case neutral(String)
 
     public static let available = AetherStatus.positive("Available")
-    public static let connected = AetherStatus.positive("Connected")
+    public static let connected = AetherStatus.neutral("Connected")
     public static let notConnected = AetherStatus.negative("Not connected")
     /// "Planned" reads calmer and more deliberate than "Coming soon" — the
     /// status the user lands on when a feature exists on the roadmap but
@@ -22,7 +27,7 @@ public enum AetherStatus: Sendable, Equatable {
 
     public var text: String {
         switch self {
-        case let .positive(text), let .negative(text), let .muted(text):
+        case let .positive(text), let .negative(text), let .muted(text), let .neutral(text):
             return text
         }
     }
@@ -32,6 +37,7 @@ public enum AetherStatus: Sendable, Equatable {
         case .positive: return AetherDesign.Palette.success
         case .negative: return AetherDesign.Palette.error
         case .muted:    return AetherDesign.Palette.textTertiary
+        case .neutral:  return AetherDesign.Palette.textSecondary
         }
     }
 }

@@ -39,7 +39,7 @@ final class SettingsViewModel {
     /// Colour-coded account state for the Account card.
     var plexAccountStatus: AetherStatus {
         if connectedServerName != nil { return .connected }
-        if isPlexSignedIn             { return .positive("Signed in") }
+        if isPlexSignedIn             { return .neutral("Signed in") }
         return .notConnected
     }
 

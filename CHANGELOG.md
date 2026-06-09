@@ -6,6 +6,28 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.6.4] — Unreleased
 
+### Fixed
+
+- **Storage Summary free space was far too low** (#231) — Settings and the
+  Storage screen reported the space visible to the app's process (~10 GB on a
+  device with >100 GB free) instead of the real device free space. Both now read
+  `volumeAvailableCapacityForImportantUsage`, matching the figure iOS shows.
+
+### Changed
+
+- **Diagnostics no longer appears twice** (#224) — it lived under both Support →
+  Send Diagnostics and About → Diagnostics. About → Diagnostics is now shown only
+  on tvOS (which has no Support section / Mail composer); on iOS and visionOS,
+  Support → Send Diagnostics is the single home.
+- **Calmer Settings status labels** (#224) — healthy states (Connected, Active,
+  Signed in) now read in quiet secondary text instead of bright green, so the
+  red "Not connected" stands out where it matters. Colour is reserved for states
+  you can act on.
+- **"Contact Developer" → "Contact the Creator"** (#224) — a warmer label that
+  fits a community-built app.
+- **About Aether gained a short "what & why"** (#224) — a one-paragraph
+  description of what Aether is, rounding out the product page.
+
 ### Added
 
 - **Local Library** (#173, v1) — play media that lives on the device, with no
