@@ -112,10 +112,14 @@ jobs:
       - name: Build (${{ matrix.platform }} Simulator)
         run: |
           set -o pipefail
+          # arm64-only: the runner is Apple Silicon, and VLCKit's visionOS
+          # simulator slice is arm64 (x86_64 visionOS sims don't exist). Without
+          # this, the generic destination also builds x86_64 and fails to link.
           xcodebuild build \
             -project Aether.xcodeproj \
             -scheme Aether \
             -destination "generic/platform=${{ matrix.platform }} Simulator" \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
