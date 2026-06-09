@@ -12,10 +12,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   Plex / Jellyfin server needed. Import video files from Files (Settings → Local
   Library → Import Media…); Aether copies them into a managed store (excluded
   from iCloud backup), infers a title / year from the filename, and surfaces them
-  in your unified Movies library to play directly. Foundations for the rest of
-  the epic (filename parsing #206, the `.local` source id #207) shipped first.
-  *Fast-follows: TV show/season grouping, share-sheet import, browser upload
-  (#209), metadata matching (#210) + manual editing (#211).*
+  in your unified library to play directly. **TV episodes group into shows** —
+  files like `Severance.S01E02.mkv` nest under a show in TV Shows (drill show →
+  episodes), while movies stay flat in Movies. Foundations (filename parsing
+  #206, the `.local` source id #207) shipped first. *Fast-follows: share-sheet
+  import, browser upload (#209), metadata matching (#210) + manual editing
+  (#211).*
 - **mkv (and other non-native formats) play locally** — files AVFoundation can't
   open (Matroska / AVI / …) now play through a bundled **VLCKit** engine, chosen
   automatically per file (`PlaybackEngine`); everything AVPlayer supports keeps
