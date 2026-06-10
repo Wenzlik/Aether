@@ -1256,6 +1256,84 @@ struct LocalLibraryTests {
         #expect(await store.count() == 0)
         #expect(!FileManager.default.fileExists(atPath: path))
     }
+
+    // MARK: - Manual overrides (#211)
+
+    @Test("manual overrides win over the TMDb match + inference, and persist")
+    func overridesWin() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Whatever (1999).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        // A wrong auto-match…
+        await store.setMatch(TMDbMetadata(tmdbID: 1, title: "Wrong Movie", year: 2001,
+            overview: "nope", posterURL: nil, backdropURL: nil), for: item.id)
+        // …corrected by the user.
+        await store.setOverrides(.init(title: "The Matrix", year: 1999, overview: "Neo."), for: item.id)
+
+        // Survives relaunch.
+        let reopened = LocalLibraryStore(directory: dir)
+        let stored = try #require(await reopened.allItems().first)
+        #expect(stored.effectiveTitle == "The Matrix")
+        #expect(stored.effectiveYear == 1999)
+        #expect(stored.effectiveOverview == "Neo.")
+        let source = LocalMediaSource(store: reopened)
+        let lib = try #require(try await source.libraries().first { $0.kind == .movie })
+        #expect(try await source.items(in: lib.id).first?.title == "The Matrix")
+    }
+
+    @Test("overriding isEpisode reclassifies a movie into the TV library")
+    func reclassify() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Pilot (2020).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        let source = LocalMediaSource(store: store)
+        #expect(try await source.libraries().contains { $0.kind == .show } == false)
+
+        await store.setOverrides(.init(title: "My Show", isEpisode: true, season: 1, episode: 1), for: item.id)
+        let libs = try await source.libraries()
+        #expect(libs.contains { $0.kind == .show })
+        #expect(libs.contains { $0.kind == .movie } == false)
+        let showLib = try #require(libs.first { $0.kind == .show })
+        let shows = try await source.items(in: showLib.id)
+        #expect(shows.first?.title == "My Show")
+        #expect(try await source.children(of: shows[0].id).first?.episodeNumber == 1)
+    }
+
+    @Test("custom artwork is stored, used as the poster, and removed with the item")
+    func customArtwork() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Movie (2000).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+
+        #expect(await store.setArtwork(Data("png-bytes".utf8), for: item.id) != nil)
+        let stored = try #require(await store.allItems().first)
+        let artURL = try #require(store.artworkURL(for: stored))
+        #expect(FileManager.default.fileExists(atPath: artURL.path))
+
+        let source = LocalMediaSource(store: store)
+        let lib = try #require(try await source.libraries().first { $0.kind == .movie })
+        #expect(try await source.items(in: lib.id).first?.posterURL == artURL)
+
+        await store.remove(item.id)
+        #expect(!FileManager.default.fileExists(atPath: artURL.path))
+    }
+
+    @Test("clearing overrides reverts to inference")
+    func clearOverrides() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Real Title (2012).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        await store.setOverrides(.init(title: "Temp"), for: item.id)
+        #expect(await store.allItems().first?.effectiveTitle == "Temp")
+        await store.setOverrides(nil, for: item.id)
+        let stored = try #require(await store.allItems().first)
+        #expect(stored.overrides == nil)
+        #expect(stored.effectiveTitle == "Real Title")
+    }
 }
 
 @Suite("AetherCore — PlaybackEngine (mkv #173)")
@@ -1325,6 +1403,22 @@ struct TMDbClientTests {
         let client = TMDbClient(apiKey: "  ", api: StubAPI(json: #"{"results":[]}"#))
         #expect(client.isConfigured == false)
         #expect(await client.match(title: "X", year: nil, isEpisode: false) == nil)
+    }
+
+    @Test("searchCandidates returns multiple results, most-relevant first, capped by limit (#211)")
+    func candidates() async {
+        let json = #"""
+        {"results":[
+          {"id":1,"title":"A","release_date":"2001-01-01"},
+          {"id":2,"title":"B","release_date":"2002-01-01"},
+          {"id":3,"title":"C"}
+        ]}
+        """#
+        let cands = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .searchCandidates(title: "x", year: nil, isEpisode: false, limit: 2)
+        #expect(cands.count == 2)
+        #expect(cands[0].tmdbID == 1)
+        #expect(cands[1].title == "B")
     }
 
     @Test("no results → nil")
