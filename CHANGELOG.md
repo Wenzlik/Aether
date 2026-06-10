@@ -17,6 +17,22 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   screen repaints in place, and re-grouping follows (e.g. reclassifying a movie
   as an episode moves it into TV Shows).
 
+### Fixed
+
+- **Settings could be dragged horizontally on iPhone** (#248) — the content was
+  capped at a fixed 820 pt width, which proposed that width to the full-width
+  settings cards and made the page wider than the phone, so the vertical scroll
+  view drifted sideways. Compact widths now use the viewport width; the page is
+  horizontally anchored.
+
+### Changed
+
+- **Cast & Crew is now passive on tvOS** (#249) — the cast cards were focusable
+  but led nowhere, trapping focus and making it hard to leave the section. Until
+  actor pages exist, the cards are non-focusable informational metadata (photo +
+  name + character); the focus engine skips the rail and moves cleanly between
+  the sections around it. iOS / iPadOS unaffected.
+
 ## [0.6.4] — 2026-06-10
 
 ### Fixed
