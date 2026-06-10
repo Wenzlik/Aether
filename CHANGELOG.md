@@ -39,6 +39,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- **Cast & Crew moved lower on Detail, and the rail uses full width on tvOS**
+  (#247) — Cast now sits below the primary actions, overview, sources and
+  related content (it shouldn't compete with Resume / Episodes), and on tvOS the
+  cast rail breaks out of the content column to span the full screen for easier
+  browsing.
 - **Cast & Crew is now passive on tvOS** (#249) — the cast cards were focusable
   but led nowhere, trapping focus and making it hard to leave the section. Until
   actor pages exist, the cards are non-focusable informational metadata (photo +
