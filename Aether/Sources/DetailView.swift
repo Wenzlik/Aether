@@ -811,6 +811,16 @@ struct DetailView: View {
         item.kind == .show ? "Seasons" : "Episodes"
     }
 
+    /// Season poster cards run a touch wider on the 10-foot UI so the named
+    /// "S2 · Asylum" labels have room to breathe over two lines (#263).
+    private var seasonCardWidth: CGFloat {
+        #if os(tvOS)
+        return 180
+        #else
+        return 140
+        #endif
+    }
+
     private var seasonsRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: AetherDesign.Spacing.m) {
@@ -819,9 +829,12 @@ struct DetailView: View {
                         AetherCard.poster(
                             title: DetailFormatting.seasonLabel(season),
                             posterURL: season.posterURL,
-                            isWatched: (season.unwatchedEpisodeCount ?? 1) == 0
+                            isWatched: (season.unwatchedEpisodeCount ?? 1) == 0,
+                            // Named seasons ("S2 · Asylum") need a second line so
+                            // they don't clip to "Seaso…" on the 10-foot UI (#263).
+                            titleLineLimit: 2
                         )
-                        .frame(width: 140)
+                        .frame(width: seasonCardWidth)
                     }
                     .buttonStyle(.plain)
                 }
