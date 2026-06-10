@@ -1502,3 +1502,60 @@ struct TMDbClientTests {
         #expect(m == nil)
     }
 }
+
+@Suite("AetherCore — DetailFormatting (#241)")
+struct DetailFormattingTests {
+    @Test("kind labels")
+    func kindLabels() {
+        #expect(DetailFormatting.kindLabel(.movie) == "Movie")
+        #expect(DetailFormatting.kindLabel(.episode) == "Episode")
+        #expect(DetailFormatting.kindLabel(.show) == "Series")
+        #expect(DetailFormatting.kindLabel(.season) == "Season")
+    }
+
+    @Test("runtime / position formatting")
+    func durations() {
+        #expect(DetailFormatting.runtime(.seconds(3661)) == "1h 1m")
+        #expect(DetailFormatting.runtime(.seconds(125)) == "2m")
+        #expect(DetailFormatting.position(.seconds(3661)) == "01:01:01")
+        #expect(DetailFormatting.position(.seconds(125)) == "02:05")
+    }
+
+    @Test("percent / bitrate / channels")
+    func numbers() {
+        #expect(DetailFormatting.percent(0.426) == "43%")
+        #expect(DetailFormatting.bitrate(8000) == "8.0 Mbps")
+        #expect(DetailFormatting.bitrate(800) == "800 kbps")
+        #expect(DetailFormatting.channelLabel(1) == "Mono")
+        #expect(DetailFormatting.channelLabel(2) == "2.0")
+        #expect(DetailFormatting.channelLabel(6) == "5.1")
+        #expect(DetailFormatting.channelLabel(8) == "7.1")
+        #expect(DetailFormatting.channelLabel(3) == "3 ch")
+    }
+
+    @Test("video / audio / HDR lines from MediaInfo")
+    func mediaLines() {
+        let full = MediaInfo(videoCodec: "hevc", audioCodec: "eac3", audioChannels: 6,
+                             videoResolution: "4K", isHDR: true, isDolbyVision: true)
+        #expect(DetailFormatting.videoLine(full) == "HEVC 4K")
+        #expect(DetailFormatting.audioLine(full) == "EAC3 5.1")
+        #expect(DetailFormatting.hdrBadge(full) == "Dolby Vision")
+        #expect(DetailFormatting.hdrBadge(MediaInfo(isHDR: true)) == "HDR")
+        #expect(DetailFormatting.hdrBadge(MediaInfo()) == nil)
+        #expect(DetailFormatting.videoLine(nil) == nil)
+        #expect(DetailFormatting.videoLine(MediaInfo(videoCodec: "h264")) == "H264")
+        #expect(DetailFormatting.audioLine(MediaInfo()) == nil)
+    }
+
+    @Test("season / episode labels")
+    func labels() {
+        let s2 = MediaItem(id: .init(source: .mock, rawValue: "s2"), title: "The Show",
+                           kind: .season, seasonNumber: 2)
+        #expect(DetailFormatting.seasonLabel(s2) == "Season 2")
+        let specials = MediaItem(id: .init(source: .mock, rawValue: "sx"), title: "Specials", kind: .season)
+        #expect(DetailFormatting.seasonLabel(specials) == "Specials")
+        let ep = MediaItem(id: .init(source: .mock, rawValue: "e"), title: "Pilot",
+                           kind: .episode, seasonNumber: 1, episodeNumber: 3)
+        #expect(DetailFormatting.episodeLabel(ep) == "S1E3 · Pilot")
+    }
+}
