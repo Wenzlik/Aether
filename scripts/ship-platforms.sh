@@ -3,18 +3,18 @@
 # ship-platforms.sh — trigger the per-platform Xcode Cloud archives that are
 # gated on git tags.
 #
-# Aether is one app for many platforms, all built from `main`. To let each
-# platform ship on its own cadence (and to avoid App Store Connect rejecting
-# simultaneous deliveries), the Xcode Cloud workflows are split:
+# Aether is one app for many platforms, all built from `main`. Every platform's
+# Xcode Cloud workflow is gated on a git tag (none auto-build on a plain push),
+# so this one script ships them all from the same commit, on demand:
 #
-#   • iOS       — "Branch Changes" on `main`  → builds AUTOMATICALLY on every push.
-#   • tvOS      — "Tag Changes" `tvos/…`      → builds only when a tvos/ tag is pushed.
-#   • visionOS  — "Tag Changes" `visionos/…`  → builds only when a visionos/ tag is pushed.
+#   • iOS       — "Tag Changes" `ios/…`
+#   • tvOS      — "Tag Changes" `tvos/…`
+#   • visionOS  — "Tag Changes" `visionos/…`
 #   • macOS     — (added later, gated on `macos/…`)
 #
-# So a plain promotion to `main` ships iOS; this script pushes the tags that
-# ship the rest. Run it right AFTER a release lands on `main`, so every platform
-# gets the same build iOS just got. See RELEASING.md.
+# Merging staging → main means "ready"; running this script means "ship". Run it
+# right AFTER a release lands on `main` so all platforms build the same commit.
+# See RELEASING.md.
 #
 # Tag format:  <platform>/<MARKETING_VERSION>-<short-sha>
 #   e.g. tvos/0.6.4-b436e24 — unique per build (so re-builds of the same
@@ -25,9 +25,8 @@
 #
 set -euo pipefail
 
-# Tag-gated platforms. iOS is intentionally absent (it auto-builds on `main`).
-# Add "macos" here once its workflow exists.
-PLATFORMS=(tvos visionos)
+# Tag-gated platforms — all of them. Add "macos" here once its workflow exists.
+PLATFORMS=(ios tvos visionos)
 
 REF="${1:-origin/main}"
 git fetch origin --quiet --tags
@@ -47,4 +46,4 @@ for plat in "${PLATFORMS[@]}"; do
   git push origin "$TAG" >/dev/null
   echo "  ✓ pushed $TAG"
 done
-echo "Done. iOS builds from the main push; the tags above trigger tvOS / visionOS."
+echo "Done. The tags above trigger each platform's Xcode Cloud archive."
