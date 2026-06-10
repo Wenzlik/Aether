@@ -528,6 +528,11 @@ public struct MediaID: Hashable, Sendable {
         self.source = source
         self.rawValue = rawValue
     }
+
+    /// A stable, run-to-run identical string identifying this item — its
+    /// source's `stableKey` joined to the raw id. Suitable as a dictionary key
+    /// when a `String` is needed instead of the `Hashable` value itself.
+    public var key: String { "\(source.stableKey):\(rawValue)" }
 }
 
 /// Identifies which source (mock / Plex server / Synology share / on-device

@@ -746,6 +746,39 @@ struct UnifiedHomeRailsTests {
         #expect(rails.recentlyAdded.count == 1)         // fallback kept it
         #expect(rails.recentlyReleased.isEmpty)         // no release date → hidden
     }
+
+    @Test("Continue Watching surfaces an in-progress episode — one per show across seasons (#263)")
+    func continueWatchingEpisodes() async {
+        let showID = MediaID(source: .mock, rawValue: "show:S")
+        let e1 = MediaID(source: .mock, rawValue: "S1E1")
+        let e2 = MediaID(source: .mock, rawValue: "S2E3")
+        let show = MediaItem(id: showID, title: "The Show", kind: .show)
+        // parentID resolves to the *season* on real sources (Plex/Jellyfin), so
+        // the two episodes carry *different* parentIDs — grouping must collapse
+        // them to one show via seriesTitle, not split them per season.
+        let ep1 = MediaItem(id: e1, title: "Episode 1", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 1, episodeNumber: 1,
+                            parentID: .init(source: .mock, rawValue: "season:1"))
+        let ep2 = MediaItem(id: e2, title: "Episode 3", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 2, episodeNumber: 3,
+                            parentID: .init(source: .mock, rawValue: "season:2"))
+        let source = StubShowSource(movies: [], show: show, episodes: [ep1, ep2])
+
+        let store = ResumeStore()
+        let now = Date()
+        await store.record(.init(mediaID: e1, position: .seconds(60), updatedAt: now.addingTimeInterval(-600)))
+        await store.record(.init(mediaID: e2, position: .seconds(60), updatedAt: now.addingTimeInterval(-100)))
+
+        let rails = await UnifiedLibrary(sources: [source]).homeRails(resumeStore: store, forceRefresh: true)
+
+        // The show contributes exactly one entry — its most-recently-watched
+        // episode (e2), even though e1 is a different season. Before #263 the
+        // unified Home surfaced no in-progress episode at all (it only matched
+        // resume points against top-level movies and show containers).
+        #expect(rails.continueWatching.map(\.item.id) == [e2])
+        #expect(rails.continueWatching.first?.item.kind == .episode)
+        #expect(rails.continueWatching.contains { $0.item.id == e1 } == false)
+    }
 }
 
 @Suite("AetherCore — Cinema presets")
@@ -1113,6 +1146,47 @@ struct UnifiedLibrarySnapshotTests {
         #expect(movies.count == 1)              // instant, from the stale snapshot
         #expect(await src.calls() == 0)         // still no blocking fetch on the read path
         #expect(await library.isStale(kind: .movie) == true)   // caller should background-refresh
+    }
+
+    /// A source whose movie library is momentarily empty on the first fetch and
+    /// populated thereafter — models a server not-yet-ready at launch / a hiccup.
+    private actor FlakyMovieSource: MediaSource {
+        nonisolated let id: MediaSourceID
+        nonisolated let displayName = "Flaky"
+        private let lib: Library
+        private let movie: MediaItem
+        private var calls = 0
+        init(serverID: String) {
+            self.id = .plex(serverID: serverID)
+            self.lib = Library(id: .init(source: .plex(serverID: serverID), rawValue: "m"), title: "Movies", kind: .movie)
+            self.movie = MediaItem(id: .init(source: .plex(serverID: serverID), rawValue: "1"), title: "Matrix",
+                                   kind: .movie, streamURL: URL(string: "http://p/1"), guids: MediaGuids(tmdb: "603"))
+        }
+        func libraries() async throws -> [Library] { [lib] }
+        func items(in id: Library.ID) async throws -> [MediaItem] {
+            calls += 1
+            return calls == 1 ? [] : [movie]   // empty once, then recovered
+        }
+    }
+
+    @Test("a transient empty fan-out is not pinned — the next read self-heals (#263)")
+    func emptyResultNotPinned() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Unique source id so the process-shared in-memory cache can't collide.
+        let source = FlakyMovieSource(serverID: "regr263")
+        let library = UnifiedLibrary(sources: [source], snapshotStore: UnifiedLibrarySnapshotStore(directory: dir))
+
+        // First fetch sees an empty movie library (source momentarily not ready).
+        let first = await library.unifiedItems(kind: .movie)
+        #expect(first.isEmpty)
+
+        // Second fetch (NO forceRefresh): because the empty was never cached or
+        // snapshotted, this fans out again and now sees the recovered catalog —
+        // instead of being stranded on the pinned empty. This is the #263 fix.
+        let second = await library.unifiedItems(kind: .movie)
+        #expect(second.count == 1)
+        #expect(second.first?.title == "Matrix")
     }
 }
 
@@ -1549,11 +1623,29 @@ struct DetailFormattingTests {
 
     @Test("season / episode labels")
     func labels() {
-        let s2 = MediaItem(id: .init(source: .mock, rawValue: "s2"), title: "The Show",
-                           kind: .season, seasonNumber: 2)
-        #expect(DetailFormatting.seasonLabel(s2) == "Season 2")
+        // Generic "Season N" titles stay as "Season N".
+        let generic = MediaItem(id: .init(source: .mock, rawValue: "s2"), title: "Season 2",
+                                kind: .season, seasonNumber: 2)
+        #expect(DetailFormatting.seasonLabel(generic) == "Season 2")
+        // No real title at all → derive from the number.
+        let numbered = MediaItem(id: .init(source: .mock, rawValue: "s2b"), title: "",
+                                 kind: .season, seasonNumber: 2)
+        #expect(DetailFormatting.seasonLabel(numbered) == "Season 2")
+        // A real, human season name is surfaced alongside the number (#263).
+        let named = MediaItem(id: .init(source: .mock, rawValue: "s2n"), title: "Asylum",
+                              kind: .season, seasonNumber: 2)
+        #expect(DetailFormatting.seasonLabel(named) == "S2 · Asylum")
+        // A season titled with the *series* name (some agents do this) is not a
+        // real season name → fall back to the number.
+        let seriesNamed = MediaItem(id: .init(source: .mock, rawValue: "s3"), title: "The Show",
+                                    kind: .season, seriesTitle: "The Show", seasonNumber: 3)
+        #expect(DetailFormatting.seasonLabel(seriesNamed) == "Season 3")
+        // Named season with no number keeps its name as-is.
         let specials = MediaItem(id: .init(source: .mock, rawValue: "sx"), title: "Specials", kind: .season)
         #expect(DetailFormatting.seasonLabel(specials) == "Specials")
+        // No name and no number → the bare word.
+        let bare = MediaItem(id: .init(source: .mock, rawValue: "sb"), title: "Season", kind: .season)
+        #expect(DetailFormatting.seasonLabel(bare) == "Season")
         let ep = MediaItem(id: .init(source: .mock, rawValue: "e"), title: "Pilot",
                            kind: .episode, seasonNumber: 1, episodeNumber: 3)
         #expect(DetailFormatting.episodeLabel(ep) == "S1E3 · Pilot")

@@ -17,6 +17,10 @@ public struct AetherCard: View {
     public let progress: Double?
     /// Shows a "watched" checkmark badge over the artwork when `true`.
     public let isWatched: Bool
+    /// How many lines the title may wrap to before truncating. Season cards
+    /// pass `2` so longer "S2 · Asylum" labels stay legible instead of clipping
+    /// to "Seaso…" (#263); most cards keep the single-line default.
+    public let titleLineLimit: Int
 
     public init(
         title: String,
@@ -24,7 +28,8 @@ public struct AetherCard: View {
         posterURL: URL? = nil,
         aspectRatio: CGFloat = 2.0 / 3.0,
         progress: Double? = nil,
-        isWatched: Bool = false
+        isWatched: Bool = false,
+        titleLineLimit: Int = 1
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -32,6 +37,7 @@ public struct AetherCard: View {
         self.aspectRatio = aspectRatio
         self.progress = progress
         self.isWatched = isWatched
+        self.titleLineLimit = titleLineLimit
     }
 
     public var body: some View {
@@ -48,7 +54,7 @@ public struct AetherCard: View {
                 Text(title)
                     .font(AetherDesign.Typography.cardTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(titleLineLimit)
 
                 if let subtitle {
                     Text(subtitle)
@@ -171,9 +177,10 @@ extension AetherCard {
         title: String,
         posterURL: URL?,
         progress: Double? = nil,
-        isWatched: Bool = false
+        isWatched: Bool = false,
+        titleLineLimit: Int = 1
     ) -> AetherCard {
-        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched)
+        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, titleLineLimit: titleLineLimit)
     }
 
     /// 16:9 hero card — used for the featured rail and continue-watching, where

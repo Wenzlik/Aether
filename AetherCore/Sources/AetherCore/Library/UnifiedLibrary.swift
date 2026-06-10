@@ -53,7 +53,15 @@ public actor UnifiedLibrary {
         // `forceRefresh` to bypass it and re-stamp the cache.
         let key = cacheKey(kind: kind)
         if !forceRefresh {
-            if let cached = await UnifiedLibraryCache.shared.items(for: key) {
+            // An *empty* cached/snapshot value is treated as a miss, never served.
+            // A transient empty fan-out (a server not yet ready at launch, or a
+            // momentary hiccup) must not be able to pin an empty catalog under
+            // this source-set key and have it served at any age — that's exactly
+            // what stranded the "See all" grid (and Discover) on "Nothing here
+            // yet" once the Local Library flipped the connected-source set, while
+            // the rails kept showing their last-good state (#263). Ignoring empty
+            // here also self-heals any empty already persisted by an older build.
+            if let cached = await UnifiedLibraryCache.shared.items(for: key), !cached.isEmpty {
                 return cached
             }
             // Cold in-memory cache (e.g. a fresh launch): serve the persisted
@@ -62,7 +70,7 @@ public actor UnifiedLibrary {
             // caller refreshes in the background when `isStale(kind:)` is true.
             // Only a first-ever launch with no snapshot falls through to the
             // blocking fan-out below (the sole place a loading state appears).
-            if let snapshot = await snapshotStore.snapshot(for: key) {
+            if let snapshot = await snapshotStore.snapshot(for: key), !snapshot.items.isEmpty {
                 await UnifiedLibraryCache.shared.set(snapshot.items, for: key)
                 return snapshot.items
             }
@@ -91,10 +99,19 @@ public actor UnifiedLibrary {
         }
         let downloaded = await downloadedTask
         let merged = Self.merge(items, downloaded: downloaded, serverNames: serverNames)
-        await UnifiedLibraryCache.shared.set(merged, for: key)
-        // Re-stamp the cross-launch snapshot with the fresh catalog so the next
-        // cold start paints it instantly.
-        await snapshotStore.save(merged, for: key, at: Date())
+        // Never cache or persist an empty result. The fan-out is fault-tolerant
+        // (a failing/slow source contributes nothing), so an empty merge means
+        // "we couldn't see anything *right now*", not "this catalog is empty" —
+        // pinning it would strand every surface that reads this key until the TTL
+        // expired or a manual refresh, even though the next fetch would succeed
+        // (#263). Returning empty without caching lets the very next appearance
+        // self-heal via a fresh fan-out.
+        if !merged.isEmpty {
+            await UnifiedLibraryCache.shared.set(merged, for: key)
+            // Re-stamp the cross-launch snapshot with the fresh catalog so the
+            // next cold start paints it instantly.
+            await snapshotStore.save(merged, for: key, at: Date())
+        }
         return merged
     }
 
@@ -151,6 +168,19 @@ public actor UnifiedLibrary {
             if let best { continueWatching.append(.init(item: best.item, resume: best.resume)) }
         }
 
+        // In-progress EPISODES (#263). An episode's resume point is keyed by the
+        // *episode* id, which is never a top-level catalog item — so the loop
+        // above (movies + show *containers*) misses every in-progress episode and
+        // no TV show ever reaches Continue Watching. Walk the live resume points,
+        // resolve each via its owning source, group by show, and surface the
+        // most-recently-watched episode per show ("pick up where you left off").
+        continueWatching.append(
+            contentsOf: await inProgressEpisodes(resumeStore: resumeStore, excluding: continueWatching)
+        )
+
+        // Most recently active first, across movies + TV.
+        continueWatching.sort { $0.resume.updatedAt > $1.resume.updatedAt }
+
         let pool = movies + shows
 
         // Recently Added: newest library-add date first. When no source dates
@@ -184,6 +214,39 @@ public actor UnifiedLibrary {
             movieCount: movies.count,
             showCount: shows.count
         )
+    }
+
+    /// The most-recently-watched in-progress **episode per show**, resolved from
+    /// the live resume points (#263).
+    ///
+    /// Resume points whose `mediaID` already surfaced as a movie/show entry are
+    /// skipped. The rest are routed to their owning source via `item(for:)` and
+    /// kept only when they resolve to an episode. Grouping is by **`seriesTitle`**
+    /// — the show-level identity that holds even though `parentID` resolves to the
+    /// *season* on Plex/Jellyfin, so a multi-season binge collapses to one entry
+    /// per show rather than one per season.
+    private func inProgressEpisodes(
+        resumeStore: ResumeStore,
+        excluding existing: [HomeFeed.ContinueWatchingEntry]
+    ) async -> [HomeFeed.ContinueWatchingEntry] {
+        let points = await resumeStore.allPoints()
+        guard !points.isEmpty else { return [] }
+
+        let alreadySurfaced = Set(existing.map(\.item.id))
+        let sourcesByID = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        var byShow: [String: (item: MediaItem, resume: ResumePoint)] = [:]
+        for point in points where !alreadySurfaced.contains(point.mediaID) {
+            guard let source = sourcesByID[point.mediaID.source],
+                  let item = try? await source.item(for: point.mediaID),
+                  item.kind == .episode else { continue }
+            let showKey = item.seriesTitle.map { $0.lowercased() }
+                ?? (item.parentID ?? item.id).key
+            if let current = byShow[showKey], current.resume.updatedAt >= point.updatedAt { continue }
+            byShow[showKey] = (item, point)
+        }
+
+        return byShow.values.map { .init(item: $0.item, resume: $0.resume) }
     }
 
     /// Round-robin two lists: a, b, a, b, … until both drain. Used for the
