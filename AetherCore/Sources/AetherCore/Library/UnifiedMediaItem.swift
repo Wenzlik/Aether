@@ -154,6 +154,13 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
     public var isWatched: Bool {
         sources.contains { $0.item.isWatched }
     }
+
+    /// `true` when the title is **fully** watched on any source — containers
+    /// (shows) require every episode watched, so a partially-watched show is
+    /// not badged (#260). This is what the card badge should use.
+    public var isFullyWatched: Bool {
+        sources.contains { $0.item.isFullyWatched }
+    }
 }
 
 /// The unified Home feed: deduplicated rails across all connected sources.

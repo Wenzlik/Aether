@@ -342,6 +342,16 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
             self == .show || self == .season
         }
     }
+
+    /// Whether this item should display as **fully watched**. Leaves use the raw
+    /// `isWatched` flag; **containers** (shows / seasons) require that every
+    /// episode is watched (`unwatchedEpisodeCount == 0`) — the raw source flag
+    /// can read "watched" before the whole show is (#260). An unknown count
+    /// (`nil`) ⇒ not fully watched, so a partially-watched show is never badged.
+    public var isFullyWatched: Bool {
+        if kind.isContainer { return (unwatchedEpisodeCount ?? 1) == 0 }
+        return isWatched
+    }
 }
 
 /// External catalogue identifiers for a title — the basis for recognising the

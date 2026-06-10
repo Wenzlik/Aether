@@ -1559,3 +1559,48 @@ struct DetailFormattingTests {
         #expect(DetailFormatting.episodeLabel(ep) == "S1E3 · Pilot")
     }
 }
+
+@Suite("AetherCore — OnDeck (#260)")
+struct OnDeckTests {
+    private func ep(_ s: Int, _ e: Int, watched: Bool = false) -> MediaItem {
+        MediaItem(id: .init(source: .mock, rawValue: "s\(s)e\(e)"), title: "E\(s)x\(e)",
+                  kind: .episode, seasonNumber: s, episodeNumber: e, isWatched: watched)
+    }
+
+    @Test("most-recent in-progress wins over an earlier unwatched season (the S3-vs-S7 bug)")
+    func inProgressWins() {
+        let s7 = ep(7, 2)
+        let episodes = [ep(1, 1, watched: true), ep(3, 5), s7, ep(7, 3)]
+        let now = Date()
+        let next = OnDeck.next(episodes: episodes) { $0.id == s7.id ? now : nil }
+        #expect(next?.id == s7.id)
+    }
+
+    @Test("no in-progress → the episode after the last one watched")
+    func afterLastWatched() {
+        let episodes = [ep(1, 1, watched: true), ep(1, 2, watched: true), ep(1, 3), ep(2, 1)]
+        let next = OnDeck.next(episodes: episodes) { _ in nil }
+        #expect(next?.seasonNumber == 1 && next?.episodeNumber == 3)
+    }
+
+    @Test("nothing watched → the first episode (in order)")
+    func nothingWatched() {
+        let next = OnDeck.next(episodes: [ep(2, 1), ep(1, 1), ep(1, 2)]) { _ in nil }
+        #expect(next?.seasonNumber == 1 && next?.episodeNumber == 1)
+    }
+
+    @Test("all watched → nil")
+    func allWatched() {
+        #expect(OnDeck.next(episodes: [ep(1, 1, watched: true), ep(1, 2, watched: true)]) { _ in nil } == nil)
+    }
+
+    @Test("among several in-progress, the most recent wins")
+    func mostRecentInProgress() {
+        let older = ep(1, 4); let newer = ep(2, 1)
+        let base = Date()
+        let next = OnDeck.next(episodes: [older, newer]) {
+            $0.id == older.id ? base : ($0.id == newer.id ? base.addingTimeInterval(100) : nil)
+        }
+        #expect(next?.id == newer.id)
+    }
+}
