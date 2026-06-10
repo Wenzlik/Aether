@@ -41,12 +41,27 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            content
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.vertical, AetherDesign.Spacing.l)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                // tvOS: an in-scroll heading that scrolls away with the grid.
+                // `.navigationTitle` on tvOS pins a persistent title that never
+                // moves and overlaps the top tab-bar region — it can displace
+                // the tab bar and strand focus on return from a pushed Detail
+                // (#243). Same treatment as UnifiedLibraryGridView (#216).
+                #if os(tvOS)
+                Text(library.title)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                #endif
+                content
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .padding(.vertical, AetherDesign.Spacing.l)
         }
         .aetherScreenBackground()
+        #if !os(tvOS)
         .navigationTitle(library.title)
+        #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
         #endif

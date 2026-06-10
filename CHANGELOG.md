@@ -19,13 +19,18 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
-- **Continue Watching / Next Up now surfaces in-progress TV episodes** (#243) —
+- **Continue Watching / Next Up now surfaces in-progress TV episodes** (#244) —
   it previously only matched resume points against top-level movies and show
   *containers*, so a half-watched episode (whose resume point is keyed by the
   episode) never brought its show back. Now a show appears whenever it has a
   resumable episode, surfacing the one you're most likely to continue (most
   recently watched, then newest season, then newest episode), mixed with movies
   by recency. TV is a first-class citizen of Continue Watching.
+- **tvOS: the library "See all" grid no longer displaces the top navigation**
+  (#243) — `LibraryView` pinned a `navigationTitle`, which on tvOS never scrolls
+  away and can overlap the tab-bar region, stranding focus on return from a
+  pushed Detail. It now uses an in-scroll heading on tvOS (the same treatment
+  the unified grid already had, #216); iOS/iPadOS/visionOS keep the native title.
 - **Settings could be dragged horizontally on iPhone** (#248) — the content was
   capped at a fixed 820 pt width, which proposed that width to the full-width
   settings cards and made the page wider than the phone, so the vertical scroll
