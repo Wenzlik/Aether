@@ -406,8 +406,62 @@ struct MockFixtureTests {
     }
 }
 
+/// Minimal source with a movie library + one show whose episodes are children
+/// — enough to exercise episode-level Continue Watching (#243). The mock fixture
+/// can't express episode `parentID`, so this stub does.
+private struct StubShowSource: MediaSource {
+    let id: MediaSourceID = .mock
+    let displayName = "Stub"
+    let movies: [MediaItem]
+    let show: MediaItem
+    let episodes: [MediaItem]
+
+    func libraries() async throws -> [Library] {
+        [Library(id: .init(source: .mock, rawValue: "movies"), title: "Movies", kind: .movie),
+         Library(id: .init(source: .mock, rawValue: "shows"), title: "Shows", kind: .show)]
+    }
+    func items(in library: Library.ID) async throws -> [MediaItem] {
+        library.rawValue == "movies" ? movies : [show]
+    }
+    func children(of id: MediaID) async throws -> [MediaItem] {
+        id == show.id ? episodes : []
+    }
+    func item(for id: MediaID) async throws -> MediaItem? {
+        ([show] + movies + episodes).first { $0.id == id }
+    }
+}
+
 @Suite("AetherCore — HomeFeedBuilder")
 struct HomeFeedBuilderTests {
+
+    @Test("Continue Watching surfaces a show's in-progress episode — one per show, mixed with movies by recency (#243)")
+    func continueWatchingIncludesEpisodes() async throws {
+        let movieID = MediaID(source: .mock, rawValue: "a")
+        let showID = MediaID(source: .mock, rawValue: "show:S")
+        let e1 = MediaID(source: .mock, rawValue: "S1E1")
+        let e2 = MediaID(source: .mock, rawValue: "S1E2")
+        let movie = MediaItem(id: movieID, title: "A Movie", kind: .movie, runtime: .seconds(3600))
+        let show = MediaItem(id: showID, title: "The Show", kind: .show)
+        let ep1 = MediaItem(id: e1, title: "Episode 1", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 1, episodeNumber: 1, parentID: showID)
+        let ep2 = MediaItem(id: e2, title: "Episode 2", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 1, episodeNumber: 2, parentID: showID)
+        let source = StubShowSource(movies: [movie], show: show, episodes: [ep1, ep2])
+
+        let store = ResumeStore()
+        let now = Date()
+        await store.record(.init(mediaID: movieID, position: .seconds(60), updatedAt: now.addingTimeInterval(-300)))
+        await store.record(.init(mediaID: e1, position: .seconds(60), updatedAt: now.addingTimeInterval(-600)))
+        await store.record(.init(mediaID: e2, position: .seconds(60), updatedAt: now.addingTimeInterval(-100)))
+
+        let feed = try await HomeFeedBuilder().build(source: source, resumeStore: store)
+
+        // The show contributes exactly one entry — its most-recent episode (e2) —
+        // ordered with the movie by recency; the older episode is not surfaced.
+        #expect(feed.continueWatching.map(\.item.id) == [e2, movieID])
+        #expect(feed.continueWatching.first?.item.kind == .episode)
+        #expect(feed.continueWatching.contains { $0.item.id == e1 } == false)
+    }
 
     @Test("Continue Watching includes only items with a resume point, most recent first")
     func continueWatchingFiltering() async throws {
