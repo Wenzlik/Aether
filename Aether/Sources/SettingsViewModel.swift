@@ -123,17 +123,23 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "A new Support hub — report a bug or request a feature right from Settings",
-        "Send Diagnostics — email a readable, private app report (no account details)",
-        "A dedicated Diagnostics screen — sources, library, downloads and cache at a glance",
-        "Cinema preferences on Apple Vision Pro — default screen size, seat, auto-enter and remember-last",
-        "A warmer, more intimate screening room in Cinema mode",
-        "An About screen, clearer setting descriptions, and a System theme option"
+        "Edit your Local Library by hand — tap the pencil on a local movie or episode to fix its title, year, kind, season and episode, re-match from TMDb, or set a custom poster from Files when auto-matching gets it wrong",
+        "Richer TV seasons — a rail of season poster cards opens a dedicated Season Detail with its own number, year, episode count and overview, and named seasons now read their real names",
+        "Continue Watching finally remembers your shows — a half-watched episode brings its series right back, grouped per show and mixed in with your movies by recency across every source",
+        "A show's Next Up points at the right episode — true On Deck across all seasons, so you pick up exactly where you left off instead of jumping to the wrong season",
+        "Watched titles read at a glance — finished movies and episodes get dimmed, desaturated artwork and a bold gold corner checkmark, while in-progress titles keep their resume bar",
+        "A more reliable Library and Discover — they no longer go unexpectedly blank, with a cleaner Apple TV “See all” grid, full-width Cast & Crew, and a tidier Settings layout on iPhone"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.4", codename: "Cassiopeia",
+                    summary: "The Local Library arrives — play media straight from the device with TMDb posters and metadata, TV episodes grouped into shows, mkv support via VLCKit, and a tidier Settings with accurate storage figures."),
+        ReleaseNote(version: "0.6.3", codename: "Cassiopeia",
+                    summary: "A Detail-screen layout pass with a platform-aware iPhone banner hero, calmer Settings, plus server Favorites, Cast & Crew, and an instant library on launch."),
+        ReleaseNote(version: "0.6.2", codename: "Cassiopeia",
+                    summary: "A denser, Infuse-inspired Detail screen — a clear action hierarchy, content ratings, genres everywhere, and richer technical details on both Plex and Jellyfin."),
         ReleaseNote(version: "0.6.1", codename: "Cassiopeia",
                     summary: "Settings & product-experience polish — a Support hub, Cinema preferences, diagnostics, and About."),
         ReleaseNote(version: "0.6.0", codename: "Cassiopeia",
