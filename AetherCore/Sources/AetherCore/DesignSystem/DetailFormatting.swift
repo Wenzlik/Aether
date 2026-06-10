@@ -19,10 +19,45 @@ public enum DetailFormatting {
         }
     }
 
-    /// "Season 2" from a season's number, or its title when the number is absent.
+    /// A season's display label that prefers a **real, human name** over the
+    /// bare number.
+    ///
+    /// Plex/Jellyfin frequently expose only a generic "Season 2" title; when
+    /// that's all we have we keep "Season 2". But when the source carries an
+    /// actual name (e.g. "Asylum"), we surface it alongside the number as
+    /// "S2 · Asylum" — the evocative name without losing the ordering, which
+    /// is exactly what anthology shows like American Horror Story need (#263).
     public static func seasonLabel(_ season: MediaItem) -> String {
-        if let number = season.seasonNumber { return "Season \(number)" }
-        return season.title
+        let number = season.seasonNumber
+        let title = season.title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // A title is a *real* season name only when it's non-empty, isn't the
+        // generic "Season N", and isn't just the series name repeated (some
+        // metadata agents set the season's title to the show's title).
+        let isSeriesName = title.caseInsensitiveCompare(season.seriesTitle ?? "") == .orderedSame
+        if !title.isEmpty, !isGenericSeasonTitle(title), !isSeriesName {
+            if let number { return "S\(number) · \(title)" }
+            return title
+        }
+        if let number { return "Season \(number)" }
+        return title.isEmpty ? "Season" : title
+    }
+
+    /// True when `title` adds nothing beyond the season number — "Season 2",
+    /// "Season", "Series 2", "Saison 2", or a bare number. Such titles are
+    /// placeholders the source generated, not names worth surfacing.
+    static func isGenericSeasonTitle(_ title: String) -> Bool {
+        var rest = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if rest.isEmpty { return true }
+        for keyword in ["season", "series", "saison", "staffel", "temporada", "part", "volume", "vol", "chapter"] {
+            if rest.hasPrefix(keyword) {
+                rest = String(rest.dropFirst(keyword.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+        // Generic when nothing meaningful remains after the keyword — empty, or
+        // purely the season number ("Season 2" → "2", bare "2" → "2").
+        return rest.isEmpty || rest.allSatisfy(\.isNumber)
     }
 
     /// "S1E3 · Title" when season + episode are known, else the bare title.

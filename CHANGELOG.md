@@ -36,13 +36,32 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **Episodes show their in-progress state** (#260) — a partially-watched episode
   now has a resume bar across its still and a "Resume hh:mm" caption in the list,
   so you can see at a glance how far in you are.
-- **Continue Watching / Next Up now surfaces in-progress TV episodes** (#244) —
-  it previously only matched resume points against top-level movies and show
-  *containers*, so a half-watched episode (whose resume point is keyed by the
-  episode) never brought its show back. Now a show appears whenever it has a
+- **Library & Discover no longer go blank when the Local Library is present**
+  (#263) — the unified catalog cached (and persisted) an **empty** result when a
+  cross-source fetch came back empty (a server not ready at launch, or a hiccup).
+  Because the cache key includes the connected-source set, importing local
+  content changed the key and the first fetch under it could pin an empty
+  catalog, stranding **Library "See all"** and **Discover** on "Nothing here
+  yet" while Home (which keeps its last-good state) looked fine — and tvOS was
+  unaffected (no Local Library, so the key never changed). Empty results are no
+  longer cached or served; the next read self-heals. (You diagnosed this — thank
+  you.)
+- **Season cards show real season names** (#263) — anthology/named seasons now
+  read **"S2 · Asylum"** instead of a bare, truncated "Seaso…"; generic
+  "Season N" stays as-is, and the card title can wrap to two lines (wider on
+  tvOS) so it no longer clips.
+- **Continue Watching / Next Up now surfaces in-progress TV episodes** (#244,
+  #263) — it previously only matched resume points against top-level movies and
+  show *containers*, so a half-watched episode (whose resume point is keyed by
+  the episode) never brought its show back. Now a show appears whenever it has a
   resumable episode, surfacing the one you're most likely to continue (most
-  recently watched, then newest season, then newest episode), mixed with movies
-  by recency. TV is a first-class citizen of Continue Watching.
+  recently watched), mixed with movies by recency. This now holds on the
+  **unified multi-source Home** too — the aggregated Continue Watching walks the
+  live resume points and resolves episodes (grouped **per show**, via the series
+  title, so a multi-season binge is one entry, not one per season), where before
+  it only intersected resume points with the top-level catalog and so never
+  showed a single in-progress episode. TV is a first-class citizen of Continue
+  Watching.
 - **tvOS: the library "See all" grid no longer displaces the top navigation**
   (#243) — `LibraryView` pinned a `navigationTitle`, which on tvOS never scrolls
   away and can overlap the tab-bar region, stranding focus on return from a
