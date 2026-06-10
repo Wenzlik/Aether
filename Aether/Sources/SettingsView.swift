@@ -100,7 +100,13 @@ struct SettingsView: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
-                    .frame(maxWidth: isWide ? 1100 : 820, alignment: .leading)
+                    // Compact (iPhone) must use the viewport width, not a fixed
+                    // cap: `820` proposes 820pt to width-greedy children (the
+                    // settings cards are maxWidth .infinity), so the content laid
+                    // out wider than the phone and the vertical ScrollView became
+                    // horizontally pannable (#248). `.infinity` inside a vertical
+                    // ScrollView resolves to the viewport width — no overflow.
+                    .frame(maxWidth: isWide ? 1100 : .infinity, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .task {

@@ -1307,26 +1307,20 @@ struct DetailView: View {
                     .padding(.vertical, AetherDesign.Spacing.xxs)
                     .padding(.horizontal, 2)
                 }
-                #if os(tvOS)
-                .focusSection()
-                #endif
+                // No `.focusSection()` on tvOS: the cards are non-focusable
+                // metadata (#249), so the focus engine skips the whole rail and
+                // moves cleanly between the sections above and below it.
             }
         }
     }
 
-    @ViewBuilder
     private func castCard(_ member: CastMember) -> some View {
-        // tvOS: wrap in a plain Button so it's reliably focusable and the
-        // focus-reading card lights up (a bare `.focusable()` propagated focus
-        // too weakly). Other platforms render the calm static card.
-        #if os(tvOS)
-        Button(action: {}) {
-            CastCardContent(member: member, size: castPhotoSize)
-        }
-        .buttonStyle(.plain)
-        #else
+        // Cast is passive, informational metadata: the cards do nothing when
+        // selected (no actor pages yet). On tvOS that means NON-focusable — a
+        // focusable card with no destination just traps focus and makes leaving
+        // the section hard (#249). So render the plain static card everywhere;
+        // when actor detail pages exist this can become interactive again.
         CastCardContent(member: member, size: castPhotoSize)
-        #endif
     }
 
     private var castPhotoSize: CGFloat {
