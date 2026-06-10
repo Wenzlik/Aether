@@ -1334,6 +1334,26 @@ struct LocalLibraryTests {
         #expect(stored.overrides == nil)
         #expect(stored.effectiveTitle == "Real Title")
     }
+
+    @Test("custom poster is versioned; replacing deletes the old file, reset deletes the current (#211)")
+    func artworkVersioningAndCleanup() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Film (2001).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+
+        let name1 = try #require(await store.setArtwork(Data("a".utf8), for: item.id))
+        let name2 = try #require(await store.setArtwork(Data("b".utf8), for: item.id))
+        #expect(name1 != name2)   // versioned → URL changes so image caches repaint
+        let artworkDir = dir.appendingPathComponent("Artwork")
+        #expect(!FileManager.default.fileExists(atPath: artworkDir.appendingPathComponent(name1).path)) // old gone
+        let storedAfter = try #require(await store.allItems().first)
+        let current = try #require(store.artworkURL(for: storedAfter))
+        #expect(FileManager.default.fileExists(atPath: current.path))                                  // new kept
+
+        await store.setOverrides(nil, for: item.id)   // reset
+        #expect(!FileManager.default.fileExists(atPath: current.path))                                 // poster cleaned up
+    }
 }
 
 @Suite("AetherCore — PlaybackEngine (mkv #173)")

@@ -92,6 +92,10 @@ struct DetailView: View {
     /// `.presentationDetents([.medium])` so the picker takes about half the
     /// screen and the Detail backdrop is still visible behind.
     @State private var presentedSelector: PlaybackSelector?
+    // Set when the local metadata editor closes, to re-point the screen at the
+    // edited item so its title / poster / overview repaint (#211). Seeded nil so
+    // the re-hydrate task below is a no-op on first appear (no double fetch).
+    @State private var localEditToken: UUID?
     /// True while a Download is being prepared (quality picker → enqueue) so
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
@@ -104,6 +108,7 @@ struct DetailView: View {
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    @Environment(\.dismiss) private var dismiss
     #if os(visionOS)
     /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
     /// app root; always present inside the windowed view tree on visionOS.
@@ -138,6 +143,9 @@ struct DetailView: View {
     /// selection on the item.
     private enum PlaybackSelector: Identifiable {
         case audio, subtitles, quality, downloadQuality, technicalDetails
+        #if !os(tvOS)
+        case editMetadata
+        #endif
         var id: String {
             switch self {
             case .audio: return "audio"
@@ -145,6 +153,9 @@ struct DetailView: View {
             case .quality: return "quality"
             case .downloadQuality: return "downloadQuality"
             case .technicalDetails: return "technicalDetails"
+            #if !os(tvOS)
+            case .editMetadata: return "editMetadata"
+            #endif
             }
         }
     }
@@ -231,6 +242,24 @@ struct DetailView: View {
             await setupSeasonsIfNeeded()
             related = await source?.related(to: activeItem.id) ?? []
         }
+        // Re-point the screen after the local metadata editor closes (#211): the
+        // item id is unchanged, so the main task won't re-run. Feeding the
+        // refreshed item into `overrideItem` (the same channel the source switch
+        // uses) repaints the hero, which reads `activeItem`. If the edit changed
+        // the kind (movie↔episode) the item now lives under a different library
+        // grouping, so pop back rather than render a contradictory screen.
+        .task(id: localEditToken) {
+            guard localEditToken != nil,
+                  activeItem.id.source == .local,
+                  let source,
+                  let refreshed = try? await source.item(for: activeItem.id) else { return }
+            if refreshed.kind != activeItem.kind {
+                dismiss()
+            } else {
+                overrideItem = refreshed
+                configuredItem = applyingPreferences(to: refreshed)
+            }
+        }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
             // Use the closure parameter, not the @State again. On first
@@ -272,12 +301,12 @@ struct DetailView: View {
                 // the text into a side gutter beside a letterboxed image.
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                     BackdropImage(
-                        url: item.backdropURL(.backdrop) ?? item.posterURL(.detail),
+                        url: activeItem.backdropURL(.backdrop) ?? activeItem.posterURL(.detail),
                         height: hSizeClass == .regular ? backdropMaxHeight : nil
                     )
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                        Text(item.title)
+                        Text(activeItem.title)
                             .font(AetherDesign.Typography.heroTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                         metadataRow
@@ -360,7 +389,7 @@ struct DetailView: View {
     private var wideContent: some View {
         ZStack(alignment: .topLeading) {
             CachedAsyncImage(
-                url: item.backdropURL(heroBackdropTier) ?? item.posterURL(.detail),
+                url: activeItem.backdropURL(heroBackdropTier) ?? activeItem.posterURL(.detail),
                 maxPixel: heroBackdropTier.maxPixel
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -370,7 +399,7 @@ struct DetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                    Text(item.title)
+                    Text(activeItem.title)
                         .font(AetherDesign.Typography.heroTitle)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                     metadataRow
@@ -381,7 +410,7 @@ struct DetailView: View {
                         actionRow
                     }
 
-                    if let summary = item.summary {
+                    if let summary = activeItem.summary {
                         if item.kind.isContainer {
                             Text(summary)
                                 .font(AetherDesign.Typography.body)
@@ -536,7 +565,7 @@ struct DetailView: View {
     @ViewBuilder
     private var movieBelowHero: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            if let summary = item.summary {
+            if let summary = activeItem.summary {
                 synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
@@ -586,7 +615,7 @@ struct DetailView: View {
                 .overlay(alignment: .bottom) { bannerScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text(item.title)
+                Text(activeItem.title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                 metadataRow
@@ -630,7 +659,7 @@ struct DetailView: View {
                 .overlay { movieHeroScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text(item.title)
+                Text(activeItem.title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
 
@@ -862,7 +891,7 @@ struct DetailView: View {
                     seasonSelector
                 }
                 seasonEpisodesSection
-                if let summary = item.summary {
+                if let summary = activeItem.summary {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
@@ -1153,8 +1182,8 @@ struct DetailView: View {
         // single runtime: "2011–Present • 8 Seasons • 73 Episodes • Series".
         if item.kind == .show { return seriesMetadataParts }
         var parts: [String] = []
-        if let year = item.year { parts.append(String(year)) }
-        if let runtime = item.runtime { parts.append(formatRuntime(runtime)) }
+        if let year = activeItem.year { parts.append(String(year)) }
+        if let runtime = activeItem.runtime { parts.append(formatRuntime(runtime)) }
         parts.append(kindLabel(item.kind))
         return parts
     }
@@ -1572,6 +1601,16 @@ struct DetailView: View {
                     presentedSelector = .technicalDetails
                 }
             }
+            #if !os(tvOS)
+            // Edit metadata — local items only (movies / episodes, not show
+            // containers, whose id is "show:<series>" rather than an item id).
+            if activeItem.id.source == .local && !activeItem.kind.isContainer {
+                AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit metadata") {
+                    dismissIconHint()
+                    presentedSelector = .editMetadata
+                }
+            }
+            #endif
             Spacer(minLength: 0)
         }
     }
@@ -1884,6 +1923,13 @@ struct DetailView: View {
             .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        #if !os(tvOS)
+        case .editMetadata:
+            LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
+                presentedSelector = nil
+                localEditToken = UUID()   // force a re-hydrate on dismiss
+            }
+        #endif
         }
     }
 
