@@ -79,8 +79,13 @@ final class VLCPlaybackController: UIViewController {
         player.media = VLCMedia(url: url)
         player.play()
 
+        // The timer is scheduled on the main run loop (we're in viewDidLoad), so
+        // it fires on the main actor — assert that so the main-actor-isolated
+        // tick() can be called synchronously without a hop or a Swift 6 warning.
         ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.tick()
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
         }
     }
 
