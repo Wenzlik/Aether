@@ -813,8 +813,12 @@ struct DetailView: View {
             LazyHStack(spacing: AetherDesign.Spacing.m) {
                 ForEach(children) { season in
                     NavigationLink(value: season) {
-                        AetherCard.poster(title: season.title, posterURL: season.posterURL)
-                            .frame(width: 140)
+                        AetherCard.poster(
+                            title: seasonLabel(season),
+                            posterURL: season.posterURL,
+                            isWatched: (season.unwatchedEpisodeCount ?? 1) == 0
+                        )
+                        .frame(width: 140)
                     }
                     .buttonStyle(.plain)
                 }
@@ -826,6 +830,18 @@ struct DetailView: View {
         // detail). Without this, focus is trapped in the rail. Matches the
         // Home / Library rails; the episodes list is vertical so it doesn't need it.
         .aetherDetailFocusSection()
+    }
+
+    /// A titled rail of season poster cards on the show page — each pushes a
+    /// dedicated Season Detail (#245). Used for multi-season shows; single-season
+    /// shows render their episodes inline instead.
+    private var seasonsSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            Text("Seasons")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            seasonsRail
+        }
     }
 
     private var episodesList: some View {
@@ -904,9 +920,15 @@ struct DetailView: View {
             } else {
                 nextUpCard
                 if children.count > 1 {
-                    seasonSelector
+                    // Multi-season: a rail of season poster cards that push a
+                    // dedicated Season Detail (#245), instead of an inline
+                    // selector + flat episode list.
+                    seasonsSection
+                } else {
+                    // Single-season: skip the pointless drill and show the lone
+                    // season's episodes inline.
+                    seasonEpisodesSection
                 }
-                seasonEpisodesSection
                 if let summary = activeItem.summary {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
@@ -1197,10 +1219,23 @@ struct DetailView: View {
         // Shows describe themselves by run span + season/episode counts, not a
         // single runtime: "2011–Present • 8 Seasons • 73 Episodes • Series".
         if item.kind == .show { return seriesMetadataParts }
+        if item.kind == .season { return seasonMetadataParts }
         var parts: [String] = []
         if let year = activeItem.year { parts.append(String(year)) }
         if let runtime = activeItem.runtime { parts.append(formatRuntime(runtime)) }
         parts.append(kindLabel(item.kind))
+        return parts
+    }
+
+    /// Season Detail metadata line: "Season N • 2022 • 10 Episodes" (#245).
+    /// Reads `current`/`children` so hydrated counts fill in after the detail
+    /// endpoint resolves.
+    private var seasonMetadataParts: [String] {
+        var parts: [String] = []
+        if let number = current.seasonNumber { parts.append("Season \(number)") }
+        if let year = current.year { parts.append(String(year)) }
+        let count = current.episodeCount ?? (children.isEmpty ? nil : children.count)
+        if let count, count > 0 { parts.append("\(count) Episode\(count == 1 ? "" : "s")") }
         return parts
     }
 

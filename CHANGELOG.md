@@ -16,6 +16,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   filename guess, persist across launches, and propagate everywhere — the Detail
   screen repaints in place, and re-grouping follows (e.g. reclassifying a movie
   as an episode moves it into TV Shows).
+- **Richer TV seasons** (#245) — a multi-season show now presents a **rail of
+  season poster cards** (artwork + title, with a watched marker) that open a
+  **dedicated Season Detail** (season number, year, episode count, overview and
+  the episode list) instead of a bare "Season N" selector with an inline list.
+  Single-season shows skip the drill and show their episodes inline. *(Local
+  Library shows stay flat for now — a synthetic season layer is a fast-follow.)*
 
 ### Fixed
 
