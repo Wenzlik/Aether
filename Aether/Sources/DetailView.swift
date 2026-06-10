@@ -814,7 +814,7 @@ struct DetailView: View {
                 ForEach(children) { season in
                     NavigationLink(value: season) {
                         AetherCard.poster(
-                            title: seasonLabel(season),
+                            title: DetailFormatting.seasonLabel(season),
                             posterURL: season.posterURL,
                             isWatched: (season.unwatchedEpisodeCount ?? 1) == 0
                         )
@@ -881,7 +881,7 @@ struct DetailView: View {
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(2)
                 if let runtime = episode.runtime {
-                    Text(formatRuntime(runtime))
+                    Text(DetailFormatting.runtime(runtime))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
                 }
@@ -967,16 +967,16 @@ struct DetailView: View {
                         Text(nextUpResume != nil ? "CONTINUE WATCHING" : "NEXT UP")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.accent)
-                        Text(episodeLabel(episode))
+                        Text(DetailFormatting.episodeLabel(episode))
                             .font(AetherDesign.Typography.cardTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                             .lineLimit(2)
                         if let resume = nextUpResume {
-                            Text("Resume from \(formatPosition(resume.position))")
+                            Text("Resume from \(DetailFormatting.position(resume.position))")
                                 .font(AetherDesign.Typography.caption)
                                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                         } else if let runtime = episode.runtime {
-                            Text(formatRuntime(runtime))
+                            Text(DetailFormatting.runtime(runtime))
                                 .font(AetherDesign.Typography.caption)
                                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                         }
@@ -1012,7 +1012,7 @@ struct DetailView: View {
                     Button {
                         selectSeason(season)
                     } label: {
-                        Text(seasonLabel(season))
+                        Text(DetailFormatting.seasonLabel(season))
                             .font(AetherDesign.Typography.metadata)
                             .padding(.horizontal, AetherDesign.Spacing.m)
                             .padding(.vertical, AetherDesign.Spacing.xs)
@@ -1032,11 +1032,6 @@ struct DetailView: View {
         .aetherDetailFocusSection()
     }
 
-    private func seasonLabel(_ season: MediaItem) -> String {
-        if let number = season.seasonNumber { return "Season \(number)" }
-        return season.title
-    }
-
     @ViewBuilder
     private var seasonEpisodesSection: some View {
         if isLoadingEpisodes {
@@ -1051,13 +1046,6 @@ struct DetailView: View {
                 }
             }
         }
-    }
-
-    private func episodeLabel(_ episode: MediaItem) -> String {
-        if let season = episode.seasonNumber, let number = episode.episodeNumber {
-            return "S\(season)E\(number) · \(episode.title)"
-        }
-        return episode.title
     }
 
     /// The "Metadata" block: genres, rating, first-aired, status — surfaced now
@@ -1222,8 +1210,8 @@ struct DetailView: View {
         if item.kind == .season { return seasonMetadataParts }
         var parts: [String] = []
         if let year = activeItem.year { parts.append(String(year)) }
-        if let runtime = activeItem.runtime { parts.append(formatRuntime(runtime)) }
-        parts.append(kindLabel(item.kind))
+        if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+        parts.append(DetailFormatting.kindLabel(item.kind))
         return parts
     }
 
@@ -1302,7 +1290,7 @@ struct DetailView: View {
         if let codec = info.videoCodec?.uppercased() { labels.append(codec) }
         if let audio = info.audioCodec?.uppercased() {
             if let channels = info.audioChannels {
-                labels.append("\(audio) \(channelLabel(channels))")
+                labels.append("\(audio) \(DetailFormatting.channelLabel(channels))")
             } else {
                 labels.append(audio)
             }
@@ -1726,11 +1714,11 @@ struct DetailView: View {
             Text("Queued")
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .downloading(fraction):
-            Text("Downloading · \(percentString(fraction))")
+            Text("Downloading · \(DetailFormatting.percent(fraction))")
             Button { Task { await pauseDownload() } } label: { Label("Pause", systemImage: "pause") }
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .paused(fraction):
-            Text("Paused at \(percentString(fraction))")
+            Text("Paused at \(DetailFormatting.percent(fraction))")
             Button { Task { await resumeDownload() } } label: { Label("Resume", systemImage: "play") }
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .completed(_, size):
@@ -1781,9 +1769,6 @@ struct DetailView: View {
 
     /// "47%" — keeps the row stable as progress ticks (no decimals,
     /// always two digits at most).
-    private func percentString(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))%"
-    }
 
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
@@ -1828,7 +1813,7 @@ struct DetailView: View {
             isPresented: $showCinemaResumePrompt,
             titleVisibility: .visible
         ) {
-            Button(resume.map { "Continue from \(formatPosition($0.position))" } ?? "Continue") {
+            Button(resume.map { "Continue from \(DetailFormatting.position($0.position))" } ?? "Continue") {
                 Task { await watchInCinema(fromStart: false) }
             }
             Button("Start Over") {
@@ -1853,7 +1838,7 @@ struct DetailView: View {
             }
             .disabled(isPreparingPlayback)
 
-            Text("Resume from \(formatPosition(resume?.position ?? .zero))")
+            Text("Resume from \(DetailFormatting.position(resume?.position ?? .zero))")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .padding(.leading, AetherDesign.Spacing.xs)
@@ -2136,23 +2121,23 @@ struct DetailView: View {
     /// (`mediaSection`) and the collapsible on-page section.
     @ViewBuilder
     private func mediaInfoRows(_ info: MediaInfo?) -> some View {
-        if let video = videoLine(info) {
+        if let video = DetailFormatting.videoLine(info) {
             AetherSettingsRow(label: "Video", value: video)
         }
-        if let audio = audioLine(info) {
+        if let audio = DetailFormatting.audioLine(info) {
             AetherSettingsRow(label: "Audio", value: audio)
         }
         if let subtitles = subtitleSummary {
             AetherSettingsRow(label: "Subtitles", value: subtitles)
         }
-        if let hdrBadge = hdrBadge(info) {
+        if let hdrBadge = DetailFormatting.hdrBadge(info) {
             AetherSettingsRow(label: "HDR", value: hdrBadge)
         }
         if let bitrate = info?.bitrateKbps, bitrate > 0 {
-            AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            AetherSettingsRow(label: "Bitrate", value: DetailFormatting.bitrate(bitrate))
         }
         if let size = info?.fileSizeBytes, size > 0 {
-            AetherSettingsRow(label: "File Size", value: formatFileSize(size))
+            AetherSettingsRow(label: "File Size", value: DetailFormatting.fileSize(size))
         }
         AetherSettingsRow(label: "Playback", status: playbackModeStatus)
         if let source {
@@ -2236,7 +2221,7 @@ struct DetailView: View {
         var seen = Set<String>()
         var ordered: [String] = []
         for track in current.subtitleTracks {
-            guard let name = subtitleName(track) else { continue }
+            guard let name = DetailFormatting.subtitleName(track) else { continue }
             if seen.insert(name.lowercased()).inserted { ordered.append(name) }
         }
         guard !ordered.isEmpty else { return nil }
@@ -2244,69 +2229,6 @@ struct DetailView: View {
         return ordered.count > 4 ? "\(shown) +\(ordered.count - 4)" : shown
     }
 
-    private func subtitleName(_ track: MediaSubtitleTrack) -> String? {
-        if let code = track.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {
-            return Locale.current.localizedString(forLanguageCode: code) ?? code
-        }
-        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? nil : title
-    }
-
-    /// Human-readable file size ("12.4 GB") from a raw byte count.
-    private func formatFileSize(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
-
-    private func videoLine(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        let codec = info.videoCodec?.uppercased()
-        let resolution = info.videoResolution
-        switch (codec, resolution) {
-        case let (codec?, resolution?): return "\(codec) \(resolution)"
-        case let (codec?, nil):         return codec
-        case let (nil, resolution?):    return resolution
-        case (nil, nil):                return nil
-        }
-    }
-
-    private func audioLine(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        let codec = info.audioCodec?.uppercased()
-        let channels = info.audioChannels.map { channelLabel($0) }
-        switch (codec, channels) {
-        case let (codec?, channels?): return "\(codec) \(channels)"
-        case let (codec?, nil):       return codec
-        case let (nil, channels?):    return channels
-        case (nil, nil):              return nil
-        }
-    }
-
-    /// Plex's channel count → loudspeaker layout label: 2 → "2.0", 6 → "5.1",
-    /// 8 → "7.1". Anything we don't recognise falls back to "N ch".
-    private func channelLabel(_ channels: Int) -> String {
-        switch channels {
-        case 1: return "Mono"
-        case 2: return "2.0"
-        case 6: return "5.1"
-        case 8: return "7.1"
-        default: return "\(channels) ch"
-        }
-    }
-
-    private func hdrBadge(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        if info.isDolbyVision { return "Dolby Vision" }
-        if info.isHDR { return "HDR" }
-        return nil
-    }
-
-    private func formatBitrate(_ kbps: Int) -> String {
-        if kbps >= 1000 {
-            let mbps = Double(kbps) / 1000.0
-            return String(format: "%.1f Mbps", mbps)
-        }
-        return "\(kbps) kbps"
-    }
 
     /// Best-effort projected playback mode for the Media line, computed from
     /// container + quality choice. The server's actual decision is taken when
@@ -2477,38 +2399,6 @@ struct DetailView: View {
 
     // MARK: - Formatting helpers
 
-    private func kindLabel(_ kind: MediaItem.Kind) -> String {
-        switch kind {
-        case .movie: return "Movie"
-        case .episode: return "Episode"
-        case .show: return "Series"
-        case .season: return "Season"
-        }
-    }
-
-    private func formatRuntime(_ duration: Duration) -> String {
-        let total = Int(durationSeconds(duration))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
-    }
-
-    private func formatPosition(_ duration: Duration) -> String {
-        let total = Int(durationSeconds(duration))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    private func durationSeconds(_ duration: Duration) -> Double {
-        let parts = duration.components
-        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
-    }
 }
 
 private extension View {
