@@ -20,6 +20,52 @@ public actor LocalLibraryStore {
         /// TMDb match (poster / overview / canonical title), filled in after
         /// import when a TMDb key is configured (#210). `nil` until matched.
         public var metadata: TMDbMetadata? = nil
+        /// User corrections (#211). Any non-nil field **wins over** the TMDb
+        /// match and the filename inference. `nil` when nothing is overridden.
+        public var overrides: Overrides? = nil
+
+        /// Per-field manual overrides. A nil field means "fall back" (to the
+        /// TMDb match, then inference); a non-nil field is the user's value.
+        public struct Overrides: Codable, Sendable, Hashable {
+            public var title: String?
+            public var year: Int?
+            public var isEpisode: Bool?
+            public var season: Int?
+            public var episode: Int?
+            public var overview: String?
+            /// Filename of a custom poster in the store's `artworkDir`, if set.
+            public var artworkFilename: String?
+
+            public init(
+                title: String? = nil, year: Int? = nil, isEpisode: Bool? = nil,
+                season: Int? = nil, episode: Int? = nil, overview: String? = nil,
+                artworkFilename: String? = nil
+            ) {
+                self.title = title; self.year = year; self.isEpisode = isEpisode
+                self.season = season; self.episode = episode; self.overview = overview
+                self.artworkFilename = artworkFilename
+            }
+
+            /// True when nothing is overridden — used to drop the struct to `nil`.
+            public var isEmpty: Bool {
+                title == nil && year == nil && isEpisode == nil && season == nil
+                    && episode == nil && overview == nil && artworkFilename == nil
+            }
+        }
+
+        // MARK: Effective values — override > TMDb match > inference.
+        // Everything that displays or groups a local item reads these, so a
+        // user correction propagates uniformly (#211).
+
+        public var effectiveTitle: String { overrides?.title ?? metadata?.title ?? title }
+        public var effectiveYear: Int? { overrides?.year ?? metadata?.year ?? year }
+        public var effectiveOverview: String? { overrides?.overview ?? metadata?.overview }
+        public var effectiveIsEpisode: Bool { overrides?.isEpisode ?? isEpisode }
+        public var effectiveSeason: Int? { overrides?.season ?? season }
+        public var effectiveEpisode: Int? { overrides?.episode ?? episode }
+        /// True when a custom poster was set (resolved to a file URL by
+        /// `LocalLibraryStore.artworkURL(for:)` — the filename lives in overrides).
+        public var hasCustomArtwork: Bool { overrides?.artworkFilename != nil }
     }
 
     /// Attach (or clear) a TMDb match for an item, then persist. No-op if the
@@ -31,9 +77,72 @@ public actor LocalLibraryStore {
         persist()
     }
 
+    /// Store the user's manual corrections for an item, then persist (#211).
+    /// An all-nil/`nil` value clears the overrides (back to match/inference).
+    /// No-op if the item is gone.
+    public func setOverrides(_ overrides: Item.Overrides?, for id: String) {
+        hydrate()
+        guard items[id] != nil else { return }
+        let resolved: Item.Overrides? = (overrides?.isEmpty ?? true) ? nil : overrides
+        // If a custom poster is being dropped (cleared or reset), delete its file
+        // so it doesn't orphan — this is the one chokepoint both the "Remove
+        // Poster" and "Reset" paths flow through (#211).
+        if let old = items[id]?.overrides?.artworkFilename, resolved?.artworkFilename != old {
+            try? FileManager.default.removeItem(at: artworkDir.appendingPathComponent(old))
+        }
+        items[id]?.overrides = resolved
+        persist()
+    }
+
+    /// Save custom poster bytes for an item into `artworkDir`, record the
+    /// filename in its overrides, and persist. Returns the stored filename, or
+    /// `nil` if the item is gone or the write failed (#211).
+    ///
+    /// The filename is **versioned** (`<id>-<n>.jpg`), not a fixed `<id>.jpg`:
+    /// the poster's URL therefore changes every time it's replaced, so URL-keyed
+    /// image caches (`AsyncImage` / `AetherImageCache`) repaint the new artwork
+    /// immediately instead of serving the stale cached image. The previous
+    /// custom poster file is deleted so only one ever lingers.
+    @discardableResult
+    public func setArtwork(_ data: Data, for id: String) -> String? {
+        hydrate()
+        guard let existing = items[id] else { return nil }
+        let previous = existing.overrides?.artworkFilename
+        let version = (previous.flatMap(Self.versionSuffix) ?? 0) + 1
+        let name = "\(id)-\(version).jpg"
+        let url = artworkDir.appendingPathComponent(name)
+        do { try data.write(to: url, options: .atomic) } catch { return nil }
+        Self.excludeFromBackup(url)
+        // Drop the old poster file (the URL is changing).
+        if let previous, previous != name {
+            try? FileManager.default.removeItem(at: artworkDir.appendingPathComponent(previous))
+        }
+        var overrides = existing.overrides ?? Item.Overrides()
+        overrides.artworkFilename = name
+        items[id]?.overrides = overrides
+        persist()
+        return name
+    }
+
+    /// Parse the trailing version integer from a `<id>-<n>.jpg` artwork filename.
+    private nonisolated static func versionSuffix(_ filename: String) -> Int? {
+        guard let dash = filename.lastIndex(of: "-") else { return nil }
+        let after = filename[filename.index(after: dash)...]
+        return Int(after.prefix(while: { $0.isNumber }))
+    }
+
+    /// File URL of an item's custom poster, or `nil` if none was set.
+    /// Nonisolated — pure path math over the immutable `artworkDir`.
+    public nonisolated func artworkURL(for item: Item) -> URL? {
+        guard let name = item.overrides?.artworkFilename else { return nil }
+        return artworkDir.appendingPathComponent(name)
+    }
+
     /// Media files live here; `mediaDir` is an immutable (`Sendable`) constant so
     /// it's readable synchronously off-actor for URL math.
     public nonisolated let mediaDir: URL
+    /// Custom posters (#211) live here, separate from media; also iCloud-excluded.
+    public nonisolated let artworkDir: URL
     private let indexURL: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -47,8 +156,10 @@ public actor LocalLibraryStore {
         let root = directory ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("AetherLocalLibrary-\(UUID().uuidString)", isDirectory: true)
         self.mediaDir = root.appendingPathComponent("Media", isDirectory: true)
+        self.artworkDir = root.appendingPathComponent("Artwork", isDirectory: true)
         self.indexURL = root.appendingPathComponent("index.json")
         try? FileManager.default.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: artworkDir, withIntermediateDirectories: true)
     }
 
     /// `Application Support/Aether/LocalLibrary` — persists across launches,
@@ -73,6 +184,13 @@ public actor LocalLibraryStore {
     public func count() -> Int {
         hydrate()
         return items.count
+    }
+
+    /// O(1) lookup of a single item by id — used to pre-fill the metadata
+    /// editor (#211) without scanning `allItems()`.
+    public func item(for id: String) -> Item? {
+        hydrate()
+        return items[id]
     }
 
     /// Absolute URL of an item's media file. Nonisolated — pure path math over
@@ -116,11 +234,14 @@ public actor LocalLibraryStore {
         return item
     }
 
-    /// Delete an item + its media file.
+    /// Delete an item + its media file (and custom poster, if any).
     public func remove(_ id: String) {
         hydrate()
         if let item = items[id] {
             try? FileManager.default.removeItem(at: fileURL(for: item))
+            if let artwork = artworkURL(for: item) {
+                try? FileManager.default.removeItem(at: artwork)
+            }
         }
         items[id] = nil
         persist()
@@ -131,6 +252,9 @@ public actor LocalLibraryStore {
         hydrate()
         for item in items.values {
             try? FileManager.default.removeItem(at: fileURL(for: item))
+            if let artwork = artworkURL(for: item) {
+                try? FileManager.default.removeItem(at: artwork)
+            }
         }
         items.removeAll()
         persist()

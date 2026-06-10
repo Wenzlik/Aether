@@ -4,7 +4,65 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.6.4] — Unreleased
+## [0.6.5] — Unreleased
+
+### Added
+
+- **Local Library: manual metadata & artwork editing** (#211) — correct or
+  override what auto-matching got wrong. Tap the **pencil** on a local movie or
+  episode (iOS / iPadOS / visionOS) to edit its title, year, kind, season /
+  episode, and overview, re-match from TMDb and pick among candidate posters, or
+  set a custom poster from Files. Overrides **win over** the TMDb match and the
+  filename guess, persist across launches, and propagate everywhere — the Detail
+  screen repaints in place, and re-grouping follows (e.g. reclassifying a movie
+  as an episode moves it into TV Shows).
+- **Richer TV seasons** (#245) — a multi-season show now presents a **rail of
+  season poster cards** (artwork + title, with a watched marker) that open a
+  **dedicated Season Detail** (season number, year, episode count, overview and
+  the episode list) instead of a bare "Season N" selector with an inline list.
+  Single-season shows skip the drill and show their episodes inline. *(Local
+  Library shows stay flat for now — a synthetic season layer is a fast-follow.)*
+
+### Fixed
+
+- **Continue Watching / Next Up now surfaces in-progress TV episodes** (#244) —
+  it previously only matched resume points against top-level movies and show
+  *containers*, so a half-watched episode (whose resume point is keyed by the
+  episode) never brought its show back. Now a show appears whenever it has a
+  resumable episode, surfacing the one you're most likely to continue (most
+  recently watched, then newest season, then newest episode), mixed with movies
+  by recency. TV is a first-class citizen of Continue Watching.
+- **tvOS: the library "See all" grid no longer displaces the top navigation**
+  (#243) — `LibraryView` pinned a `navigationTitle`, which on tvOS never scrolls
+  away and can overlap the tab-bar region, stranding focus on return from a
+  pushed Detail. It now uses an in-scroll heading on tvOS (the same treatment
+  the unified grid already had, #216); iOS/iPadOS/visionOS keep the native title.
+- **Settings could be dragged horizontally on iPhone** (#248) — the content was
+  capped at a fixed 820 pt width, which proposed that width to the full-width
+  settings cards and made the page wider than the phone, so the vertical scroll
+  view drifted sideways. Compact widths now use the viewport width; the page is
+  horizontally anchored.
+
+### Changed
+
+- **Cast & Crew moved lower on Detail, and the rail uses full width on tvOS**
+  (#247) — Cast now sits below the primary actions, overview, sources and
+  related content (it shouldn't compete with Resume / Episodes), and on tvOS the
+  cast rail breaks out of the content column to span the full screen for easier
+  browsing.
+- **Cast & Crew is now passive on tvOS** (#249) — the cast cards were focusable
+  but led nowhere, trapping focus and making it hard to leave the section. Until
+  actor pages exist, the cards are non-focusable informational metadata (photo +
+  name + character); the focus engine skips the rail and moves cleanly between
+  the sections around it. iOS / iPadOS unaffected.
+- **Watched titles are now obvious at a glance** (#246) — finished movies and
+  episodes show **dimmed, desaturated artwork** plus a **bold checkmark in a
+  folded top-corner marker** (larger on tvOS / visionOS), instead of a small,
+  easy-to-miss icon. Unwatched (full artwork) and in-progress (progress bar)
+  stay clearly distinct. Applied via `AetherCard`, so every grid and rail gets
+  it.
+
+## [0.6.4] — 2026-06-10
 
 ### Fixed
 

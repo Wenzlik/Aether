@@ -92,6 +92,10 @@ struct DetailView: View {
     /// `.presentationDetents([.medium])` so the picker takes about half the
     /// screen and the Detail backdrop is still visible behind.
     @State private var presentedSelector: PlaybackSelector?
+    // Set when the local metadata editor closes, to re-point the screen at the
+    // edited item so its title / poster / overview repaint (#211). Seeded nil so
+    // the re-hydrate task below is a no-op on first appear (no double fetch).
+    @State private var localEditToken: UUID?
     /// True while a Download is being prepared (quality picker → enqueue) so
     /// the button can read "Starting…" and disable.
     @State private var isEnqueuingDownload = false
@@ -104,6 +108,7 @@ struct DetailView: View {
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    @Environment(\.dismiss) private var dismiss
     #if os(visionOS)
     /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
     /// app root; always present inside the windowed view tree on visionOS.
@@ -138,6 +143,9 @@ struct DetailView: View {
     /// selection on the item.
     private enum PlaybackSelector: Identifiable {
         case audio, subtitles, quality, downloadQuality, technicalDetails
+        #if !os(tvOS)
+        case editMetadata
+        #endif
         var id: String {
             switch self {
             case .audio: return "audio"
@@ -145,6 +153,9 @@ struct DetailView: View {
             case .quality: return "quality"
             case .downloadQuality: return "downloadQuality"
             case .technicalDetails: return "technicalDetails"
+            #if !os(tvOS)
+            case .editMetadata: return "editMetadata"
+            #endif
             }
         }
     }
@@ -231,6 +242,24 @@ struct DetailView: View {
             await setupSeasonsIfNeeded()
             related = await source?.related(to: activeItem.id) ?? []
         }
+        // Re-point the screen after the local metadata editor closes (#211): the
+        // item id is unchanged, so the main task won't re-run. Feeding the
+        // refreshed item into `overrideItem` (the same channel the source switch
+        // uses) repaints the hero, which reads `activeItem`. If the edit changed
+        // the kind (movie↔episode) the item now lives under a different library
+        // grouping, so pop back rather than render a contradictory screen.
+        .task(id: localEditToken) {
+            guard localEditToken != nil,
+                  activeItem.id.source == .local,
+                  let source,
+                  let refreshed = try? await source.item(for: activeItem.id) else { return }
+            if refreshed.kind != activeItem.kind {
+                dismiss()
+            } else {
+                overrideItem = refreshed
+                configuredItem = applyingPreferences(to: refreshed)
+            }
+        }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
             // Use the closure parameter, not the @State again. On first
@@ -272,12 +301,12 @@ struct DetailView: View {
                 // the text into a side gutter beside a letterboxed image.
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                     BackdropImage(
-                        url: item.backdropURL(.backdrop) ?? item.posterURL(.detail),
+                        url: activeItem.backdropURL(.backdrop) ?? activeItem.posterURL(.detail),
                         height: hSizeClass == .regular ? backdropMaxHeight : nil
                     )
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                        Text(item.title)
+                        Text(activeItem.title)
                             .font(AetherDesign.Typography.heroTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                         metadataRow
@@ -312,11 +341,6 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
-                    if !item.kind.isContainer {
-                        castSection
-                            .padding(.horizontal, AetherDesign.Spacing.l)
-                    }
-
                     if !item.kind.isContainer, current.mediaInfo != nil {
                         technicalDetailsSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
@@ -333,6 +357,13 @@ struct DetailView: View {
                     // Season detail (browsed into directly): episode list.
                     if item.kind.isContainer {
                         childrenSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
+
+                    // Cast & Crew sits below the primary actions / overview /
+                    // sources (#247) — valuable, but not competing with them.
+                    if !item.kind.isContainer {
+                        castSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                     }
                 }
@@ -360,7 +391,7 @@ struct DetailView: View {
     private var wideContent: some View {
         ZStack(alignment: .topLeading) {
             CachedAsyncImage(
-                url: item.backdropURL(heroBackdropTier) ?? item.posterURL(.detail),
+                url: activeItem.backdropURL(heroBackdropTier) ?? activeItem.posterURL(.detail),
                 maxPixel: heroBackdropTier.maxPixel
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -370,48 +401,61 @@ struct DetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                    Text(item.title)
-                        .font(AetherDesign.Typography.heroTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    metadataRow
-                    genresRow
-                    mediaBadges
+                    // Primary content stays in the readable left column…
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                        Text(activeItem.title)
+                            .font(AetherDesign.Typography.heroTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        metadataRow
+                        genresRow
+                        mediaBadges
 
-                    if !item.kind.isContainer {
-                        actionRow
-                    }
+                        if !item.kind.isContainer {
+                            actionRow
+                        }
 
-                    if let summary = item.summary {
+                        if let summary = activeItem.summary {
+                            if item.kind.isContainer {
+                                Text(summary)
+                                    .font(AetherDesign.Typography.body)
+                                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                synopsis(summary)
+                            }
+                        }
+
+                        if !item.kind.isContainer, current.streamURL != nil {
+                            playbackSection
+                        }
+                        if !item.kind.isContainer, current.mediaInfo != nil {
+                            technicalDetailsSection
+                        }
+                        if availableSources.count > 1 {
+                            availableSourcesSection
+                        }
                         if item.kind.isContainer {
-                            Text(summary)
-                                .font(AetherDesign.Typography.body)
-                                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            synopsis(summary)
+                            childrenSection
                         }
                     }
+                    .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, AetherDesign.Spacing.xl)
 
+                    // …but Cast & Crew sits last (#247) and, on tvOS, breaks out
+                    // of the column so the rail uses the full screen width.
                     if !item.kind.isContainer {
                         castSection
-                    }
-                    if !item.kind.isContainer, current.streamURL != nil {
-                        playbackSection
-                    }
-                    if !item.kind.isContainer, current.mediaInfo != nil {
-                        technicalDetailsSection
-                    }
-                    if availableSources.count > 1 {
-                        availableSourcesSection
-                    }
-                    if item.kind.isContainer {
-                        childrenSection
+                            #if os(tvOS)
+                            .padding(.leading, AetherDesign.Spacing.xl)
+                            #else
+                            .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.xl)
+                            #endif
                     }
                 }
-                .frame(maxWidth: wideColumnWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, AetherDesign.Spacing.xl)
                 .padding(.top, AetherDesign.Spacing.xl)
                 .padding(.bottom, AetherDesign.Spacing.xxl)
             }
@@ -536,11 +580,10 @@ struct DetailView: View {
     @ViewBuilder
     private var movieBelowHero: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            if let summary = item.summary {
+            if let summary = activeItem.summary {
                 synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
-            castSection
             if availableSources.count > 1 {
                 availableSourcesSection
                     .frame(maxWidth: 720, alignment: .leading)
@@ -554,6 +597,8 @@ struct DetailView: View {
                 playbackSection
                     .frame(maxWidth: 720, alignment: .leading)
             }
+            // Cast & Crew last — below Related (#247).
+            castSection
         }
     }
 
@@ -586,7 +631,7 @@ struct DetailView: View {
                 .overlay(alignment: .bottom) { bannerScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text(item.title)
+                Text(activeItem.title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                 metadataRow
@@ -630,7 +675,7 @@ struct DetailView: View {
                 .overlay { movieHeroScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text(item.title)
+                Text(activeItem.title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
 
@@ -768,8 +813,12 @@ struct DetailView: View {
             LazyHStack(spacing: AetherDesign.Spacing.m) {
                 ForEach(children) { season in
                     NavigationLink(value: season) {
-                        AetherCard.poster(title: season.title, posterURL: season.posterURL)
-                            .frame(width: 140)
+                        AetherCard.poster(
+                            title: DetailFormatting.seasonLabel(season),
+                            posterURL: season.posterURL,
+                            isWatched: (season.unwatchedEpisodeCount ?? 1) == 0
+                        )
+                        .frame(width: 140)
                     }
                     .buttonStyle(.plain)
                 }
@@ -781,6 +830,18 @@ struct DetailView: View {
         // detail). Without this, focus is trapped in the rail. Matches the
         // Home / Library rails; the episodes list is vertical so it doesn't need it.
         .aetherDetailFocusSection()
+    }
+
+    /// A titled rail of season poster cards on the show page — each pushes a
+    /// dedicated Season Detail (#245). Used for multi-season shows; single-season
+    /// shows render their episodes inline instead.
+    private var seasonsSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            Text("Seasons")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            seasonsRail
+        }
     }
 
     private var episodesList: some View {
@@ -820,7 +881,7 @@ struct DetailView: View {
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(2)
                 if let runtime = episode.runtime {
-                    Text(formatRuntime(runtime))
+                    Text(DetailFormatting.runtime(runtime))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
                 }
@@ -859,10 +920,16 @@ struct DetailView: View {
             } else {
                 nextUpCard
                 if children.count > 1 {
-                    seasonSelector
+                    // Multi-season: a rail of season poster cards that push a
+                    // dedicated Season Detail (#245), instead of an inline
+                    // selector + flat episode list.
+                    seasonsSection
+                } else {
+                    // Single-season: skip the pointless drill and show the lone
+                    // season's episodes inline.
+                    seasonEpisodesSection
                 }
-                seasonEpisodesSection
-                if let summary = item.summary {
+                if let summary = activeItem.summary {
                     Text(summary)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
@@ -900,16 +967,16 @@ struct DetailView: View {
                         Text(nextUpResume != nil ? "CONTINUE WATCHING" : "NEXT UP")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.accent)
-                        Text(episodeLabel(episode))
+                        Text(DetailFormatting.episodeLabel(episode))
                             .font(AetherDesign.Typography.cardTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                             .lineLimit(2)
                         if let resume = nextUpResume {
-                            Text("Resume from \(formatPosition(resume.position))")
+                            Text("Resume from \(DetailFormatting.position(resume.position))")
                                 .font(AetherDesign.Typography.caption)
                                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                         } else if let runtime = episode.runtime {
-                            Text(formatRuntime(runtime))
+                            Text(DetailFormatting.runtime(runtime))
                                 .font(AetherDesign.Typography.caption)
                                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                         }
@@ -945,7 +1012,7 @@ struct DetailView: View {
                     Button {
                         selectSeason(season)
                     } label: {
-                        Text(seasonLabel(season))
+                        Text(DetailFormatting.seasonLabel(season))
                             .font(AetherDesign.Typography.metadata)
                             .padding(.horizontal, AetherDesign.Spacing.m)
                             .padding(.vertical, AetherDesign.Spacing.xs)
@@ -965,11 +1032,6 @@ struct DetailView: View {
         .aetherDetailFocusSection()
     }
 
-    private func seasonLabel(_ season: MediaItem) -> String {
-        if let number = season.seasonNumber { return "Season \(number)" }
-        return season.title
-    }
-
     @ViewBuilder
     private var seasonEpisodesSection: some View {
         if isLoadingEpisodes {
@@ -984,13 +1046,6 @@ struct DetailView: View {
                 }
             }
         }
-    }
-
-    private func episodeLabel(_ episode: MediaItem) -> String {
-        if let season = episode.seasonNumber, let number = episode.episodeNumber {
-            return "S\(season)E\(number) · \(episode.title)"
-        }
-        return episode.title
     }
 
     /// The "Metadata" block: genres, rating, first-aired, status — surfaced now
@@ -1152,10 +1207,23 @@ struct DetailView: View {
         // Shows describe themselves by run span + season/episode counts, not a
         // single runtime: "2011–Present • 8 Seasons • 73 Episodes • Series".
         if item.kind == .show { return seriesMetadataParts }
+        if item.kind == .season { return seasonMetadataParts }
         var parts: [String] = []
-        if let year = item.year { parts.append(String(year)) }
-        if let runtime = item.runtime { parts.append(formatRuntime(runtime)) }
-        parts.append(kindLabel(item.kind))
+        if let year = activeItem.year { parts.append(String(year)) }
+        if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+        parts.append(DetailFormatting.kindLabel(item.kind))
+        return parts
+    }
+
+    /// Season Detail metadata line: "Season N • 2022 • 10 Episodes" (#245).
+    /// Reads `current`/`children` so hydrated counts fill in after the detail
+    /// endpoint resolves.
+    private var seasonMetadataParts: [String] {
+        var parts: [String] = []
+        if let number = current.seasonNumber { parts.append("Season \(number)") }
+        if let year = current.year { parts.append(String(year)) }
+        let count = current.episodeCount ?? (children.isEmpty ? nil : children.count)
+        if let count, count > 0 { parts.append("\(count) Episode\(count == 1 ? "" : "s")") }
         return parts
     }
 
@@ -1222,7 +1290,7 @@ struct DetailView: View {
         if let codec = info.videoCodec?.uppercased() { labels.append(codec) }
         if let audio = info.audioCodec?.uppercased() {
             if let channels = info.audioChannels {
-                labels.append("\(audio) \(channelLabel(channels))")
+                labels.append("\(audio) \(DetailFormatting.channelLabel(channels))")
             } else {
                 labels.append(audio)
             }
@@ -1278,26 +1346,20 @@ struct DetailView: View {
                     .padding(.vertical, AetherDesign.Spacing.xxs)
                     .padding(.horizontal, 2)
                 }
-                #if os(tvOS)
-                .focusSection()
-                #endif
+                // No `.focusSection()` on tvOS: the cards are non-focusable
+                // metadata (#249), so the focus engine skips the whole rail and
+                // moves cleanly between the sections above and below it.
             }
         }
     }
 
-    @ViewBuilder
     private func castCard(_ member: CastMember) -> some View {
-        // tvOS: wrap in a plain Button so it's reliably focusable and the
-        // focus-reading card lights up (a bare `.focusable()` propagated focus
-        // too weakly). Other platforms render the calm static card.
-        #if os(tvOS)
-        Button(action: {}) {
-            CastCardContent(member: member, size: castPhotoSize)
-        }
-        .buttonStyle(.plain)
-        #else
+        // Cast is passive, informational metadata: the cards do nothing when
+        // selected (no actor pages yet). On tvOS that means NON-focusable — a
+        // focusable card with no destination just traps focus and makes leaving
+        // the section hard (#249). So render the plain static card everywhere;
+        // when actor detail pages exist this can become interactive again.
         CastCardContent(member: member, size: castPhotoSize)
-        #endif
     }
 
     private var castPhotoSize: CGFloat {
@@ -1572,6 +1634,16 @@ struct DetailView: View {
                     presentedSelector = .technicalDetails
                 }
             }
+            #if !os(tvOS)
+            // Edit metadata — local items only (movies / episodes, not show
+            // containers, whose id is "show:<series>" rather than an item id).
+            if activeItem.id.source == .local && !activeItem.kind.isContainer {
+                AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit metadata") {
+                    dismissIconHint()
+                    presentedSelector = .editMetadata
+                }
+            }
+            #endif
             Spacer(minLength: 0)
         }
     }
@@ -1642,11 +1714,11 @@ struct DetailView: View {
             Text("Queued")
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .downloading(fraction):
-            Text("Downloading · \(percentString(fraction))")
+            Text("Downloading · \(DetailFormatting.percent(fraction))")
             Button { Task { await pauseDownload() } } label: { Label("Pause", systemImage: "pause") }
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .paused(fraction):
-            Text("Paused at \(percentString(fraction))")
+            Text("Paused at \(DetailFormatting.percent(fraction))")
             Button { Task { await resumeDownload() } } label: { Label("Resume", systemImage: "play") }
             Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .completed(_, size):
@@ -1697,9 +1769,6 @@ struct DetailView: View {
 
     /// "47%" — keeps the row stable as progress ticks (no decimals,
     /// always two digits at most).
-    private func percentString(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))%"
-    }
 
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
@@ -1744,7 +1813,7 @@ struct DetailView: View {
             isPresented: $showCinemaResumePrompt,
             titleVisibility: .visible
         ) {
-            Button(resume.map { "Continue from \(formatPosition($0.position))" } ?? "Continue") {
+            Button(resume.map { "Continue from \(DetailFormatting.position($0.position))" } ?? "Continue") {
                 Task { await watchInCinema(fromStart: false) }
             }
             Button("Start Over") {
@@ -1769,7 +1838,7 @@ struct DetailView: View {
             }
             .disabled(isPreparingPlayback)
 
-            Text("Resume from \(formatPosition(resume?.position ?? .zero))")
+            Text("Resume from \(DetailFormatting.position(resume?.position ?? .zero))")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .padding(.leading, AetherDesign.Spacing.xs)
@@ -1884,6 +1953,13 @@ struct DetailView: View {
             .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        #if !os(tvOS)
+        case .editMetadata:
+            LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
+                presentedSelector = nil
+                localEditToken = UUID()   // force a re-hydrate on dismiss
+            }
+        #endif
         }
     }
 
@@ -2045,23 +2121,23 @@ struct DetailView: View {
     /// (`mediaSection`) and the collapsible on-page section.
     @ViewBuilder
     private func mediaInfoRows(_ info: MediaInfo?) -> some View {
-        if let video = videoLine(info) {
+        if let video = DetailFormatting.videoLine(info) {
             AetherSettingsRow(label: "Video", value: video)
         }
-        if let audio = audioLine(info) {
+        if let audio = DetailFormatting.audioLine(info) {
             AetherSettingsRow(label: "Audio", value: audio)
         }
         if let subtitles = subtitleSummary {
             AetherSettingsRow(label: "Subtitles", value: subtitles)
         }
-        if let hdrBadge = hdrBadge(info) {
+        if let hdrBadge = DetailFormatting.hdrBadge(info) {
             AetherSettingsRow(label: "HDR", value: hdrBadge)
         }
         if let bitrate = info?.bitrateKbps, bitrate > 0 {
-            AetherSettingsRow(label: "Bitrate", value: formatBitrate(bitrate))
+            AetherSettingsRow(label: "Bitrate", value: DetailFormatting.bitrate(bitrate))
         }
         if let size = info?.fileSizeBytes, size > 0 {
-            AetherSettingsRow(label: "File Size", value: formatFileSize(size))
+            AetherSettingsRow(label: "File Size", value: DetailFormatting.fileSize(size))
         }
         AetherSettingsRow(label: "Playback", status: playbackModeStatus)
         if let source {
@@ -2145,7 +2221,7 @@ struct DetailView: View {
         var seen = Set<String>()
         var ordered: [String] = []
         for track in current.subtitleTracks {
-            guard let name = subtitleName(track) else { continue }
+            guard let name = DetailFormatting.subtitleName(track) else { continue }
             if seen.insert(name.lowercased()).inserted { ordered.append(name) }
         }
         guard !ordered.isEmpty else { return nil }
@@ -2153,69 +2229,6 @@ struct DetailView: View {
         return ordered.count > 4 ? "\(shown) +\(ordered.count - 4)" : shown
     }
 
-    private func subtitleName(_ track: MediaSubtitleTrack) -> String? {
-        if let code = track.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {
-            return Locale.current.localizedString(forLanguageCode: code) ?? code
-        }
-        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? nil : title
-    }
-
-    /// Human-readable file size ("12.4 GB") from a raw byte count.
-    private func formatFileSize(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
-
-    private func videoLine(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        let codec = info.videoCodec?.uppercased()
-        let resolution = info.videoResolution
-        switch (codec, resolution) {
-        case let (codec?, resolution?): return "\(codec) \(resolution)"
-        case let (codec?, nil):         return codec
-        case let (nil, resolution?):    return resolution
-        case (nil, nil):                return nil
-        }
-    }
-
-    private func audioLine(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        let codec = info.audioCodec?.uppercased()
-        let channels = info.audioChannels.map { channelLabel($0) }
-        switch (codec, channels) {
-        case let (codec?, channels?): return "\(codec) \(channels)"
-        case let (codec?, nil):       return codec
-        case let (nil, channels?):    return channels
-        case (nil, nil):              return nil
-        }
-    }
-
-    /// Plex's channel count → loudspeaker layout label: 2 → "2.0", 6 → "5.1",
-    /// 8 → "7.1". Anything we don't recognise falls back to "N ch".
-    private func channelLabel(_ channels: Int) -> String {
-        switch channels {
-        case 1: return "Mono"
-        case 2: return "2.0"
-        case 6: return "5.1"
-        case 8: return "7.1"
-        default: return "\(channels) ch"
-        }
-    }
-
-    private func hdrBadge(_ info: MediaInfo?) -> String? {
-        guard let info else { return nil }
-        if info.isDolbyVision { return "Dolby Vision" }
-        if info.isHDR { return "HDR" }
-        return nil
-    }
-
-    private func formatBitrate(_ kbps: Int) -> String {
-        if kbps >= 1000 {
-            let mbps = Double(kbps) / 1000.0
-            return String(format: "%.1f Mbps", mbps)
-        }
-        return "\(kbps) kbps"
-    }
 
     /// Best-effort projected playback mode for the Media line, computed from
     /// container + quality choice. The server's actual decision is taken when
@@ -2386,38 +2399,6 @@ struct DetailView: View {
 
     // MARK: - Formatting helpers
 
-    private func kindLabel(_ kind: MediaItem.Kind) -> String {
-        switch kind {
-        case .movie: return "Movie"
-        case .episode: return "Episode"
-        case .show: return "Series"
-        case .season: return "Season"
-        }
-    }
-
-    private func formatRuntime(_ duration: Duration) -> String {
-        let total = Int(durationSeconds(duration))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
-    }
-
-    private func formatPosition(_ duration: Duration) -> String {
-        let total = Int(durationSeconds(duration))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    private func durationSeconds(_ duration: Duration) -> Double {
-        let parts = duration.components
-        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
-    }
 }
 
 private extension View {

@@ -41,6 +41,7 @@ struct AetherApp: App {
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
+                .environment(session)
                 .environment(cinema)
         }
         #else
@@ -49,6 +50,7 @@ struct AetherApp: App {
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
                 .task { await session.start() }
+                .environment(session)
         }
         #endif
 
@@ -177,6 +179,39 @@ final class AppSession {
             await matchLocalMetadata(for: item)
         }
         await refreshLocalLibrary()
+    }
+
+    // MARK: Local metadata editing (#211)
+
+    /// The stored item backing a local `MediaItem`, for pre-filling the editor.
+    func localItem(for id: String) async -> LocalLibraryStore.Item? {
+        await localLibraryStore.item(for: id)
+    }
+
+    /// Top TMDb candidates so the user can correct a wrong / missing match.
+    /// Empty without a key.
+    func localMatchCandidates(title: String, year: Int?, isEpisode: Bool, limit: Int = 6) async -> [TMDbMetadata] {
+        guard isTMDbConfigured else { return [] }
+        return await TMDbClient(apiKey: tmdbAPIKey, api: api)
+            .searchCandidates(title: title, year: year, isEpisode: isEpisode, limit: limit)
+    }
+
+    /// Apply a user-chosen TMDb candidate as the item's match (poster / overview
+    /// / canonical title); the user's text overrides still win on top.
+    func applyLocalMatch(_ metadata: TMDbMetadata?, for id: String) async {
+        await localLibraryStore.setMatch(metadata, for: id)
+    }
+
+    /// Persist the user's per-field corrections (an all-nil/`nil` value clears).
+    func saveLocalOverrides(_ overrides: LocalLibraryStore.Item.Overrides?, for id: String) async {
+        await localLibraryStore.setOverrides(overrides, for: id)
+        await refreshLocalLibrary()
+    }
+
+    /// Write custom poster bytes; returns the stored (versioned) filename, or nil.
+    @discardableResult
+    func saveLocalArtwork(_ data: Data, for id: String) async -> String? {
+        await localLibraryStore.setArtwork(data, for: id)
     }
 
     // MARK: - Downloads

@@ -406,8 +406,62 @@ struct MockFixtureTests {
     }
 }
 
+/// Minimal source with a movie library + one show whose episodes are children
+/// — enough to exercise episode-level Continue Watching (#243). The mock fixture
+/// can't express episode `parentID`, so this stub does.
+private struct StubShowSource: MediaSource {
+    let id: MediaSourceID = .mock
+    let displayName = "Stub"
+    let movies: [MediaItem]
+    let show: MediaItem
+    let episodes: [MediaItem]
+
+    func libraries() async throws -> [Library] {
+        [Library(id: .init(source: .mock, rawValue: "movies"), title: "Movies", kind: .movie),
+         Library(id: .init(source: .mock, rawValue: "shows"), title: "Shows", kind: .show)]
+    }
+    func items(in library: Library.ID) async throws -> [MediaItem] {
+        library.rawValue == "movies" ? movies : [show]
+    }
+    func children(of id: MediaID) async throws -> [MediaItem] {
+        id == show.id ? episodes : []
+    }
+    func item(for id: MediaID) async throws -> MediaItem? {
+        ([show] + movies + episodes).first { $0.id == id }
+    }
+}
+
 @Suite("AetherCore — HomeFeedBuilder")
 struct HomeFeedBuilderTests {
+
+    @Test("Continue Watching surfaces a show's in-progress episode — one per show, mixed with movies by recency (#243)")
+    func continueWatchingIncludesEpisodes() async throws {
+        let movieID = MediaID(source: .mock, rawValue: "a")
+        let showID = MediaID(source: .mock, rawValue: "show:S")
+        let e1 = MediaID(source: .mock, rawValue: "S1E1")
+        let e2 = MediaID(source: .mock, rawValue: "S1E2")
+        let movie = MediaItem(id: movieID, title: "A Movie", kind: .movie, runtime: .seconds(3600))
+        let show = MediaItem(id: showID, title: "The Show", kind: .show)
+        let ep1 = MediaItem(id: e1, title: "Episode 1", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 1, episodeNumber: 1, parentID: showID)
+        let ep2 = MediaItem(id: e2, title: "Episode 2", kind: .episode,
+                            seriesTitle: "The Show", seasonNumber: 1, episodeNumber: 2, parentID: showID)
+        let source = StubShowSource(movies: [movie], show: show, episodes: [ep1, ep2])
+
+        let store = ResumeStore()
+        let now = Date()
+        await store.record(.init(mediaID: movieID, position: .seconds(60), updatedAt: now.addingTimeInterval(-300)))
+        await store.record(.init(mediaID: e1, position: .seconds(60), updatedAt: now.addingTimeInterval(-600)))
+        await store.record(.init(mediaID: e2, position: .seconds(60), updatedAt: now.addingTimeInterval(-100)))
+
+        let feed = try await HomeFeedBuilder().build(source: source, resumeStore: store)
+
+        // The show contributes exactly one entry — its most-recent episode (e2) —
+        // ordered with the movie by recency; the older episode is not surfaced.
+        #expect(feed.continueWatching.map(\.item.id) == [e2, movieID])
+        #expect(feed.continueWatching.first?.item.kind == .episode)
+        #expect(feed.continueWatching.contains { $0.item.id == e1 } == false)
+    }
 
     @Test("Continue Watching includes only items with a resume point, most recent first")
     func continueWatchingFiltering() async throws {
@@ -1256,6 +1310,104 @@ struct LocalLibraryTests {
         #expect(await store.count() == 0)
         #expect(!FileManager.default.fileExists(atPath: path))
     }
+
+    // MARK: - Manual overrides (#211)
+
+    @Test("manual overrides win over the TMDb match + inference, and persist")
+    func overridesWin() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Whatever (1999).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        // A wrong auto-match…
+        await store.setMatch(TMDbMetadata(tmdbID: 1, title: "Wrong Movie", year: 2001,
+            overview: "nope", posterURL: nil, backdropURL: nil), for: item.id)
+        // …corrected by the user.
+        await store.setOverrides(.init(title: "The Matrix", year: 1999, overview: "Neo."), for: item.id)
+
+        // Survives relaunch.
+        let reopened = LocalLibraryStore(directory: dir)
+        let stored = try #require(await reopened.allItems().first)
+        #expect(stored.effectiveTitle == "The Matrix")
+        #expect(stored.effectiveYear == 1999)
+        #expect(stored.effectiveOverview == "Neo.")
+        let source = LocalMediaSource(store: reopened)
+        let lib = try #require(try await source.libraries().first { $0.kind == .movie })
+        #expect(try await source.items(in: lib.id).first?.title == "The Matrix")
+    }
+
+    @Test("overriding isEpisode reclassifies a movie into the TV library")
+    func reclassify() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Pilot (2020).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        let source = LocalMediaSource(store: store)
+        #expect(try await source.libraries().contains { $0.kind == .show } == false)
+
+        await store.setOverrides(.init(title: "My Show", isEpisode: true, season: 1, episode: 1), for: item.id)
+        let libs = try await source.libraries()
+        #expect(libs.contains { $0.kind == .show })
+        #expect(libs.contains { $0.kind == .movie } == false)
+        let showLib = try #require(libs.first { $0.kind == .show })
+        let shows = try await source.items(in: showLib.id)
+        #expect(shows.first?.title == "My Show")
+        #expect(try await source.children(of: shows[0].id).first?.episodeNumber == 1)
+    }
+
+    @Test("custom artwork is stored, used as the poster, and removed with the item")
+    func customArtwork() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Movie (2000).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+
+        #expect(await store.setArtwork(Data("png-bytes".utf8), for: item.id) != nil)
+        let stored = try #require(await store.allItems().first)
+        let artURL = try #require(store.artworkURL(for: stored))
+        #expect(FileManager.default.fileExists(atPath: artURL.path))
+
+        let source = LocalMediaSource(store: store)
+        let lib = try #require(try await source.libraries().first { $0.kind == .movie })
+        #expect(try await source.items(in: lib.id).first?.posterURL == artURL)
+
+        await store.remove(item.id)
+        #expect(!FileManager.default.fileExists(atPath: artURL.path))
+    }
+
+    @Test("clearing overrides reverts to inference")
+    func clearOverrides() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Real Title (2012).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+        await store.setOverrides(.init(title: "Temp"), for: item.id)
+        #expect(await store.allItems().first?.effectiveTitle == "Temp")
+        await store.setOverrides(nil, for: item.id)
+        let stored = try #require(await store.allItems().first)
+        #expect(stored.overrides == nil)
+        #expect(stored.effectiveTitle == "Real Title")
+    }
+
+    @Test("custom poster is versioned; replacing deletes the old file, reset deletes the current (#211)")
+    func artworkVersioningAndCleanup() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let src = try sourceFile("Film (2001).mp4"); defer { try? FileManager.default.removeItem(at: src) }
+        let store = LocalLibraryStore(directory: dir)
+        let item = try await store.importFile(at: src)
+
+        let name1 = try #require(await store.setArtwork(Data("a".utf8), for: item.id))
+        let name2 = try #require(await store.setArtwork(Data("b".utf8), for: item.id))
+        #expect(name1 != name2)   // versioned → URL changes so image caches repaint
+        let artworkDir = dir.appendingPathComponent("Artwork")
+        #expect(!FileManager.default.fileExists(atPath: artworkDir.appendingPathComponent(name1).path)) // old gone
+        let storedAfter = try #require(await store.allItems().first)
+        let current = try #require(store.artworkURL(for: storedAfter))
+        #expect(FileManager.default.fileExists(atPath: current.path))                                  // new kept
+
+        await store.setOverrides(nil, for: item.id)   // reset
+        #expect(!FileManager.default.fileExists(atPath: current.path))                                 // poster cleaned up
+    }
 }
 
 @Suite("AetherCore — PlaybackEngine (mkv #173)")
@@ -1327,10 +1479,83 @@ struct TMDbClientTests {
         #expect(await client.match(title: "X", year: nil, isEpisode: false) == nil)
     }
 
+    @Test("searchCandidates returns multiple results, most-relevant first, capped by limit (#211)")
+    func candidates() async {
+        let json = #"""
+        {"results":[
+          {"id":1,"title":"A","release_date":"2001-01-01"},
+          {"id":2,"title":"B","release_date":"2002-01-01"},
+          {"id":3,"title":"C"}
+        ]}
+        """#
+        let cands = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .searchCandidates(title: "x", year: nil, isEpisode: false, limit: 2)
+        #expect(cands.count == 2)
+        #expect(cands[0].tmdbID == 1)
+        #expect(cands[1].title == "B")
+    }
+
     @Test("no results → nil")
     func noResults() async {
         let m = await TMDbClient(apiKey: "k", api: StubAPI(json: #"{"results":[]}"#))
             .match(title: "Nope", year: nil, isEpisode: false)
         #expect(m == nil)
+    }
+}
+
+@Suite("AetherCore — DetailFormatting (#241)")
+struct DetailFormattingTests {
+    @Test("kind labels")
+    func kindLabels() {
+        #expect(DetailFormatting.kindLabel(.movie) == "Movie")
+        #expect(DetailFormatting.kindLabel(.episode) == "Episode")
+        #expect(DetailFormatting.kindLabel(.show) == "Series")
+        #expect(DetailFormatting.kindLabel(.season) == "Season")
+    }
+
+    @Test("runtime / position formatting")
+    func durations() {
+        #expect(DetailFormatting.runtime(.seconds(3661)) == "1h 1m")
+        #expect(DetailFormatting.runtime(.seconds(125)) == "2m")
+        #expect(DetailFormatting.position(.seconds(3661)) == "01:01:01")
+        #expect(DetailFormatting.position(.seconds(125)) == "02:05")
+    }
+
+    @Test("percent / bitrate / channels")
+    func numbers() {
+        #expect(DetailFormatting.percent(0.426) == "43%")
+        #expect(DetailFormatting.bitrate(8000) == "8.0 Mbps")
+        #expect(DetailFormatting.bitrate(800) == "800 kbps")
+        #expect(DetailFormatting.channelLabel(1) == "Mono")
+        #expect(DetailFormatting.channelLabel(2) == "2.0")
+        #expect(DetailFormatting.channelLabel(6) == "5.1")
+        #expect(DetailFormatting.channelLabel(8) == "7.1")
+        #expect(DetailFormatting.channelLabel(3) == "3 ch")
+    }
+
+    @Test("video / audio / HDR lines from MediaInfo")
+    func mediaLines() {
+        let full = MediaInfo(videoCodec: "hevc", audioCodec: "eac3", audioChannels: 6,
+                             videoResolution: "4K", isHDR: true, isDolbyVision: true)
+        #expect(DetailFormatting.videoLine(full) == "HEVC 4K")
+        #expect(DetailFormatting.audioLine(full) == "EAC3 5.1")
+        #expect(DetailFormatting.hdrBadge(full) == "Dolby Vision")
+        #expect(DetailFormatting.hdrBadge(MediaInfo(isHDR: true)) == "HDR")
+        #expect(DetailFormatting.hdrBadge(MediaInfo()) == nil)
+        #expect(DetailFormatting.videoLine(nil) == nil)
+        #expect(DetailFormatting.videoLine(MediaInfo(videoCodec: "h264")) == "H264")
+        #expect(DetailFormatting.audioLine(MediaInfo()) == nil)
+    }
+
+    @Test("season / episode labels")
+    func labels() {
+        let s2 = MediaItem(id: .init(source: .mock, rawValue: "s2"), title: "The Show",
+                           kind: .season, seasonNumber: 2)
+        #expect(DetailFormatting.seasonLabel(s2) == "Season 2")
+        let specials = MediaItem(id: .init(source: .mock, rawValue: "sx"), title: "Specials", kind: .season)
+        #expect(DetailFormatting.seasonLabel(specials) == "Specials")
+        let ep = MediaItem(id: .init(source: .mock, rawValue: "e"), title: "Pilot",
+                           kind: .episode, seasonNumber: 1, episodeNumber: 3)
+        #expect(DetailFormatting.episodeLabel(ep) == "S1E3 · Pilot")
     }
 }
