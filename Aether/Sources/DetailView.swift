@@ -341,11 +341,6 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
-                    if !item.kind.isContainer {
-                        castSection
-                            .padding(.horizontal, AetherDesign.Spacing.l)
-                    }
-
                     if !item.kind.isContainer, current.mediaInfo != nil {
                         technicalDetailsSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
@@ -362,6 +357,13 @@ struct DetailView: View {
                     // Season detail (browsed into directly): episode list.
                     if item.kind.isContainer {
                         childrenSection
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                    }
+
+                    // Cast & Crew sits below the primary actions / overview /
+                    // sources (#247) — valuable, but not competing with them.
+                    if !item.kind.isContainer {
+                        castSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                     }
                 }
@@ -399,48 +401,61 @@ struct DetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                    Text(activeItem.title)
-                        .font(AetherDesign.Typography.heroTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    metadataRow
-                    genresRow
-                    mediaBadges
+                    // Primary content stays in the readable left column…
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                        Text(activeItem.title)
+                            .font(AetherDesign.Typography.heroTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        metadataRow
+                        genresRow
+                        mediaBadges
 
-                    if !item.kind.isContainer {
-                        actionRow
-                    }
+                        if !item.kind.isContainer {
+                            actionRow
+                        }
 
-                    if let summary = activeItem.summary {
+                        if let summary = activeItem.summary {
+                            if item.kind.isContainer {
+                                Text(summary)
+                                    .font(AetherDesign.Typography.body)
+                                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                synopsis(summary)
+                            }
+                        }
+
+                        if !item.kind.isContainer, current.streamURL != nil {
+                            playbackSection
+                        }
+                        if !item.kind.isContainer, current.mediaInfo != nil {
+                            technicalDetailsSection
+                        }
+                        if availableSources.count > 1 {
+                            availableSourcesSection
+                        }
                         if item.kind.isContainer {
-                            Text(summary)
-                                .font(AetherDesign.Typography.body)
-                                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            synopsis(summary)
+                            childrenSection
                         }
                     }
+                    .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, AetherDesign.Spacing.xl)
 
+                    // …but Cast & Crew sits last (#247) and, on tvOS, breaks out
+                    // of the column so the rail uses the full screen width.
                     if !item.kind.isContainer {
                         castSection
-                    }
-                    if !item.kind.isContainer, current.streamURL != nil {
-                        playbackSection
-                    }
-                    if !item.kind.isContainer, current.mediaInfo != nil {
-                        technicalDetailsSection
-                    }
-                    if availableSources.count > 1 {
-                        availableSourcesSection
-                    }
-                    if item.kind.isContainer {
-                        childrenSection
+                            #if os(tvOS)
+                            .padding(.leading, AetherDesign.Spacing.xl)
+                            #else
+                            .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.xl)
+                            #endif
                     }
                 }
-                .frame(maxWidth: wideColumnWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, AetherDesign.Spacing.xl)
                 .padding(.top, AetherDesign.Spacing.xl)
                 .padding(.bottom, AetherDesign.Spacing.xxl)
             }
@@ -569,7 +584,6 @@ struct DetailView: View {
                 synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
-            castSection
             if availableSources.count > 1 {
                 availableSourcesSection
                     .frame(maxWidth: 720, alignment: .leading)
@@ -583,6 +597,8 @@ struct DetailView: View {
                 playbackSection
                     .frame(maxWidth: 720, alignment: .leading)
             }
+            // Cast & Crew last — below Related (#247).
+            castSection
         }
     }
 
