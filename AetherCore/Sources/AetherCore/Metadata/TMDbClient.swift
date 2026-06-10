@@ -49,23 +49,42 @@ public struct TMDbClient: Sendable {
         guard isConfigured, let request = searchRequest(title: title, year: year, isEpisode: isEpisode) else {
             return nil
         }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let response = try? await api.decode(SearchResponse.self, from: request, decoder: decoder),
-              let first = response.results.first else {
+        guard let first = await search(title: title, year: year, isEpisode: isEpisode, request: request).first else {
             return nil
         }
-        let name = first.title ?? first.name ?? title
-        let date = first.releaseDate ?? first.firstAirDate
-        let matchedYear = date.flatMap { Int($0.prefix(4)) } ?? year
-        return TMDbMetadata(
-            tmdbID: first.id,
-            title: name,
-            year: matchedYear,
-            overview: first.overview?.nonEmptyTrimmed,
-            posterURL: Self.imageURL(first.posterPath, size: "w500"),
-            backdropURL: Self.imageURL(first.backdropPath, size: "w1280")
-        )
+        return first
+    }
+
+    /// Top matches for a title, so the user can pick the right one when the best
+    /// guess is wrong (#211). Returns up to `limit` candidates, most-relevant
+    /// first; empty on any failure. Searches TV when `isEpisode`, else movies.
+    public func searchCandidates(title: String, year: Int?, isEpisode: Bool, limit: Int = 6) async -> [TMDbMetadata] {
+        guard isConfigured, let request = searchRequest(title: title, year: year, isEpisode: isEpisode) else {
+            return []
+        }
+        return Array(await search(title: title, year: year, isEpisode: isEpisode, request: request).prefix(limit))
+    }
+
+    /// Decode a search response and map every result to `TMDbMetadata`.
+    private func search(title: String, year: Int?, isEpisode: Bool, request: URLRequest) async -> [TMDbMetadata] {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? await api.decode(SearchResponse.self, from: request, decoder: decoder) else {
+            return []
+        }
+        return response.results.map { result in
+            let name = result.title ?? result.name ?? title
+            let date = result.releaseDate ?? result.firstAirDate
+            let matchedYear = date.flatMap { Int($0.prefix(4)) } ?? year
+            return TMDbMetadata(
+                tmdbID: result.id,
+                title: name,
+                year: matchedYear,
+                overview: result.overview?.nonEmptyTrimmed,
+                posterURL: Self.imageURL(result.posterPath, size: "w500"),
+                backdropURL: Self.imageURL(result.backdropPath, size: "w1280")
+            )
+        }
     }
 
     // MARK: - Request

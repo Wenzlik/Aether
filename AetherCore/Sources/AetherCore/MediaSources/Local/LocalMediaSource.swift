@@ -26,10 +26,10 @@ public actor LocalMediaSource: MediaSource {
     public func libraries() async throws -> [Library] {
         let items = await store.allItems()
         var libs: [Library] = []
-        if items.contains(where: { !$0.isEpisode }) {
+        if items.contains(where: { !$0.effectiveIsEpisode }) {
             libs.append(Library(id: moviesLibraryID, title: "Local Movies", kind: .movie))
         }
-        if items.contains(where: { $0.isEpisode }) {
+        if items.contains(where: { $0.effectiveIsEpisode }) {
             libs.append(Library(id: showsLibraryID, title: "Local TV Shows", kind: .show))
         }
         return libs
@@ -38,12 +38,13 @@ public actor LocalMediaSource: MediaSource {
     public func items(in library: Library.ID) async throws -> [MediaItem] {
         let items = await store.allItems()
         if library == moviesLibraryID {
-            return items.filter { !$0.isEpisode }.map { movieItem($0) }
+            return items.filter { !$0.effectiveIsEpisode }.map { movieItem($0) }
         }
         if library == showsLibraryID {
-            // One container per distinct inferred series title.
-            let episodes = items.filter { $0.isEpisode }
-            return Dictionary(grouping: episodes, by: { $0.title })
+            // One container per distinct effective series title (user override >
+            // TMDb match > inference), so corrections re-group correctly (#211).
+            let episodes = items.filter { $0.effectiveIsEpisode }
+            return Dictionary(grouping: episodes, by: { $0.effectiveTitle })
                 .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
                 .map { showContainer(series: $0.key, episodes: $0.value) }
         }
@@ -53,7 +54,7 @@ public actor LocalMediaSource: MediaSource {
     public func children(of id: MediaID) async throws -> [MediaItem] {
         guard id.source == self.id, id.rawValue.hasPrefix(Self.showPrefix) else { return [] }
         let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
-        let episodes = await store.allItems().filter { $0.isEpisode && $0.title == series }
+        let episodes = await store.allItems().filter { $0.effectiveIsEpisode && $0.effectiveTitle == series }
         return sortedEpisodes(episodes).map { episodeItem($0, showID: id) }
     }
 
@@ -61,11 +62,11 @@ public actor LocalMediaSource: MediaSource {
         guard id.source == self.id else { return nil }
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = await store.allItems().filter { $0.isEpisode && $0.title == series }
+            let episodes = await store.allItems().filter { $0.effectiveIsEpisode && $0.effectiveTitle == series }
             return episodes.isEmpty ? nil : showContainer(series: series, episodes: episodes)
         }
         guard let stored = await store.allItems().first(where: { $0.id == id.rawValue }) else { return nil }
-        return stored.isEpisode ? episodeItem(stored, showID: showID(for: stored.title)) : movieItem(stored)
+        return stored.effectiveIsEpisode ? episodeItem(stored, showID: showID(for: stored.effectiveTitle)) : movieItem(stored)
     }
 
     /// No server transcoder — `resolvePlayback` uses the protocol default, which
@@ -80,31 +81,33 @@ public actor LocalMediaSource: MediaSource {
     }
 
     private func movieItem(_ item: LocalLibraryStore.Item) -> MediaItem {
-        let m = item.metadata
         return MediaItem(
             id: .init(source: id, rawValue: item.id),
-            title: m?.title ?? item.title,
+            title: item.effectiveTitle,
             kind: .movie,
-            year: m?.year ?? item.year,
-            summary: m?.overview,
-            posterURL: m?.posterURL,
-            backdropURL: m?.backdropURL,
+            year: item.effectiveYear,
+            summary: item.effectiveOverview,
+            posterURL: store.artworkURL(for: item) ?? item.metadata?.posterURL,
+            backdropURL: item.metadata?.backdropURL,
             streamURL: store.fileURL(for: item),
             dateAdded: item.addedAt
         )
     }
 
     private func showContainer(series: String, episodes: [LocalLibraryStore.Item]) -> MediaItem {
-        let seasons = Set(episodes.compactMap(\.season))
-        // Episodes of a series share the matched TV show — use the first match.
-        let m = episodes.compactMap(\.metadata).first
+        // `series` is already the effective title (the grouping key), so it
+        // reflects any override. Artwork/overview come from the first episode
+        // that has them — custom poster wins over the TMDb match.
+        let seasons = Set(episodes.compactMap(\.effectiveSeason))
+        let poster = episodes.compactMap { store.artworkURL(for: $0) }.first
+            ?? episodes.compactMap { $0.metadata?.posterURL }.first
         return MediaItem(
             id: showID(for: series),
-            title: m?.title ?? series,
+            title: series,
             kind: .show,
-            summary: m?.overview,
-            posterURL: m?.posterURL,
-            backdropURL: m?.backdropURL,
+            summary: episodes.compactMap(\.effectiveOverview).first,
+            posterURL: poster,
+            backdropURL: episodes.compactMap { $0.metadata?.backdropURL }.first,
             dateAdded: episodes.map(\.addedAt).max(),
             seasonCount: seasons.isEmpty ? nil : seasons.count,
             episodeCount: episodes.count
@@ -112,17 +115,16 @@ public actor LocalMediaSource: MediaSource {
     }
 
     private func episodeItem(_ item: LocalLibraryStore.Item, showID: MediaID) -> MediaItem {
-        let m = item.metadata
         return MediaItem(
             id: .init(source: id, rawValue: item.id),
-            title: item.episode.map { "Episode \($0)" } ?? item.title,
+            title: item.effectiveEpisode.map { "Episode \($0)" } ?? item.effectiveTitle,
             kind: .episode,
-            summary: m?.overview,
-            posterURL: m?.posterURL,
+            summary: item.effectiveOverview,
+            posterURL: store.artworkURL(for: item) ?? item.metadata?.posterURL,
             streamURL: store.fileURL(for: item),
-            seriesTitle: m?.title ?? item.title,
-            seasonNumber: item.season,
-            episodeNumber: item.episode,
+            seriesTitle: item.effectiveTitle,
+            seasonNumber: item.effectiveSeason,
+            episodeNumber: item.effectiveEpisode,
             parentID: showID,
             dateAdded: item.addedAt
         )
@@ -130,7 +132,7 @@ public actor LocalMediaSource: MediaSource {
 
     private func sortedEpisodes(_ episodes: [LocalLibraryStore.Item]) -> [LocalLibraryStore.Item] {
         episodes.sorted {
-            ($0.season ?? 0, $0.episode ?? 0) < ($1.season ?? 0, $1.episode ?? 0)
+            ($0.effectiveSeason ?? 0, $0.effectiveEpisode ?? 0) < ($1.effectiveSeason ?? 0, $1.effectiveEpisode ?? 0)
         }
     }
 }

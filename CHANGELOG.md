@@ -4,7 +4,20 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.6.4] — Unreleased
+## [0.6.5] — Unreleased
+
+### Added
+
+- **Local Library: manual metadata & artwork editing** (#211) — correct or
+  override what auto-matching got wrong. Per local item you can set the title,
+  year, kind (movie/episode), season/episode, and overview, re-match from TMDb
+  and pick among candidates, or set a custom poster. Overrides **win over** the
+  TMDb match and the filename guess, persist across launches, and propagate
+  everywhere — including re-grouping (e.g. reclassifying a movie as an episode
+  moves it into TV Shows). *(This entry covers the data layer; the edit UI lands
+  in a follow-up PR under 0.6.5.)*
+
+## [0.6.4] — 2026-06-10
 
 ### Fixed
 
