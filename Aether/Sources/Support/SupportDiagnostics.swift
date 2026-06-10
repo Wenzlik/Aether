@@ -43,7 +43,12 @@ enum SupportDiagnostics {
         #elseif os(tvOS)
         return "tvOS"
         #elseif os(iOS)
-        return UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS"
+        // UIDevice.current is main-actor-isolated in Swift 6; every caller of
+        // platformName runs on the main actor (the @MainActor view model and
+        // SwiftUI views), so assert that rather than hop.
+        return MainActor.assumeIsolated {
+            UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS"
+        }
         #else
         return "macOS"
         #endif

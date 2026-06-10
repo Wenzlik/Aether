@@ -43,7 +43,7 @@ struct MailComposeView: UIViewControllerRepresentable {
         func mailComposeController(
             _ controller: MFMailComposeViewController,
             didFinishWith result: MFMailComposeResult,
-            error: Error?
+            error: (any Error)?
         ) {
             onFinish()
         }
