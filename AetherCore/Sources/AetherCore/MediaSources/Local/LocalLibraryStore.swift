@@ -83,26 +83,52 @@ public actor LocalLibraryStore {
     public func setOverrides(_ overrides: Item.Overrides?, for id: String) {
         hydrate()
         guard items[id] != nil else { return }
-        items[id]?.overrides = (overrides?.isEmpty ?? true) ? nil : overrides
+        let resolved: Item.Overrides? = (overrides?.isEmpty ?? true) ? nil : overrides
+        // If a custom poster is being dropped (cleared or reset), delete its file
+        // so it doesn't orphan — this is the one chokepoint both the "Remove
+        // Poster" and "Reset" paths flow through (#211).
+        if let old = items[id]?.overrides?.artworkFilename, resolved?.artworkFilename != old {
+            try? FileManager.default.removeItem(at: artworkDir.appendingPathComponent(old))
+        }
+        items[id]?.overrides = resolved
         persist()
     }
 
     /// Save custom poster bytes for an item into `artworkDir`, record the
     /// filename in its overrides, and persist. Returns the stored filename, or
     /// `nil` if the item is gone or the write failed (#211).
+    ///
+    /// The filename is **versioned** (`<id>-<n>.jpg`), not a fixed `<id>.jpg`:
+    /// the poster's URL therefore changes every time it's replaced, so URL-keyed
+    /// image caches (`AsyncImage` / `AetherImageCache`) repaint the new artwork
+    /// immediately instead of serving the stale cached image. The previous
+    /// custom poster file is deleted so only one ever lingers.
     @discardableResult
     public func setArtwork(_ data: Data, for id: String) -> String? {
         hydrate()
-        guard items[id] != nil else { return nil }
-        let name = "\(id).jpg"
+        guard let existing = items[id] else { return nil }
+        let previous = existing.overrides?.artworkFilename
+        let version = (previous.flatMap(Self.versionSuffix) ?? 0) + 1
+        let name = "\(id)-\(version).jpg"
         let url = artworkDir.appendingPathComponent(name)
         do { try data.write(to: url, options: .atomic) } catch { return nil }
         Self.excludeFromBackup(url)
-        var overrides = items[id]?.overrides ?? Item.Overrides()
+        // Drop the old poster file (the URL is changing).
+        if let previous, previous != name {
+            try? FileManager.default.removeItem(at: artworkDir.appendingPathComponent(previous))
+        }
+        var overrides = existing.overrides ?? Item.Overrides()
         overrides.artworkFilename = name
         items[id]?.overrides = overrides
         persist()
         return name
+    }
+
+    /// Parse the trailing version integer from a `<id>-<n>.jpg` artwork filename.
+    private nonisolated static func versionSuffix(_ filename: String) -> Int? {
+        guard let dash = filename.lastIndex(of: "-") else { return nil }
+        let after = filename[filename.index(after: dash)...]
+        return Int(after.prefix(while: { $0.isNumber }))
     }
 
     /// File URL of an item's custom poster, or `nil` if none was set.
@@ -158,6 +184,13 @@ public actor LocalLibraryStore {
     public func count() -> Int {
         hydrate()
         return items.count
+    }
+
+    /// O(1) lookup of a single item by id — used to pre-fill the metadata
+    /// editor (#211) without scanning `allItems()`.
+    public func item(for id: String) -> Item? {
+        hydrate()
+        return items[id]
     }
 
     /// Absolute URL of an item's media file. Nonisolated — pure path math over

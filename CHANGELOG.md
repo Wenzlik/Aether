@@ -9,13 +9,13 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 ### Added
 
 - **Local Library: manual metadata & artwork editing** (#211) — correct or
-  override what auto-matching got wrong. Per local item you can set the title,
-  year, kind (movie/episode), season/episode, and overview, re-match from TMDb
-  and pick among candidates, or set a custom poster. Overrides **win over** the
-  TMDb match and the filename guess, persist across launches, and propagate
-  everywhere — including re-grouping (e.g. reclassifying a movie as an episode
-  moves it into TV Shows). *(This entry covers the data layer; the edit UI lands
-  in a follow-up PR under 0.6.5.)*
+  override what auto-matching got wrong. Tap the **pencil** on a local movie or
+  episode (iOS / iPadOS / visionOS) to edit its title, year, kind, season /
+  episode, and overview, re-match from TMDb and pick among candidate posters, or
+  set a custom poster from Files. Overrides **win over** the TMDb match and the
+  filename guess, persist across launches, and propagate everywhere — the Detail
+  screen repaints in place, and re-grouping follows (e.g. reclassifying a movie
+  as an episode moves it into TV Shows).
 
 ## [0.6.4] — 2026-06-10
 
