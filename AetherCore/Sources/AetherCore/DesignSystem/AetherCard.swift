@@ -38,7 +38,7 @@ public struct AetherCard: View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             artwork
                 .overlay(alignment: .bottom) { progressBar }
-                .overlay(alignment: .topTrailing) { watchedBadge }
+                .overlay(alignment: .topTrailing) { watchedCornerMarker }
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 // Premium focus: lift + soft blue glow, no border (Apple TV+ feel).
                 // Cards earn the larger lift.
@@ -60,23 +60,44 @@ public struct AetherCard: View {
         }
     }
 
+    /// Watched artwork is **dimmed + desaturated** so a finished title reads as
+    /// "done" at a glance across a large library (#246) — still attractive, just
+    /// visibly muted. Unwatched artwork renders at full saturation.
     private var artwork: some View {
         CachedAsyncImage(url: posterURL, aspectRatio: aspectRatio)
+            .saturation(isWatched ? 0.45 : 1)
+            .overlay {
+                if isWatched { Color.black.opacity(0.28) }
+            }
     }
 
-    /// "Watched" badge — a filled checkmark in the top-trailing corner. Palette
-    /// rendering: white check on the brand accent, with a soft shadow so it
-    /// reads over any artwork.
+    /// "Watched" marker — a filled triangle folded into the top-trailing corner
+    /// with a bold checkmark, far more legible from couch distance than a small
+    /// icon (#246). Larger on the 10-foot / spatial UI.
     @ViewBuilder
-    private var watchedBadge: some View {
+    private var watchedCornerMarker: some View {
         if isWatched {
-            Image(systemName: "checkmark.circle.fill")
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.white, AetherDesign.Palette.accent)
-                .font(.system(size: 22, weight: .bold))
-                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
-                .padding(AetherDesign.Spacing.xs)
+            let s = watchedMarkerSize
+            TopTrailingTriangle()
+                .fill(AetherDesign.Palette.accent)
+                .frame(width: s, height: s)
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: s * 0.32, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.top, s * 0.12)
+                        .padding(.trailing, s * 0.12)
+                }
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
         }
+    }
+
+    private var watchedMarkerSize: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 56
+        #else
+        return 40
+        #endif
     }
 
     /// Apple-TV-style progress: a frosted strip across the artwork's lower edge
@@ -125,6 +146,19 @@ public struct AetherCard: View {
     }
 }
 
+/// A right triangle filling the top-trailing corner of its frame (hypotenuse
+/// from top-leading to bottom-trailing) — the "folded corner" watched ribbon.
+private struct TopTrailingTriangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 // MARK: - Factories
 
 extension AetherCard {
@@ -165,6 +199,8 @@ struct AetherCard_Previews: PreviewProvider {
     static var previews: some View {
         HStack(alignment: .top, spacing: AetherDesign.Spacing.l) {
             AetherCard.poster(title: "Sample Title", posterURL: nil)
+                .frame(width: 160)
+            AetherCard.poster(title: "Watched Title", posterURL: nil, isWatched: true)
                 .frame(width: 160)
             AetherCard.episode(
                 title: "S1E3 — A Long Episode Name That Might Truncate",

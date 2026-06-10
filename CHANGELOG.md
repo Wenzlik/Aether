@@ -39,6 +39,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   actor pages exist, the cards are non-focusable informational metadata (photo +
   name + character); the focus engine skips the rail and moves cleanly between
   the sections around it. iOS / iPadOS unaffected.
+- **Watched titles are now obvious at a glance** (#246) — finished movies and
+  episodes show **dimmed, desaturated artwork** plus a **bold checkmark in a
+  folded top-corner marker** (larger on tvOS / visionOS), instead of a small,
+  easy-to-miss icon. Unwatched (full artwork) and in-progress (progress bar)
+  stay clearly distinct. Applied via `AetherCard`, so every grid and rail gets
+  it.
 
 ## [0.6.4] — 2026-06-10
 
