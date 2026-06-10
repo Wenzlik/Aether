@@ -264,7 +264,7 @@ struct DiscoverView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)

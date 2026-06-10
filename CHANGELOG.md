@@ -25,6 +25,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **A show's "Next Up" now points at the right episode** (#260) — it used to
+  surface the first season with any unwatched episode (e.g. Season 3 while you
+  were mid-Season 7). It's now proper **On Deck**, computed across all seasons:
+  the most-recently-watched in-progress episode, else the one after the last you
+  finished.
+- **Partially-watched shows are no longer badged "watched"** (#260) — the
+  watched marker on a show/season now requires **every** episode watched
+  (`unwatchedEpisodeCount == 0`), not the raw source flag.
+- **Episodes show their in-progress state** (#260) — a partially-watched episode
+  now has a resume bar across its still and a "Resume hh:mm" caption in the list,
+  so you can see at a glance how far in you are.
 - **Continue Watching / Next Up now surfaces in-progress TV episodes** (#244) —
   it previously only matched resume points against top-level movies and show
   *containers*, so a half-watched episode (whose resume point is keyed by the

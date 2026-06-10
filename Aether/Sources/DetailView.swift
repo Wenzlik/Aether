@@ -81,6 +81,9 @@ struct DetailView: View {
     /// Saved resume position for the On Deck episode, when one exists — drives
     /// the "Resume from m:ss" caption on the Next Up card.
     @State private var nextUpResume: ResumePoint?
+    /// Resume points for the currently-listed episodes, so each row can show how
+    /// far in you are (#260). Keyed by episode id; filled when episodes load.
+    @State private var episodeResume: [MediaID: ResumePoint] = [:]
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -868,19 +871,25 @@ struct DetailView: View {
                     if episode.isWatched {
                         Image(systemName: "checkmark.circle.fill")
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color.white, AetherDesign.Palette.accent)
+                            .foregroundStyle(Color.black, AetherDesign.Palette.accentGold)
                             .font(.system(size: 18, weight: .bold))
                             .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
                             .padding(AetherDesign.Spacing.xs)
                     }
                 }
+                // In-progress: a resume bar across the bottom of the still (#260).
+                .overlay(alignment: .bottom) { episodeProgressBar(episode) }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
                 Text(episode.title)
                     .font(AetherDesign.Typography.cardTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(2)
-                if let runtime = episode.runtime {
+                if let resume = episodeResume[episode.id], !episode.isWatched {
+                    Text("Resume \(DetailFormatting.position(resume.position))")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                } else if let runtime = episode.runtime {
                     Text(DetailFormatting.runtime(runtime))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
@@ -896,12 +905,37 @@ struct DetailView: View {
         }
     }
 
+    /// A thin resume bar across the bottom of an episode still when it's
+    /// partially watched (#260) — so in-progress episodes are obvious in a list.
+    @ViewBuilder
+    private func episodeProgressBar(_ episode: MediaItem) -> some View {
+        if let resume = episodeResume[episode.id], !episode.isWatched, let runtime = episode.runtime {
+            let total = DetailFormatting.seconds(runtime)
+            let fraction = total > 0 ? min(1, max(0, DetailFormatting.seconds(resume.position) / total)) : 0
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.25))
+                    Capsule().fill(AetherDesign.Palette.accent)
+                        .frame(width: geo.size.width * fraction)
+                }
+            }
+            .frame(height: 4)
+            .padding(.horizontal, AetherDesign.Spacing.xs)
+            .padding(.bottom, AetherDesign.Spacing.xs)
+        }
+    }
+
     private func loadChildrenIfNeeded() async {
         guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
         isLoadingChildren = true
         defer { isLoadingChildren = false }
         do {
             children = try await source.children(of: activeItem.id)
+            // A navigated season's children are episodes — load their resume
+            // points so the rows show in-progress state (#260).
+            if children.contains(where: { $0.kind == .episode }) {
+                await loadEpisodeResumes(children)
+            }
         } catch {
             children = []
         }
@@ -1119,22 +1153,45 @@ struct DetailView: View {
         guard isShow, selectedSeason == nil, !children.isEmpty else { return }
         let deck = children.first { ($0.unwatchedEpisodeCount ?? 0) > 0 } ?? children.first
         selectedSeason = deck
-        guard let deck else { return }
-        await loadSeasonEpisodes(deck)
-        await computeNextUp(from: seasonEpisodes)
+        if let deck { await loadSeasonEpisodes(deck) }
+        await computeNextUp()
     }
 
-    /// The series On Deck episode + its resume point, derived from the deck
-    /// season's episodes. Stays fixed while the user browses other seasons, so
-    /// the Next Up card always points at where they left off in the show.
-    private func computeNextUp(from episodes: [MediaItem]) async {
-        guard let candidate = episodes.first(where: { !$0.isWatched }) else {
-            nextUpEpisode = nil
-            nextUpResume = nil
-            return
+    /// Every episode of the show, across all seasons. `children` are seasons for
+    /// Plex/Jellyfin (fetch each one's episodes) or already episodes for a flat
+    /// source (Local) — handle both.
+    private func allShowEpisodes() async -> [MediaItem] {
+        guard let source else { return [] }
+        if children.contains(where: { $0.kind == .season }) {
+            var episodes: [MediaItem] = []
+            for season in children {
+                episodes += (try? await source.children(of: season.id)) ?? []
+            }
+            return episodes
         }
-        nextUpEpisode = candidate
-        nextUpResume = await resumeStore.point(for: candidate.id)
+        return children   // already episodes (flat source)
+    }
+
+    /// The series **On Deck** episode (#260): the most-recently-watched
+    /// *in-progress* (resumable) episode, else the episode **following** the
+    /// last one finished — computed across ALL seasons, not just the first
+    /// season that happens to have an unwatched episode (which surfaced e.g.
+    /// Season 3 while the user was mid-Season 7).
+    private func computeNextUp() async {
+        let episodes = await allShowEpisodes()
+        guard !episodes.isEmpty else { nextUpEpisode = nil; nextUpResume = nil; return }
+
+        var resumes: [MediaID: ResumePoint] = [:]
+        for episode in episodes {
+            if let point = await resumeStore.point(for: episode.id) { resumes[episode.id] = point }
+        }
+
+        let next = OnDeck.next(episodes: episodes) { episode in
+            guard let resume = resumes[episode.id], !episode.isWatched else { return nil }
+            return resume.updatedAt
+        }
+        nextUpEpisode = next
+        nextUpResume = next.flatMap { resumes[$0.id] }
     }
 
     private func selectSeason(_ season: MediaItem) {
@@ -1146,6 +1203,16 @@ struct DetailView: View {
         Task { await loadSeasonEpisodes(season) }
     }
 
+    /// Fetch resume points for a set of episodes into `episodeResume` (#260),
+    /// merging so previously-loaded seasons keep theirs.
+    private func loadEpisodeResumes(_ episodes: [MediaItem]) async {
+        var map = episodeResume
+        for episode in episodes {
+            if let point = await resumeStore.point(for: episode.id) { map[episode.id] = point }
+        }
+        episodeResume = map
+    }
+
     private func loadSeasonEpisodes(_ season: MediaItem) async {
         guard let source else { return }
         isLoadingEpisodes = true
@@ -1155,6 +1222,7 @@ struct DetailView: View {
             // Bail if the user switched seasons while this was in flight.
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = episodes
+            await loadEpisodeResumes(episodes)
         } catch {
             guard selectedSeason?.id == season.id else { return }
             seasonEpisodes = []

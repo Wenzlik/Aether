@@ -58,7 +58,7 @@ struct MediaSearchResults: View {
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                     ForEach(results) { unified in
                         NavigationLink(value: unified) {
-                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isWatched)
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched)
                         }
                         .buttonStyle(.plain)
                     }

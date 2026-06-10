@@ -227,7 +227,7 @@ struct HomeView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { unified in
                         NavigationLink(value: unified) {
-                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isWatched)
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched)
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
@@ -304,7 +304,7 @@ struct HomeView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
