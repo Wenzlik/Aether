@@ -79,16 +79,19 @@ public struct AetherCard: View {
         if isWatched {
             let s = watchedMarkerSize
             TopTrailingTriangle()
-                .fill(AetherDesign.Palette.accent)
+                // Gold corner ribbon: a warm, high-contrast "watched" signal
+                // that stands apart from the blue accent / focus glow (#246).
+                .fill(AetherDesign.Palette.accentGold)
                 .frame(width: s, height: s)
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: "checkmark")
                         .font(.system(size: s * 0.32, weight: .heavy))
-                        .foregroundStyle(.white)
+                        // Dark check — white washes out on bright gold.
+                        .foregroundStyle(.black)
                         .padding(.top, s * 0.12)
                         .padding(.trailing, s * 0.12)
                 }
-                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
         }
     }
 
