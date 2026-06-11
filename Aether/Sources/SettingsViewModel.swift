@@ -123,17 +123,17 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "A cleaner Detail screen — episodes now lead with the series name and an “S1 • E2 — Title” line, a single dense metadata row (runtime · date · rating · resolution · audio), and compact Resume / Restart pills with the time inline",
-        "Continue Watching reads at a glance — a bolder, rounded progress bar across the artwork instead of a faint hairline",
-        "Apple TV — browse your Library by Genre and Year, not just Movies and TV Shows, each opening a grid of every matching movie and show",
-        "Apple TV — a richer season experience: focusing a season previews it inline (overview, episodes, year, progress), with a clearer focus highlight and reliable up/down navigation across all seasons",
-        "Apple TV — episodes browse as a wide still rail, Featured is right-sized so more shows sit below it, and the What's New notes finally scroll",
-        "Settings no longer drifts sideways on iPhone, and finished episodes wear the same bold gold watched marker as posters"
+        "Season pages got a life — browsing episodes on Apple TV now previews the focused one right below the rail: what it's about, runtime, air date, and how far in you are",
+        "Cast & Crew on every season — the season's own cast when your server has it, otherwise the show's",
+        "Next Up lives on the season too — one click to continue exactly where you are in that season",
+        "A cleaner season header — year, episode count and your watch progress (7/11 watched) instead of repeating the season number"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.6", codename: "Cassiopeia",
+                    summary: "A tvOS-led polish pass — Infuse-style Detail hero with dense metadata, Library browsing by Genre and Year, season previews, reliable focus navigation, scrollable What's New, and an iPhone Settings fix."),
         ReleaseNote(version: "0.6.5", codename: "Cassiopeia",
                     summary: "Local Library metadata & artwork editing, richer TV seasons with named Season Details, smarter Continue Watching (in-progress episodes + true On Deck), and a more reliable Library and Discover."),
         ReleaseNote(version: "0.6.4", codename: "Cassiopeia",
