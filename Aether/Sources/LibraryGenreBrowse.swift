@@ -7,6 +7,8 @@ import AetherCore
 enum LibraryBrowseRoute: Hashable {
     case genres
     case genre(String)
+    case years
+    case year(Int)
 }
 
 /// Every genre across the whole library (movies + shows), as a list of big
@@ -72,11 +74,13 @@ struct GenreListView: View {
     }
 }
 
-/// A grid of every title (movies + shows) in one genre.
-struct GenreGridView: View {
-    let genre: String
+/// A grid of every title (movies + shows) matching a facet — a genre, a year, …
+/// Reused by every Library browse facet; the caller supplies the title + filter.
+struct FacetGridView: View {
+    let title: String
     let connectedSources: [any MediaSource]
     let downloadStore: DownloadStore?
+    let filter: (UnifiedMediaItem) -> Bool
 
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
@@ -97,7 +101,7 @@ struct GenreGridView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                 #if os(tvOS)
-                Text(genre)
+                Text(title)
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,7 +110,7 @@ struct GenreGridView: View {
                     AetherLoadingState(.inline)
                 } else if items.isEmpty {
                     AetherEmptyState(glyph: "tray", title: "Nothing here yet",
-                                     message: "No \(genre) titles found across your connected sources.")
+                                     message: "No \(title) titles found across your connected sources.")
                 } else {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(items) { item in
@@ -123,7 +127,7 @@ struct GenreGridView: View {
         }
         .aetherScreenBackground()
         #if !os(tvOS)
-        .navigationTitle(genre)
+        .navigationTitle(title)
         #endif
         .task(id: sourcesKey) { await load() }
     }
@@ -137,8 +141,67 @@ struct GenreGridView: View {
         async let showsTask = library.unifiedItems(kind: .show)
         let all = await moviesTask + showsTask
         items = all
-            .filter { $0.genres.contains(genre) }
+            .filter(filter)
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+}
+
+/// Every release year present in the library (newest first); selecting one opens
+/// a grid of all titles from that year.
+struct YearListView: View {
+    let connectedSources: [any MediaSource]
+
+    @State private var years: [Int] = []
+    @State private var isLoading = false
+
+    private var sourcesKey: String {
+        connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                #if os(tvOS)
+                Text("Years")
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                #endif
+                if isLoading && years.isEmpty {
+                    AetherLoadingState(.inline)
+                } else if years.isEmpty {
+                    AetherEmptyState(glyph: "calendar", title: "No years",
+                                     message: "Your library's titles don't carry release years yet.")
+                } else {
+                    LazyVStack(spacing: AetherDesign.Spacing.m) {
+                        ForEach(years, id: \.self) { year in
+                            NavigationLink(value: LibraryBrowseRoute.year(year)) {
+                                LibraryBrowseRow(title: String(year))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, AetherDesign.Spacing.xl)
+            .padding(.vertical, AetherDesign.Spacing.l)
+        }
+        .aetherScreenBackground()
+        #if !os(tvOS)
+        .navigationTitle("Years")
+        #endif
+        .task(id: sourcesKey) { await load() }
+    }
+
+    private func load() async {
+        guard !connectedSources.isEmpty else { years = []; return }
+        isLoading = true
+        defer { isLoading = false }
+        let library = UnifiedLibrary(sources: connectedSources, downloads: nil)
+        async let moviesTask = library.unifiedItems(kind: .movie)
+        async let showsTask = library.unifiedItems(kind: .show)
+        let all = await moviesTask + showsTask
+        years = Set(all.compactMap(\.year)).sorted(by: >)
     }
 }
 

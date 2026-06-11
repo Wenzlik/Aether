@@ -104,7 +104,15 @@ struct LibraryBrowseView: View {
                 case .genres:
                     GenreListView(connectedSources: connectedSources)
                 case .genre(let name):
-                    GenreGridView(genre: name, connectedSources: connectedSources, downloadStore: downloadStore)
+                    FacetGridView(title: name, connectedSources: connectedSources, downloadStore: downloadStore) {
+                        $0.genres.contains(name)
+                    }
+                case .years:
+                    YearListView(connectedSources: connectedSources)
+                case .year(let year):
+                    FacetGridView(title: String(year), connectedSources: connectedSources, downloadStore: downloadStore) {
+                        $0.year == year
+                    }
                 }
             }
         }
@@ -263,10 +271,14 @@ struct LibraryBrowseView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                // Browse by genre across the whole library (#266). More facets
-                // (Years, Collections, …) will join here.
+                // Browse facets across the whole library (#266). More
+                // (Collections, …) will join here as data becomes available.
                 NavigationLink(value: LibraryBrowseRoute.genres) {
                     LibraryBrowseRow(title: "Genres")
+                }
+                .buttonStyle(.plain)
+                NavigationLink(value: LibraryBrowseRoute.years) {
+                    LibraryBrowseRow(title: "Years")
                 }
                 .buttonStyle(.plain)
             }
