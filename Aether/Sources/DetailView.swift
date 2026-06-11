@@ -864,6 +864,7 @@ struct DetailView: View {
                             titleLineLimit: 2
                         )
                         .frame(width: seasonCardWidth)
+                        .seasonCardFocus()
                     }
                     .buttonStyle(.plain)
                 }
@@ -1064,7 +1065,13 @@ struct DetailView: View {
             if isLoadingChildren && children.isEmpty {
                 AetherLoadingState(.inline)
             } else {
+                // Full-width focus section so Up from ANY season card lands on
+                // Next Up — section-to-section focus uses the section frames, not
+                // the card geometry, so it works from Season 1 through Season N
+                // (#266 feedback). Pairs with the seasons rail's own focus section.
                 nextUpCard
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .aetherDetailFocusSection()
                 if children.count > 1 {
                     // Multi-season: a rail of season poster cards that push a
                     // dedicated Season Detail (#245), instead of an inline
@@ -2663,4 +2670,33 @@ private extension View {
         self
         #endif
     }
+
+    /// Bolder, couch-visible focus for season cards — a brighter accent glow and
+    /// extra lift on top of the card's own focus, since the default lift alone was
+    /// hard to identify from across the room (#266 feedback). tvOS only.
+    @ViewBuilder
+    func seasonCardFocus() -> some View {
+        #if os(tvOS)
+        modifier(SeasonCardFocus())
+        #else
+        self
+        #endif
+    }
 }
+
+#if os(tvOS)
+private struct SeasonCardFocus: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isFocused ? 1.08 : 1.0)
+            .shadow(
+                color: AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0),
+                radius: isFocused ? 30 : 0,
+                y: isFocused ? 12 : 0
+            )
+            .zIndex(isFocused ? 1 : 0)
+            .animation(AetherDesign.Motion.focus, value: isFocused)
+    }
+}
+#endif
