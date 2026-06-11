@@ -68,13 +68,40 @@ public struct AetherCard: View {
 
     /// Watched artwork is **dimmed + desaturated** so a finished title reads as
     /// "done" at a glance across a large library (#246) — still attractive, just
-    /// visibly muted. Unwatched artwork renders at full saturation.
+    /// visibly muted — plus an unmissable centered "WATCHED" tag. Unwatched
+    /// artwork renders at full saturation.
     private var artwork: some View {
         CachedAsyncImage(url: posterURL, aspectRatio: aspectRatio)
             .saturation(isWatched ? 0.45 : 1)
             .overlay {
                 if isWatched { Color.black.opacity(0.28) }
             }
+            .overlay {
+                if isWatched { watchedTag }
+            }
+    }
+
+    /// Centered "WATCHED" capsule over finished artwork — readable from couch
+    /// distance even when the gold corner marker is off-screen or scrolled by.
+    private var watchedTag: some View {
+        Text("WATCHED")
+            .font(.system(size: watchedTagFontSize, weight: .heavy))
+            .tracking(1.4)
+            .foregroundStyle(Color.white.opacity(0.95))
+            .padding(.horizontal, AetherDesign.Spacing.s)
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+            .background(Color.black.opacity(0.55), in: Capsule())
+            .overlay(
+                Capsule().strokeBorder(AetherDesign.Palette.accentGold.opacity(0.8), lineWidth: 1)
+            )
+    }
+
+    private var watchedTagFontSize: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 16
+        #else
+        return 11
+        #endif
     }
 
     /// "Watched" marker — a filled triangle folded into the top-trailing corner

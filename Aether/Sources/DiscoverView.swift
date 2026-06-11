@@ -296,8 +296,13 @@ struct DiscoverView: View {
         defer { isLoading = false }
 
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let movies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
-        let shows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
+        let allMovies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
+        let allShows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
+        // Discover recommends what's *ahead* — with the (default-on)
+        // hide-watched preference, fully-watched titles drop out of every rail.
+        let hideWatched = playbackPreferences?.hideWatchedInDiscovery ?? true
+        let movies = hideWatched ? allMovies.filter { !$0.isFullyWatched } : allMovies
+        let shows = hideWatched ? allShows.filter { !$0.isFullyWatched } : allShows
         let all = movies + shows
 
         guard !all.isEmpty else {

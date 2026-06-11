@@ -105,6 +105,14 @@ public final class PlaybackPreferencesStore {
         didSet { defaults.set(nextEpisodeCountdown, forKey: Keys.countdown) }
     }
 
+    /// Hide fully-watched titles from the discovery surfaces — Home's
+    /// Recently Added / Released rails and Discover — so they show what's
+    /// still ahead, not what's done. Library is the complete catalog and is
+    /// never filtered. Default `true`.
+    public var hideWatchedInDiscovery: Bool {
+        didSet { defaults.set(hideWatchedInDiscovery, forKey: Keys.hideWatched) }
+    }
+
     /// Allowed countdown lengths, for the Settings picker.
     public static let countdownOptions = [5, 10, 15]
 
@@ -116,6 +124,7 @@ public final class PlaybackPreferencesStore {
         static let subtitle = "playback.defaultSubtitleLanguage"
         static let skipIntro = "playback.skipIntro"
         static let skipCredits = "playback.skipCredits"
+        static let hideWatched = "display.hideWatchedInDiscovery"
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
     }
@@ -139,6 +148,8 @@ public final class PlaybackPreferencesStore {
         self.autoPlayNext = (defaults.object(forKey: Keys.autoPlayNext) as? Bool) ?? true
         let savedCountdown = defaults.integer(forKey: Keys.countdown)
         self.nextEpisodeCountdown = Self.countdownOptions.contains(savedCountdown) ? savedCountdown : 10
+        // `object(forKey:)` so a missing key → default true (hide watched).
+        self.hideWatchedInDiscovery = (defaults.object(forKey: Keys.hideWatched) as? Bool) ?? true
     }
 }
 
