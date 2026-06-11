@@ -185,6 +185,99 @@ public actor JellyfinMediaSource: MediaSource {
         return response.items.compactMap { mapItem($0) }
     }
 
+    // MARK: - Library facets (#273)
+
+    public nonisolated var supportsCollections: Bool { true }
+    public nonisolated var supportsPeople: Bool { true }
+
+    /// Collections are Jellyfin **BoxSets**. Mapped directly to
+    /// `MediaCollection` — `mapItem` would silently drop them (kind guard).
+    public func collections() async -> [MediaCollection] {
+        let request = makeRequest(
+            path: "/Users/\(userID)/Items",
+            queryItems: [
+                URLQueryItem(name: "IncludeItemTypes", value: "BoxSet"),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "Fields", value: "ChildCount"),
+                URLQueryItem(name: "SortBy", value: "SortName"),
+                URLQueryItem(name: "SortOrder", value: "Ascending"),
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap { dto in
+            guard let name = dto.name else { return nil }
+            return MediaCollection(
+                id: .init(source: id, rawValue: dto.id),
+                title: name,
+                childCount: dto.childCount,
+                artwork: ArtworkSource(
+                    provider: .jellyfin, base: baseURL, token: accessToken,
+                    posterPath: "/Items/\(dto.id)/Images/Primary", posterTag: dto.imageTags?["Primary"],
+                    backdropPath: "/Items/\(dto.id)/Images/Backdrop", backdropTag: dto.backdropImageTags?.first
+                )
+            )
+        }
+    }
+
+    /// BoxSet members come back from the same children endpoint as seasons.
+    public func items(inCollection collectionID: MediaID) async -> [MediaItem] {
+        guard collectionID.source == self.id else { return [] }
+        return (try? await children(of: collectionID)) ?? []
+    }
+
+    /// People from `/Persons`, filtered server-side by type.
+    public func people(_ kind: PersonKind) async -> [MediaPerson] {
+        let request = makeRequest(
+            path: "/Persons",
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "personTypes", value: kind == .actor ? "Actor" : "Director"),
+                URLQueryItem(name: "Limit", value: "1000"),
+                URLQueryItem(name: "SortBy", value: "SortName"),
+                URLQueryItem(name: "SortOrder", value: "Ascending"),
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap { dto in
+            guard let name = dto.name else { return nil }
+            return MediaPerson(
+                id: .init(source: id, rawValue: dto.id),
+                kind: kind,
+                name: name,
+                artwork: dto.imageTags?["Primary"].map { tag in
+                    ArtworkSource(provider: .jellyfin, base: baseURL, token: accessToken,
+                                  posterPath: "/Items/\(dto.id)/Images/Primary", posterTag: tag,
+                                  backdropPath: nil)
+                }
+            )
+        }
+    }
+
+    /// Every movie / series featuring the person (`PersonIds` filter).
+    public func items(withPerson person: MediaPerson) async -> [MediaItem] {
+        guard person.id.source == self.id else { return [] }
+        let request = makeRequest(
+            path: "/Users/\(userID)/Items",
+            queryItems: [
+                URLQueryItem(name: "PersonIds", value: person.id.rawValue),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating,People"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+                URLQueryItem(name: "SortBy", value: "SortName"),
+                URLQueryItem(name: "SortOrder", value: "Ascending"),
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap { mapItem($0) }
+    }
+
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
         switch request.mode {
         case .directPlay:
@@ -348,7 +441,10 @@ public actor JellyfinMediaSource: MediaSource {
         let artwork = ArtworkSource(
             provider: .jellyfin, base: baseURL, token: accessToken,
             posterPath: "/Items/\(dto.id)/Images/Primary", posterTag: dto.imageTags?["Primary"],
-            backdropPath: "/Items/\(dto.id)/Images/Backdrop", backdropTag: dto.backdropImageTags?.first
+            backdropPath: "/Items/\(dto.id)/Images/Backdrop", backdropTag: dto.backdropImageTags?.first,
+            // clearLogo — present only when ImageTags carries a Logo hash; the
+            // logoURL builder guards on the tag, so no Logo → no URL.
+            logoPath: "/Items/\(dto.id)/Images/Logo", logoTag: dto.imageTags?["Logo"]
         )
         let cast = mapCast(dto.people)
         return MediaItem(

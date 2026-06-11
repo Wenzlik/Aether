@@ -108,6 +108,41 @@ public enum PlexAPI {
         }
     }
 
+    /// Response wrapper for the secondary-directory listings
+    /// (`/library/sections/{key}/actor`, `/director`) — `Directory` entries
+    /// here have **no `type` field**, so `LibrarySectionsResponse` (non-optional
+    /// `type`) can't decode them (#273).
+    public struct DirectoryListResponse: Decodable, Sendable {
+        public let mediaContainer: Container
+
+        public struct Container: Decodable, Sendable {
+            public let directories: [DirectoryEntry]?
+
+            enum CodingKeys: String, CodingKey {
+                case directories = "Directory"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaContainer = "MediaContainer"
+        }
+    }
+
+    /// One secondary-directory entry — a person (actor / director) tag: `key`
+    /// is the numeric tag id used to filter `/all?actor={key}`, `thumb` an
+    /// optional headshot path.
+    public struct DirectoryEntry: Decodable, Sendable, Equatable {
+        public let key: String
+        public let title: String
+        public let thumb: String?
+
+        public init(key: String, title: String, thumb: String? = nil) {
+            self.key = key
+            self.title = title
+            self.thumb = thumb
+        }
+    }
+
     // MARK: - Decision endpoint
 
     /// Response wrapper for `GET /video/:/transcode/universal/decision`.
@@ -292,6 +327,9 @@ public enum PlexAPI {
         /// Cast entries (`{"tag": actor, "role": character, "thumb": photo}`),
         /// returned on the detail endpoint. JSON key capital `Role`.
         public let roles: [Role]?
+        /// Alternative artwork entries (`{"type": "clearLogo", "url": path}`) —
+        /// the source of title logo art. JSON key capital `Image`.
+        public let images: [ImageEntry]?
 
         public struct Tag: Decodable, Sendable, Equatable {
             public let tag: String?
@@ -308,6 +346,19 @@ public enum PlexAPI {
                 self.tag = tag
                 self.role = role
                 self.thumb = thumb
+            }
+        }
+
+        /// One alternative-artwork entry: `type` distinguishes coverPoster /
+        /// background / **clearLogo**; `url` is the raw image path on the server.
+        public struct ImageEntry: Decodable, Sendable, Equatable {
+            public let alt: String?
+            public let type: String?
+            public let url: String?
+            public init(alt: String? = nil, type: String? = nil, url: String? = nil) {
+                self.alt = alt
+                self.type = type
+                self.url = url
             }
         }
 
@@ -411,7 +462,8 @@ public enum PlexAPI {
             rating: Double? = nil,
             contentRating: String? = nil,
             genreTags: [Tag]? = nil,
-            roles: [Role]? = nil
+            roles: [Role]? = nil,
+            images: [ImageEntry]? = nil
         ) {
             self.ratingKey = ratingKey
             self.type = type
@@ -439,6 +491,7 @@ public enum PlexAPI {
             self.contentRating = contentRating
             self.genreTags = genreTags
             self.roles = roles
+            self.images = images
         }
 
         public var kind: MediaItem.Kind {
@@ -568,6 +621,7 @@ public enum PlexAPI {
             case markers = "Marker"
             case genreTags = "Genre"
             case roles = "Role"
+            case images = "Image"
         }
 
         public struct Media: Decodable, Sendable, Equatable {

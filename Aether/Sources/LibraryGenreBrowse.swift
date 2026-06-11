@@ -9,6 +9,11 @@ enum LibraryBrowseRoute: Hashable {
     case genre(String)
     case years
     case year(Int)
+    case collections
+    case collection(CollectionEntry)
+    case actors
+    case directors
+    case person(PersonEntry)
 }
 
 /// Every genre across the whole library (movies + shows), as a list of big
@@ -205,17 +210,25 @@ struct YearListView: View {
     }
 }
 
-/// A big focusable browse row — title + chevron — matching the Library category
-/// rows. Used for genres (and future facets).
+/// A big focusable browse row — title (+ optional trailing detail) + chevron —
+/// matching the Library category rows. Used for genres, years, collections and
+/// people facets.
 struct LibraryBrowseRow: View {
     let title: String
+    var detail: String? = nil
 
     var body: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
             Text(title)
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .lineLimit(1)
             Spacer(minLength: AetherDesign.Spacing.m)
+            if let detail {
+                Text(detail)
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
             Image(systemName: "chevron.right")
                 .font(.headline)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
