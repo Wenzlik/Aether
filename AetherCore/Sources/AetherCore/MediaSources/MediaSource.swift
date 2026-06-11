@@ -420,6 +420,11 @@ public struct PlaybackRequest: Sendable, Equatable {
     /// `videoResolution` and the `directPlay` flag on the decision call.
     public let quality: PlaybackQuality
     public let startTime: Duration?
+    /// `true` when the user's audio / subtitle pick differs from the source's
+    /// own default — the signal for sources that must abandon direct play and
+    /// transcode to honor a selection (#68: Jellyfin's `static=true` stream
+    /// ignores `AudioStreamIndex` entirely).
+    public let hasExplicitTrackSelection: Bool
 
     public init(
         itemID: MediaID,
@@ -429,7 +434,8 @@ public struct PlaybackRequest: Sendable, Equatable {
         audioStreamID: String? = nil,
         subtitleStreamID: String? = nil,
         quality: PlaybackQuality = .original,
-        startTime: Duration? = nil
+        startTime: Duration? = nil,
+        hasExplicitTrackSelection: Bool = false
     ) {
         self.itemID = itemID
         self.mode = mode
@@ -439,6 +445,7 @@ public struct PlaybackRequest: Sendable, Equatable {
         self.subtitleStreamID = subtitleStreamID
         self.quality = quality
         self.startTime = startTime
+        self.hasExplicitTrackSelection = hasExplicitTrackSelection
     }
 
     /// Build a request from an item and a start position, reading the item's
@@ -467,7 +474,8 @@ public struct PlaybackRequest: Sendable, Equatable {
             audioStreamID: item.selectedAudioTrackID,
             subtitleStreamID: subtitleID,
             quality: item.selectedQuality,
-            startTime: startTime
+            startTime: startTime,
+            hasExplicitTrackSelection: item.explicitTrackSelection ?? false
         )
     }
 }

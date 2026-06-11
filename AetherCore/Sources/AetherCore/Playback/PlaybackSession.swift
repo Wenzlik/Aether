@@ -242,6 +242,57 @@ public actor PlaybackSession {
             position: .seconds(resumeSeconds)
         )
         startResumeLoop()
+
+        // Direct play ships the file as-is — the server can't pick a track, so
+        // the user's audio / subtitle selection must be applied CLIENT-side via
+        // AVMediaSelection (#68: offline `.original` downloads always played
+        // the container default). Transcode/direct-stream paths are handled
+        // server-side and are left alone. A nil decision with no server
+        // transcode (mock / legacy paths) counts as direct play.
+        if resolved.decision == .directPlay
+            || (resolved.decision == nil && !resolved.isServerTranscode) {
+            applyClientSideTrackSelection(item: item, player: player)
+        }
+    }
+
+    /// Selects the item's chosen audio / subtitle tracks on the player's
+    /// media-selection groups, matched by language (then title) via the pure
+    /// `MediaSelectionMatcher`. Fire-and-forget: a failed asset load or no
+    /// confident match leaves the player's default untouched.
+    private nonisolated func applyClientSideTrackSelection(item: MediaItem, player: AVPlayer) {
+        let audio = item.selectedAudioTrack
+        let subtitle = item.selectedSubtitleTrack
+        // No selected track despite available tracks = explicit "Off".
+        let subtitlesOff = item.selectedSubtitleTrackID == nil && !item.subtitleTracks.isEmpty
+        guard audio != nil || subtitle != nil || subtitlesOff else { return }
+
+        Task { @MainActor in
+            guard let playerItem = player.currentItem else { return }
+            let asset = playerItem.asset
+
+            if let audio,
+               let group = try? await asset.loadMediaSelectionGroup(for: .audible) {
+                let options = group.options.map { ($0.extendedLanguageTag, $0.displayName) }
+                if let index = MediaSelectionMatcher.bestIndex(
+                    language: audio.languageCode, title: audio.title, among: options
+                ) {
+                    playerItem.select(group.options[index], in: group)
+                }
+            }
+
+            if let group = try? await asset.loadMediaSelectionGroup(for: .legible) {
+                if subtitlesOff {
+                    playerItem.select(nil, in: group)
+                } else if let subtitle {
+                    let options = group.options.map { ($0.extendedLanguageTag, $0.displayName) }
+                    if let index = MediaSelectionMatcher.bestIndex(
+                        language: subtitle.languageCode, title: subtitle.title, among: options
+                    ) {
+                        playerItem.select(group.options[index], in: group)
+                    }
+                }
+            }
+        }
     }
 
     /// Where the player should seek after the item is ready: the resolver's

@@ -330,11 +330,15 @@ struct PlayerView: View {
     private func playNext() async {
         guard let next = nextItem else { return }
         cancelCountdown()
-        let finishedID = viewModel.state.item?.id ?? item.id
-        if let source { await source.markWatched(finishedID) }
+        let finished = viewModel.state.item ?? item
+        if let source { await source.markWatched(finished.id) }
         autoSkipped = []
         nextItem = nil
-        await viewModel.open(next, source: source, startAt: 0)
+        // Carry the session's audio/subtitle/quality choices onto the next
+        // episode (language-matched), with the app defaults as the base —
+        // episode 2 used to revert to the container's default track (#68).
+        let configured = playbackPreferences?.appliedToNextEpisode(next, continuing: finished) ?? next
+        await viewModel.open(configured, source: source, startAt: 0)
         await loadNextItem()
     }
 
