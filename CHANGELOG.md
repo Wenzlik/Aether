@@ -4,6 +4,30 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.7] — 2026-06-11
+
+A richer Season Detail on tvOS (#267) — the page had a dead bottom half, no
+actors, and episodes that carried only a number and a date.
+
+### Added
+
+- **Episode preview while browsing** (tvOS) — focusing an episode still reads it
+  out below the rail: ordinal title, runtime • air date • Resume/Watched, and a
+  three-line synopsis. *Focus = preview, Select = open* — and it carries the
+  weight when a source has no per-episode stills (identical thumbnails).
+- **Cast & Crew on season pages** — the season's own cast when the source
+  provides one, else the **parent show's** cast (new fallback fetch). All
+  platforms.
+- **Next Up on the Season Detail** — the same On Deck card as the show page,
+  computed from the season's episodes; one click to continue, and the episode
+  rail's Up focus target.
+
+### Changed
+
+- **Cleaner season header** — the metadata line no longer repeats "Season N"
+  under the title (kept only for named seasons like "Asylum") and gains watch
+  progress: `2017 • 11 Episodes • 7/11 watched`.
+
 ## [0.6.6] — 2026-06-11
 
 A tvOS-led pass toward the Infuse-style Detail + a richer Library, plus an iPhone
