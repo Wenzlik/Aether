@@ -43,7 +43,7 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown
+        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming
         var id: String { rawValue }
     }
 
@@ -774,6 +774,29 @@ struct SettingsView: View {
             }
             .tint(AetherDesign.Palette.accent)
             .padding(AetherDesign.Spacing.m)
+
+            AetherDisclosureRow(
+                label: "Watched Dimming",
+                value: viewModel.playbackPreferences.watchedDimming.displayName
+            ) {
+                openPicker = .watchedDimming
+            }
+            Toggle(isOn: Binding(
+                get: { viewModel.playbackPreferences.watchedShowLabel },
+                set: { viewModel.playbackPreferences.watchedShowLabel = $0 }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show “Watched” Label")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Text("A bold WATCHED tag over finished posters, on top of the dimming.")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(AetherDesign.Palette.accent)
+            .padding(AetherDesign.Spacing.m)
         }
     }
 
@@ -810,6 +833,21 @@ struct SettingsView: View {
         case .skipCredits:    skipModePickerSheet(title: "Skip Credits", selection: \.skipCredits)
         case .autoPlayNext:   autoPlayNextPickerSheet
         case .countdown:      countdownPickerSheet
+        case .watchedDimming: watchedDimmingPickerSheet
+        }
+    }
+
+    private var watchedDimmingPickerSheet: some View {
+        PreferencePickerSheet(title: "Watched Dimming") {
+            ForEach(WatchedDimming.allCases, id: \.self) { level in
+                AetherSelectionRow(
+                    title: level.displayName,
+                    isSelected: viewModel.playbackPreferences.watchedDimming == level
+                ) {
+                    viewModel.playbackPreferences.watchedDimming = level
+                    openPicker = nil
+                }
+            }
         }
     }
 

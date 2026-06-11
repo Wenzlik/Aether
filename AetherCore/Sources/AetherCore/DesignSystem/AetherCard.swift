@@ -21,6 +21,8 @@ public struct AetherCard: View {
     /// pass `2` so longer "S2 · Asylum" labels stay legible instead of clipping
     /// to "Seaso…" (#263); most cards keep the single-line default.
     public let titleLineLimit: Int
+    /// Watched dimming intensity + label toggle, from the user's preference (#280).
+    @Environment(\.watchedDisplay) private var watchedDisplay
 
     public init(
         title: String,
@@ -72,35 +74,37 @@ public struct AetherCard: View {
     /// artwork renders at full saturation.
     private var artwork: some View {
         CachedAsyncImage(url: posterURL, aspectRatio: aspectRatio)
-            .saturation(isWatched ? 0.45 : 1)
+            .saturation(isWatched ? watchedDisplay.dimming.saturation : 1)
             .overlay {
-                if isWatched { Color.black.opacity(0.28) }
+                if isWatched { Color.black.opacity(watchedDisplay.dimming.blackOpacity) }
             }
             .overlay {
-                if isWatched { watchedTag }
+                if isWatched, watchedDisplay.showLabel { watchedTag }
             }
     }
 
-    /// Centered "WATCHED" capsule over finished artwork — readable from couch
-    /// distance even when the gold corner marker is off-screen or scrolled by.
+    /// Centered "WATCHED" capsule over finished artwork — bold + sized to read
+    /// from couch distance even when the gold corner marker is scrolled by (#280).
     private var watchedTag: some View {
         Text("WATCHED")
             .font(.system(size: watchedTagFontSize, weight: .heavy))
-            .tracking(1.4)
-            .foregroundStyle(Color.white.opacity(0.95))
-            .padding(.horizontal, AetherDesign.Spacing.s)
-            .padding(.vertical, AetherDesign.Spacing.xxs)
-            .background(Color.black.opacity(0.55), in: Capsule())
+            .tracking(2)
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .padding(.vertical, AetherDesign.Spacing.xs)
+            .background(Color.black.opacity(0.6), in: Capsule())
             .overlay(
-                Capsule().strokeBorder(AetherDesign.Palette.accentGold.opacity(0.8), lineWidth: 1)
+                Capsule().strokeBorder(AetherDesign.Palette.accentGold, lineWidth: 1.5)
             )
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
+            .padding(.horizontal, AetherDesign.Spacing.xs)
     }
 
     private var watchedTagFontSize: CGFloat {
         #if os(tvOS) || os(visionOS)
-        return 16
+        return 24
         #else
-        return 11
+        return 15
         #endif
     }
 
