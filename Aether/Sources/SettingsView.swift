@@ -1202,12 +1202,22 @@ private struct WhatsNewSheet: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.s)
                 }
+                #if os(tvOS)
+                // On tvOS, Done sits at the END of the scroll so the remote
+                // reaches it by moving Down past the notes — a sibling below the
+                // ScrollView is unreachable once focus is inside it (#266).
+                AetherButton("Done", role: .secondary, action: onClose)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                #endif
               }
             }
 
+            #if !os(tvOS)
             AetherButton("Done", role: .secondary, action: onClose)
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
+            #endif
         }
         .aetherScreenBackground()
         .presentationDetents([.medium, .large])
