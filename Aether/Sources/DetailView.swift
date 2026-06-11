@@ -1301,36 +1301,6 @@ struct DetailView: View {
         }
     }
 
-    /// Horizontal capsule chips, one per season — selecting one swaps the inline
-    /// episode list without navigating. Scrolls when a show has many seasons.
-    private var seasonSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                ForEach(children) { season in
-                    let isSelected = season.id == selectedSeason?.id
-                    Button {
-                        selectSeason(season)
-                    } label: {
-                        Text(DetailFormatting.seasonLabel(season))
-                            .font(AetherDesign.Typography.metadata)
-                            .padding(.horizontal, AetherDesign.Spacing.m)
-                            .padding(.vertical, AetherDesign.Spacing.xs)
-                            .background(
-                                isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.surfaceElevated,
-                                in: Capsule()
-                            )
-                            .foregroundStyle(
-                                isSelected ? Color.white : AetherDesign.Palette.textSecondary
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
-        }
-        .aetherDetailFocusSection()
-    }
-
     @ViewBuilder
     private var seasonEpisodesSection: some View {
         if isLoadingEpisodes {
@@ -1472,15 +1442,6 @@ struct DetailView: View {
               let showID = activeItem.parentID ?? item.parentID,
               let show = try? await source.item(for: showID) else { return }
         fallbackCast = show.cast
-    }
-
-    private func selectSeason(_ season: MediaItem) {
-        guard season.id != selectedSeason?.id else { return }
-        selectedSeason = season
-        seasonEpisodes = []
-        // Note: the Next Up card tracks the whole series, so it deliberately
-        // stays put when the user browses to a different season.
-        Task { await loadSeasonEpisodes(season) }
     }
 
     /// Fetch resume points for a set of episodes into `episodeResume` (#260),
