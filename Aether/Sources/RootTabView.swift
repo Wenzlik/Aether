@@ -82,6 +82,21 @@ struct RootTabView: View {
         )
     }
 
+    #if os(tvOS)
+    /// Re-tap of the already-active tab → pop that section to root (the case
+    /// SwiftUI's selection binding can't catch). Indices match the `Tab` order
+    /// below: home/library/discover/search/settings (#266).
+    private func handleTabReselect(index: Int) {
+        switch index {
+        case 0: homePath = NavigationPath()
+        case 1: libraryPath = NavigationPath()
+        case 2: discoverPath = NavigationPath()
+        case 3: searchPath = NavigationPath()
+        default: break   // Settings has no navigation stack of its own
+        }
+    }
+    #endif
+
     var body: some View {
         TabView(selection: tabSelection) {
             Tab("Home", systemImage: "house.fill", value: AppTab.home) {
@@ -165,6 +180,12 @@ struct RootTabView: View {
                 )
             }
         }
+        #if os(tvOS)
+        // SwiftUI can't see a re-tap of the already-active tab; hook the tab-bar
+        // controller so re-selecting it pops that section to root (#266). Switching
+        // tabs already resets via `tabSelection` above.
+        .tvOSTabReselect { index in handleTabReselect(index: index) }
+        #endif
         .sheet(isPresented: $session.isSignInPresented) {
             switch session.signInTarget {
             case .plex:
