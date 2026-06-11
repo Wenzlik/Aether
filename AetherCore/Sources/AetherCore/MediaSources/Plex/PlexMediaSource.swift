@@ -166,7 +166,13 @@ public actor PlexMediaSource: MediaSource {
     public func item(for id: MediaID) async throws -> MediaItem? {
         guard id.source == self.id else { return nil }
         let base = try await resolveBaseURL()
-        let request = request(base: base, path: "/library/metadata/\(id.rawValue)")
+        // includeImages exposes the Image[] array (clearLogo etc.) on PMS
+        // versions that gate it behind the flag; harmless where it's default.
+        let request = request(
+            base: base,
+            path: "/library/metadata/\(id.rawValue)",
+            queryItems: [URLQueryItem(name: "includeImages", value: "1")]
+        )
         let response = try await api.decode(
             PlexAPI.LibraryItemsResponse.self,
             from: request,
@@ -209,6 +215,110 @@ public actor PlexMediaSource: MediaSource {
             }
         }
         return items
+    }
+
+    // MARK: - Library facets (#273)
+
+    public nonisolated var supportsCollections: Bool { true }
+    public nonisolated var supportsPeople: Bool { true }
+
+    /// Every collection across the movie + show sections. Collections come back
+    /// as `Metadata` entries (`type: "collection"`, `childCount`) — mapped
+    /// directly to `MediaCollection`, never through `mapMetadataToMediaItem`
+    /// (whose kind fallback would fake them as movies).
+    public func collections() async -> [MediaCollection] {
+        guard let base = try? await resolveBaseURL(),
+              let sections = try? await libraries() else { return [] }
+        var seen: Set<String> = []
+        var result: [MediaCollection] = []
+        for section in sections {
+            let request = request(base: base, path: "/library/sections/\(section.id.rawValue)/collections")
+            guard let response = try? await api.decode(
+                PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+            ) else { continue }
+            for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                result.append(MediaCollection(
+                    id: .init(source: id, rawValue: dto.ratingKey),
+                    title: dto.title,
+                    childCount: dto.childCount,
+                    artwork: ArtworkSource(
+                        provider: .plex, base: base, token: accessToken,
+                        posterPath: dto.thumb, backdropPath: dto.art
+                    )
+                ))
+            }
+        }
+        return result.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    public func items(inCollection collectionID: MediaID) async -> [MediaItem] {
+        guard collectionID.source == self.id,
+              let base = try? await resolveBaseURL() else { return [] }
+        let request = request(
+            base: base,
+            path: "/library/collections/\(collectionID.rawValue)/children",
+            queryItems: [URLQueryItem(name: "includeGuids", value: "1")]
+        )
+        guard let response = try? await api.decode(
+            PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return (response.mediaContainer.metadata ?? []).map { mapMetadataToMediaItem($0, base: base) }
+    }
+
+    /// People from the per-section secondary directories (`/actor`, `/director`),
+    /// deduped by tag id across sections.
+    public func people(_ kind: PersonKind) async -> [MediaPerson] {
+        guard let base = try? await resolveBaseURL(),
+              let sections = try? await libraries() else { return [] }
+        let directory = kind == .actor ? "actor" : "director"
+        var seen: Set<String> = []
+        var result: [MediaPerson] = []
+        for section in sections {
+            let request = request(base: base, path: "/library/sections/\(section.id.rawValue)/\(directory)")
+            guard let response = try? await api.decode(
+                PlexAPI.DirectoryListResponse.self, from: request, decoder: decoder
+            ) else { continue }
+            for entry in response.mediaContainer.directories ?? [] where seen.insert(entry.key).inserted {
+                result.append(MediaPerson(
+                    id: .init(source: id, rawValue: entry.key),
+                    kind: kind,
+                    name: entry.title,
+                    artwork: entry.thumb.map {
+                        ArtworkSource(provider: .plex, base: base, token: accessToken,
+                                      posterPath: $0, backdropPath: nil)
+                    }
+                ))
+            }
+        }
+        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Every title featuring the person — `/all?actor={tagID}` (or `director=`)
+    /// per section, aggregated.
+    public func items(withPerson person: MediaPerson) async -> [MediaItem] {
+        guard person.id.source == self.id,
+              let base = try? await resolveBaseURL(),
+              let sections = try? await libraries() else { return [] }
+        let filterName = person.kind == .actor ? "actor" : "director"
+        var seen: Set<String> = []
+        var result: [MediaItem] = []
+        for section in sections {
+            let request = request(
+                base: base,
+                path: "/library/sections/\(section.id.rawValue)/all",
+                queryItems: [
+                    URLQueryItem(name: filterName, value: person.id.rawValue),
+                    URLQueryItem(name: "includeGuids", value: "1"),
+                ]
+            )
+            guard let response = try? await api.decode(
+                PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+            ) else { continue }
+            for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                result.append(mapMetadataToMediaItem(dto, base: base))
+            }
+        }
+        return result
     }
 
     /// Build a fresh playback URL for the request, mirroring Plex Web:
@@ -774,7 +884,12 @@ public actor PlexMediaSource: MediaSource {
         // default tiers, and the Detail hero can ask it for a larger backdrop.
         let artwork = ArtworkSource(
             provider: .plex, base: base, token: accessToken,
-            posterPath: dto.thumb, backdropPath: dto.art
+            posterPath: dto.thumb, backdropPath: dto.art,
+            // clearLogo from the Image[] entries (detail endpoint). Match is
+            // case-insensitive to hedge PMS-version casing differences.
+            logoPath: dto.images?.first {
+                $0.type?.caseInsensitiveCompare("clearLogo") == .orderedSame
+            }?.url
         )
         // Cast & Crew (Plex `Role`). Headshots go through the same photo
         // transcoder as posters via an ArtworkSource pinned to the role thumb.

@@ -113,6 +113,20 @@ struct LibraryBrowseView: View {
                     FacetGridView(title: String(year), connectedSources: connectedSources, downloadStore: downloadStore) {
                         $0.year == year
                     }
+                case .collections:
+                    CollectionListView(connectedSources: connectedSources)
+                case .collection(let entry):
+                    SourceFacetGridView(title: entry.title, downloadStore: downloadStore) { [connectedSources] in
+                        await collectionItems(for: entry, sources: connectedSources)
+                    }
+                case .actors:
+                    PersonListView(kind: .actor, connectedSources: connectedSources)
+                case .directors:
+                    PersonListView(kind: .director, connectedSources: connectedSources)
+                case .person(let entry):
+                    SourceFacetGridView(title: entry.name, downloadStore: downloadStore) { [connectedSources] in
+                        await personItems(for: entry, sources: connectedSources)
+                    }
                 }
             }
         }
@@ -236,12 +250,51 @@ struct LibraryBrowseView: View {
                 if !rails.shows.isEmpty {
                     unifiedRail(title: "TV Shows", count: rails.showCount, kind: .show, items: rails.shows)
                 }
+                browseSection
                 if hasAnyDownloads {
                     downloadedRail
                 }
             }
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+
+    /// "Browse" facet links (iOS / iPadOS / visionOS) — Genres / Years filter the
+    /// local catalog; Collections / Actors / Directors query the servers and only
+    /// appear when a connected source supports them (#273). tvOS surfaces the
+    /// same facets in its category list instead.
+    @ViewBuilder
+    private var browseSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "Browse")
+            VStack(spacing: AetherDesign.Spacing.s) {
+                NavigationLink(value: LibraryBrowseRoute.genres) {
+                    LibraryBrowseRow(title: "Genres")
+                }
+                .buttonStyle(.plain)
+                NavigationLink(value: LibraryBrowseRoute.years) {
+                    LibraryBrowseRow(title: "Years")
+                }
+                .buttonStyle(.plain)
+                if connectedSources.contains(where: { $0.supportsCollections }) {
+                    NavigationLink(value: LibraryBrowseRoute.collections) {
+                        LibraryBrowseRow(title: "Collections")
+                    }
+                    .buttonStyle(.plain)
+                }
+                if connectedSources.contains(where: { $0.supportsPeople }) {
+                    NavigationLink(value: LibraryBrowseRoute.actors) {
+                        LibraryBrowseRow(title: "Actors")
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink(value: LibraryBrowseRoute.directors) {
+                        LibraryBrowseRow(title: "Directors")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
         }
     }
 
@@ -271,8 +324,10 @@ struct LibraryBrowseView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                // Browse facets across the whole library (#266). More
-                // (Collections, …) will join here as data becomes available.
+                // Browse facets across the whole library (#266, #273). Genres /
+                // Years filter the local catalog; Collections / Actors /
+                // Directors query the servers, so they only appear when a
+                // connected source supports them.
                 NavigationLink(value: LibraryBrowseRoute.genres) {
                     LibraryBrowseRow(title: "Genres")
                 }
@@ -281,6 +336,22 @@ struct LibraryBrowseView: View {
                     LibraryBrowseRow(title: "Years")
                 }
                 .buttonStyle(.plain)
+                if connectedSources.contains(where: { $0.supportsCollections }) {
+                    NavigationLink(value: LibraryBrowseRoute.collections) {
+                        LibraryBrowseRow(title: "Collections")
+                    }
+                    .buttonStyle(.plain)
+                }
+                if connectedSources.contains(where: { $0.supportsPeople }) {
+                    NavigationLink(value: LibraryBrowseRoute.actors) {
+                        LibraryBrowseRow(title: "Actors")
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink(value: LibraryBrowseRoute.directors) {
+                        LibraryBrowseRow(title: "Directors")
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, AetherDesign.Spacing.xl)
             .padding(.top, AetherDesign.Spacing.l)

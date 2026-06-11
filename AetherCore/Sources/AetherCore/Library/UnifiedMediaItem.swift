@@ -139,6 +139,11 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         artwork?.backdropURL(tier) ?? backdropURL
     }
 
+    /// The title's clearLogo URL, when the pinned artwork source carries one.
+    public func logoURL(_ tier: ArtworkTier = .logo) -> URL? {
+        artwork?.logoURL(tier)
+    }
+
     /// The source playback should use: highest-priority playable source.
     public var preferredSource: UnifiedSource? {
         sources.filter(\.playable).min { $0.kind < $1.kind }

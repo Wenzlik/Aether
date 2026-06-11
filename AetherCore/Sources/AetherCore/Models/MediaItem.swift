@@ -241,6 +241,12 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         artwork?.backdropURL(tier) ?? backdropURL
     }
 
+    /// The title's clearLogo URL (transparent wordmark for the Detail hero),
+    /// when the source carries one. No baked fallback — most titles have none.
+    public func logoURL(_ tier: ArtworkTier = .logo) -> URL? {
+        artwork?.logoURL(tier)
+    }
+
     /// Copy preserving every field except those explicitly overridden. Keeps
     /// the selection transforms below from drifting as new fields are added.
     private func copy(

@@ -117,6 +117,30 @@ public protocol MediaSource: Sendable {
     /// clients. Best-effort + non-throwing. Default: no-op for sources without
     /// a favorite concept.
     func setFavorite(_ id: MediaID, to favorite: Bool) async
+
+    /// Whether the source exposes server-side **collections** (Plex collections
+    /// / Jellyfin BoxSets) for Library browsing (#273). Default: `false`.
+    var supportsCollections: Bool { get }
+
+    /// Every collection across the source's libraries. Best-effort +
+    /// non-throwing — `[]` just hides the facet. Default: none.
+    func collections() async -> [MediaCollection]
+
+    /// The titles inside one collection. Best-effort. Default: none.
+    func items(inCollection id: MediaID) async -> [MediaItem]
+
+    /// Whether the source can list **people** (actors / directors) for Library
+    /// browsing (#273). Default: `false`.
+    var supportsPeople: Bool { get }
+
+    /// Every person of `kind` across the source's libraries. Best-effort.
+    /// Default: none.
+    func people(_ kind: PersonKind) async -> [MediaPerson]
+
+    /// The titles featuring `person`. Takes the whole person (not just an id)
+    /// because Plex picks its filter parameter from the person's `kind`.
+    /// Best-effort. Default: none.
+    func items(withPerson person: MediaPerson) async -> [MediaItem]
 }
 
 public extension MediaSource {
@@ -160,6 +184,24 @@ public extension MediaSource {
 
     /// Default: no server-side favorite to update. Jellyfin overrides.
     func setFavorite(_ id: MediaID, to favorite: Bool) async {}
+
+    /// Default: no collections. Plex / Jellyfin override.
+    var supportsCollections: Bool { false }
+
+    /// Default: no collections. Plex / Jellyfin override.
+    func collections() async -> [MediaCollection] { [] }
+
+    /// Default: no collections. Plex / Jellyfin override.
+    func items(inCollection id: MediaID) async -> [MediaItem] { [] }
+
+    /// Default: no people directory. Plex / Jellyfin override.
+    var supportsPeople: Bool { false }
+
+    /// Default: no people directory. Plex / Jellyfin override.
+    func people(_ kind: PersonKind) async -> [MediaPerson] { [] }
+
+    /// Default: no people directory. Plex / Jellyfin override.
+    func items(withPerson person: MediaPerson) async -> [MediaItem] { [] }
 
     /// Generic next-episode resolver: hydrate the item, fetch its season's
     /// episodes, return the one after it. Works for any source that fills in

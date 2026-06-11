@@ -20,6 +20,8 @@ public enum ArtworkTier: Sendable, Hashable {
     case backdrop
     /// Full-screen hero backdrop (16:9) on tvOS / visionOS.
     case backdropLarge
+    /// Title clearLogo on the Detail hero (wide, transparent; ~2.6:1 typical).
+    case logo
 
     /// Server-side resize target width, in pixels.
     public var pixelWidth: Int {
@@ -29,6 +31,7 @@ public enum ArtworkTier: Sendable, Hashable {
         case .still:         return 500
         case .backdrop:      return 1200
         case .backdropLarge: return 1920
+        case .logo:          return 800
         }
     }
 
@@ -40,6 +43,7 @@ public enum ArtworkTier: Sendable, Hashable {
         case .still:         return 282
         case .backdrop:      return 675
         case .backdropLarge: return 1080
+        case .logo:          return 310
         }
     }
 
