@@ -46,7 +46,6 @@ public struct AetherCard: View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             artwork
                 .overlay(alignment: .bottom) { progressBar }
-                .overlay(alignment: .topTrailing) { watchedCornerMarker }
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 // Premium focus: lift + soft blue glow, no border (Apple TV+ feel).
                 // Cards earn the larger lift.
@@ -68,76 +67,12 @@ public struct AetherCard: View {
         }
     }
 
-    /// Watched artwork is **dimmed + desaturated** so a finished title reads as
-    /// "done" at a glance across a large library (#246) — still attractive, just
-    /// visibly muted — plus an unmissable centered "WATCHED" tag. Unwatched
-    /// artwork renders at full saturation.
+    /// Watched artwork wears the shared treatment (#280): dimming + a centered
+    /// "WATCHED" wordmark + the gold corner ribbon. Unwatched renders at full
+    /// saturation. See `watchedArtwork(_:display:compact:)`.
     private var artwork: some View {
         CachedAsyncImage(url: posterURL, aspectRatio: aspectRatio)
-            .saturation(isWatched ? watchedDisplay.dimming.saturation : 1)
-            .overlay {
-                if isWatched { Color.black.opacity(watchedDisplay.dimming.blackOpacity) }
-            }
-            .overlay {
-                if isWatched, watchedDisplay.showLabel { watchedTag }
-            }
-    }
-
-    /// Centered "WATCHED" capsule over finished artwork — bold + sized to read
-    /// from couch distance even when the gold corner marker is scrolled by (#280).
-    private var watchedTag: some View {
-        Text("WATCHED")
-            .font(.system(size: watchedTagFontSize, weight: .heavy))
-            .tracking(2)
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, AetherDesign.Spacing.m)
-            .padding(.vertical, AetherDesign.Spacing.xs)
-            .background(Color.black.opacity(0.6), in: Capsule())
-            .overlay(
-                Capsule().strokeBorder(AetherDesign.Palette.accentGold, lineWidth: 1.5)
-            )
-            .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
-            .padding(.horizontal, AetherDesign.Spacing.xs)
-    }
-
-    private var watchedTagFontSize: CGFloat {
-        #if os(tvOS) || os(visionOS)
-        return 24
-        #else
-        return 15
-        #endif
-    }
-
-    /// "Watched" marker — a filled triangle folded into the top-trailing corner
-    /// with a bold checkmark, far more legible from couch distance than a small
-    /// icon (#246). Larger on the 10-foot / spatial UI.
-    @ViewBuilder
-    private var watchedCornerMarker: some View {
-        if isWatched {
-            let s = watchedMarkerSize
-            TopTrailingTriangle()
-                // Gold corner ribbon: a warm, high-contrast "watched" signal
-                // that stands apart from the blue accent / focus glow (#246).
-                .fill(AetherDesign.Palette.accentGold)
-                .frame(width: s, height: s)
-                .overlay(alignment: .topTrailing) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: s * 0.32, weight: .heavy))
-                        // Dark check — white washes out on bright gold.
-                        .foregroundStyle(.black)
-                        .padding(.top, s * 0.12)
-                        .padding(.trailing, s * 0.12)
-                }
-                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-        }
-    }
-
-    private var watchedMarkerSize: CGFloat {
-        #if os(tvOS) || os(visionOS)
-        return 56
-        #else
-        return 40
-        #endif
+            .watchedArtwork(isWatched, display: watchedDisplay)
     }
 
     /// Apple-TV-style progress: a frosted strip across the artwork's lower edge
@@ -222,6 +157,82 @@ private struct TopTrailingTriangle: Shape {
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.closeSubpath()
         return path
+    }
+}
+
+public extension View {
+    /// The shared **watched** artwork treatment (#280): dimming + a centered
+    /// "WATCHED" wordmark + the gold corner ribbon — so poster cards and
+    /// episode-row stills read identically. Apply to the artwork BEFORE
+    /// clipping; the caller clips to its own corner radius. `compact` shrinks
+    /// the wordmark + ribbon for small stills (episode list rows).
+    func watchedArtwork(_ isWatched: Bool, display: WatchedDisplayConfig, compact: Bool = false) -> some View {
+        modifier(WatchedArtworkTreatment(isWatched: isWatched, display: display, compact: compact))
+    }
+}
+
+struct WatchedArtworkTreatment: ViewModifier {
+    let isWatched: Bool
+    let display: WatchedDisplayConfig
+    let compact: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .saturation(isWatched ? display.dimming.saturation : 1)
+            .overlay {
+                if isWatched { Color.black.opacity(display.dimming.blackOpacity) }
+            }
+            .overlay(alignment: .center) {
+                if isWatched, display.showLabel {
+                    // Just the wordmark — bold white + a shadow for legibility,
+                    // no box (#280 follow-up: "fakt jen text").
+                    Text("WATCHED")
+                        .font(.system(size: tagFontSize, weight: .heavy))
+                        .tracking(2)
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.75), radius: 4, y: 1)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, AetherDesign.Spacing.xs)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isWatched { cornerMarker }
+            }
+    }
+
+    private var tagFontSize: CGFloat {
+        if compact { return 13 }
+        #if os(tvOS) || os(visionOS)
+        return 24
+        #else
+        return 15
+        #endif
+    }
+
+    private var markerSize: CGFloat {
+        if compact { return 28 }
+        #if os(tvOS) || os(visionOS)
+        return 56
+        #else
+        return 40
+        #endif
+    }
+
+    @ViewBuilder
+    private var cornerMarker: some View {
+        let s = markerSize
+        TopTrailingTriangle()
+            .fill(AetherDesign.Palette.accentGold)
+            .frame(width: s, height: s)
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: s * 0.32, weight: .heavy))
+                    .foregroundStyle(.black)
+                    .padding(.top, s * 0.12)
+                    .padding(.trailing, s * 0.12)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
     }
 }
 

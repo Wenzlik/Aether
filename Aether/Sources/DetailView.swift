@@ -135,6 +135,9 @@ struct DetailView: View {
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
+    /// Watched dimming + label preference, so episode-row stills match the
+    /// poster cards' watched treatment (#280 follow-up).
+    @Environment(\.watchedDisplay) private var watchedDisplay
     #if os(visionOS)
     /// Cinema Mode state — drives the "Watch in Cinema" entry. Injected at the
     /// app root; always present inside the windowed view tree on visionOS.
@@ -1031,17 +1034,10 @@ struct DetailView: View {
                 maxPixel: ArtworkTier.still.maxPixel
             )
                 .frame(width: 150)
+                // Same watched treatment as the poster cards — dimming + WATCHED
+                // wordmark + gold ribbon (compact for the small still) (#280).
+                .watchedArtwork(episode.isWatched, display: watchedDisplay, compact: true)
                 .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
-                .overlay(alignment: .topTrailing) {
-                    if episode.isWatched {
-                        Image(systemName: "checkmark.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color.black, AetherDesign.Palette.accentGold)
-                            .font(.system(size: 18, weight: .bold))
-                            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
-                            .padding(AetherDesign.Spacing.xs)
-                    }
-                }
                 // In-progress: a resume bar across the bottom of the still (#260).
                 .overlay(alignment: .bottom) { episodeProgressBar(episode) }
 
