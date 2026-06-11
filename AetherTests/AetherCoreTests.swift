@@ -942,6 +942,59 @@ struct ArtworkSourceTests {
                                   posterPath: "", backdropPath: nil)
         #expect(empty.posterURL() == nil)
     }
+
+    @Test("Plex logoURL serves the RAW path + token — never the JPEG transcoder (alpha) (#273)")
+    func plexLogoURL() throws {
+        let art = ArtworkSource(provider: .plex, base: plexBase, token: "AAA",
+                                posterPath: "/library/metadata/6/thumb/1", backdropPath: nil,
+                                logoPath: "/library/metadata/6/clearLogo/99")
+        let url = try #require(art.logoURL())
+        #expect(!url.path.contains("/photo/:/transcode"))
+        #expect(url.path.hasSuffix("/library/metadata/6/clearLogo/99"))
+        let q = (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        #expect(q == [URLQueryItem(name: "X-Plex-Token", value: "AAA")])
+        // No logo path → nil.
+        let none = ArtworkSource(provider: .plex, base: plexBase, token: "AAA",
+                                 posterPath: nil, backdropPath: nil)
+        #expect(none.logoURL() == nil)
+    }
+
+    @Test("Jellyfin logoURL uses aspect-fit maxWidth + Webp; requires the tag (#273)")
+    func jellyfinLogoURL() throws {
+        let art = ArtworkSource(provider: .jellyfin, base: jellyBase, token: "tok",
+                                posterPath: nil, backdropPath: nil,
+                                logoPath: "/Items/9/Images/Logo", logoTag: "lll")
+        let url = try #require(art.logoURL())
+        let q = Dictionary(uniqueKeysWithValues:
+            (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(q["maxWidth"] == "800")
+        #expect(q["fillWidth"] == nil)         // fill would crop the logo's aspect
+        #expect(q["fillHeight"] == nil)
+        #expect(q["format"] == "Webp")
+        #expect(q["tag"] == "lll")
+        #expect(q["api_key"] == "tok")
+        // Logo path without a tag → nil (nothing to address).
+        let noTag = ArtworkSource(provider: .jellyfin, base: jellyBase, token: "tok",
+                                  posterPath: nil, backdropPath: nil,
+                                  logoPath: "/Items/9/Images/Logo")
+        #expect(noTag.logoURL() == nil)
+    }
+
+    @Test("legacy ArtworkSource JSON (no logo keys) still decodes — snapshot back-compat (#273)")
+    func legacyDecodeBackCompat() throws {
+        // Encoded by a build BEFORE logoPath/logoTag existed; a throwing decode
+        // here would silently wipe the persisted catalog snapshot.
+        let old = ArtworkSource(provider: .plex, base: plexBase, token: "AAA",
+                                posterPath: "/p", backdropPath: "/b")
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as! [String: Any]
+        json.removeValue(forKey: "logoPath")
+        json.removeValue(forKey: "logoTag")
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let decoded = try JSONDecoder().decode(ArtworkSource.self, from: data)
+        #expect(decoded.logoPath == nil)
+        #expect(decoded.logoURL() == nil)
+        #expect(decoded.posterPath == "/p")
+    }
 }
 
 @Suite("AetherCore — UnifiedMediaItem artwork pin")

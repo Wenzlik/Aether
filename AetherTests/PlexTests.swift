@@ -716,6 +716,73 @@ struct PlexLibraryDecodingTests {
         #expect(roles[0].thumb == "/library/metadata/1/role/1")
         #expect(roles[1].thumb == nil)
     }
+
+    @Test("Metadata decodes the Image array — the clearLogo source (#273)")
+    func decodesImageArray() throws {
+        let json = #"""
+        {
+          "ratingKey":"6","type":"movie","title":"Dune",
+          "Image":[
+            {"alt":"Dune","type":"coverPoster","url":"/library/metadata/6/thumb/1"},
+            {"alt":"Dune","type":"clearLogo","url":"/library/metadata/6/clearLogo/2"},
+            {"alt":"Dune","type":"background","url":"/library/metadata/6/art/3"}
+          ]
+        }
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        let images = try #require(dto.images)
+        #expect(images.count == 3)
+        let logo = images.first { $0.type?.caseInsensitiveCompare("clearLogo") == .orderedSame }
+        #expect(logo?.url == "/library/metadata/6/clearLogo/2")
+        // Absent Image key stays nil (every existing fixture).
+        let bare = try JSONDecoder().decode(
+            PlexAPI.Metadata.self,
+            from: Data(#"{"ratingKey":"1","type":"movie","title":"X"}"#.utf8)
+        )
+        #expect(bare.images == nil)
+    }
+
+    @Test("DirectoryListResponse decodes /actor entries — no `type` field (#273)")
+    func decodesActorDirectory() throws {
+        // The exact reason this DTO exists: secondary-directory entries lack
+        // `type`, which LibrarySectionsResponse requires.
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Directory": [
+              {"key":"1201","title":"Ryan Gosling","thumb":"/library/metadata/people/1201/thumb"},
+              {"key":"1305","title":"Emma Stone"}
+            ]
+          }
+        }
+        """#
+        let response = try JSONDecoder().decode(PlexAPI.DirectoryListResponse.self, from: Data(json.utf8))
+        let entries = try #require(response.mediaContainer.directories)
+        #expect(entries.count == 2)
+        #expect(entries[0].key == "1201")
+        #expect(entries[0].title == "Ryan Gosling")
+        #expect(entries[0].thumb != nil)
+        #expect(entries[1].thumb == nil)
+    }
+
+    @Test("collections list decodes via LibraryItemsResponse (type collection + childCount) (#273)")
+    func decodesCollections() throws {
+        let json = #"""
+        {
+          "MediaContainer": {
+            "Metadata": [
+              {"ratingKey":"900","type":"collection","title":"Marvel","childCount":12,
+               "thumb":"/library/collections/900/composite/1"}
+            ]
+          }
+        }
+        """#
+        let response = try JSONDecoder().decode(PlexAPI.LibraryItemsResponse.self, from: Data(json.utf8))
+        let collection = try #require(response.mediaContainer.metadata?.first)
+        #expect(collection.type == "collection")
+        #expect(collection.childCount == 12)
+        #expect(collection.title == "Marvel")
+    }
 }
 
 @Suite("Plex — PlexMediaSource library + items + mapping")
