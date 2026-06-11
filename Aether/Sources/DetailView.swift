@@ -90,6 +90,14 @@ struct DetailView: View {
     /// Last-focused season, kept so the preview stays put when focus leaves the
     /// rail (defaults to the first season).
     @State private var previewSeasonID: MediaID?
+    /// tvOS: which episode still has focus — the rail previews it below
+    /// (synopsis, runtime, air date, resume), same Focus = Preview model (#267).
+    @FocusState private var focusedEpisodeID: MediaID?
+    /// Last-focused episode, kept so the preview stays put when focus leaves.
+    @State private var previewEpisodeID: MediaID?
+    /// Season pages rarely carry their own cast — the parent show's cast,
+    /// fetched as a fallback so Cast & Crew isn't missing on a season (#267).
+    @State private var fallbackCast: [CastMember] = []
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -249,6 +257,12 @@ struct DetailView: View {
             await hydrateForPlayback()
             await loadChildrenIfNeeded()
             await setupSeasonsIfNeeded()
+            if item.kind == .season {
+                // Season page: its children ARE its episodes — Next Up within
+                // the season, and the parent show's cast as a fallback (#267).
+                await computeNextUp()
+                await loadFallbackCastIfNeeded()
+            }
             related = await source?.related(to: activeItem.id) ?? []
         }
         // Re-point the screen after the local metadata editor closes (#211): the
@@ -360,15 +374,20 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
-                    // Season detail (browsed into directly): episode list.
+                    // Season detail (browsed into directly): Next Up + episode list.
                     if item.kind.isContainer {
+                        if item.kind == .season {
+                            nextUpCard
+                                .padding(.horizontal, AetherDesign.Spacing.l)
+                        }
                         childrenSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                     }
 
                     // Cast & Crew sits below the primary actions / overview /
                     // sources (#247) — valuable, but not competing with them.
-                    if !item.kind.isContainer {
+                    // Seasons fall back to the parent show's cast (#267).
+                    if item.kind != .show {
                         castSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                     }
@@ -429,6 +448,15 @@ struct DetailView: View {
                             }
                         }
 
+                        // Season page: "continue this season" one click away —
+                        // and, as a full-width focus section, the Up target for
+                        // the episode rail below (#267).
+                        if item.kind == .season {
+                            nextUpCard
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .aetherDetailFocusSection()
+                        }
+
                         if !item.kind.isContainer, current.streamURL != nil {
                             playbackSection
                         }
@@ -459,7 +487,9 @@ struct DetailView: View {
 
                     // …but Cast & Crew sits last (#247) and, on tvOS, breaks out
                     // of the column so the rail uses the full screen width.
-                    if !item.kind.isContainer {
+                    // Seasons show it too — their own cast when the source has
+                    // one, else the parent show's (#267).
+                    if item.kind != .show {
                         castSection
                             #if os(tvOS)
                             .padding(.leading, AetherDesign.Spacing.xl)
@@ -1049,16 +1079,68 @@ struct DetailView: View {
     /// resume/date caption), mirroring the Infuse "Season N" rail instead of a
     /// tall vertical list. Each still keeps its watched marker + in-progress bar.
     private func episodeRail(_ episodes: [MediaItem]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: AetherDesign.Spacing.l) {
-                ForEach(episodes) { episode in
-                    NavigationLink(value: episode) { episodeStillCard(episode) }
-                        .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(episodes) { episode in
+                        NavigationLink(value: episode) { episodeStillCard(episode) }
+                            .buttonStyle(.plain)
+                            .focused($focusedEpisodeID, equals: episode.id)
+                    }
+                }
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
+            .aetherDetailFocusSection()
+
+            // Focus = Preview: browsing the rail reads out the focused episode
+            // below it (synopsis, runtime, air date, resume) — the stills alone
+            // often look identical when a source has no per-episode art (#267).
+            episodePreview(episodes)
+        }
+        .onChange(of: focusedEpisodeID) { _, id in
+            if let id { previewEpisodeID = id }
+        }
+    }
+
+    /// Lightweight preview of the focused episode under the rail. Falls back to
+    /// the first episode so the space never sits empty.
+    @ViewBuilder
+    private func episodePreview(_ episodes: [MediaItem]) -> some View {
+        if let episode = episodes.first(where: { $0.id == previewEpisodeID }) ?? episodes.first {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text(episodeOrdinalTitle(episode))
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let meta = episodePreviewMeta(episode) {
+                    Text(meta)
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                }
+                if let summary = episode.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.xs)
+            .frame(maxWidth: 720, alignment: .leading)
+            .animation(AetherDesign.Motion.hero, value: previewEpisodeID)
         }
-        .aetherDetailFocusSection()
+    }
+
+    /// "50m • Sep 26, 2017 • Resume 12:30" / "… • Watched" — the preview's
+    /// glanceable second line.
+    private func episodePreviewMeta(_ episode: MediaItem) -> String? {
+        var parts: [String] = []
+        if let runtime = episode.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+        if let date = episode.releaseDate { parts.append(DetailFormatting.airDate(date)) }
+        if let resume = episodeResume[episode.id], !episode.isWatched {
+            parts.append("Resume \(DetailFormatting.position(resume.position))")
+        } else if episode.isWatched {
+            parts.append("Watched")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     /// Built on `AetherCard` so the still wears the **same** watched marker as
@@ -1367,6 +1449,17 @@ struct DetailView: View {
         nextUpResume = next.flatMap { resumes[$0.id] }
     }
 
+    /// Seasons rarely carry their own cast — fetch the parent show's once, so
+    /// the season page's Cast & Crew isn't empty (#267). No-op when the season
+    /// has cast, the fallback is already loaded, or there's no parent to ask.
+    private func loadFallbackCastIfNeeded() async {
+        guard item.kind == .season, current.cast.isEmpty, fallbackCast.isEmpty,
+              let source,
+              let showID = activeItem.parentID ?? item.parentID,
+              let show = try? await source.item(for: showID) else { return }
+        fallbackCast = show.cast
+    }
+
     private func selectSeason(_ season: MediaItem) {
         guard season.id != selectedSeason?.id else { return }
         selectedSeason = season
@@ -1524,15 +1617,29 @@ struct DetailView: View {
         return parts
     }
 
-    /// Season Detail metadata line: "Season N • 2022 • 10 Episodes" (#245).
-    /// Reads `current`/`children` so hydrated counts fill in after the detail
-    /// endpoint resolves.
+    /// Season Detail metadata line: "2022 • 10 Episodes • 7/10 watched" (#245,
+    /// #267). "Season N" appears only when the hero title is a *named* season
+    /// (e.g. "Asylum") — when the title already reads "Season N", repeating it
+    /// here said nothing. Reads `current`/`children` so hydrated counts fill in
+    /// after the detail endpoint resolves.
     private var seasonMetadataParts: [String] {
         var parts: [String] = []
-        if let number = current.seasonNumber { parts.append("Season \(number)") }
+        if let number = current.seasonNumber, current.title != "Season \(number)" {
+            parts.append("Season \(number)")
+        }
         if let year = current.year { parts.append(String(year)) }
         let count = current.episodeCount ?? (children.isEmpty ? nil : children.count)
         if let count, count > 0 { parts.append("\(count) Episode\(count == 1 ? "" : "s")") }
+        // Watch progress from the loaded episodes: "Watched" when done, else
+        // "7/10 watched" once anything's been seen.
+        if !children.isEmpty, children.allSatisfy({ $0.kind == .episode }) {
+            let watched = children.filter(\.isWatched).count
+            if watched == children.count {
+                parts.append("Watched")
+            } else if watched > 0 {
+                parts.append("\(watched)/\(children.count) watched")
+            }
+        }
         return parts
     }
 
@@ -1639,18 +1746,24 @@ struct DetailView: View {
 
     // MARK: - Cast & Crew
 
+    /// Cast for the screen — the item's own, else the parent show's (seasons
+    /// rarely carry cast of their own, #267).
+    private var displayCast: [CastMember] {
+        current.cast.isEmpty ? fallbackCast : current.cast
+    }
+
     /// Horizontal rail of cast + key crew with circular headshots — the biggest
     /// information-density gap vs. Infuse. Hidden when the source carries none.
     @ViewBuilder
     private var castSection: some View {
-        if !current.cast.isEmpty {
+        if !displayCast.isEmpty {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                 Text("Cast & Crew")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
-                        ForEach(current.cast) { member in castCard(member) }
+                        ForEach(displayCast) { member in castCard(member) }
                     }
                     .padding(.vertical, AetherDesign.Spacing.xxs)
                     .padding(.horizontal, 2)
