@@ -758,6 +758,22 @@ struct SettingsView: View {
             ) {
                 openPicker = .countdown
             }
+            Toggle(isOn: Binding(
+                get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
+                set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hide Watched in Home & Discover")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Text("Finished titles stay in your Library but leave the discovery rails.")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(AetherDesign.Palette.accent)
+            .padding(AetherDesign.Spacing.m)
         }
     }
 
@@ -936,7 +952,7 @@ struct SettingsView: View {
 
     #if !os(tvOS)
     /// Support — Report a Bug / Feature Request / Contact the Creator. Each opens
-    /// the system Mail composer to `aether@zmrhal.cz` (with a `mailto:` fallback
+    /// the system Mail composer to `support@aetherplayer.com` (with a `mailto:` fallback
     /// when no mail account is configured). Compiled out on tvOS (no MessageUI).
     private var supportSection: some View {
         AetherSettingsSection("Support") {

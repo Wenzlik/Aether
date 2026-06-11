@@ -202,11 +202,13 @@ struct HomeView: View {
                 if !rails.continueWatching.isEmpty {
                     continueWatchingSection
                 }
-                if !rails.recentlyAdded.isEmpty {
-                    unifiedSection(title: "Recently Added", items: rails.recentlyAdded)
+                let recentlyAdded = discoveryFiltered(rails.recentlyAdded)
+                if !recentlyAdded.isEmpty {
+                    unifiedSection(title: "Recently Added", items: recentlyAdded)
                 }
-                if !rails.recentlyReleased.isEmpty {
-                    unifiedSection(title: "Recently Released", items: rails.recentlyReleased)
+                let recentlyReleased = discoveryFiltered(rails.recentlyReleased)
+                if !recentlyReleased.isEmpty {
+                    unifiedSection(title: "Recently Released", items: recentlyReleased)
                 }
                 if !rails.downloaded.isEmpty {
                     unifiedSection(title: "Downloaded", items: rails.downloaded)
@@ -214,6 +216,14 @@ struct HomeView: View {
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// Home is what's *ahead*: with the (default-on) hide-watched preference,
+    /// fully-watched titles drop out of the discovery rails. The Library keeps
+    /// the complete catalog; Continue Watching / Downloaded are never filtered.
+    private func discoveryFiltered(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+        guard playbackPreferences?.hideWatchedInDiscovery ?? true else { return items }
+        return items.filter { !$0.isFullyWatched }
     }
 
     /// A horizontal poster rail of **unified** titles. Each card navigates the

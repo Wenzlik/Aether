@@ -43,21 +43,26 @@ public enum DetailFormatting {
         return title.isEmpty ? "Season" : title
     }
 
+    /// Localized "season" words a server may use as the generic title —
+    /// compared diacritic-folded, so "řada" / "série" / "sezóna" match too.
+    /// Plex localizes season titles per its server language ("2. řada"), which
+    /// used to slip past the English-only prefix check and render as a "name".
+    private static let genericSeasonWords: Set<String> = [
+        "season", "seasons", "series", "serie", "saison", "staffel",
+        "temporada", "stagione", "seizoen", "sezona", "sezon", "rada",
+        "part", "volume", "vol", "chapter",
+    ]
+
     /// True when `title` adds nothing beyond the season number — "Season 2",
-    /// "Season", "Series 2", "Saison 2", or a bare number. Such titles are
+    /// "2. řada", "Série 1", "Vol. 3", or a bare number. Such titles are
     /// placeholders the source generated, not names worth surfacing.
     static func isGenericSeasonTitle(_ title: String) -> Bool {
-        var rest = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if rest.isEmpty { return true }
-        for keyword in ["season", "series", "saison", "staffel", "temporada", "part", "volume", "vol", "chapter"] {
-            if rest.hasPrefix(keyword) {
-                rest = String(rest.dropFirst(keyword.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                break
-            }
-        }
-        // Generic when nothing meaningful remains after the keyword — empty, or
-        // purely the season number ("Season 2" → "2", bare "2" → "2").
-        return rest.isEmpty || rest.allSatisfy(\.isNumber)
+        // Fold case + diacritics, then keep only letters — "2. řada" → "rada",
+        // "Season 2" → "season" — and test against the generic vocabulary.
+        let folded = title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let letters = folded.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+        let word = String(String.UnicodeScalarView(letters))
+        return word.isEmpty || genericSeasonWords.contains(word)
     }
 
     /// "S1E3 · Title" when season + episode are known, else the bare title.

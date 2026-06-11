@@ -31,6 +31,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// the user-facing "Off" row in the picker. A non-nil id matches one of
     /// `subtitleTracks`.
     public let selectedSubtitleTrackID: String?
+    /// `true` once a track selection was APPLIED on top of the source's own
+    /// defaults (picker tap, app-default language seeding, next-episode carry)
+    /// — sources that must transcode to honor a pick key off this (#68).
+    /// Optional so persisted catalogs from before the field decode as nil.
+    public let explicitTrackSelection: Bool?
     /// Plex Part id (e.g. `"17905"`). Surfaces `Media.Part.id` so the playback
     /// pipeline can `PUT /library/parts/{partId}?audioStreamID=…` before
     /// asking Plex for a decision — the canonical way to set the active
@@ -139,6 +144,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         selectedAudioTrackID: String? = nil,
         subtitleTracks: [MediaSubtitleTrack] = [],
         selectedSubtitleTrackID: String? = nil,
+        explicitTrackSelection: Bool? = nil,
         partID: String? = nil,
         originalFileURL: URL? = nil,
         mediaInfo: MediaInfo? = nil,
@@ -176,6 +182,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.selectedAudioTrackID = selectedAudioTrackID ?? audioTracks.first(where: \.isSelected)?.id
         self.subtitleTracks = subtitleTracks
         self.selectedSubtitleTrackID = selectedSubtitleTrackID ?? subtitleTracks.first(where: \.isSelected)?.id
+        self.explicitTrackSelection = explicitTrackSelection
         self.partID = partID
         self.originalFileURL = originalFileURL
         self.mediaInfo = mediaInfo
@@ -254,6 +261,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         selectedAudioTrackID: String?? = nil,
         subtitleTracks: [MediaSubtitleTrack]? = nil,
         selectedSubtitleTrackID: String?? = nil,
+        explicitTrackSelection: Bool?? = nil,
         selectedQuality: PlaybackQuality? = nil
     ) -> MediaItem {
         MediaItem(
@@ -270,6 +278,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
             selectedAudioTrackID: selectedAudioTrackID ?? self.selectedAudioTrackID,
             subtitleTracks: subtitleTracks ?? self.subtitleTracks,
             selectedSubtitleTrackID: selectedSubtitleTrackID ?? self.selectedSubtitleTrackID,
+            explicitTrackSelection: explicitTrackSelection ?? self.explicitTrackSelection,
             partID: partID,
             originalFileURL: originalFileURL,
             mediaInfo: mediaInfo,
@@ -318,7 +327,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// then ask the server for a fresh decision).
     public func selectingAudioTrack(_ track: MediaAudioTrack) -> MediaItem {
         let nextTracks = audioTracks.map { $0.withSelection($0.id == track.id) }
-        return copy(audioTracks: nextTracks, selectedAudioTrackID: track.id)
+        return copy(audioTracks: nextTracks, selectedAudioTrackID: track.id,
+                    explicitTrackSelection: true)
     }
 
     /// Return a copy with `track` selected as the burned-in / muxed subtitle,
@@ -327,7 +337,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// PUTs the selection to the Part at play time.
     public func selectingSubtitleTrack(_ track: MediaSubtitleTrack?) -> MediaItem {
         let nextTracks = subtitleTracks.map { $0.withSelection($0.id == track?.id) }
-        return copy(subtitleTracks: nextTracks, selectedSubtitleTrackID: .some(track?.id))
+        return copy(subtitleTracks: nextTracks, selectedSubtitleTrackID: .some(track?.id),
+                    explicitTrackSelection: true)
     }
 
     /// Return a copy with the chosen playback quality. `.original` keeps Direct
