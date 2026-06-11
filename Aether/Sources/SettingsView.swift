@@ -936,7 +936,7 @@ struct SettingsView: View {
 
     #if !os(tvOS)
     /// Support — Report a Bug / Feature Request / Contact the Creator. Each opens
-    /// the system Mail composer to `aether@zmrhal.cz` (with a `mailto:` fallback
+    /// the system Mail composer to `support@aetherplayer.com` (with a `mailto:` fallback
     /// when no mail account is configured). Compiled out on tvOS (no MessageUI).
     private var supportSection: some View {
         AetherSettingsSection("Support") {

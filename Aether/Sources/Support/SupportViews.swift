@@ -21,7 +21,7 @@ enum BugCategory: String, CaseIterable, Identifiable {
 // MARK: - Report a Bug
 
 /// Lightweight in-app bug report: Subject, Description, Category → opens the Mail
-/// composer to `aether@zmrhal.cz` (falls back to a `mailto:` link when no mail
+/// composer to `support@aetherplayer.com` (falls back to a `mailto:` link when no mail
 /// account is configured), auto-appending the token-free diagnostics footer.
 struct ReportBugSheet: View {
     let theme: String
