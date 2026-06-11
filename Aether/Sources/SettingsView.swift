@@ -88,36 +88,28 @@ struct SettingsView: View {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
-                ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                        header
-                        if isWide {
-                            wideDashboard
-                        } else {
-                            compactColumn
+                // Drive content width off the *measured* viewport so it can never
+                // be proposed wider than the screen. A fixed `maxWidth: 1100`
+                // proposed 1100pt to the width-greedy cards even when the viewport
+                // was narrower (iPad portrait / split view), so the two columns
+                // laid out past the edges and centered off-screen — both columns
+                // clipped (#287, same root cause as the old #248 pannability).
+                // `min(viewport − margins, 1100)`, centered, fits + keeps margins.
+                GeometryReader { geo in
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                            header
+                            settingsIndex
                         }
+                        .padding(.top, AetherDesign.Spacing.l)
+                        .padding(.bottom, AetherDesign.Spacing.xxl)
+                        .frame(width: settingsContentWidth(geo.size.width))
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.top, AetherDesign.Spacing.l)
-                    .padding(.bottom, AetherDesign.Spacing.xxl)
-                    // Compact (iPhone) must use the viewport width, not a fixed
-                    // cap: `820` proposes 820pt to width-greedy children (the
-                    // settings cards are maxWidth .infinity), so the content laid
-                    // out wider than the phone and the vertical ScrollView became
-                    // horizontally pannable (#248). `.infinity` inside a vertical
-                    // ScrollView resolves to the viewport width — no overflow.
-                    .frame(maxWidth: isWide ? 1100 : .infinity, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    // HARD clamp (#248, third strike): pin the scroll content's
-                    // width to the viewport, so no child — present or future —
-                    // can widen the page and make the vertical scroll pannable
-                    // sideways. An over-wide child now overflows its own row
-                    // (truncated/clipped) instead of dragging the whole page.
-                    .containerRelativeFrame(.horizontal)
-                }
-                .task {
-                    await refreshCapacity()
-                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                    .task {
+                        await refreshCapacity()
+                        imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                    }
                 }
             }
             // The root Settings surface carries its own wordmark, so suppress the
@@ -125,6 +117,9 @@ struct SettingsView: View {
             #if os(iOS) || os(visionOS)
             .toolbar(.hidden, for: .navigationBar)
             #endif
+            .navigationDestination(for: SettingsCategory.self) { category in
+                categoryScreen(category)
+            }
             #if !os(tvOS)
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
@@ -174,6 +169,144 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Index (#289)
+
+    /// Top-level Settings is a calm **index** of categories — each opens its own
+    /// focused screen — instead of one dense dashboard that competed for space
+    /// and clipped on iPad (#287/#289). Each category screen reuses the existing
+    /// section builders, so behaviour is unchanged; only the navigation is.
+    private enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
+        case accountsSources, playback, libraryDownloads, appearance, supportAbout
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .accountsSources: return "Accounts & Sources"
+            case .playback: return "Playback"
+            case .libraryDownloads: return "Library & Downloads"
+            case .appearance: return "Appearance"
+            case .supportAbout: return "Support & About"
+            }
+        }
+        var subtitle: String {
+            switch self {
+            case .accountsSources: return "Plex, Jellyfin, SMB, and local files"
+            case .playback: return "Quality, audio & subtitles, skip, watched"
+            case .libraryDownloads: return "Downloads, storage, and cache"
+            case .appearance: return "Theme and app icon"
+            case .supportAbout: return "Report a bug, diagnostics, about"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .accountsSources: return "person.2.circle.fill"
+            case .playback: return "play.circle.fill"
+            case .libraryDownloads: return "arrow.down.circle.fill"
+            case .appearance: return "paintbrush.fill"
+            case .supportAbout: return "questionmark.circle.fill"
+            }
+        }
+    }
+
+    private var settingsIndex: some View {
+        VStack(spacing: AetherDesign.Spacing.m) {
+            ForEach(SettingsCategory.allCases) { category in
+                NavigationLink(value: category) {
+                    HStack(spacing: AetherDesign.Spacing.m) {
+                        Image(systemName: category.systemImage)
+                            .font(.title3)
+                            .foregroundStyle(AetherDesign.Palette.accent)
+                            .frame(width: 34)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(category.title)
+                                .font(AetherDesign.Typography.cardTitle)
+                                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                            Text(category.subtitle)
+                                .font(AetherDesign.Typography.caption)
+                                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    }
+                    .padding(AetherDesign.Spacing.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                            .fill(AetherDesign.Palette.surface)
+                    )
+                    .premiumFocus()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// One category's own screen — a single-column scroll of the relevant
+    /// existing sections (no two-column dashboard, which is what clipped on
+    /// iPad). Pushed onto the Settings `NavigationStack`.
+    @ViewBuilder
+    private func categoryScreen(_ category: SettingsCategory) -> some View {
+        ZStack {
+            AetherDesign.Gradients.background.ignoresSafeArea()
+            GeometryReader { geo in
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                        categorySections(category)
+                    }
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                    .frame(width: settingsContentWidth(geo.size.width))
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .navigationTitle(category.title)
+        #if os(iOS)
+        // Inline (centered) on every category screen — consistent and reliable.
+        // Large titles collapsed unpredictably inside the GeometryReader+ScrollView
+        // nesting (one screen showed large, another inline).
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    @ViewBuilder
+    private func categorySections(_ category: SettingsCategory) -> some View {
+        switch category {
+        case .accountsSources:
+            accountSection
+            #if !os(tvOS)
+            localLibrarySection
+            #endif
+        case .playback:
+            playbackSection
+            #if os(visionOS)
+            cinemaSection
+            #endif
+        case .libraryDownloads:
+            #if !os(tvOS)
+            downloadsSection
+            storageSummaryCard
+            #endif
+            imageCacheCard
+        case .appearance:
+            appearanceSection
+            #if os(iOS)
+            appIconSection
+            #endif
+        case .supportAbout:
+            #if !os(tvOS)
+            supportSection
+            #endif
+            aboutSection
+            if developerUnlocked {
+                developerSection
+            }
+        }
+    }
+
     // MARK: - Layout
 
     /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
@@ -184,6 +317,18 @@ struct SettingsView: View {
         #else
         return hSizeClass == .regular
         #endif
+    }
+
+    /// Content width for the settings scroll body: the viewport minus side
+    /// margins, capped at 1100 on roomy surfaces. Computed from the *measured*
+    /// viewport (not a fixed `maxWidth`) so the width-greedy cards are never
+    /// proposed more than the screen — which previously pushed the two-column
+    /// iPad layout past both edges (#287). The fallback keeps a sane width during
+    /// the GeometryReader's first (zero-size) layout pass so nothing blanks.
+    private func settingsContentWidth(_ viewport: CGFloat) -> CGFloat {
+        guard viewport > 0 else { return 320 }
+        let available = viewport - AetherDesign.Spacing.l * 2
+        return isWide ? min(available, 1100) : available
     }
 
     /// iPad / tvOS / visionOS: controls on the left, an at-a-glance status
@@ -258,11 +403,13 @@ struct SettingsView: View {
     private var appIconSection: some View {
         AetherSettingsSection("App Icon") {
             if appIconStore.isSupported {
+                // Label left + menu-picker right, same metrics as a disclosure
+                // row so it sits uniformly in the list (was a long description
+                // with the picker, which read differently from every other row).
                 HStack(spacing: AetherDesign.Spacing.m) {
-                    Text("Choose how Aether appears on your Home Screen.")
-                        .font(AetherDesign.Typography.metadata)
-                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("App Icon")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
                     Spacer(minLength: AetherDesign.Spacing.s)
                     Picker(
                         "App Icon",
@@ -279,7 +426,8 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .tint(AetherDesign.Palette.accent)
                 }
-                .padding(AetherDesign.Spacing.m)
+                .padding(.vertical, AetherDesign.Spacing.m)
+                .padding(.horizontal, AetherDesign.Spacing.m)
             } else {
                 Text("Not available on this device.")
                     .font(AetherDesign.Typography.metadata)
@@ -764,12 +912,19 @@ struct SettingsView: View {
             ) {
                 openPicker = .skipCredits
             }
-            AetherDisclosureRow(
-                label: "Auto-Play Next Episode",
-                value: viewModel.playbackPreferences.autoPlayNext ? "On" : "Off"
-            ) {
-                openPicker = .autoPlayNext
+            // A plain on/off — an inline toggle reads better than a sheet with
+            // two radio options.
+            Toggle(isOn: Binding(
+                get: { viewModel.playbackPreferences.autoPlayNext },
+                set: { viewModel.playbackPreferences.autoPlayNext = $0 }
+            )) {
+                Text("Auto-Play Next Episode")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
             }
+            .tint(AetherDesign.Palette.accent)
+            .padding(AetherDesign.Spacing.m)
+
             AetherDisclosureRow(
                 label: "Next Episode Countdown",
                 value: "\(viewModel.playbackPreferences.nextEpisodeCountdown)s"
@@ -830,8 +985,7 @@ struct SettingsView: View {
             AetherDisclosureRow(
                 label: "Theme",
                 description: "Match the system, or force Dark or Light.",
-                value: viewModel.appearance.preference.displayName,
-                systemImage: "paintbrush.fill"
+                value: viewModel.appearance.preference.displayName
             ) {
                 openPicker = .appearance
             }

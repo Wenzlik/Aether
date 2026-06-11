@@ -20,6 +20,21 @@ public enum AetherDesign {
         public static let xxl: CGFloat = 48
     }
 
+    // MARK: - Layout
+
+    /// Width cap for the compact nav-header search field (Home / Library). The
+    /// field used to fill the row; the 0.6.x header refresh shrinks it and pins
+    /// it to the trailing edge beside Reload, so the brand mark leads the row.
+    /// Roughly the Reload button's footprint on the 10-foot UI, a touch tighter
+    /// on phones.
+    public static var headerSearchWidth: CGFloat {
+        #if os(tvOS)
+        return 360
+        #else
+        return 300
+        #endif
+    }
+
     // MARK: - Radii
 
     public enum Radius {

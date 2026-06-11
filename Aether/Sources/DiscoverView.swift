@@ -136,11 +136,21 @@ struct DiscoverView: View {
     private var rails: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                #if os(tvOS)
-                AetherTVReloadButton { Task { await load() } }
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.top, AetherDesign.Spacing.l)
-                #endif
+                // Brand mark leads Discover too (0.6.x header refresh), so the
+                // logo reads consistently across Home / Library / Discover.
+                // Discover has no search field; Reload rides the trailing edge on
+                // tvOS (no pull-to-refresh there).
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    AetherWordmark(.medium)
+                    Spacer(minLength: AetherDesign.Spacing.l)
+                    #if os(tvOS)
+                    AetherTVReloadButton { Task { await load() } }
+                        .frame(width: 260)
+                    #endif
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.top, AetherDesign.Spacing.l)
+                .padding(.bottom, AetherDesign.Spacing.xs)
                 // Discovery Hub order: a featured pick, then fresh arrivals, the
                 // best-rated, genre lanes, and serendipitous picks at the tail.
                 if let hero {

@@ -60,3 +60,61 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
         return options
     }
 }
+
+extension URL {
+    /// Rewrite an `smb://` URL to `smb2://` so libVLC forces the **libsmb2**
+    /// (SMB2/3) access module instead of letting **libdsm** (SMB1) claim the
+    /// scheme for browsing. libdsm can't talk to a NAS with SMB1 disabled (the
+    /// default on modern Synology / Windows) — it stalls on NetBIOS name
+    /// resolution (`netbios_ns_resolve`) and the browse/playback times out. The
+    /// vendored VLCKit registers `smb2` as a module shortcut, so the scheme name
+    /// selects the module; the smb2 module reads host/path from the parsed URL,
+    /// so the scheme string itself is irrelevant to libsmb2. We keep `smb://`
+    /// everywhere else (MediaID, storage, PlaybackEngine routing) and swap to
+    /// `smb2://` only at the VLCKit boundary. No-op for any other scheme.
+    var forcingSMB2VLCModule: URL {
+        guard scheme == "smb" else { return self }
+        var comps = URLComponents(url: self, resolvingAgainstBaseURL: false)
+        comps?.scheme = "smb2"
+        return comps?.url ?? self
+    }
+}
+
+/// Builds the VLC MRL + media options for a libsmb2 (SMB2/3) request.
+///
+/// Two things libsmb2 needs that the plain `smb://` + options form didn't give:
+/// 1. the **`smb2://` scheme** so libVLC picks libsmb2, not the SMB1 `dsm` module
+///    (which stalls on NetBIOS against SMB1-disabled NAS);
+/// 2. the **username + domain folded into the URL** (`smb2://domain;user@host/share`)
+///    — libsmb2 reads the identity from the URL, NOT from VLC's `smb-user` /
+///    `smb-domain` options, so passing them only as options left the session
+///    anonymous and the NAS refused it even with valid credentials (confirmed:
+///    the macOS SMB client authenticates fine with the very same creds). The
+///    password still rides as `:smb-pwd=` (libsmb2 takes it via vlc_credential).
+///
+/// No-op for non-`smb` URLs (HTTP / local files pass straight through).
+func smb2VLCRequest(url: URL, options: [String]) -> (url: URL, options: [String]) {
+    guard url.scheme == "smb", let host = url.host else {
+        return (url.forcingSMB2VLCModule, options)
+    }
+    var user: String?
+    var domain: String?
+    var passthrough: [String] = []
+    for opt in options {
+        if opt.hasPrefix(":smb-user=") { user = String(opt.dropFirst(10)) }
+        else if opt.hasPrefix(":smb-domain=") { domain = String(opt.dropFirst(12)) }
+        else { passthrough.append(opt) }   // keeps :smb-pwd= and :network-caching=
+    }
+    func enc(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .urlUserAllowed) ?? s
+    }
+    var auth = ""
+    if let user, !user.isEmpty {
+        if let domain, !domain.isEmpty { auth += enc(domain) + ";" }   // domain;user@
+        auth += enc(user) + "@"
+    }
+    let portPart = url.port.map { ":\($0)" } ?? ""
+    let path = url.path.isEmpty ? "/" : url.path   // already percent-encoded by URL
+    let built = URL(string: "smb2://\(auth)\(host)\(portPart)\(path)")
+    return (built ?? url.forcingSMB2VLCModule, passthrough)
+}

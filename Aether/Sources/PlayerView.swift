@@ -45,6 +45,10 @@ struct PlayerView: View {
     @State private var isCloseVisible = true
     @State private var hideTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Live vertical offset while the user is swiping the player down to dismiss
+    /// (#288). 0 when at rest; follows the finger during a deliberate downward
+    /// drag, then either commits to dismiss or springs back.
+    @State private var dragOffset: CGFloat = 0
     #endif
 
     /// visionOS only: auto-expand the system player so it docks into an open
@@ -99,6 +103,14 @@ struct PlayerView: View {
                 .safeAreaPadding(.top, AetherDesign.Spacing.l)
                 #else
                 .ignoresSafeArea()
+                #endif
+                #if os(iOS)
+                // Swipe-down-to-dismiss (#288): the player slides with the finger
+                // and commits past a high threshold. `simultaneousGesture` so it
+                // never steals touches from AVKit's transport (scrubber/menus).
+                .offset(y: dragOffset)
+                .simultaneousGesture(swipeDownDismissGesture)
+                .animation(reduceMotion ? nil : .interactiveSpring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
                 #endif
             } else {
                 ProgressView()
@@ -388,6 +400,29 @@ struct PlayerView: View {
             .padding(AetherDesign.Spacing.m)
             Spacer()
         }
+    }
+
+    /// Downward swipe-to-dismiss (#288). Engages only on a clearly vertical,
+    /// downward drag, so a horizontal scrub on AVKit's transport never moves the
+    /// player; pairs with the chrome-reveal tap via `simultaneousGesture` so the
+    /// native controls keep all their touches. Commits only past a high
+    /// threshold (or a fast flick) — a small/accidental drag springs back.
+    private var swipeDownDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onChanged { value in
+                guard value.translation.height > 0,
+                      value.translation.height > abs(value.translation.width) else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                let verticalDominant = value.translation.height > abs(value.translation.width)
+                let committed = value.translation.height > 140 || value.predictedEndTranslation.height > 280
+                if verticalDominant && committed {
+                    Task { await dismissPlayer() }
+                } else {
+                    dragOffset = 0
+                }
+            }
     }
 
     private func revealChrome() {
