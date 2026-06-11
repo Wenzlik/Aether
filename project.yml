@@ -34,7 +34,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.6.7"
+    MARKETING_VERSION: "0.6.8"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -97,6 +97,10 @@ targets:
         # clean checkouts, which simply disables matching.
         TMDBAPIKey: "$(TMDB_API_KEY)"
         ITSAppUsesNonExemptEncryption: false
+        # Required so iOS/visionOS may reach a NAS on the LAN for SMB browse +
+        # playback (#214). tvOS ignores it. Without it the first connect silently
+        # fails until the user allows Local Network in Settings ▸ Privacy.
+        NSLocalNetworkUsageDescription: "Aether uses your local network to connect to media servers and SMB shares on your network."
         # iOS / iPadOS / visionOS read the launch screen + scene manifest;
         # tvOS ignores them harmlessly.
         UILaunchScreen: {}

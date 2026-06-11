@@ -171,6 +171,8 @@ struct RootTabView: View {
                 PlexOnboardingView(session: session)
             case .jellyfin:
                 JellyfinSignInView(session: session)
+            case .smb:
+                SMBConnectView(session: session)
             }
         }
         #if os(visionOS)
