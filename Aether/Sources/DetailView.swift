@@ -432,13 +432,24 @@ struct DetailView: View {
                         if availableSources.count > 1 {
                             availableSourcesSection
                         }
-                        if item.kind.isContainer {
-                            childrenSection
-                        }
                     }
                     .frame(maxWidth: wideColumnWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, AetherDesign.Spacing.xl)
+
+                    // Seasons / Episodes rail breaks out of the left column on
+                    // tvOS so it uses the full screen width (#266) — the text
+                    // stays readable on the left, the rail spans the screen.
+                    if item.kind.isContainer {
+                        childrenSection
+                            #if os(tvOS)
+                            .padding(.leading, AetherDesign.Spacing.xl)
+                            #else
+                            .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.xl)
+                            #endif
+                    }
 
                     // …but Cast & Crew sits last (#247) and, on tvOS, breaks out
                     // of the column so the rail uses the full screen width.
@@ -999,39 +1010,30 @@ struct DetailView: View {
         .aetherDetailFocusSection()
     }
 
+    /// Built on `AetherCard` so the still wears the **same** watched marker as
+    /// posters — the bold gold corner ribbon, not a small checkmark — and the
+    /// same prominent progress bar for in-progress episodes (#266 feedback).
     private func episodeStillCard(_ episode: MediaItem) -> some View {
-        let inProgress = episodeResume[episode.id] != nil && !episode.isWatched
-        return VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            CachedAsyncImage(
-                url: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
-                aspectRatio: 16.0 / 9.0,
-                maxPixel: ArtworkTier.still.maxPixel
-            )
-                .frame(width: episodeStillWidth)
-                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
-                .overlay(alignment: .topTrailing) {
-                    if episode.isWatched {
-                        Image(systemName: "checkmark.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color.black, AetherDesign.Palette.accentGold)
-                            .font(.system(size: 22, weight: .bold))
-                            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
-                            .padding(AetherDesign.Spacing.s)
-                    }
-                }
-                .overlay(alignment: .bottom) { episodeProgressBar(episode) }
-                .premiumFocus(scale: 1.06)
-
-            Text(episodeOrdinalTitle(episode))
-                .font(AetherDesign.Typography.cardTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .lineLimit(1)
-            Text(episodeCaption(episode))
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(inProgress ? AetherDesign.Palette.accent : AetherDesign.Palette.textTertiary)
-                .lineLimit(1)
-        }
+        AetherCard(
+            title: episodeOrdinalTitle(episode),
+            subtitle: episodeCaption(episode),
+            posterURL: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
+            aspectRatio: 16.0 / 9.0,
+            progress: episodeProgressFraction(episode),
+            isWatched: episode.isWatched,
+            titleLineLimit: 1
+        )
         .frame(width: episodeStillWidth)
+    }
+
+    /// Watched fraction for an in-progress (not-yet-watched) episode, else `nil`
+    /// so `AetherCard` shows no progress bar.
+    private func episodeProgressFraction(_ episode: MediaItem) -> Double? {
+        guard let resume = episodeResume[episode.id], !episode.isWatched,
+              let runtime = episode.runtime else { return nil }
+        let total = DetailFormatting.seconds(runtime)
+        guard total > 0 else { return nil }
+        return min(1, max(0, DetailFormatting.seconds(resume.position) / total))
     }
     #endif
 
