@@ -4,6 +4,34 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-06-11
+
+A new source type (SMB) plus Detail/watched polish.
+
+### Added
+
+- **SMB network shares as a source** (#214) — connect to a NAS by host (+ optional
+  folder and credentials) in Settings ▸ Account ▸ SMB. Files are browsed over
+  VLCKit's SMB modules and flattened into Movies + TV Shows via title inference;
+  playback runs through the built-in VLC engine (mkv and all), with credentials
+  passed as media options so the `smb://` URL stays credential-free. iOS prompts
+  for Local Network access on first connect.
+- **Episode → Season / Show navigation** (#282) — episode detail now shows
+  "Season N" / "<Series>" pills (resolved from the parent), so an episode opened
+  straight from Home is no longer a dead end.
+- **Watched poster controls** (#280) — Settings ▸ Playback gains a **Watched
+  Dimming** level (Subtle / Medium / Strong) and a **Show "Watched" Label** toggle.
+
+### Changed
+
+- **Bolder watched posters** (#280) — a bigger, bolder centered "WATCHED" tag and
+  stronger default dimming so finished titles read at a glance across the room.
+- **tvOS technical details decluttered** (#281) — the inline Technical Details
+  section (which clipped + competed with primary content) is gone from the tvOS
+  detail hierarchy; the full, scrollable details are one tap away via the action
+  row's info button.
+- **Created By** now also credits Yana Shamruk.
+
 ## [0.6.7] — 2026-06-11
 
 A richer Season Detail on tvOS (#267) — the page had a dead bottom half, no

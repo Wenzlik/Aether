@@ -126,17 +126,17 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Titles wear their logo — movies and shows render their stylized logo art on the Detail screen when your server has it",
-        "Browse your Library by Collections, Actors and Directors — three new facets beside Genres and Years, each opening a grid of matching titles",
-        "Season pages got a life — browsing episodes on Apple TV now previews the focused one right below the rail: what it's about, runtime, air date, and how far in you are",
-        "Cast & Crew on every season — the season's own cast when your server has it, otherwise the show's",
-        "Next Up lives on the season too — one click to continue exactly where you are in that season",
-        "Settings no longer drifts sideways on iPhone — for good this time"
+        "Connect an SMB share — point Aether at a NAS by host, browse your files, and play them (mkv and all) through the built-in engine",
+        "Jump from an episode to its Season or Show — opening an episode from Home is no longer a dead end",
+        "Watched titles stand out more — a bigger WATCHED tag and stronger dimming, both tunable in Settings (or turn the label off)",
+        "Apple TV: technical details moved behind a tidy info button so they stop crowding the detail screen"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.7", codename: "Cassiopeia",
+                    summary: "Title logo art on the Detail hero, Library browsing by Collections / Actors / Directors, a richer Season Detail (episode preview, season cast, Next Up), and a localized-season-title fix."),
         ReleaseNote(version: "0.6.6", codename: "Cassiopeia",
                     summary: "A tvOS-led polish pass — Infuse-style Detail hero with dense metadata, Library browsing by Genre and Year, season previews, reliable focus navigation, scrollable What's New, and an iPhone Settings fix."),
         ReleaseNote(version: "0.6.5", codename: "Cassiopeia",
