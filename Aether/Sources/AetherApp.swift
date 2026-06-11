@@ -40,6 +40,7 @@ struct AetherApp: App {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
+                .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
                 .environment(session)
                 .environment(cinema)
@@ -49,6 +50,7 @@ struct AetherApp: App {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
                 .tint(AetherDesign.Palette.accent)
+                .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
                 .environment(session)
         }
