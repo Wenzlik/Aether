@@ -1760,3 +1760,135 @@ struct OnDeckTests {
         #expect(next?.id == newer.id)
     }
 }
+
+@Suite("AetherCore — MediaSelectionMatcher (#68)")
+struct MediaSelectionMatcherTests {
+
+    @Test("language normalization bridges ISO 639-2 and BCP-47")
+    func languageNormalization() {
+        #expect(MediaSelectionMatcher.normalizedLanguage("cze") == "cs")
+        #expect(MediaSelectionMatcher.normalizedLanguage("ces") == "cs")
+        #expect(MediaSelectionMatcher.normalizedLanguage("cs-CZ") == "cs")
+        #expect(MediaSelectionMatcher.normalizedLanguage("eng") == "en")
+        #expect(MediaSelectionMatcher.normalizedLanguage("en-US") == "en")
+        #expect(MediaSelectionMatcher.normalizedLanguage("") == nil)
+    }
+
+    @Test("picks the option matching the selected track's language")
+    func languageMatch() {
+        let options: [(language: String?, name: String)] = [
+            (language: "en", name: "English"),
+            (language: "cs", name: "Čeština"),
+        ]
+        // Source gives ISO 639-2 "cze"; AVFoundation exposes BCP-47 "cs".
+        #expect(MediaSelectionMatcher.bestIndex(language: "cze", title: "Czech 5.1", among: options) == 1)
+        #expect(MediaSelectionMatcher.bestIndex(language: "eng", title: nil, among: options) == 0)
+    }
+
+    @Test("title tie-breaks multiple tracks of the same language")
+    func titleTieBreak() {
+        let options: [(language: String?, name: String)] = [
+            (language: "en", name: "English Stereo"),
+            (language: "en", name: "English 5.1 Surround"),
+        ]
+        #expect(MediaSelectionMatcher.bestIndex(language: "en", title: "English 5.1", among: options) == 1)
+        // No usable title → first language match.
+        #expect(MediaSelectionMatcher.bestIndex(language: "en", title: "Director Commentary", among: options) == 0)
+    }
+
+    @Test("no confident match → nil (leave the player default alone)")
+    func noMatch() {
+        let options: [(language: String?, name: String)] = [(language: "ja", name: "日本語")]
+        #expect(MediaSelectionMatcher.bestIndex(language: "cs", title: "Czech", among: options) == nil)
+        #expect(MediaSelectionMatcher.bestIndex(language: nil, title: nil, among: options) == nil)
+        // Exact title match works even without a language.
+        #expect(MediaSelectionMatcher.bestIndex(language: nil, title: "日本語", among: options) == 0)
+    }
+}
+
+@Suite("AetherCore — PlaybackRequest explicit selection (#68)")
+struct PlaybackRequestSelectionTests {
+    private func item(audioSelected: String? = nil, subtitleSelected: String?? = .none) -> MediaItem {
+        var item = MediaItem(
+            id: .init(source: .mock, rawValue: "x"), title: "X", kind: .movie,
+            streamURL: URL(string: "https://s/x.mp4"),
+            audioTracks: [
+                .init(id: "a1", title: "English", languageCode: "eng", isSelected: true),
+                .init(id: "a2", title: "Czech", languageCode: "cze"),
+            ],
+            subtitleTracks: [
+                .init(id: "s1", title: "English", languageCode: "eng", isSelected: true),
+                .init(id: "s2", title: "Czech", languageCode: "cze"),
+            ]
+        )
+        if let audioSelected {
+            if let track = item.audioTracks.first(where: { $0.id == audioSelected }) {
+                item = item.selectingAudioTrack(track)
+            }
+        }
+        if case let .some(value) = subtitleSelected {
+            let track = value.flatMap { id in item.subtitleTracks.first(where: { $0.id == id }) }
+            item = item.selectingSubtitleTrack(track)
+        }
+        return item
+    }
+
+    @Test("source defaults → not explicit (direct play stays cheap)")
+    func defaultsNotExplicit() {
+        let request = PlaybackRequest(item: item(), startTime: nil)
+        #expect(request.hasExplicitTrackSelection == false)
+    }
+
+    @Test("picking a different audio track → explicit")
+    func audioPickExplicit() {
+        let request = PlaybackRequest(item: item(audioSelected: "a2"), startTime: nil)
+        #expect(request.hasExplicitTrackSelection == true)
+    }
+
+    @Test("subtitles Off (with a flagged default) → explicit")
+    func subtitleOffExplicit() {
+        let request = PlaybackRequest(item: item(subtitleSelected: .some(nil)), startTime: nil)
+        #expect(request.hasExplicitTrackSelection == true)
+        #expect(request.subtitleStreamID == "0")
+    }
+}
+
+@Suite("AetherCore — playback preference application (#68)")
+@MainActor
+struct PlaybackPreferenceApplicationTests {
+    private func episode(_ id: String) -> MediaItem {
+        MediaItem(
+            id: .init(source: .mock, rawValue: id), title: id, kind: .episode,
+            streamURL: URL(string: "https://s/\(id).mp4"),
+            audioTracks: [
+                .init(id: "\(id)-en", title: "English", languageCode: "eng", isSelected: true),
+                .init(id: "\(id)-cs", title: "Czech", languageCode: "cze"),
+            ],
+            subtitleTracks: [
+                .init(id: "\(id)-sub-en", title: "English", languageCode: "eng", isSelected: true),
+                .init(id: "\(id)-sub-cs", title: "Czech", languageCode: "cze"),
+            ]
+        )
+    }
+
+    @Test("next episode inherits the session's audio language and subtitle Off")
+    func nextEpisodeCarriesSelection() {
+        let prefs = PlaybackPreferencesStore(defaults: UserDefaults(suiteName: "test-68-\(UUID())")!)
+        var current = episode("e1")
+        let czech = current.audioTracks.first { $0.id == "e1-cs" }!
+        current = current.selectingAudioTrack(czech).selectingSubtitleTrack(nil)
+
+        let next = prefs.appliedToNextEpisode(episode("e2"), continuing: current)
+        #expect(next.selectedAudioTrack?.languageCode == "cze")
+        #expect(next.selectedSubtitleTrackID == nil)   // Off carries over
+    }
+
+    @Test("applied(to:) seeds the default audio language when present")
+    func appliedSeedsDefaults() {
+        let defaults = UserDefaults(suiteName: "test-68b-\(UUID())")!
+        let prefs = PlaybackPreferencesStore(defaults: defaults)
+        prefs.defaultAudioLanguage = "cze"
+        let seeded = prefs.applied(to: episode("e3"))
+        #expect(seeded.selectedAudioTrack?.languageCode == "cze")
+    }
+}

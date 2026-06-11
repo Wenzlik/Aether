@@ -281,8 +281,26 @@ public actor JellyfinMediaSource: MediaSource {
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
         switch request.mode {
         case .directPlay:
+            // Hybrid (#68): the static direct-play stream ships the container
+            // as-is and ignores AudioStreamIndex, so an EXPLICIT track pick
+            // reroutes to the transcoder, which muxes the chosen streams.
+            // Default selections keep the cheaper direct play.
+            if request.hasExplicitTrackSelection {
+                let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
+                if let url = transcodeURL(
+                    itemID: request.itemID.rawValue,
+                    audioStreamID: request.audioStreamID,
+                    subtitleStreamID: request.subtitleStreamID,
+                    offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
+                ) {
+                    return ResolvedPlayback(
+                        url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+                        decision: .transcode
+                    )
+                }
+            }
             guard let url = request.directPlayURL else { throw PlaybackResolveError.noPlayableStream }
-            return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0)
+            return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0, decision: .directPlay)
 
         case .transcode:
             let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
@@ -433,9 +451,12 @@ public actor JellyfinMediaSource: MediaSource {
     private func mapItem(_ dto: JellyfinAPI.BaseItemDto) -> MediaItem? {
         guard let kind = dto.kind else { return nil }
         let url = streamURL(for: dto)
-        let isTranscode = url?.pathExtension.lowercased() == "m3u8"
-        let audioTracks = isTranscode ? dto.audioTracks : []
-        let subtitleTracks = isTranscode ? dto.subtitleTracks : []
+        // Tracks are surfaced on EVERY playable — direct play included (#68).
+        // They used to be hidden off the transcode path because `static=true`
+        // ignores stream indexes; resolvePlayback now reroutes an explicit
+        // pick to the transcoder instead, so the pickers actually work.
+        let audioTracks = dto.audioTracks
+        let subtitleTracks = dto.subtitleTracks
         // Artwork as a tier-aware source; the baked poster/backdrop below are its
         // default tiers. A nil tag → nil URL, so a title without art stays blank.
         let artwork = ArtworkSource(

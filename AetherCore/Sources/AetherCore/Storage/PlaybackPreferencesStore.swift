@@ -141,3 +141,76 @@ public final class PlaybackPreferencesStore {
         self.nextEpisodeCountdown = Self.countdownOptions.contains(savedCountdown) ? savedCountdown : 10
     }
 }
+
+public extension PlaybackPreferencesStore {
+    /// Apply the user's playback defaults to a hydrated item: audio by language
+    /// match, subtitles by language match (or "off"), and the default quality.
+    /// Extracted from DetailView so EVERY path that opens a player — Detail's
+    /// Play, the fallback hydrate, and Auto-Play-Next — applies the same
+    /// defaults (#68: next episodes used to revert to the container default).
+    func applied(to item: MediaItem) -> MediaItem {
+        var result = item
+
+        // Audio: match by language code (case-insensitive). Only override
+        // when the title has a track in the preferred language.
+        if let preferred = defaultAudioLanguage?.lowercased(),
+           let track = result.audioTracks.first(where: {
+               $0.languageCode?.lowercased() == preferred
+           }) {
+            result = result.selectingAudioTrack(track)
+        }
+
+        // Subtitles: "off" disables subs entirely; nil leaves whatever the
+        // source picked; a language code selects the first matching track.
+        if let preferred = defaultSubtitleLanguage {
+            if preferred == "off" {
+                result = result.selectingSubtitleTrack(nil)
+            } else if let track = result.subtitleTracks.first(where: {
+                $0.languageCode?.lowercased() == preferred.lowercased()
+            }) {
+                result = result.selectingSubtitleTrack(track)
+            }
+        }
+
+        // Quality: always applied. The MediaItem default is `.original`,
+        // but most users want the picker to open on whatever they chose
+        // last as their everywhere-default.
+        result = result.selectingQuality(defaultQuality)
+
+        return result
+    }
+
+    /// Configure the **next episode** for Auto-Play-Next: the session's live
+    /// context wins — the language you're hearing and the subtitle state you
+    /// chose carry over to the next episode — with the app defaults as the
+    /// base. Quality follows the current session (#68).
+    func appliedToNextEpisode(_ next: MediaItem, continuing current: MediaItem) -> MediaItem {
+        var result = applied(to: next)
+
+        // Carry the playing audio language over (an explicit in-session pick
+        // beats the app default).
+        if let language = current.selectedAudioTrack?.languageCode?.lowercased(),
+           let track = result.audioTracks.first(where: {
+               $0.languageCode?.lowercased() == language
+           }) {
+            result = result.selectingAudioTrack(track)
+        }
+
+        // Subtitles: carry the current language; an explicitly-off state
+        // (no selected track despite available tracks) stays off.
+        if let language = current.selectedSubtitleTrack?.languageCode?.lowercased() {
+            if let track = result.subtitleTracks.first(where: {
+                $0.languageCode?.lowercased() == language
+            }) {
+                result = result.selectingSubtitleTrack(track)
+            }
+        } else if current.selectedSubtitleTrackID == nil, !current.subtitleTracks.isEmpty {
+            result = result.selectingSubtitleTrack(nil)
+        }
+
+        // Quality continues from the session, not the default.
+        result = result.selectingQuality(current.selectedQuality)
+
+        return result
+    }
+}

@@ -2724,47 +2724,37 @@ struct DetailView: View {
     private func hydrateForPlayback() async {
         guard !activeItem.kind.isContainer, let source else { return }
         if let hydrated = try? await source.item(for: activeItem.id) {
-            configuredItem = applyingPreferences(to: hydrated)
+            // Don't clobber a pick the user made while this hydrate was in
+            // flight (#68) — carry any explicit selections onto the fresh item.
+            configuredItem = preservingUserSelections(on: applyingPreferences(to: hydrated))
         }
     }
 
     /// Seeds the user's app-wide playback defaults onto a freshly hydrated
-    /// item. Each preference is applied only when it points at a track that
-    /// actually exists on the title — a Czech-audio default doesn't force
-    /// English-only content into silence — and only when set; `nil` means
-    /// "follow the source default" and falls through to whatever the source
-    /// (Plex / Jellyfin) already picked. The user's per-title picker tap
-    /// later still wins for that session.
+    /// item (audio/subtitle language + default quality). The logic lives on
+    /// `PlaybackPreferencesStore.applied(to:)` in AetherCore so every player
+    /// entry point — including Auto-Play-Next — shares it (#68).
     private func applyingPreferences(to hydrated: MediaItem) -> MediaItem {
-        guard let prefs = playbackPreferences else { return hydrated }
-        var result = hydrated
+        playbackPreferences?.applied(to: hydrated) ?? hydrated
+    }
 
-        // Audio: match by language code (case-insensitive). Only override
-        // when the title has a track in the preferred language.
-        if let preferred = prefs.defaultAudioLanguage?.lowercased(),
-           let track = result.audioTracks.first(where: {
-               $0.languageCode?.lowercased() == preferred
-           }) {
-            result = result.selectingAudioTrack(track)
+    /// Re-applies the session's explicit picker choices (audio / subtitles /
+    /// quality) from the current `configuredItem` onto `fresh`, so a re-hydrate
+    /// never silently reverts what the user just selected (#68).
+    private func preservingUserSelections(on fresh: MediaItem) -> MediaItem {
+        guard let existing = configuredItem, existing.id == fresh.id else { return fresh }
+        var result = fresh
+        if let track = existing.selectedAudioTrack,
+           let match = result.audioTracks.first(where: { $0.id == track.id }) {
+            result = result.selectingAudioTrack(match)
         }
-
-        // Subtitles: "off" disables subs entirely; nil leaves whatever the
-        // source picked; a language code selects the first matching track.
-        if let preferred = prefs.defaultSubtitleLanguage {
-            if preferred == "off" {
-                result = result.selectingSubtitleTrack(nil)
-            } else if let track = result.subtitleTracks.first(where: {
-                $0.languageCode?.lowercased() == preferred.lowercased()
-            }) {
-                result = result.selectingSubtitleTrack(track)
-            }
+        if let track = existing.selectedSubtitleTrack,
+           let match = result.subtitleTracks.first(where: { $0.id == track.id }) {
+            result = result.selectingSubtitleTrack(match)
+        } else if existing.selectedSubtitleTrackID == nil, !existing.subtitleTracks.isEmpty {
+            result = result.selectingSubtitleTrack(nil)   // explicit "Off" survives
         }
-
-        // Quality: always applied. The MediaItem default is `.original`,
-        // but most users want the picker to open on whatever they chose
-        // last as their everywhere-default.
-        result = result.selectingQuality(prefs.defaultQuality)
-
+        result = result.selectingQuality(existing.selectedQuality)
         return result
     }
 
@@ -2795,7 +2785,9 @@ struct DetailView: View {
         // what the Detail screen showed. Fall back to a fresh hydrate if it
         // somehow hasn't resolved yet.
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
-            configuredItem = hydrated
+            // Same seeding as the on-appear hydrate — without it, a fast Play
+            // before hydration resolved dropped the default-language prefs (#68).
+            configuredItem = applyingPreferences(to: hydrated)
         }
         playbackItem = current
 
@@ -2841,7 +2833,9 @@ struct DetailView: View {
         defer { isPreparingPlayback = false }
 
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
-            configuredItem = hydrated
+            // Same seeding as the on-appear hydrate — without it, a fast Play
+            // before hydration resolved dropped the default-language prefs (#68).
+            configuredItem = applyingPreferences(to: hydrated)
         }
         playbackItem = current
         playbackStartAt = fromStart ? 0 : (resume != nil ? nil : 0)
