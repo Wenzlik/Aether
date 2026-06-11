@@ -12,7 +12,7 @@ import UIKit
 /// the platforms that have a mail composer (iOS / iPadOS / visionOS).
 enum SupportDiagnostics {
     /// Where bug reports, feature requests, and diagnostics are sent.
-    static let supportEmail = "aether@zmrhal.cz"
+    static let supportEmail = "support@aetherplayer.com"
 
     // MARK: - Identity
 

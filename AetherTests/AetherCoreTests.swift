@@ -1688,6 +1688,13 @@ struct DetailFormattingTests {
         let named = MediaItem(id: .init(source: .mock, rawValue: "s2n"), title: "Asylum",
                               kind: .season, seasonNumber: 2)
         #expect(DetailFormatting.seasonLabel(named) == "S2 · Asylum")
+        // Localized generic titles are generic too — a Czech-localized Plex
+        // sends "7. řada" / "Řada 7" / "Série 1", none of which are names.
+        for czechTitle in ["7. řada", "Řada 7", "Série 7", "7. série", "Sezóna 7"] {
+            let czech = MediaItem(id: .init(source: .mock, rawValue: "cz-\(czechTitle)"),
+                                  title: czechTitle, kind: .season, seasonNumber: 7)
+            #expect(DetailFormatting.seasonLabel(czech) == "Season 7", "\(czechTitle)")
+        }
         // A season titled with the *series* name (some agents do this) is not a
         // real season name → fall back to the number.
         let seriesNamed = MediaItem(id: .init(source: .mock, rawValue: "s3"), title: "The Show",

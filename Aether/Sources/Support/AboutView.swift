@@ -17,9 +17,8 @@ struct AboutView: View {
     @Environment(\.openURL) private var openURL
     #endif
 
-    // TODO: confirm public URLs with the developer before this ships to main.
     private let githubURL = URL(string: "https://github.com/Wenzlik/Aether")
-    private let websiteURL = URL(string: "https://zmrhal.cz")
+    private let websiteURL = URL(string: "https://aetherplayer.com")
     private let roadmapURL = URL(string: "https://github.com/Wenzlik/Aether/blob/main/ROADMAP.md")
 
     private static let unlockTapTarget = 7
