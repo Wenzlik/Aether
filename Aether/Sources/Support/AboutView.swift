@@ -70,8 +70,8 @@ struct AboutView: View {
 
     private var authorSection: some View {
         AetherSettingsSection("Created By") {
-            AetherSettingsRow(label: "Vaclav Zmrhal", systemImage: "person.crop.circle.fill", value: nil)
-            AetherSettingsRow(label: "Yana Shamruk", systemImage: "person.crop.circle.fill", value: nil)
+            AetherSettingsRow(label: "Vaclav Zmrhal", systemImage: "person.crop.circle.fill", value: "Creator")
+            AetherSettingsRow(label: "Yana Shamruk", systemImage: "person.crop.circle.fill", value: "Designer")
         }
     }
 
