@@ -88,7 +88,7 @@ struct SettingsView: View {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
-                ScrollView {
+                ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         header
                         if isWide {
@@ -1144,7 +1144,7 @@ private struct WhatsNewSheet: View {
             .padding(.top, AetherDesign.Spacing.l)
 
             ScrollView {
-              VStack(alignment: .leading, spacing: 0) {   // tvOS: one focusable scroll body
+              VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                     ForEach(bullets, id: \.self) { bullet in
                         HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
@@ -1166,6 +1166,10 @@ private struct WhatsNewSheet: View {
                         .fill(AetherDesign.Materials.card)
                 )
                 .padding(.horizontal, AetherDesign.Spacing.l)
+                // tvOS scrolls by MOVING focus between items — so each card is a
+                // focus stop. A single focusable scroll body (the old approach)
+                // left focus stuck on Done and the release notes unreachable.
+                .tvOSScrollFocusable()
 
                 if !pastReleases.isEmpty {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
@@ -1185,6 +1189,7 @@ private struct WhatsNewSheet: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .tvOSScrollFocusable()   // a focus stop per release so the remote scrolls through history
                             }
                         }
                         .padding(AetherDesign.Spacing.l)
@@ -1197,13 +1202,22 @@ private struct WhatsNewSheet: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.s)
                 }
+                #if os(tvOS)
+                // On tvOS, Done sits at the END of the scroll so the remote
+                // reaches it by moving Down past the notes — a sibling below the
+                // ScrollView is unreachable once focus is inside it (#266).
+                AetherButton("Done", role: .secondary, action: onClose)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                #endif
               }
-              .tvOSScrollFocusable()
             }
 
+            #if !os(tvOS)
             AetherButton("Done", role: .secondary, action: onClose)
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
+            #endif
         }
         .aetherScreenBackground()
         .presentationDetents([.medium, .large])

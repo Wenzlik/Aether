@@ -84,6 +84,12 @@ struct DetailView: View {
     /// Resume points for the currently-listed episodes, so each row can show how
     /// far in you are (#260). Keyed by episode id; filled when episodes load.
     @State private var episodeResume: [MediaID: ResumePoint] = [:]
+    /// tvOS: which season card has focus, so the Show page previews it while
+    /// browsing (#266 — Focus = Preview, Select = Open).
+    @FocusState private var focusedSeasonID: MediaID?
+    /// Last-focused season, kept so the preview stays put when focus leaves the
+    /// rail (defaults to the first season).
+    @State private var previewSeasonID: MediaID?
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -309,12 +315,9 @@ struct DetailView: View {
                     )
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                        Text(activeItem.title)
-                            .font(AetherDesign.Typography.heroTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        heroTitleBlock
                         metadataRow
                         genresRow
-                        mediaBadges
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
                 }
@@ -406,12 +409,9 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                     // Primary content stays in the readable left column…
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                        Text(activeItem.title)
-                            .font(AetherDesign.Typography.heroTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        heroTitleBlock
                         metadataRow
                         genresRow
-                        mediaBadges
 
                         if !item.kind.isContainer {
                             actionRow
@@ -438,13 +438,24 @@ struct DetailView: View {
                         if availableSources.count > 1 {
                             availableSourcesSection
                         }
-                        if item.kind.isContainer {
-                            childrenSection
-                        }
                     }
                     .frame(maxWidth: wideColumnWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, AetherDesign.Spacing.xl)
+
+                    // Seasons / Episodes rail breaks out of the left column on
+                    // tvOS so it uses the full screen width (#266) — the text
+                    // stays readable on the left, the rail spans the screen.
+                    if item.kind.isContainer {
+                        childrenSection
+                            #if os(tvOS)
+                            .padding(.leading, AetherDesign.Spacing.xl)
+                            #else
+                            .frame(maxWidth: wideColumnWidth, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.xl)
+                            #endif
+                    }
 
                     // …but Cast & Crew sits last (#247) and, on tvOS, breaks out
                     // of the column so the rail uses the full screen width.
@@ -590,10 +601,12 @@ struct DetailView: View {
             if availableSources.count > 1 {
                 availableSourcesSection
                     .frame(maxWidth: 720, alignment: .leading)
+                    .aetherDetailFocusSection()
             }
             if current.mediaInfo != nil {
                 technicalDetailsSection
                     .frame(maxWidth: 720, alignment: .leading)
+                    .aetherDetailFocusSection()
             }
             relatedRail
             if current.streamURL != nil {
@@ -634,12 +647,9 @@ struct DetailView: View {
                 .overlay(alignment: .bottom) { bannerScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text(activeItem.title)
-                    .font(AetherDesign.Typography.heroTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                heroTitleBlock
                 metadataRow
                 genresRow
-                mediaBadges
             }
             .padding(.horizontal, AetherDesign.Spacing.l)
 
@@ -678,9 +688,7 @@ struct DetailView: View {
                 .overlay { movieHeroScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text(activeItem.title)
-                    .font(AetherDesign.Typography.heroTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                heroTitleBlock
 
                 HStack(spacing: AetherDesign.Spacing.s) {
                     Text(metadataParts.joined(separator: " • "))
@@ -774,35 +782,14 @@ struct DetailView: View {
         }
     }
 
-    /// The "More Like This" title. On tvOS it's a **full-width, single-focusable
-    /// focus section** sitting directly above the rail — the only reliable way to
-    /// let Up from *any* poster (even one scrolled far right) escape the rail
-    /// (#249 follow-up). The content directly above this rail is non-focusable
-    /// (static Technical-Details rows on a movie, plain summary text on a series),
-    /// so the focus engine had nothing to relay Up into and trapped focus unless
-    /// you were on the first tile. Full-width ⇒ it overlaps every column; a single
-    /// focusable ⇒ no cross-axis tiebreak. Off tvOS it stays plain Text.
-    @ViewBuilder
+    /// The "More Like This" title — plain text. Up-escape from the rail is handled
+    /// by making the REAL section above it a focus section (the seasons rail on a
+    /// series page; Available Sources / Technical Details on a movie page), rather
+    /// than the earlier no-op header button (#266 — "do it properly").
     private var relatedHeader: some View {
-        #if os(tvOS)
-        Button {
-            // No dedicated "all related" screen yet — this is a labelled, fully
-            // escapable focus waypoint (not a dead-end like the cast cards, #249),
-            // so a no-op Select is safe. Wire a destination here if one is added.
-        } label: {
-            Text("More Like This")
-                .font(AetherDesign.Typography.sectionTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .focusSection()
-        #else
         Text("More Like This")
             .font(AetherDesign.Typography.sectionTitle)
             .foregroundStyle(AetherDesign.Palette.textPrimary)
-        #endif
     }
 
     private var relatedPosterWidth: CGFloat {
@@ -864,8 +851,10 @@ struct DetailView: View {
                             titleLineLimit: 2
                         )
                         .frame(width: seasonCardWidth)
+                        .seasonCardFocus()
                     }
                     .buttonStyle(.plain)
+                    .focused($focusedSeasonID, equals: season.id)
                 }
             }
             .padding(.vertical, AetherDesign.Spacing.xs)
@@ -886,10 +875,76 @@ struct DetailView: View {
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
             seasonsRail
+            #if os(tvOS)
+            // Focus = Preview: a lightweight read-out of the season currently
+            // under focus (Select still opens the dedicated Season Detail) (#266).
+            seasonPreview
+            #endif
+        }
+        #if os(tvOS)
+        .onChange(of: focusedSeasonID) { _, id in
+            if let id { previewSeasonID = id }
+        }
+        #endif
+    }
+
+    #if os(tvOS)
+    /// The season the preview describes — the last-focused one, else the first.
+    private var previewSeason: MediaItem? {
+        children.first { $0.id == previewSeasonID } ?? children.first
+    }
+
+    /// Lightweight preview of the focused season on the Show page: name, year /
+    /// episode count / progress, and a short overview — immediate context while
+    /// browsing without leaving for the Season Detail (#266).
+    @ViewBuilder
+    private var seasonPreview: some View {
+        if let season = previewSeason {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text(DetailFormatting.seasonLabel(season))
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let meta = seasonPreviewMeta(season) {
+                    Text(meta)
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                }
+                if let summary = season.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: 720, alignment: .leading)
+            .animation(AetherDesign.Motion.hero, value: previewSeasonID)
         }
     }
 
+    /// "2017 • 11 Episodes • 7/11 watched" — year, episode count, watch progress.
+    private func seasonPreviewMeta(_ season: MediaItem) -> String? {
+        var parts: [String] = []
+        if let year = season.year { parts.append(String(year)) }
+        if let count = season.episodeCount, count > 0 {
+            parts.append("\(count) Episode\(count == 1 ? "" : "s")")
+            if let unwatched = season.unwatchedEpisodeCount {
+                if unwatched == 0 {
+                    parts.append("Watched")
+                } else if count - unwatched > 0 {
+                    parts.append("\(count - unwatched)/\(count) watched")
+                }
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+    #endif
+
+    @ViewBuilder
     private var episodesList: some View {
+        #if os(tvOS)
+        episodeRail(children)
+        #else
         LazyVStack(spacing: AetherDesign.Spacing.m) {
             ForEach(children) { episode in
                 NavigationLink(value: episode) {
@@ -898,6 +953,7 @@ struct DetailView: View {
                 .buttonStyle(.plain)
             }
         }
+        #endif
     }
 
     private func episodeRow(_ episode: MediaItem) -> some View {
@@ -967,6 +1023,71 @@ struct DetailView: View {
         }
     }
 
+    #if os(tvOS)
+    // MARK: - tvOS episode rail (Detail Phase 2)
+
+    /// Wide 16:9 still cards, like the Infuse "Season N" rail.
+    private var episodeStillWidth: CGFloat { 320 }
+
+    /// "2. Ladies Room" — ordinal-prefixed episode title for the still rail.
+    private func episodeOrdinalTitle(_ episode: MediaItem) -> String {
+        if let number = episode.episodeNumber { return "\(number). \(episode.title)" }
+        return episode.title
+    }
+
+    /// Resume time when in-progress, else air date, else runtime.
+    private func episodeCaption(_ episode: MediaItem) -> String {
+        if let resume = episodeResume[episode.id], !episode.isWatched {
+            return "Resume \(DetailFormatting.position(resume.position))"
+        }
+        if let date = episode.releaseDate { return DetailFormatting.airDate(date) }
+        if let runtime = episode.runtime { return DetailFormatting.runtime(runtime) }
+        return ""
+    }
+
+    /// tvOS episode browsing: a horizontal rail of 16:9 stills (ordinal title +
+    /// resume/date caption), mirroring the Infuse "Season N" rail instead of a
+    /// tall vertical list. Each still keeps its watched marker + in-progress bar.
+    private func episodeRail(_ episodes: [MediaItem]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: AetherDesign.Spacing.l) {
+                ForEach(episodes) { episode in
+                    NavigationLink(value: episode) { episodeStillCard(episode) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xs)
+        }
+        .aetherDetailFocusSection()
+    }
+
+    /// Built on `AetherCard` so the still wears the **same** watched marker as
+    /// posters — the bold gold corner ribbon, not a small checkmark — and the
+    /// same prominent progress bar for in-progress episodes (#266 feedback).
+    private func episodeStillCard(_ episode: MediaItem) -> some View {
+        AetherCard(
+            title: episodeOrdinalTitle(episode),
+            subtitle: episodeCaption(episode),
+            posterURL: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
+            aspectRatio: 16.0 / 9.0,
+            progress: episodeProgressFraction(episode),
+            isWatched: episode.isWatched,
+            titleLineLimit: 1
+        )
+        .frame(width: episodeStillWidth)
+    }
+
+    /// Watched fraction for an in-progress (not-yet-watched) episode, else `nil`
+    /// so `AetherCard` shows no progress bar.
+    private func episodeProgressFraction(_ episode: MediaItem) -> Double? {
+        guard let resume = episodeResume[episode.id], !episode.isWatched,
+              let runtime = episode.runtime else { return nil }
+        let total = DetailFormatting.seconds(runtime)
+        guard total > 0 else { return nil }
+        return min(1, max(0, DetailFormatting.seconds(resume.position) / total))
+    }
+    #endif
+
     private func loadChildrenIfNeeded() async {
         guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
         isLoadingChildren = true
@@ -994,7 +1115,13 @@ struct DetailView: View {
             if isLoadingChildren && children.isEmpty {
                 AetherLoadingState(.inline)
             } else {
+                // Full-width focus section so Up from ANY season card lands on
+                // Next Up — section-to-section focus uses the section frames, not
+                // the card geometry, so it works from Season 1 through Season N
+                // (#266 feedback). Pairs with the seasons rail's own focus section.
                 nextUpCard
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .aetherDetailFocusSection()
                 if children.count > 1 {
                     // Multi-season: a rail of season poster cards that push a
                     // dedicated Season Detail (#245), instead of an inline
@@ -1113,6 +1240,9 @@ struct DetailView: View {
         if isLoadingEpisodes {
             AetherLoadingState(.inline)
         } else if !seasonEpisodes.isEmpty {
+            #if os(tvOS)
+            episodeRail(seasonEpisodes)
+            #else
             LazyVStack(spacing: AetherDesign.Spacing.m) {
                 ForEach(seasonEpisodes) { episode in
                     NavigationLink(value: episode) {
@@ -1121,6 +1251,7 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                 }
             }
+            #endif
         }
     }
 
@@ -1271,18 +1402,78 @@ struct DetailView: View {
         }
     }
 
-    /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
-    /// is always included when known, on every layout.
+    /// Hero title. For an **episode** with a known series, the series name is the
+    /// big title and "S1 • E2 - Episode Title" sits beneath it (how Infuse / Apple
+    /// TV present an episode); movies / shows / seasons — and episodes missing a
+    /// series title — show their own title (#266 Detail Phase 1).
+    @ViewBuilder
+    private var heroTitleBlock: some View {
+        if item.kind == .episode, let series = activeItem.seriesTitle, !series.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text(series)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text(DetailFormatting.episodeContext(activeItem))
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+        } else {
+            Text(activeItem.title)
+                .font(AetherDesign.Typography.heroTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+    }
+
+    /// Dense single line, Infuse-style: "48 min • Jul 26, 2007 • [TV-14] • 1080p •
+    /// DTS-HD MA 5.1" — runtime/date, the content-rating badge, then resolution +
+    /// audio folded inline (they replace the old separate chip strip). The tech
+    /// tail fills in when `mediaInfo` hydrates; the line reflows once, harmlessly.
     private var metadataRow: some View {
         HStack(spacing: AetherDesign.Spacing.xs) {
             Text(metadataParts.joined(separator: " • "))
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
             if let rating = current.contentRating {
+                metadataDot
                 contentRatingBadge(rating)
+            }
+            if !inlineTechParts.isEmpty {
+                metadataDot
+                Text(inlineTechParts.joined(separator: " • "))
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The "•" separator used to splice the badge / tech tail into the line.
+    private var metadataDot: some View {
+        Text("•")
+            .font(AetherDesign.Typography.metadata)
+            .foregroundStyle(AetherDesign.Palette.textTertiary)
+    }
+
+    /// Resolution + HDR/DV + audio (codec + channels), folded into the metadata
+    /// line — the glanceable subset of `mediaBadgeLabels` (the full breakdown
+    /// stays in Technical Details). Empty until `mediaInfo` hydrates.
+    private var inlineTechParts: [String] {
+        guard let info = current.mediaInfo else { return [] }
+        var parts: [String] = []
+        if let resolution = info.videoResolution { parts.append(resolution) }
+        if info.isDolbyVision {
+            parts.append("Dolby Vision")
+        } else if info.isHDR {
+            parts.append("HDR")
+        }
+        if let audio = info.audioCodec?.uppercased() {
+            if let channels = info.audioChannels {
+                parts.append("\(audio) \(DetailFormatting.channelLabel(channels))")
+            } else {
+                parts.append(audio)
+            }
+        }
+        return parts
     }
 
     /// The source's age/content classification as a thin-bordered badge —
@@ -1319,9 +1510,17 @@ struct DetailView: View {
         if item.kind == .show { return seriesMetadataParts }
         if item.kind == .season { return seasonMetadataParts }
         var parts: [String] = []
-        if let year = activeItem.year { parts.append(String(year)) }
-        if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
-        parts.append(DetailFormatting.kindLabel(item.kind))
+        if item.kind == .episode {
+            // Episode: runtime + air date. The series name and "S1 • E2 - Title"
+            // live in the hero title block, so no year or "Episode" label here.
+            if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+            if let date = activeItem.releaseDate { parts.append(DetailFormatting.airDate(date)) }
+        } else {
+            // Movie: year + runtime. The kind label is dropped — it's obvious and
+            // the Infuse-style reference omits it — keeping the line dense.
+            if let year = activeItem.year { parts.append(String(year)) }
+            if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+        }
         return parts
     }
 
@@ -1641,14 +1840,19 @@ struct DetailView: View {
     private var actionRow: some View {
         if current.streamURL != nil {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                // Level 1 — one dominant primary action (Resume or Play).
-                if resume != nil { resumeButton } else { playButton }
-                // Level 2 — Restart, only when a resume point exists.
-                if resume != nil { restartButton }
-                #if os(visionOS)
-                watchInCinemaButton
-                #endif
-                // Level 3 — everything else as compact, equal-weight icon buttons.
+                // Primary actions as a single horizontal pill row (Infuse-style),
+                // Resume carrying its position inline — a compact cluster instead
+                // of a tall Resume / caption / Restart stack (#266 Detail Phase 1).
+                // Pills come first so the tvOS remote still lands on Play/Resume on
+                // arrival (not the watched toggle).
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    if resume != nil { resumeButton } else { playButton }
+                    if resume != nil { restartButton }
+                    #if os(visionOS)
+                    watchInCinemaButton
+                    #endif
+                }
+                // Tertiary actions as a compact, equal-weight icon row beneath.
                 compactActionRow
                 // The first-use hint is a touch affordance (tap "Got it" / tap an
                 // icon). On tvOS it created an unreachable focus dead-zone, and
@@ -1934,25 +2138,18 @@ struct DetailView: View {
     }
     #endif
 
-    /// Level 1 — the single dominant primary when a resume point exists, with a
-    /// "Resume from m:ss" caption beneath it. (Restart is a separate, lighter
-    /// Level-2 button below, so the hierarchy reads at a glance.)
+    /// Primary action when a resume point exists — the position is carried
+    /// **inline** in the label ("Resume 0:01:39") like the Infuse reference, so it
+    /// sits as one pill next to Restart instead of a button + caption stack.
     private var resumeButton: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            AetherButton(
-                isPreparingPlayback ? "Preparing…" : "Resume",
-                systemImage: "play.fill",
-                role: .primary
-            ) {
-                Task { await presentPlayer(fromStart: false) }
-            }
-            .disabled(isPreparingPlayback)
-
-            Text("Resume from \(DetailFormatting.position(resume?.position ?? .zero))")
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .padding(.leading, AetherDesign.Spacing.xs)
+        AetherButton(
+            isPreparingPlayback ? "Preparing…" : "Resume \(DetailFormatting.position(resume?.position ?? .zero))",
+            systemImage: "play.fill",
+            role: .primary
+        ) {
+            Task { await presentPlayer(fromStart: false) }
         }
+        .disabled(isPreparingPlayback)
     }
 
     /// Level 2 — Restart, secondary emphasis, sitting under Resume.
@@ -2523,4 +2720,33 @@ private extension View {
         self
         #endif
     }
+
+    /// Bolder, couch-visible focus for season cards — a brighter accent glow and
+    /// extra lift on top of the card's own focus, since the default lift alone was
+    /// hard to identify from across the room (#266 feedback). tvOS only.
+    @ViewBuilder
+    func seasonCardFocus() -> some View {
+        #if os(tvOS)
+        modifier(SeasonCardFocus())
+        #else
+        self
+        #endif
+    }
 }
+
+#if os(tvOS)
+private struct SeasonCardFocus: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isFocused ? 1.08 : 1.0)
+            .shadow(
+                color: AetherDesign.Palette.accent.opacity(isFocused ? 0.9 : 0),
+                radius: isFocused ? 30 : 0,
+                y: isFocused ? 12 : 0
+            )
+            .zIndex(isFocused ? 1 : 0)
+            .animation(AetherDesign.Motion.focus, value: isFocused)
+    }
+}
+#endif
