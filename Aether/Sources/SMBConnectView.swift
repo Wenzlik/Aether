@@ -95,18 +95,46 @@ struct SMBConnectView: View {
             roots: roots
         )
 
-        // Validate by listing the chosen root (or the host root). Empty +
-        // reachable is allowed (a share may simply hold no folders we surfaced);
-        // we only fail when nothing comes back at all and creds look involved.
-        let probeURL = roots.first.flatMap { connection.url(forPath: $0) } ?? connection.rootURL
-        guard let probeURL else { phase = .failed("Invalid host."); return }
-        let entries = await SMBBrowser.entries(at: probeURL, options: connection.vlcMediaOptions, timeoutMilliseconds: 6000)
-
-        if entries.isEmpty {
-            phase = .failed("Couldn't list anything at \(connection.host). Check the host, folder, credentials, and that Local Network access is allowed in Settings ▸ Privacy.")
+        // Trigger the iOS Local Network prompt + confirm the host is reachable
+        // BEFORE the libsmb2 browse: libVLC's raw sockets don't make iOS show
+        // the prompt, so without this the connection is silently blocked and the
+        // app never even appears in Settings ▸ Privacy ▸ Local Network (#214).
+        // An NWConnection does trigger it; the grant then applies app-wide.
+        if await SMBNetworkProbe.probe(host: trimmedHost) == .blocked {
+            phase = .failed("Couldn't reach \(trimmedHost) on your network. If iOS asked for Local Network access, allow it; if it didn't, enable it in Settings ▸ Privacy & Security ▸ Local Network ▸ Aether. Also check the IP is correct and on the same Wi-Fi.")
             return
         }
-        await session.completeSMBSignIn(connection: connection)
-        dismiss()
+
+        // Validate by listing the chosen root (or the host root). Use the rich
+        // browse so we can say *why* it came back empty rather than one generic
+        // failure — the status (timeout / failed / done-but-empty) maps to very
+        // different fixes.
+        let probeURL = roots.first.flatMap { connection.url(forPath: $0) } ?? connection.rootURL
+        guard let probeURL else { phase = .failed("Invalid host."); return }
+        let result = await SMBBrowser.browse(at: probeURL, options: connection.vlcMediaOptions, timeoutMilliseconds: 6000)
+
+        if !result.isEmpty {
+            await session.completeSMBSignIn(connection: connection)
+            dismiss()
+            return
+        }
+
+        // libsmb2's own last error line, when it logged one — the most precise
+        // hint (e.g. STATUS_LOGON_FAILURE = creds, STATUS_BAD_NETWORK_NAME = share).
+        let detail = result.diagnostic.map { "\n\nServer said: \($0)" } ?? ""
+        let scanningWholeHost = roots.isEmpty
+        switch result.status {
+        case .timeout, .notStarted:
+            phase = .failed("Couldn't reach \(connection.host). Check the host/IP is correct and reachable, and that Local Network access is allowed for Aether (Settings ▸ Privacy ▸ Local Network on iOS). On the Simulator, Local Network access is unreliable — try a real device.\(detail)")
+        case .failed:
+            phase = .failed("\(connection.host) refused the request. Check the username, password and domain — and, if you set a Folder, that the path exists.\(detail)")
+        case .done where scanningWholeHost:
+            // Reached the host, but listing *shares* at smb://host/ returned
+            // nothing. Many NAS block anonymous share enumeration — the practical
+            // fix is to name a specific share instead of scanning the whole host.
+            phase = .failed("Reached \(connection.host) but couldn't list any shares — many NAS block browsing the whole server. Enter a specific Folder (e.g. Media or Movies) and try again.\(detail)")
+        case .done:
+            phase = .failed("Reached the folder on \(connection.host) but it held nothing we could list. Double-check the Folder path (it's relative to the server root, e.g. Media/Movies).\(detail)")
+        }
     }
 }

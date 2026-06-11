@@ -215,6 +215,12 @@ struct DetailView: View {
 
     var body: some View {
         ZStack {
+            // The title's artwork as the page's environment (#290) — pinned
+            // behind all content so Detail reads as one continuous cinematic
+            // scene instead of a hero band that ends above a flat dark surface.
+            if !isPlayerPresented {
+                cinematicDetailBackground
+            }
             GeometryReader { geo in
                 Group {
                     if isShow {
@@ -256,7 +262,10 @@ struct DetailView: View {
                 #endif
             }
         }
-        .aetherScreenBackground()
+        // `cinematicDetailBackground` is the screen background now (#290); it
+        // carries its own base colour, so no flat `aetherScreenBackground` here.
+        // The player overlay paints its own black when presented.
+        .background(AetherDesign.Palette.background)
         #if os(iOS)
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
@@ -348,10 +357,11 @@ struct DetailView: View {
                 // stacked *below* it (not overlaid), so wide layouts don't push
                 // the text into a side gutter beside a letterboxed image.
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                    BackdropImage(
-                        url: activeItem.backdropURL(.backdrop) ?? activeItem.posterURL(.detail),
-                        height: hSizeClass == .regular ? backdropMaxHeight : nil
-                    )
+                    // Hero artwork now comes from the full-screen cinematic
+                    // background (#290) — reserve the band height so the title
+                    // sits below it, over the art, with no second backdrop.
+                    Color.clear
+                        .frame(height: hSizeClass == .regular ? backdropMaxHeight : 220)
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                         heroTitleBlock
@@ -427,6 +437,15 @@ struct DetailView: View {
                     }
                 }
             }
+            // Pin the column to the viewport's leading edge. Without this the
+            // VStack sizes to its widest child; the instant any child resolves
+            // wider than the screen, a leading-aligned VStack with no width
+            // constraint gets centered and its left edge — "Episodes", the
+            // leading halves of the stills — slides off the iPad-portrait
+            // screen. `movieContent` avoids this by anchoring its hero to
+            // `size.width`; `wideContent` via an explicit pin. `scrollContent`
+            // was the only layout missing one (the iPad-portrait episode clip).
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
     }
@@ -449,13 +468,9 @@ struct DetailView: View {
     /// overview and the playback rows sit on top, visible immediately.
     private var wideContent: some View {
         ZStack(alignment: .topLeading) {
-            CachedAsyncImage(
-                url: activeItem.backdropURL(heroBackdropTier) ?? activeItem.posterURL(.detail),
-                maxPixel: heroBackdropTier.maxPixel
-            )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .overlay { wideScrim }
+            // Backdrop comes from the full-screen cinematic background (#290) now;
+            // keep just the readability scrim over it for the left content column.
+            wideScrim
                 .ignoresSafeArea()
 
             ScrollView {
@@ -584,6 +599,19 @@ struct DetailView: View {
     /// fill a large display, so they request a 1080p tier; phone / iPad use the
     /// regular backdrop. Pair with `maxPixel` so the local cache doesn't shrink
     /// the large tier back down.
+    /// Full-screen artwork background for the whole Detail page (#290): the
+    /// title's backdrop crisp, or its poster blurred into atmosphere when no
+    /// backdrop exists. `current` (not `activeItem`) so it tracks source
+    /// switches + hydration.
+    private var cinematicDetailBackground: some View {
+        let backdrop = current.backdropURL(heroBackdropTier)
+        return CinematicArtworkBackground(
+            url: backdrop ?? current.posterURL(.detail),
+            blurRadius: backdrop != nil ? 0 : 40,
+            maxPixel: heroBackdropTier.maxPixel
+        )
+    }
+
     private var heroBackdropTier: ArtworkTier {
         #if os(tvOS) || os(visionOS)
         return .backdropLarge
@@ -708,13 +736,10 @@ struct DetailView: View {
     /// the fold.
     private func movieBanner(_ size: CGSize) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            CachedAsyncImage(
-                url: activeItem.backdropURL(.backdrop) ?? activeItem.posterURL(.detail),
-                maxPixel: ArtworkTier.backdrop.maxPixel
-            )
-                .frame(width: size.width, height: compactHeroHeight(size))
-                .clipped()
-                .overlay(alignment: .bottom) { bannerScrim }
+            // The full-screen cinematic background (#290) is the hero artwork
+            // now — reserve the same height so the title sits over the lower
+            // part of that art instead of stacking a second backdrop banner.
+            Color.clear.frame(height: compactHeroHeight(size))
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                 heroTitleBlock
@@ -749,13 +774,11 @@ struct DetailView: View {
 
     private func movieHero(_ size: CGSize) -> some View {
         ZStack(alignment: .bottomLeading) {
-            CachedAsyncImage(
-                url: activeItem.backdropURL(heroBackdropTier) ?? activeItem.posterURL(.detail),
-                maxPixel: heroBackdropTier.maxPixel
-            )
+            // Hero artwork comes from the full-screen cinematic background (#290);
+            // reserve the stage height so the embedded actions sit at the bottom
+            // of it, over the art, with no second backdrop image.
+            Color.clear
                 .frame(width: size.width, height: movieHeroHeight(size))
-                .clipped()
-                .overlay { movieHeroScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
                 heroTitleBlock
@@ -1320,36 +1343,6 @@ struct DetailView: View {
         }
     }
 
-    /// Horizontal capsule chips, one per season — selecting one swaps the inline
-    /// episode list without navigating. Scrolls when a show has many seasons.
-    private var seasonSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                ForEach(children) { season in
-                    let isSelected = season.id == selectedSeason?.id
-                    Button {
-                        selectSeason(season)
-                    } label: {
-                        Text(DetailFormatting.seasonLabel(season))
-                            .font(AetherDesign.Typography.metadata)
-                            .padding(.horizontal, AetherDesign.Spacing.m)
-                            .padding(.vertical, AetherDesign.Spacing.xs)
-                            .background(
-                                isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.surfaceElevated,
-                                in: Capsule()
-                            )
-                            .foregroundStyle(
-                                isSelected ? Color.white : AetherDesign.Palette.textSecondary
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
-        }
-        .aetherDetailFocusSection()
-    }
-
     @ViewBuilder
     private var seasonEpisodesSection: some View {
         if isLoadingEpisodes {
@@ -1549,15 +1542,6 @@ struct DetailView: View {
         .padding(.vertical, AetherDesign.Spacing.s)
         .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
         .premiumFocus()
-    }
-
-    private func selectSeason(_ season: MediaItem) {
-        guard season.id != selectedSeason?.id else { return }
-        selectedSeason = season
-        seasonEpisodes = []
-        // Note: the Next Up card tracks the whole series, so it deliberately
-        // stays put when the user browses to a different season.
-        Task { await loadSeasonEpisodes(season) }
     }
 
     /// Fetch resume points for a set of episodes into `episodeResume` (#260),
