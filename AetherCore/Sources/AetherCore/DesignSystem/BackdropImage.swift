@@ -46,9 +46,20 @@ public struct BackdropImage: View {
     @ViewBuilder
     private var backdrop: some View {
         if let height {
-            CachedAsyncImage(url: url, maxPixel: maxPixel)
+            // Fill the full width at a fixed height WITHOUT letting the success
+            // image's natural size push the layout wider than the screen. A bare
+            // `scaledToFill` image (no aspectRatio) reports its own grown size and
+            // grows past `.frame(maxWidth:)`; `.clipped()` only clips drawing, not
+            // the reported width. On iPad portrait (regular hSizeClass) that grew
+            // the hero past the viewport and shoved the whole Detail column left,
+            // clipping the leading edge of episode/season screens. So size a clear
+            // box (full width × height), draw the image into it, then clip —
+            // mirroring the Color.clear→overlay→clipped pattern CachedAsyncImage
+            // uses for its aspect-ratio case.
+            Color.clear
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
+                .overlay { CachedAsyncImage(url: url, maxPixel: maxPixel) }
                 .clipped()
         } else {
             CachedAsyncImage(url: url, aspectRatio: 16.0 / 9.0, maxPixel: maxPixel)
