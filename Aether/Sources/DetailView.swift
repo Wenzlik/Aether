@@ -84,6 +84,12 @@ struct DetailView: View {
     /// Resume points for the currently-listed episodes, so each row can show how
     /// far in you are (#260). Keyed by episode id; filled when episodes load.
     @State private var episodeResume: [MediaID: ResumePoint] = [:]
+    /// tvOS: which season card has focus, so the Show page previews it while
+    /// browsing (#266 — Focus = Preview, Select = Open).
+    @FocusState private var focusedSeasonID: MediaID?
+    /// Last-focused season, kept so the preview stays put when focus leaves the
+    /// rail (defaults to the first season).
+    @State private var previewSeasonID: MediaID?
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -867,6 +873,7 @@ struct DetailView: View {
                         .seasonCardFocus()
                     }
                     .buttonStyle(.plain)
+                    .focused($focusedSeasonID, equals: season.id)
                 }
             }
             .padding(.vertical, AetherDesign.Spacing.xs)
@@ -887,8 +894,70 @@ struct DetailView: View {
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
             seasonsRail
+            #if os(tvOS)
+            // Focus = Preview: a lightweight read-out of the season currently
+            // under focus (Select still opens the dedicated Season Detail) (#266).
+            seasonPreview
+            #endif
+        }
+        #if os(tvOS)
+        .onChange(of: focusedSeasonID) { _, id in
+            if let id { previewSeasonID = id }
+        }
+        #endif
+    }
+
+    #if os(tvOS)
+    /// The season the preview describes — the last-focused one, else the first.
+    private var previewSeason: MediaItem? {
+        children.first { $0.id == previewSeasonID } ?? children.first
+    }
+
+    /// Lightweight preview of the focused season on the Show page: name, year /
+    /// episode count / progress, and a short overview — immediate context while
+    /// browsing without leaving for the Season Detail (#266).
+    @ViewBuilder
+    private var seasonPreview: some View {
+        if let season = previewSeason {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                Text(DetailFormatting.seasonLabel(season))
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let meta = seasonPreviewMeta(season) {
+                    Text(meta)
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                }
+                if let summary = season.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: 720, alignment: .leading)
+            .animation(AetherDesign.Motion.hero, value: previewSeasonID)
         }
     }
+
+    /// "2017 • 11 Episodes • 7/11 watched" — year, episode count, watch progress.
+    private func seasonPreviewMeta(_ season: MediaItem) -> String? {
+        var parts: [String] = []
+        if let year = season.year { parts.append(String(year)) }
+        if let count = season.episodeCount, count > 0 {
+            parts.append("\(count) Episode\(count == 1 ? "" : "s")")
+            if let unwatched = season.unwatchedEpisodeCount {
+                if unwatched == 0 {
+                    parts.append("Watched")
+                } else if count - unwatched > 0 {
+                    parts.append("\(count - unwatched)/\(count) watched")
+                }
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+    #endif
 
     @ViewBuilder
     private var episodesList: some View {
