@@ -8,16 +8,20 @@ import VLCKit
 /// Cinema are AVPlayer-only for now and are fast-follows on this engine.
 struct VLCPlayerView: UIViewControllerRepresentable {
     let url: URL
+    /// VLCKit media options applied before play — carries SMB credentials
+    /// (`:smb-user=` / `:smb-pwd=` / `:smb-domain=`) and tuned caching (#214).
+    var options: [String] = []
     let onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> VLCPlaybackController {
-        VLCPlaybackController(url: url, onDismiss: onDismiss)
+        VLCPlaybackController(url: url, options: options, onDismiss: onDismiss)
     }
     func updateUIViewController(_ controller: VLCPlaybackController, context: Context) {}
 }
 
 final class VLCPlaybackController: UIViewController {
     private let url: URL
+    private let options: [String]
     private let onDismiss: () -> Void
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
@@ -26,8 +30,9 @@ final class VLCPlaybackController: UIViewController {
     private let progress = UIProgressView(progressViewStyle: .default)
     private var ticker: Timer?
 
-    init(url: URL, onDismiss: @escaping () -> Void) {
+    init(url: URL, options: [String] = [], onDismiss: @escaping () -> Void) {
         self.url = url
+        self.options = options
         self.onDismiss = onDismiss
         super.init(nibName: nil, bundle: nil)
     }
@@ -76,7 +81,11 @@ final class VLCPlaybackController: UIViewController {
         ])
 
         player.drawable = videoView
-        player.media = VLCMedia(url: url)
+        if let media = VLCMedia(url: url) {
+            // SMB credentials + caching ride as media options (#214).
+            for option in options { media.addOption(option) }
+            player.media = media
+        }
         player.play()
 
         // The timer is scheduled on the main run loop (we're in viewDidLoad), so

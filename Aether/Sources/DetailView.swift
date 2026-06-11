@@ -98,6 +98,11 @@ struct DetailView: View {
     /// Season pages rarely carry their own cast — the parent show's cast,
     /// fetched as a fallback so Cast & Crew isn't missing on a season (#267).
     @State private var fallbackCast: [CastMember] = []
+    /// Episode detail: the parent season + show, resolved from `parentID` so the
+    /// screen offers "Season N" / "<Series>" navigation instead of dead-ending
+    /// (#282 — matters when an episode is opened straight from Home).
+    @State private var parentSeason: MediaItem?
+    @State private var parentShow: MediaItem?
     /// The title's clearLogo, once loaded — the hero swaps its text title for
     /// this wordmark art. Stays nil (text title) for the majority of titles
     /// whose source has no logo (#273).
@@ -267,6 +272,9 @@ struct DetailView: View {
                 await computeNextUp()
                 await loadFallbackCastIfNeeded()
             }
+            if item.kind == .episode {
+                await loadEpisodeParents()   // #282: Season / Show navigation
+            }
             related = await source?.related(to: activeItem.id) ?? []
         }
         // Re-point the screen after the local metadata editor closes (#211): the
@@ -311,7 +319,7 @@ struct DetailView: View {
             playbackSelectorSheet(for: selector)
         }
         .fullScreenCover(item: $vlcPlayback) { playback in
-            VLCPlayerView(url: playback.url) { vlcPlayback = nil }
+            VLCPlayerView(url: playback.url, options: playback.options) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
         #if os(visionOS)
@@ -363,6 +371,9 @@ struct DetailView: View {
                             .padding(.horizontal, AetherDesign.Spacing.l)
                     }
 
+                    episodeParentNavigation
+                        .padding(.horizontal, AetherDesign.Spacing.l)
+
                     if !item.kind.isContainer, current.streamURL != nil {
                         playbackSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
@@ -375,11 +386,17 @@ struct DetailView: View {
                             .frame(maxWidth: 720, alignment: .leading)
                     }
 
+                    // tvOS reaches the full technical details via the info icon
+                    // in the action row → a focused, scrollable sheet — the
+                    // inline section was clipped + competed with primary content
+                    // (#281). Other platforms keep it inline (collapsed).
+                    #if !os(tvOS)
                     if !item.kind.isContainer, current.mediaInfo != nil {
                         technicalDetailsSection
                             .padding(.horizontal, AetherDesign.Spacing.l)
                             .frame(maxWidth: 720, alignment: .leading)
                     }
+                    #endif
 
                     // Only meaningful when the title exists on more than one source.
                     if availableSources.count > 1 {
@@ -450,6 +467,8 @@ struct DetailView: View {
                             actionRow
                         }
 
+                        episodeParentNavigation
+
                         if let summary = activeItem.summary {
                             if item.kind.isContainer {
                                 Text(summary)
@@ -474,9 +493,11 @@ struct DetailView: View {
                         if !item.kind.isContainer, current.streamURL != nil {
                             playbackSection
                         }
+                        #if !os(tvOS)
                         if !item.kind.isContainer, current.mediaInfo != nil {
                             technicalDetailsSection
                         }
+                        #endif
                         if availableSources.count > 1 {
                             availableSourcesSection
                         }
@@ -647,11 +668,13 @@ struct DetailView: View {
                     .frame(maxWidth: 720, alignment: .leading)
                     .aetherDetailFocusSection()
             }
+            #if !os(tvOS)
             if current.mediaInfo != nil {
                 technicalDetailsSection
                     .frame(maxWidth: 720, alignment: .leading)
                     .aetherDetailFocusSection()
             }
+            #endif
             relatedRail
             if current.streamURL != nil {
                 playbackSection
@@ -1472,6 +1495,64 @@ struct DetailView: View {
               let showID = activeItem.parentID ?? item.parentID,
               let show = try? await source.item(for: showID) else { return }
         fallbackCast = show.cast
+    }
+
+    /// Resolve an episode's parent season + show from `parentID` so the detail
+    /// can offer upward navigation (#282). Server episodes nest episode → season
+    /// → show; flat sources (Local / SMB) nest episode → show directly, so the
+    /// immediate parent may already be the show.
+    private func loadEpisodeParents() async {
+        parentSeason = nil
+        parentShow = nil
+        guard item.kind == .episode, let source,
+              let parentID = activeItem.parentID,
+              let parent = try? await source.item(for: parentID) else { return }
+        switch parent.kind {
+        case .season:
+            parentSeason = parent
+            if let showID = parent.parentID, let show = try? await source.item(for: showID) {
+                parentShow = show
+            }
+        case .show:
+            parentShow = parent
+        default:
+            break
+        }
+    }
+
+    /// Episode-detail upward navigation: "Season N" and/or the series. Hidden
+    /// when neither parent resolved (#282).
+    @ViewBuilder
+    private var episodeParentNavigation: some View {
+        if item.kind == .episode, parentSeason != nil || parentShow != nil {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                if let parentSeason {
+                    NavigationLink(value: parentSeason) {
+                        parentNavLabel(DetailFormatting.seasonLabel(parentSeason), systemImage: "rectangle.stack")
+                    }
+                    .buttonStyle(.plain)
+                }
+                if let parentShow {
+                    NavigationLink(value: parentShow) {
+                        parentNavLabel(parentShow.title, systemImage: "tv")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func parentNavLabel(_ text: String, systemImage: String) -> some View {
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: systemImage)
+            Text(text).lineLimit(1)
+        }
+        .font(AetherDesign.Typography.metadata)
+        .foregroundStyle(AetherDesign.Palette.textPrimary)
+        .padding(.horizontal, AetherDesign.Spacing.m)
+        .padding(.vertical, AetherDesign.Spacing.s)
+        .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
+        .premiumFocus()
     }
 
     private func selectSeason(_ season: MediaItem) {
@@ -2771,6 +2852,8 @@ struct DetailView: View {
     private struct VLCPlayback: Identifiable {
         let id = UUID()
         let url: URL
+        /// VLCKit media options (SMB credentials + caching) — empty for local files.
+        var options: [String] = []
     }
 
     private func presentPlayer(fromStart: Bool) async {
@@ -2802,7 +2885,10 @@ struct DetailView: View {
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
         if let url = current.streamURL, PlaybackEngine.engine(for: url) == .vlc {
-            vlcPlayback = VLCPlayback(url: url)
+            // SMB needs its credentials passed to VLCKit as media options (the
+            // URL stays credential-free) — empty for local files (#214).
+            let options = (source as? SMBMediaSource)?.vlcMediaOptions ?? []
+            vlcPlayback = VLCPlayback(url: url, options: options)
             return
         }
 

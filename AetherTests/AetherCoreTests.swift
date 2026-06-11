@@ -1254,7 +1254,7 @@ struct MediaSourceIDLocalTests {
 
     @Test("existing source ids still round-trip unchanged")
     func othersRoundTrip() throws {
-        for id in [MediaSourceID.mock, .plex(serverID: "s1"), .jellyfin(serverID: "j1"), .synology(host: "h")] {
+        for id in [MediaSourceID.mock, .plex(serverID: "s1"), .jellyfin(serverID: "j1"), .smb(id: "x"), .dlna(udn: "uuid:y")] {
             let data = try JSONEncoder().encode(id)
             #expect(try JSONDecoder().decode(MediaSourceID.self, from: data) == id)
         }

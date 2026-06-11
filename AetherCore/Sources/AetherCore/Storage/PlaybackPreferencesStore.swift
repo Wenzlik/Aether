@@ -113,6 +113,23 @@ public final class PlaybackPreferencesStore {
         didSet { defaults.set(hideWatchedInDiscovery, forKey: Keys.hideWatched) }
     }
 
+    /// How strongly watched posters are dimmed/desaturated in the grids (#280).
+    /// Default `.medium`.
+    public var watchedDimming: WatchedDimming {
+        didSet { defaults.set(watchedDimming.rawValue, forKey: Keys.watchedDimming) }
+    }
+
+    /// Whether the centered "WATCHED" label is drawn over finished posters
+    /// (#280). Default `true`.
+    public var watchedShowLabel: Bool {
+        didSet { defaults.set(watchedShowLabel, forKey: Keys.watchedShowLabel) }
+    }
+
+    /// Bundled into the value injected as `\.watchedDisplay`.
+    public var watchedDisplayConfig: WatchedDisplayConfig {
+        WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel)
+    }
+
     /// Allowed countdown lengths, for the Settings picker.
     public static let countdownOptions = [5, 10, 15]
 
@@ -125,6 +142,8 @@ public final class PlaybackPreferencesStore {
         static let skipIntro = "playback.skipIntro"
         static let skipCredits = "playback.skipCredits"
         static let hideWatched = "display.hideWatchedInDiscovery"
+        static let watchedDimming = "display.watchedDimming"
+        static let watchedShowLabel = "display.watchedShowLabel"
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
     }
@@ -150,6 +169,8 @@ public final class PlaybackPreferencesStore {
         self.nextEpisodeCountdown = Self.countdownOptions.contains(savedCountdown) ? savedCountdown : 10
         // `object(forKey:)` so a missing key → default true (hide watched).
         self.hideWatchedInDiscovery = (defaults.object(forKey: Keys.hideWatched) as? Bool) ?? true
+        self.watchedDimming = defaults.string(forKey: Keys.watchedDimming).flatMap(WatchedDimming.init) ?? .medium
+        self.watchedShowLabel = (defaults.object(forKey: Keys.watchedShowLabel) as? Bool) ?? true
     }
 }
 

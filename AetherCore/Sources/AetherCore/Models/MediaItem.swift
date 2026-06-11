@@ -552,13 +552,18 @@ public struct MediaID: Hashable, Sendable {
     public var key: String { "\(source.stableKey):\(rawValue)" }
 }
 
-/// Identifies which source (mock / Plex server / Synology share / on-device
-/// Local Library) an item came from.
+/// Identifies which source (mock / Plex / Jellyfin server / SMB share / DLNA
+/// server / on-device Local Library) an item came from.
 public enum MediaSourceID: Hashable, Sendable {
     case mock
     case plex(serverID: String)
     case jellyfin(serverID: String)
-    case synology(host: String)
+    /// A configured SMB share, keyed by a stable record UUID (not host) so an
+    /// IP/host change doesn't orphan resume state (#214).
+    case smb(id: String)
+    /// A DLNA/UPnP media server, keyed by its device UDN (`uuid:…`) — stable
+    /// across the server's IP churn (#212).
+    case dlna(udn: String)
     /// The on-device Local Library (files Aether owns). Singular — one store
     /// per device — so no associated value. See #173.
     case local
@@ -576,8 +581,10 @@ public enum MediaSourceID: Hashable, Sendable {
             return "plex.\(serverID)"
         case .jellyfin(let serverID):
             return "jellyfin.\(serverID)"
-        case .synology(let host):
-            return "synology.\(host)"
+        case .smb(let id):
+            return "smb.\(id)"
+        case .dlna(let udn):
+            return "dlna.\(udn)"
         case .local:
             return "local"
         }
