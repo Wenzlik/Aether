@@ -751,9 +751,7 @@ struct DetailView: View {
     private var relatedRail: some View {
         if !related.isEmpty {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text("More Like This")
-                    .font(AetherDesign.Typography.sectionTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                relatedHeader
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: AetherDesign.Spacing.l) {
@@ -774,6 +772,37 @@ struct DetailView: View {
                 .aetherDetailFocusSection()
             }
         }
+    }
+
+    /// The "More Like This" title. On tvOS it's a **full-width, single-focusable
+    /// focus section** sitting directly above the rail — the only reliable way to
+    /// let Up from *any* poster (even one scrolled far right) escape the rail
+    /// (#249 follow-up). The content directly above this rail is non-focusable
+    /// (static Technical-Details rows on a movie, plain summary text on a series),
+    /// so the focus engine had nothing to relay Up into and trapped focus unless
+    /// you were on the first tile. Full-width ⇒ it overlaps every column; a single
+    /// focusable ⇒ no cross-axis tiebreak. Off tvOS it stays plain Text.
+    @ViewBuilder
+    private var relatedHeader: some View {
+        #if os(tvOS)
+        Button {
+            // No dedicated "all related" screen yet — this is a labelled, fully
+            // escapable focus waypoint (not a dead-end like the cast cards, #249),
+            // so a no-op Select is safe. Wire a destination here if one is added.
+        } label: {
+            Text("More Like This")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusSection()
+        #else
+        Text("More Like This")
+            .font(AetherDesign.Typography.sectionTitle)
+            .foregroundStyle(AetherDesign.Palette.textPrimary)
+        #endif
     }
 
     private var relatedPosterWidth: CGFloat {
