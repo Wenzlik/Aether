@@ -1534,6 +1534,13 @@ struct DetailView: View {
                 .scaledToFit()
                 .frame(maxWidth: heroLogoMaxWidth, maxHeight: heroLogoMaxHeight, alignment: .leading)
                 .accessibilityLabel(Text(activeItem.title))
+        } else if item.kind == .season {
+            // The formatter, not the raw title — a Czech-localized Plex sends
+            // "7. řada", which should read "Season 7" (named seasons keep
+            // their "S2 · Asylum" form).
+            Text(DetailFormatting.seasonLabel(activeItem))
+                .font(AetherDesign.Typography.heroTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
         } else {
             Text(activeItem.title)
                 .font(AetherDesign.Typography.heroTitle)
