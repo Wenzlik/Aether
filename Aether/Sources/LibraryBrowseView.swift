@@ -279,6 +279,13 @@ struct LibraryBrowseView: View {
                     navigationPath.append(UnifiedLibrarySection(kind: kind, title: title))
                 }
             )
+            // tvOS: make the header row a full-width focus section so Up from
+            // *any* poster (not just the last one) lands on its single focusable
+            // — the "See all" Button — without scrolling to the rail's end (#249
+            // follow-up). Full-width ⇒ overlaps every column; the title/subtitle
+            // are plain Text, so See-all is the lone cross-axis match. No-op off tvOS.
+            .frame(maxWidth: .infinity)
+            .aetherHeaderFocusSection()
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
@@ -404,6 +411,18 @@ private extension View {
     /// rails; no-op elsewhere (the API is tvOS-only).
     @ViewBuilder
     func aetherFocusSection() -> some View {
+        #if os(tvOS)
+        self.focusSection()
+        #else
+        self
+        #endif
+    }
+
+    /// Mark a rail's *header row* as its own focus section on tvOS so Up from any
+    /// poster reliably lands on the header's single focusable ("See all"). Same
+    /// shape as `aetherFocusSection()`; no-op elsewhere.
+    @ViewBuilder
+    func aetherHeaderFocusSection() -> some View {
         #if os(tvOS)
         self.focusSection()
         #else
