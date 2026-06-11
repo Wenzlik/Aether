@@ -110,9 +110,10 @@ public struct AetherCard: View {
     }
 
     /// Apple-TV-style progress: a frosted strip across the artwork's lower edge
-    /// (so it reads as part of the poster, not a detached line) with a 2pt
-    /// gradient fill in the brand blue. Clipped by the card's rounded corners
-    /// (the overlays are composited before the parent `clipShape`).
+    /// (so it reads as part of the poster, not a detached line) holding an inset,
+    /// rounded **progress bar** in the brand blue. The bar is several points tall
+    /// and inset from the edges so it reads from couch distance — a hairline at
+    /// the very bottom was nearly invisible on the 10-foot UI.
     @ViewBuilder
     private var progressBar: some View {
         if let progress {
@@ -120,15 +121,20 @@ public struct AetherCard: View {
             ZStack(alignment: .bottom) {
                 Rectangle().fill(AetherDesign.Materials.card)
                 GeometryReader { geo in
+                    let trackWidth = geo.size.width
                     ZStack(alignment: .leading) {
-                        Rectangle().fill(Color.white.opacity(0.18))
-                        Rectangle()
+                        Capsule().fill(Color.white.opacity(0.28))
+                        Capsule()
                             .fill(AetherDesign.Gradients.progress)
-                            .frame(width: geo.size.width * clamped)
+                            // Never thinner than its own height, so even a few
+                            // percent shows a clear rounded nub rather than nothing.
+                            .frame(width: max(progressBarThickness, trackWidth * clamped))
                     }
-                    .frame(height: 2)
+                    .frame(height: progressBarThickness)
                     .frame(maxHeight: .infinity, alignment: .bottom)
                 }
+                .padding(.horizontal, progressBarInset)
+                .padding(.bottom, progressBarInset)
             }
             .frame(height: progressStripHeight)
             .clipShape(
@@ -143,6 +149,26 @@ public struct AetherCard: View {
         return 28
         #else
         return 22
+        #endif
+    }
+
+    /// Height of the actual progress bar inside the frosted strip — bold enough
+    /// to read across a room on the 10-foot UI, slimmer on touch.
+    private var progressBarThickness: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 7
+        #else
+        return 5
+        #endif
+    }
+
+    /// Inset of the bar from the strip's side and bottom edges, so it reads as a
+    /// rounded pill floating in the strip rather than glued to the corner.
+    private var progressBarInset: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 8
+        #else
+        return 6
         #endif
     }
 
