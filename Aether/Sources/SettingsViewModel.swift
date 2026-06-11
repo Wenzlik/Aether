@@ -188,7 +188,8 @@ final class SettingsViewModel {
             switch source.id {
             case .plex:     kind = "plex"
             case .jellyfin: kind = "jellyfin"
-            case .synology: kind = "synology"
+            case .smb:      kind = "smb"
+            case .dlna:     kind = "dlna"
             case .mock:     kind = "mock"
             case .local:    kind = "local"
             }

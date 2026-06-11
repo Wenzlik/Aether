@@ -225,9 +225,12 @@ private struct WirePoint: Codable {
         case .jellyfin(let serverID):
             kind = "jellyfin"
             param = serverID
-        case .synology(let host):
-            kind = "synology"
-            param = host
+        case .smb(let id):
+            kind = "smb"
+            param = id
+        case .dlna(let udn):
+            kind = "dlna"
+            param = udn
         case .local:
             kind = "local"
         }
@@ -253,9 +256,12 @@ private struct WirePoint: Codable {
         case "jellyfin":
             guard let param = sourceParam else { return nil }
             source = .jellyfin(serverID: param)
-        case "synology":
+        case "smb":
             guard let param = sourceParam else { return nil }
-            source = .synology(host: param)
+            source = .smb(id: param)
+        case "dlna":
+            guard let param = sourceParam else { return nil }
+            source = .dlna(udn: param)
         case "local":
             source = .local
         default:
