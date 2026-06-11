@@ -24,6 +24,13 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
     public let posterTag: String?
     public let backdropPath: String?
     public let backdropTag: String?
+    /// Title clearLogo (transparent wordmark art). Plex: the raw `Image[].url`
+    /// path; Jellyfin: `/Items/{id}/Images/Logo`. Optional **and decoded as
+    /// optional** so persisted catalog snapshots from before the field existed
+    /// still decode (a throwing decode would silently wipe the snapshot).
+    public let logoPath: String?
+    /// Jellyfin Logo image tag (content hash); `nil` for Plex.
+    public let logoTag: String?
 
     public init(
         provider: Provider,
@@ -32,7 +39,9 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
         posterPath: String?,
         posterTag: String? = nil,
         backdropPath: String?,
-        backdropTag: String? = nil
+        backdropTag: String? = nil,
+        logoPath: String? = nil,
+        logoTag: String? = nil
     ) {
         self.provider = provider
         self.base = base
@@ -41,6 +50,8 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
         self.posterTag = posterTag
         self.backdropPath = backdropPath
         self.backdropTag = backdropTag
+        self.logoPath = logoPath
+        self.logoTag = logoTag
     }
 
     /// A server-resized poster URL for the given tier (2:3).
@@ -51,6 +62,39 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
     /// A server-resized backdrop URL for the given tier (16:9).
     public func backdropURL(_ tier: ArtworkTier = .backdrop) -> URL? {
         url(path: backdropPath, tag: backdropTag, tier: tier)
+    }
+
+    /// The title's clearLogo URL — deliberately NOT routed through the shared
+    /// `url(path:tag:tier:)` builder: the Plex photo transcoder is JPEG-only
+    /// (kills the transparency a logo lives on), and the Jellyfin branch
+    /// fill-crops to the tier's box (logos vary wildly in aspect). Plex serves
+    /// the raw image (logos are small); Jellyfin resizes aspect-fit via
+    /// `maxWidth` with Webp, which preserves alpha.
+    public func logoURL(_ tier: ArtworkTier = .logo) -> URL? {
+        guard let logoPath, !logoPath.isEmpty else { return nil }
+        switch provider {
+        case .plex:
+            var components = URLComponents(
+                url: base.appendingPathComponent(logoPath),
+                resolvingAgainstBaseURL: false
+            )
+            components?.queryItems = [URLQueryItem(name: "X-Plex-Token", value: token)]
+            return components?.url
+        case .jellyfin:
+            guard let logoTag else { return nil }
+            var components = URLComponents(
+                url: base.appendingPathComponent(logoPath),
+                resolvingAgainstBaseURL: false
+            )
+            components?.queryItems = [
+                URLQueryItem(name: "api_key", value: token),
+                URLQueryItem(name: "tag", value: logoTag),
+                URLQueryItem(name: "maxWidth", value: String(tier.pixelWidth)),
+                URLQueryItem(name: "quality", value: "90"),
+                URLQueryItem(name: "format", value: "Webp"),
+            ]
+            return components?.url
+        }
     }
 
     private func url(path: String?, tag: String?, tier: ArtworkTier) -> URL? {

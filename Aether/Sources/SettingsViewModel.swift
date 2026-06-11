@@ -123,10 +123,12 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
+        "Titles wear their logo — movies and shows render their stylized logo art on the Detail screen when your server has it",
+        "Browse your Library by Collections, Actors and Directors — three new facets beside Genres and Years, each opening a grid of matching titles",
         "Season pages got a life — browsing episodes on Apple TV now previews the focused one right below the rail: what it's about, runtime, air date, and how far in you are",
         "Cast & Crew on every season — the season's own cast when your server has it, otherwise the show's",
         "Next Up lives on the season too — one click to continue exactly where you are in that season",
-        "A cleaner season header — year, episode count and your watch progress (7/11 watched) instead of repeating the season number"
+        "Settings no longer drifts sideways on iPhone — for good this time"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.

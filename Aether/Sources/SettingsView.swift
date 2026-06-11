@@ -108,6 +108,12 @@ struct SettingsView: View {
                     // ScrollView resolves to the viewport width — no overflow.
                     .frame(maxWidth: isWide ? 1100 : .infinity, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    // HARD clamp (#248, third strike): pin the scroll content's
+                    // width to the viewport, so no child — present or future —
+                    // can widen the page and make the vertical scroll pannable
+                    // sideways. An over-wide child now overflows its own row
+                    // (truncated/clipped) instead of dragging the whole page.
+                    .containerRelativeFrame(.horizontal)
                 }
                 .task {
                     await refreshCapacity()
@@ -1015,12 +1021,15 @@ struct SettingsView: View {
                     Text(viewModel.versionRowLabel)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
 
                     Spacer(minLength: AetherDesign.Spacing.s)
 
                     Text("What's New")
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(1)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))

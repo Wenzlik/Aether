@@ -98,6 +98,10 @@ struct DetailView: View {
     /// Season pages rarely carry their own cast — the parent show's cast,
     /// fetched as a fallback so Cast & Crew isn't missing on a season (#267).
     @State private var fallbackCast: [CastMember] = []
+    /// The title's clearLogo, once loaded — the hero swaps its text title for
+    /// this wordmark art. Stays nil (text title) for the majority of titles
+    /// whose source has no logo (#273).
+    @State private var heroLogo: AetherPlatformImage?
     /// The item with full metadata (audio + subtitle streams, partID,
     /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
     /// choices. Playback decisions happen here on Detail, before the player
@@ -282,6 +286,16 @@ struct DetailView: View {
                 overrideItem = refreshed
                 configuredItem = applyingPreferences(to: refreshed)
             }
+        }
+        // clearLogo for the hero — keyed on the minted URL so it re-fires when
+        // hydration fills `configuredItem` (Plex logos arrive on the detail
+        // endpoint, not the library list) and when the user switches source.
+        .task(id: current.logoURL()) {
+            guard item.kind != .episode, let url = current.logoURL() else {
+                heroLogo = nil
+                return
+            }
+            heroLogo = await AetherImageCache.shared.image(for: url, maxPixel: ArtworkTier.logo.maxPixel)
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
@@ -1498,7 +1512,10 @@ struct DetailView: View {
     /// Hero title. For an **episode** with a known series, the series name is the
     /// big title and "S1 • E2 - Episode Title" sits beneath it (how Infuse / Apple
     /// TV present an episode); movies / shows / seasons — and episodes missing a
-    /// series title — show their own title (#266 Detail Phase 1).
+    /// series title — show their own title (#266 Detail Phase 1). When the source
+    /// carries a **clearLogo**, the title renders as the stylized wordmark art
+    /// instead of plain text (#273) — text-first, swapping in only once the image
+    /// has actually loaded, so titles without a logo never flash a placeholder.
     @ViewBuilder
     private var heroTitleBlock: some View {
         if item.kind == .episode, let series = activeItem.seriesTitle, !series.isEmpty {
@@ -1510,11 +1527,36 @@ struct DetailView: View {
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
+        } else if let heroLogo {
+            Image(uiImage: heroLogo)
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: heroLogoMaxWidth, maxHeight: heroLogoMaxHeight, alignment: .leading)
+                .accessibilityLabel(Text(activeItem.title))
         } else {
             Text(activeItem.title)
                 .font(AetherDesign.Typography.heroTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
         }
+    }
+
+    /// Logo caps — height-led (logos vary in aspect; `scaledToFit` follows).
+    /// Generous on the 10-foot / spatial hero, compact on touch layouts.
+    private var heroLogoMaxHeight: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        140
+        #else
+        80
+        #endif
+    }
+
+    private var heroLogoMaxWidth: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        480
+        #else
+        280
+        #endif
     }
 
     /// Dense single line, Infuse-style: "48 min • Jul 26, 2007 • [TV-14] • 1080p •
