@@ -62,9 +62,10 @@ struct MediaSourceIDStableKeyTests {
         #expect(MediaSourceID.plex(serverID: "abc-123").stableKey == "plex.abc-123")
     }
 
-    @Test("synology(host:) embeds the host")
-    func synology() {
-        #expect(MediaSourceID.synology(host: "nas.lan").stableKey == "synology.nas.lan")
+    @Test("smb(id:) / dlna(udn:) embed their stable key")
+    func networkShares() {
+        #expect(MediaSourceID.smb(id: "ABC-123").stableKey == "smb.ABC-123")
+        #expect(MediaSourceID.dlna(udn: "uuid:9f").stableKey == "dlna.uuid:9f")
     }
 
     @Test("stableKey is deterministic across calls (no nondeterminism)")

@@ -19,9 +19,12 @@ public enum PlaybackEngine: Sendable, Equatable {
         "mp4", "m4v", "mov", "m4a", "3gp", "3g2", "mp3", "aac", "m3u8"
     ]
 
-    /// Engine for a stream URL, decided by its container extension. An empty
-    /// extension (a transcode/HLS URL without one) defaults to `.system`.
+    /// Engine for a stream URL, decided by scheme then container extension.
+    /// `smb://` always goes to VLCKit — AVPlayer can't open it at all, even for
+    /// an `.mp4` (#214). An empty extension (a transcode/HLS URL without one)
+    /// defaults to `.system`.
     public static func engine(for url: URL) -> PlaybackEngine {
+        if let scheme = url.scheme?.lowercased(), scheme == "smb" { return .vlc }
         let ext = url.pathExtension.lowercased()
         if ext.isEmpty { return .system }
         return systemPlayableExtensions.contains(ext) ? .system : .vlc

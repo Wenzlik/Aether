@@ -231,14 +231,22 @@ extension MediaSourceID: Codable {
                 )
             }
             self = .jellyfin(serverID: parameter)
-        case "synology":
+        case "smb":
             guard let parameter else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .parameter, in: container,
-                    debugDescription: "synology source missing host"
+                    debugDescription: "smb source missing id"
                 )
             }
-            self = .synology(host: parameter)
+            self = .smb(id: parameter)
+        case "dlna":
+            guard let parameter else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .parameter, in: container,
+                    debugDescription: "dlna source missing udn"
+                )
+            }
+            self = .dlna(udn: parameter)
         case "local":
             self = .local
         default:
@@ -260,9 +268,12 @@ extension MediaSourceID: Codable {
         case .jellyfin(let serverID):
             try container.encode("jellyfin", forKey: .kind)
             try container.encode(serverID, forKey: .parameter)
-        case .synology(let host):
-            try container.encode("synology", forKey: .kind)
-            try container.encode(host, forKey: .parameter)
+        case .smb(let id):
+            try container.encode("smb", forKey: .kind)
+            try container.encode(id, forKey: .parameter)
+        case .dlna(let udn):
+            try container.encode("dlna", forKey: .kind)
+            try container.encode(udn, forKey: .parameter)
         case .local:
             try container.encode("local", forKey: .kind)
         }
