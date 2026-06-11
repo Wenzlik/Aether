@@ -111,14 +111,21 @@ public struct AetherSettingsRow: View {
             switch style {
             case let .value(value):
                 if let value {
+                    // Truncate, never expand: a long value (server name, OS/build
+                    // string, capacity) used to push the row wider than an iPhone,
+                    // which made the whole Settings page pan sideways (#248).
                     Text(value)
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             case let .status(status):
                 Text(status.text)
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(status.color)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             case .action:
                 EmptyView()
             }

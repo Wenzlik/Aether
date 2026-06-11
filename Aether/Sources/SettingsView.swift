@@ -88,7 +88,7 @@ struct SettingsView: View {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
-                ScrollView {
+                ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         header
                         if isWide {
