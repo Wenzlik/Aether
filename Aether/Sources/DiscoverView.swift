@@ -204,7 +204,10 @@ struct DiscoverView: View {
                 maxPixel: ArtworkTier.backdropLarge.maxPixel
             )
             .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
-            .frame(width: 760)
+            // Trimmed from 760 → 600 (≈428pt → ≈338pt tall at 16:9) so Featured
+            // stops dominating the page and the rails below show without scrolling
+            // (#266 tvOS feedback). Still the prominent top recommendation.
+            .frame(width: 600)
             .premiumFocus(scale: 1.04)
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
@@ -222,7 +225,7 @@ struct DiscoverView: View {
                     Text(overview)
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
-                        .lineLimit(4)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
