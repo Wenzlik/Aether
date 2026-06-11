@@ -311,7 +311,7 @@ struct DetailView: View {
             playbackSelectorSheet(for: selector)
         }
         .fullScreenCover(item: $vlcPlayback) { playback in
-            VLCPlayerView(url: playback.url) { vlcPlayback = nil }
+            VLCPlayerView(url: playback.url, options: playback.options) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
         #if os(visionOS)
@@ -2771,6 +2771,8 @@ struct DetailView: View {
     private struct VLCPlayback: Identifiable {
         let id = UUID()
         let url: URL
+        /// VLCKit media options (SMB credentials + caching) — empty for local files.
+        var options: [String] = []
     }
 
     private func presentPlayer(fromStart: Bool) async {
@@ -2802,7 +2804,10 @@ struct DetailView: View {
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
         if let url = current.streamURL, PlaybackEngine.engine(for: url) == .vlc {
-            vlcPlayback = VLCPlayback(url: url)
+            // SMB needs its credentials passed to VLCKit as media options (the
+            // URL stays credential-free) — empty for local files (#214).
+            let options = (source as? SMBMediaSource)?.vlcMediaOptions ?? []
+            vlcPlayback = VLCPlayback(url: url, options: options)
             return
         }
 
