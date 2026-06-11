@@ -98,6 +98,15 @@ struct LibraryBrowseView: View {
                     downloadStore: downloadStore
                 )
             }
+            // Browse facets (Genres, …) — the richer Library hierarchy (#266).
+            .navigationDestination(for: LibraryBrowseRoute.self) { route in
+                switch route {
+                case .genres:
+                    GenreListView(connectedSources: connectedSources)
+                case .genre(let name):
+                    GenreGridView(genre: name, connectedSources: connectedSources, downloadStore: downloadStore)
+                }
+            }
         }
         .task(id: sourcesKey) { await load() }
         .onChange(of: scenePhase) { _, phase in
@@ -254,6 +263,12 @@ struct LibraryBrowseView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                // Browse by genre across the whole library (#266). More facets
+                // (Years, Collections, …) will join here.
+                NavigationLink(value: LibraryBrowseRoute.genres) {
+                    LibraryBrowseRow(title: "Genres")
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, AetherDesign.Spacing.xl)
             .padding(.top, AetherDesign.Spacing.l)
