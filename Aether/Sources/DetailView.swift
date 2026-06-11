@@ -878,7 +878,11 @@ struct DetailView: View {
         }
     }
 
+    @ViewBuilder
     private var episodesList: some View {
+        #if os(tvOS)
+        episodeRail(children)
+        #else
         LazyVStack(spacing: AetherDesign.Spacing.m) {
             ForEach(children) { episode in
                 NavigationLink(value: episode) {
@@ -887,6 +891,7 @@ struct DetailView: View {
                 .buttonStyle(.plain)
             }
         }
+        #endif
     }
 
     private func episodeRow(_ episode: MediaItem) -> some View {
@@ -955,6 +960,80 @@ struct DetailView: View {
             .padding(.bottom, AetherDesign.Spacing.xs)
         }
     }
+
+    #if os(tvOS)
+    // MARK: - tvOS episode rail (Detail Phase 2)
+
+    /// Wide 16:9 still cards, like the Infuse "Season N" rail.
+    private var episodeStillWidth: CGFloat { 320 }
+
+    /// "2. Ladies Room" — ordinal-prefixed episode title for the still rail.
+    private func episodeOrdinalTitle(_ episode: MediaItem) -> String {
+        if let number = episode.episodeNumber { return "\(number). \(episode.title)" }
+        return episode.title
+    }
+
+    /// Resume time when in-progress, else air date, else runtime.
+    private func episodeCaption(_ episode: MediaItem) -> String {
+        if let resume = episodeResume[episode.id], !episode.isWatched {
+            return "Resume \(DetailFormatting.position(resume.position))"
+        }
+        if let date = episode.releaseDate { return DetailFormatting.airDate(date) }
+        if let runtime = episode.runtime { return DetailFormatting.runtime(runtime) }
+        return ""
+    }
+
+    /// tvOS episode browsing: a horizontal rail of 16:9 stills (ordinal title +
+    /// resume/date caption), mirroring the Infuse "Season N" rail instead of a
+    /// tall vertical list. Each still keeps its watched marker + in-progress bar.
+    private func episodeRail(_ episodes: [MediaItem]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: AetherDesign.Spacing.l) {
+                ForEach(episodes) { episode in
+                    NavigationLink(value: episode) { episodeStillCard(episode) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xs)
+        }
+        .aetherDetailFocusSection()
+    }
+
+    private func episodeStillCard(_ episode: MediaItem) -> some View {
+        let inProgress = episodeResume[episode.id] != nil && !episode.isWatched
+        return VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+            CachedAsyncImage(
+                url: episode.backdropURL(.still) ?? episode.posterURL(.thumbnail),
+                aspectRatio: 16.0 / 9.0,
+                maxPixel: ArtworkTier.still.maxPixel
+            )
+                .frame(width: episodeStillWidth)
+                .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if episode.isWatched {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.black, AetherDesign.Palette.accentGold)
+                            .font(.system(size: 22, weight: .bold))
+                            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                            .padding(AetherDesign.Spacing.s)
+                    }
+                }
+                .overlay(alignment: .bottom) { episodeProgressBar(episode) }
+                .premiumFocus(scale: 1.06)
+
+            Text(episodeOrdinalTitle(episode))
+                .font(AetherDesign.Typography.cardTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .lineLimit(1)
+            Text(episodeCaption(episode))
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(inProgress ? AetherDesign.Palette.accent : AetherDesign.Palette.textTertiary)
+                .lineLimit(1)
+        }
+        .frame(width: episodeStillWidth)
+    }
+    #endif
 
     private func loadChildrenIfNeeded() async {
         guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
@@ -1102,6 +1181,9 @@ struct DetailView: View {
         if isLoadingEpisodes {
             AetherLoadingState(.inline)
         } else if !seasonEpisodes.isEmpty {
+            #if os(tvOS)
+            episodeRail(seasonEpisodes)
+            #else
             LazyVStack(spacing: AetherDesign.Spacing.m) {
                 ForEach(seasonEpisodes) { episode in
                     NavigationLink(value: episode) {
@@ -1110,6 +1192,7 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                 }
             }
+            #endif
         }
     }
 
