@@ -1649,6 +1649,17 @@ struct DetailFormattingTests {
         let ep = MediaItem(id: .init(source: .mock, rawValue: "e"), title: "Pilot",
                            kind: .episode, seasonNumber: 1, episodeNumber: 3)
         #expect(DetailFormatting.episodeLabel(ep) == "S1E3 · Pilot")
+        // Hero episode-context line (#266 Detail Phase 1) — spaced, dash before title.
+        #expect(DetailFormatting.episodeContext(ep) == "S1 • E3 - Pilot")
+        let noNumbers = MediaItem(id: .init(source: .mock, rawValue: "e2"), title: "Special", kind: .episode)
+        #expect(DetailFormatting.episodeContext(noNumbers) == "Special")
+    }
+
+    @Test("air date — fixed en-US month-day-year (#266)")
+    func airDate() {
+        // 2007-07-26 UTC.
+        let date = Date(timeIntervalSince1970: 1_185_408_000)
+        #expect(DetailFormatting.airDate(date) == "Jul 26, 2007")
     }
 }
 

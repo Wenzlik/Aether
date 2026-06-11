@@ -68,6 +68,28 @@ public enum DetailFormatting {
         return episode.title
     }
 
+    /// "S1 • E2 - Ladies Room" — the episode-context line shown beneath the
+    /// **series** title on an episode's Detail hero (the series name is the big
+    /// title; this carries the season/episode + episode name). Falls back to the
+    /// bare title when the numbers are unknown.
+    public static func episodeContext(_ episode: MediaItem) -> String {
+        if let season = episode.seasonNumber, let number = episode.episodeNumber {
+            return "S\(season) • E\(number) - \(episode.title)"
+        }
+        return episode.title
+    }
+
+    /// "Jul 26, 2007" — an air/release date for the metadata line. Fixed
+    /// `en_US_POSIX` month-day-year so it reads the same everywhere (the app's UI
+    /// strings are English) and stays deterministic for tests.
+    public static func airDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
     // MARK: - Durations & numbers
 
     public static func runtime(_ duration: Duration) -> String {

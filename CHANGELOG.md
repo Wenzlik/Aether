@@ -4,7 +4,53 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.6.5] — Unreleased
+## [0.6.6] — 2026-06-11
+
+A tvOS-led pass toward the Infuse-style Detail + a richer Library, plus an iPhone
+Settings fix. (All builds green on iOS / tvOS / visionOS.)
+
+### Added
+
+- **Library browsing by Genre and Year** (#266, tvOS) — alongside Movies and TV
+  Shows, the Library now offers **Genres** and **Years** entries that list every
+  genre / release year across the whole catalog and open a combined grid of all
+  matching movies + shows. Keeps Library distinct from Home (browse, not rails);
+  Collections / Actors / Directors are a future addition.
+- **Focus-driven season preview** (#266, tvOS) — focusing a season card on a show
+  page now previews that season inline (name, year · episode count · watch
+  progress, and a short overview); selecting it still opens the dedicated Season
+  Detail. *Focus = preview, Select = open.*
+- **Episode still rail** (#266, tvOS) — a season's episodes browse as a horizontal
+  rail of 16:9 stills with ordinal "N. Title" labels, instead of a vertical list.
+
+### Changed
+
+- **Redesigned Detail hero + metadata** (#266) — an episode now leads with the
+  **series name** and an "S1 • E2 — Title" line; one **dense metadata row**
+  (runtime · air date · rating · resolution · audio) replaces the separate chip
+  strip; and **compact Resume / Restart pills** carry the resume time inline.
+- **Bolder Continue Watching progress** (#266) — a rounded, couch-visible progress
+  bar across the artwork instead of a faint 2-pt hairline.
+- **tvOS Library browses by category** (#266) — Movies / TV Shows / Genres / Years
+  rows under Search, so D-pad Down lands predictably instead of skipping into a
+  rail; the episode rail on a Season detail now uses the full screen width.
+- **tvOS Discover Featured right-sized** (#266) — the hero is trimmed so the rails
+  below it show without scrolling.
+- **Clearer tvOS season focus** (#266) — a bolder accent glow + lift on the focused
+  season card, and Up from any season card reliably reaches Next Up.
+
+### Fixed
+
+- **Settings no longer drags sideways on iPhone** (#248) — long values in rows
+  (server name, OS/build, capacity) truncate instead of forcing rows wider than
+  the screen; the Settings scroll view is explicitly vertical.
+- **What's New modal scrolls on tvOS** (#266) — each card / release entry is its
+  own focus stop, so the Siri Remote can move through (and scroll) all the notes.
+- **More Like This focus** (#266) — Up-escapes from the rail via the real section
+  above it; the earlier no-op header button is gone.
+- **Episodes use the same bold gold watched marker as posters** (#266).
+
+## [0.6.5] — 2026-06-11
 
 ### Added
 

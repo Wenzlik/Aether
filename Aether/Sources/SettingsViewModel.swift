@@ -123,17 +123,19 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Edit your Local Library by hand — tap the pencil on a local movie or episode to fix its title, year, kind, season and episode, re-match from TMDb, or set a custom poster from Files when auto-matching gets it wrong",
-        "Richer TV seasons — a rail of season poster cards opens a dedicated Season Detail with its own number, year, episode count and overview, and named seasons now read their real names",
-        "Continue Watching finally remembers your shows — a half-watched episode brings its series right back, grouped per show and mixed in with your movies by recency across every source",
-        "A show's Next Up points at the right episode — true On Deck across all seasons, so you pick up exactly where you left off instead of jumping to the wrong season",
-        "Watched titles read at a glance — finished movies and episodes get dimmed, desaturated artwork and a bold gold corner checkmark, while in-progress titles keep their resume bar",
-        "A more reliable Library and Discover — they no longer go unexpectedly blank, with a cleaner Apple TV “See all” grid, full-width Cast & Crew, and a tidier Settings layout on iPhone"
+        "A cleaner Detail screen — episodes now lead with the series name and an “S1 • E2 — Title” line, a single dense metadata row (runtime · date · rating · resolution · audio), and compact Resume / Restart pills with the time inline",
+        "Continue Watching reads at a glance — a bolder, rounded progress bar across the artwork instead of a faint hairline",
+        "Apple TV — browse your Library by Genre and Year, not just Movies and TV Shows, each opening a grid of every matching movie and show",
+        "Apple TV — a richer season experience: focusing a season previews it inline (overview, episodes, year, progress), with a clearer focus highlight and reliable up/down navigation across all seasons",
+        "Apple TV — episodes browse as a wide still rail, Featured is right-sized so more shows sit below it, and the What's New notes finally scroll",
+        "Settings no longer drifts sideways on iPhone, and finished episodes wear the same bold gold watched marker as posters"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.5", codename: "Cassiopeia",
+                    summary: "Local Library metadata & artwork editing, richer TV seasons with named Season Details, smarter Continue Watching (in-progress episodes + true On Deck), and a more reliable Library and Discover."),
         ReleaseNote(version: "0.6.4", codename: "Cassiopeia",
                     summary: "The Local Library arrives — play media straight from the device with TMDb posters and metadata, TV episodes grouped into shows, mkv support via VLCKit, and a tidier Settings with accurate storage figures."),
         ReleaseNote(version: "0.6.3", codename: "Cassiopeia",
