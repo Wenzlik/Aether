@@ -152,7 +152,16 @@ struct LibraryBrowseView: View {
         } else if !rails.isEmpty {
             // Have content → always show it, including while a refresh runs (so a
             // pull-to-refresh never blanks to an empty/loading state).
+            #if os(tvOS)
+            // tvOS browses by **category** (Movies / TV Shows / …), not poster
+            // rails: Down from Search lands cleanly on the first category instead
+            // of skipping into the middle of a rail, and each category opens the
+            // full grid. The list is data-driven, so a new content group appears
+            // automatically (#266 Detail Phase 1 — tvOS Library nav).
+            categoryListContent
+            #else
             railsContent
+            #endif
         } else if connectedSources.isEmpty {
             // Empty sources: "still connecting" during startup → loading; only
             // once startup has settled is it genuinely "no source connected".
@@ -218,6 +227,68 @@ struct LibraryBrowseView: View {
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
     }
+
+    #if os(tvOS)
+    // MARK: - tvOS category list
+
+    /// The content groups present in the library — **data-driven**: a row appears
+    /// only for a kind that actually has titles, so a future content group shows
+    /// up here automatically without touching this view. Each opens the full grid.
+    private var libraryCategories: [(kind: MediaItem.Kind, title: String, count: Int)] {
+        var cats: [(MediaItem.Kind, String, Int)] = []
+        if !rails.movies.isEmpty { cats.append((.movie, "Movies", rails.movieCount)) }
+        if !rails.shows.isEmpty { cats.append((.show, "TV Shows", rails.showCount)) }
+        return cats.map { (kind: $0.0, title: $0.1, count: $0.2) }
+    }
+
+    /// tvOS Library landing: big focusable category rows under the search field,
+    /// each pushing the full unified grid for that kind. Replaces the poster rails
+    /// so D-pad Down from Search moves predictably down the categories instead of
+    /// skipping into the middle of a rail.
+    private var categoryListContent: some View {
+        ScrollView {
+            LazyVStack(spacing: AetherDesign.Spacing.m) {
+                ForEach(libraryCategories, id: \.kind) { category in
+                    NavigationLink(value: UnifiedLibrarySection(kind: category.kind, title: category.title)) {
+                        categoryRow(title: category.title, count: category.count)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, AetherDesign.Spacing.xl)
+            .padding(.top, AetherDesign.Spacing.l)
+            .padding(.bottom, AetherDesign.Spacing.xxl)
+        }
+    }
+
+    /// One category row — title + count + chevron in a card that lifts on focus.
+    private func categoryRow(title: String, count: Int) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            Text(title)
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            Spacer(minLength: AetherDesign.Spacing.m)
+            Text(countLabel(count))
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+            Image(systemName: "chevron.right")
+                .font(.headline)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.vertical, AetherDesign.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Materials.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+        )
+        .premiumFocus()
+    }
+    #endif
 
     /// `true` once there's at least one completed download — gates the
     /// Downloaded rail. Management lives in Settings → Downloads; Library only

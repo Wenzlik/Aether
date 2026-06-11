@@ -309,12 +309,9 @@ struct DetailView: View {
                     )
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                        Text(activeItem.title)
-                            .font(AetherDesign.Typography.heroTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        heroTitleBlock
                         metadataRow
                         genresRow
-                        mediaBadges
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
                 }
@@ -406,12 +403,9 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                     // Primary content stays in the readable left column…
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                        Text(activeItem.title)
-                            .font(AetherDesign.Typography.heroTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        heroTitleBlock
                         metadataRow
                         genresRow
-                        mediaBadges
 
                         if !item.kind.isContainer {
                             actionRow
@@ -634,12 +628,9 @@ struct DetailView: View {
                 .overlay(alignment: .bottom) { bannerScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-                Text(activeItem.title)
-                    .font(AetherDesign.Typography.heroTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                heroTitleBlock
                 metadataRow
                 genresRow
-                mediaBadges
             }
             .padding(.horizontal, AetherDesign.Spacing.l)
 
@@ -678,9 +669,7 @@ struct DetailView: View {
                 .overlay { movieHeroScrim }
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                Text(activeItem.title)
-                    .font(AetherDesign.Typography.heroTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                heroTitleBlock
 
                 HStack(spacing: AetherDesign.Spacing.s) {
                     Text(metadataParts.joined(separator: " • "))
@@ -1271,18 +1260,78 @@ struct DetailView: View {
         }
     }
 
-    /// "2025 • 1h 59m • Movie" — year · runtime · kind, dot-separated. Runtime
-    /// is always included when known, on every layout.
+    /// Hero title. For an **episode** with a known series, the series name is the
+    /// big title and "S1 • E2 - Episode Title" sits beneath it (how Infuse / Apple
+    /// TV present an episode); movies / shows / seasons — and episodes missing a
+    /// series title — show their own title (#266 Detail Phase 1).
+    @ViewBuilder
+    private var heroTitleBlock: some View {
+        if item.kind == .episode, let series = activeItem.seriesTitle, !series.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                Text(series)
+                    .font(AetherDesign.Typography.heroTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text(DetailFormatting.episodeContext(activeItem))
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+        } else {
+            Text(activeItem.title)
+                .font(AetherDesign.Typography.heroTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+    }
+
+    /// Dense single line, Infuse-style: "48 min • Jul 26, 2007 • [TV-14] • 1080p •
+    /// DTS-HD MA 5.1" — runtime/date, the content-rating badge, then resolution +
+    /// audio folded inline (they replace the old separate chip strip). The tech
+    /// tail fills in when `mediaInfo` hydrates; the line reflows once, harmlessly.
     private var metadataRow: some View {
         HStack(spacing: AetherDesign.Spacing.xs) {
             Text(metadataParts.joined(separator: " • "))
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
             if let rating = current.contentRating {
+                metadataDot
                 contentRatingBadge(rating)
+            }
+            if !inlineTechParts.isEmpty {
+                metadataDot
+                Text(inlineTechParts.joined(separator: " • "))
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The "•" separator used to splice the badge / tech tail into the line.
+    private var metadataDot: some View {
+        Text("•")
+            .font(AetherDesign.Typography.metadata)
+            .foregroundStyle(AetherDesign.Palette.textTertiary)
+    }
+
+    /// Resolution + HDR/DV + audio (codec + channels), folded into the metadata
+    /// line — the glanceable subset of `mediaBadgeLabels` (the full breakdown
+    /// stays in Technical Details). Empty until `mediaInfo` hydrates.
+    private var inlineTechParts: [String] {
+        guard let info = current.mediaInfo else { return [] }
+        var parts: [String] = []
+        if let resolution = info.videoResolution { parts.append(resolution) }
+        if info.isDolbyVision {
+            parts.append("Dolby Vision")
+        } else if info.isHDR {
+            parts.append("HDR")
+        }
+        if let audio = info.audioCodec?.uppercased() {
+            if let channels = info.audioChannels {
+                parts.append("\(audio) \(DetailFormatting.channelLabel(channels))")
+            } else {
+                parts.append(audio)
+            }
+        }
+        return parts
     }
 
     /// The source's age/content classification as a thin-bordered badge —
@@ -1319,9 +1368,17 @@ struct DetailView: View {
         if item.kind == .show { return seriesMetadataParts }
         if item.kind == .season { return seasonMetadataParts }
         var parts: [String] = []
-        if let year = activeItem.year { parts.append(String(year)) }
-        if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
-        parts.append(DetailFormatting.kindLabel(item.kind))
+        if item.kind == .episode {
+            // Episode: runtime + air date. The series name and "S1 • E2 - Title"
+            // live in the hero title block, so no year or "Episode" label here.
+            if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+            if let date = activeItem.releaseDate { parts.append(DetailFormatting.airDate(date)) }
+        } else {
+            // Movie: year + runtime. The kind label is dropped — it's obvious and
+            // the Infuse-style reference omits it — keeping the line dense.
+            if let year = activeItem.year { parts.append(String(year)) }
+            if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
+        }
         return parts
     }
 
@@ -1641,14 +1698,19 @@ struct DetailView: View {
     private var actionRow: some View {
         if current.streamURL != nil {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                // Level 1 — one dominant primary action (Resume or Play).
-                if resume != nil { resumeButton } else { playButton }
-                // Level 2 — Restart, only when a resume point exists.
-                if resume != nil { restartButton }
-                #if os(visionOS)
-                watchInCinemaButton
-                #endif
-                // Level 3 — everything else as compact, equal-weight icon buttons.
+                // Primary actions as a single horizontal pill row (Infuse-style),
+                // Resume carrying its position inline — a compact cluster instead
+                // of a tall Resume / caption / Restart stack (#266 Detail Phase 1).
+                // Pills come first so the tvOS remote still lands on Play/Resume on
+                // arrival (not the watched toggle).
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    if resume != nil { resumeButton } else { playButton }
+                    if resume != nil { restartButton }
+                    #if os(visionOS)
+                    watchInCinemaButton
+                    #endif
+                }
+                // Tertiary actions as a compact, equal-weight icon row beneath.
                 compactActionRow
                 // The first-use hint is a touch affordance (tap "Got it" / tap an
                 // icon). On tvOS it created an unreachable focus dead-zone, and
@@ -1934,25 +1996,18 @@ struct DetailView: View {
     }
     #endif
 
-    /// Level 1 — the single dominant primary when a resume point exists, with a
-    /// "Resume from m:ss" caption beneath it. (Restart is a separate, lighter
-    /// Level-2 button below, so the hierarchy reads at a glance.)
+    /// Primary action when a resume point exists — the position is carried
+    /// **inline** in the label ("Resume 0:01:39") like the Infuse reference, so it
+    /// sits as one pill next to Restart instead of a button + caption stack.
     private var resumeButton: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            AetherButton(
-                isPreparingPlayback ? "Preparing…" : "Resume",
-                systemImage: "play.fill",
-                role: .primary
-            ) {
-                Task { await presentPlayer(fromStart: false) }
-            }
-            .disabled(isPreparingPlayback)
-
-            Text("Resume from \(DetailFormatting.position(resume?.position ?? .zero))")
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                .padding(.leading, AetherDesign.Spacing.xs)
+        AetherButton(
+            isPreparingPlayback ? "Preparing…" : "Resume \(DetailFormatting.position(resume?.position ?? .zero))",
+            systemImage: "play.fill",
+            role: .primary
+        ) {
+            Task { await presentPlayer(fromStart: false) }
         }
+        .disabled(isPreparingPlayback)
     }
 
     /// Level 2 — Restart, secondary emphasis, sitting under Resume.
