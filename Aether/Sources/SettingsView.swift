@@ -541,6 +541,15 @@ struct SettingsView: View {
             } else {
                 AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
             }
+
+            if viewModel.isSMBConnected {
+                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
+                    Task { await viewModel.signOutOfSMB() }
+                }
+            } else {
+                AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
+            }
         }
     }
 
@@ -575,6 +584,15 @@ struct SettingsView: View {
                 .disabled(isSigningOutJellyfin)
             } else {
                 AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
+            }
+
+            if viewModel.isSMBConnected {
+                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
+                    Task { await viewModel.signOutOfSMB() }
+                }
+            } else {
+                AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
         }
     }

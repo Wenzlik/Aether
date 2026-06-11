@@ -270,11 +270,19 @@ final class AppSession {
     private(set) var jellyfinSource: JellyfinMediaSource?
     var isJellyfinSignedIn: Bool = false
 
+    // MARK: - SMB (#214)
+
+    private(set) var smbConnectionStore: SMBConnectionStore?
+    var smbConnection: SMBConnection?
+    private(set) var smbSource: SMBMediaSource?
+    var isSMBConnected: Bool = false
+
     // MARK: - Active source
 
     /// Which connected source is being browsed. The user can connect both Plex
     /// and Jellyfin; exactly one is active at a time, and the choice persists.
-    /// (A merged multi-source feed can be layered on later.)
+    /// (A merged multi-source feed can be layered on later.) SMB/DLNA are NOT
+    /// active-source kinds — they surface only via `connectedSources` (#214).
     enum SourceKind: String, Sendable, CaseIterable {
         case plex
         case jellyfin
@@ -285,8 +293,15 @@ final class AppSession {
     // MARK: - UI bridging
 
     var isSignInPresented: Bool = false
-    /// Which onboarding the sign-in sheet should show.
-    var signInTarget: SourceKind = .plex
+    /// Which onboarding the sign-in sheet should show. Decoupled from
+    /// `SourceKind` so SMB/DLNA can be sign-in targets without becoming
+    /// active-source kinds (#214).
+    enum SignInTarget: Sendable {
+        case plex
+        case jellyfin
+        case smb
+    }
+    var signInTarget: SignInTarget = .plex
 
     // MARK: - Init
 
@@ -347,6 +362,7 @@ final class AppSession {
         // 2. Restore persisted servers — these build the live sources.
         await restorePlexServer()
         await restoreJellyfinServer()
+        await restoreSMB()
 
         // 3. Pick the active source (persisted choice, else whatever connected).
         activeSourceKind = await loadActiveSourceKind()
@@ -455,6 +471,7 @@ final class AppSession {
         var list: [any MediaSource] = []
         if let plexSource { list.append(plexSource) }
         if let jellyfinSource { list.append(jellyfinSource) }
+        if let smbSource { list.append(smbSource) }
         // Local is on-device + always available, but only counts as a connected
         // source once it has content — otherwise a fresh server-less install
         // would never show the "connect a source" welcome state.
@@ -668,9 +685,42 @@ final class AppSession {
         }
     }
 
-    func presentSignIn(_ target: SourceKind = .plex) {
+    func presentSignIn(_ target: SignInTarget = .plex) {
         signInTarget = target
         isSignInPresented = true
+    }
+
+    // MARK: - SMB (#214)
+
+    private func restoreSMB() async {
+        let store = SMBConnectionStore(keychain: keychain)
+        smbConnectionStore = store
+        do {
+            guard let connection = try await store.read() else { return }
+            smbConnection = connection
+            smbSource = SMBMediaSource(connection: connection)
+            isSMBConnected = true
+        } catch {
+            // Corrupted record shouldn't break launch — leave SMB disconnected.
+        }
+    }
+
+    /// Called by `SMBConnectView` after the user enters + validates a share.
+    func completeSMBSignIn(connection: SMBConnection) async {
+        if smbConnectionStore == nil { smbConnectionStore = SMBConnectionStore(keychain: keychain) }
+        do { try await smbConnectionStore?.write(connection) } catch { }
+        smbConnection = connection
+        smbSource = SMBMediaSource(connection: connection)
+        isSMBConnected = true
+        isSignInPresented = false
+    }
+
+    func signOutOfSMB() async {
+        do { try await smbConnectionStore?.clear() } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        smbConnection = nil
+        smbSource = nil
+        isSMBConnected = false
     }
 
     // MARK: - Keychain keys

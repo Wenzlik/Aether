@@ -62,6 +62,9 @@ final class SettingsViewModel {
         isJellyfinSignedIn ? .connected : .notConnected
     }
 
+    var isSMBConnected: Bool { session.isSMBConnected }
+    var smbServerName: String? { session.smbConnection?.displayName }
+
     let synologyStatus: AetherStatus = .comingSoon
 
     // MARK: - Active source
@@ -236,6 +239,14 @@ final class SettingsViewModel {
     /// Open the Jellyfin sign-in flow (server URL + Quick Connect).
     func connectJellyfin() {
         session.presentSignIn(.jellyfin)
+    }
+
+    func connectSMB() {
+        session.presentSignIn(.smb)
+    }
+
+    func signOutOfSMB() async {
+        await session.signOutOfSMB()
     }
 
     // MARK: - Local Library
