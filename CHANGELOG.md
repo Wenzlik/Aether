@@ -72,6 +72,13 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   settings cards and made the page wider than the phone, so the vertical scroll
   view drifted sideways. Compact widths now use the viewport width; the page is
   horizontally anchored.
+- **tvOS: "See all" and "More Like This" are reachable from any poster** (#266) —
+  pressing **Up** out of a horizontal rail only worked from the tile geometrically
+  beneath the target, so from any other poster focus was stuck (the same trap we
+  removed from Cast & Crew in #249). Each rail now has a **full-width, single-
+  focusable focus section directly above it** — the Library header's "See all"
+  button, and a focusable "More Like This" title on Detail — so Up from *any*
+  poster (even one scrolled far right) lands on it. iOS/iPadOS/visionOS unchanged.
 
 ### Changed
 
