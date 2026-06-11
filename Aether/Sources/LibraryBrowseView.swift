@@ -53,6 +53,9 @@ struct LibraryBrowseView: View {
 
     /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
     @State private var searchQuery = ""
+    /// iOS / visionOS: header shows a search *button* by default; the field only
+    /// appears once tapped — no permanent search bar (matches Home).
+    @State private var isSearchActive = false
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
@@ -157,17 +160,52 @@ struct LibraryBrowseView: View {
     /// the search field — less wasted vertical space than the old centered banner.
     private var brandedHeader: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherWordmark(.small)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
             #if os(tvOS)
+            AetherWordmark(.medium)
+            Spacer(minLength: AetherDesign.Spacing.l)
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                .frame(maxWidth: AetherDesign.headerSearchWidth)
             AetherTVReloadButton { Task { await load() } }
                 .frame(width: 260)
+            #else
+            if isSearchActive {
+                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                Button("Cancel") {
+                    searchQuery = ""
+                    searchFocused = false
+                    isSearchActive = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            } else {
+                AetherWordmark(.medium)
+                Spacer(minLength: AetherDesign.Spacing.l)
+                searchButton
+            }
             #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
         .padding(.bottom, AetherDesign.Spacing.m)
     }
+
+    #if !os(tvOS)
+    /// Top-right magnifying-glass that reveals the search field.
+    private var searchButton: some View {
+        Button {
+            isSearchActive = true
+            searchFocused = true
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(AetherDesign.Palette.surface, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search")
+    }
+    #endif
 
     /// True when the user has typed something — rails get replaced with unified
     /// search results.

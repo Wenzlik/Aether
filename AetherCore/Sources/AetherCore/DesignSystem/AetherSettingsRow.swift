@@ -172,7 +172,12 @@ public struct AetherSettingsSection<Content: View>: View {
                 .tracking(0.6)
                 .padding(.horizontal, AetherDesign.Spacing.m)
 
-            VStack(spacing: 0) {
+            // Hairline separators between rows, inset from the leading edge — so
+            // a grouped card reads like an iOS inset-grouped list instead of one
+            // undivided block (the rows used to blur together). `_VariadicView`
+            // inserts the dividers between the builder's rows, so call sites
+            // don't each have to.
+            _VariadicView.Tree(DividedRows()) {
                 content()
             }
             // Translucent frosted card over the cinematic background (tvOS 26 /
@@ -181,6 +186,26 @@ public struct AetherSettingsSection<Content: View>: View {
             .overlay {
                 RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
                     .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        }
+    }
+}
+
+/// Inserts hairline separators between a section's rows (iOS inset-grouped
+/// style — inset from the leading edge, none after the last row).
+private struct DividedRows: _VariadicView_MultiViewRoot {
+    @ViewBuilder
+    func body(children: _VariadicView.Children) -> some View {
+        let lastID = children.last?.id
+        VStack(spacing: 0) {
+            ForEach(children) { child in
+                child
+                if child.id != lastID {
+                    Divider()
+                        .overlay(AetherDesign.Palette.separator)
+                        .padding(.leading, AetherDesign.Spacing.m)
+                }
             }
         }
     }

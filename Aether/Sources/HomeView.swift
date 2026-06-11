@@ -57,6 +57,9 @@ struct HomeView: View {
     /// same client-side title filter so search isn't trapped behind a
     /// dedicated tab anymore.
     @State private var searchQuery = ""
+    /// iOS / visionOS: the header shows a magnifying-glass button by default and
+    /// only reveals the search field once tapped — no permanent search bar.
+    @State private var isSearchActive = false
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
@@ -137,19 +140,56 @@ struct HomeView: View {
     /// less wasted vertical space, more content density.
     private var brandedHeader: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherWordmark(.small)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
             #if os(tvOS)
-            // tvOS has no pull-to-refresh, so Reload sits to the right of the
-            // search field — one Right press from the field lands on it.
+            // tvOS keeps the inline field + Reload (no pull-to-refresh, and a
+            // search button would be an extra focus hop with no keyboard win).
+            AetherWordmark(.medium)
+            Spacer(minLength: AetherDesign.Spacing.l)
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                .frame(maxWidth: AetherDesign.headerSearchWidth)
             AetherTVReloadButton { Task { await load() } }
                 .frame(width: 260)
+            #else
+            // iOS / visionOS: brand mark + a search *button*; the field only
+            // appears once tapped, so the rails aren't topped by a permanent bar.
+            if isSearchActive {
+                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                Button("Cancel") {
+                    searchQuery = ""
+                    searchFocused = false
+                    isSearchActive = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            } else {
+                AetherWordmark(.medium)
+                Spacer(minLength: AetherDesign.Spacing.l)
+                searchButton
+            }
             #endif
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
         .padding(.bottom, AetherDesign.Spacing.m)
     }
+
+    #if !os(tvOS)
+    /// Top-right magnifying-glass that reveals the search field (#header refresh).
+    private var searchButton: some View {
+        Button {
+            isSearchActive = true
+            searchFocused = true
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(AetherDesign.Palette.surface, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search")
+    }
+    #endif
 
     /// True when the user is searching from Home. Drives the swap from
     /// rails to results — same behaviour Library has.

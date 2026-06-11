@@ -81,9 +81,12 @@ final class VLCPlaybackController: UIViewController {
         ])
 
         player.drawable = videoView
-        if let media = VLCMedia(url: url) {
-            // SMB credentials + caching ride as media options (#214).
-            for option in options { media.addOption(option) }
+        // Build the libsmb2 request: `smb://` → `smb2://` (SMB2/3 module, not the
+        // SMB1 dsm one) with username/domain folded into the URL where libsmb2
+        // reads them; password + caching stay as options. No-op for non-SMB URLs.
+        let request = smb2VLCRequest(url: url, options: options)
+        if let media = VLCMedia(url: request.url) {
+            for option in request.options { media.addOption(option) }
             player.media = media
         }
         player.play()
