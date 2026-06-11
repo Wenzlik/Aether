@@ -21,12 +21,29 @@ actors, and episodes that carried only a number and a date.
 - **Next Up on the Season Detail** — the same On Deck card as the show page,
   computed from the season's episodes; one click to continue, and the episode
   rail's Up focus target.
+- **Title logo art on Detail** (#273) — when a server carries a clearLogo, the
+  Detail hero renders the stylized wordmark (e.g. the MAD MEN logo) instead of
+  a plain text title, with text as the fallback. Plex logos are served raw to
+  preserve transparency; Jellyfin logos resize aspect-fit as Webp.
+- **Library browsing by Collections, Actors and Directors** (#273) — three new
+  facets beside Genres / Years: server collections (Plex collections / Jellyfin
+  BoxSets), and every actor / director across the catalog, each opening a grid
+  of their titles. In the tvOS category list and a new "Browse" section on
+  iPhone / iPad / Vision Pro; rows appear only when a connected source supports
+  the facet.
 
 ### Changed
 
 - **Cleaner season header** — the metadata line no longer repeats "Season N"
   under the title (kept only for named seasons like "Asylum") and gains watch
   progress: `2017 • 11 Episodes • 7/11 watched`.
+
+### Fixed
+
+- **Settings can no longer be dragged sideways on iPhone** (#248, for good) —
+  the scroll content's width is now hard-clamped to the viewport
+  (`containerRelativeFrame`), so no row — present or future — can widen the
+  page; the version row's texts also gained line limits.
 
 ## [0.6.6] — 2026-06-11
 
