@@ -585,9 +585,40 @@ struct SettingsView: View {
     }
 
     /// The single toggle-row style across Settings: label + optional muted
-    /// description, accent tint, no leading icon — matching the disclosure rows.
+    /// description.
+    ///
+    /// iOS / visionOS use a native `Toggle` (a tidy trailing switch). tvOS does
+    /// NOT — its default `Toggle` renders as a heavy full-width blue "On" pill
+    /// that clashes with the disclosure rows beside it (#310). There it's a
+    /// focusable row showing "On" / "Off" on the right, flipping on select —
+    /// visually matching Theme / Watched Dimming / Label Opacity.
     @ViewBuilder
     private func settingsToggle(_ title: String, description: String? = nil, isOn: Binding<Bool>) -> some View {
+        #if os(tvOS)
+        Button { isOn.wrappedValue.toggle() } label: {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    if let description {
+                        Text(description)
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Text(isOn.wrappedValue ? "On" : "Off")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(isOn.wrappedValue ? AetherDesign.Palette.accent : AetherDesign.Palette.textSecondary)
+            }
+            .padding(AetherDesign.Spacing.m)
+            .contentShape(Rectangle())
+            .aetherFocusRow()
+        }
+        .buttonStyle(.plain)
+        #else
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -603,6 +634,7 @@ struct SettingsView: View {
         }
         .tint(AetherDesign.Palette.accent)
         .padding(AetherDesign.Spacing.m)
+        #endif
     }
 
     // MARK: - Sections
