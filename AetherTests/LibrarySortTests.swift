@@ -75,3 +75,46 @@ struct MediaSourceIDStableKeyTests {
         #expect(key1 == key2)
     }
 }
+
+// MARK: - LibrarySort.sorted(_:) (#294)
+
+private struct SortableStub: LibrarySortable {
+    let title: String
+    let year: Int?
+    let dateAdded: Date?
+    let communityRating: Double?
+    init(_ title: String, year: Int? = nil, dateAdded: Date? = nil, rating: Double? = nil) {
+        self.title = title; self.year = year; self.dateAdded = dateAdded; self.communityRating = rating
+    }
+}
+
+@Suite("LibrarySort.sorted")
+struct LibrarySortSortedTests {
+    @Test("ratingHighest — highest first, unrated always last (not interleaved)")
+    func ratingHighest() {
+        let items = [
+            SortableStub("A", rating: nil),
+            SortableStub("B", rating: 7.5),
+            SortableStub("C", rating: 9.1),
+            SortableStub("D", rating: nil),
+        ]
+        let sorted = LibrarySort.ratingHighest.sorted(items)
+        // Ratings descending with nils sunk to the end (relative nil order is
+        // unstable, so assert the rating sequence, not titles).
+        #expect(sorted.map(\.communityRating) == [9.1, 7.5, nil, nil])
+        #expect(sorted.first?.title == "C")
+    }
+
+    @Test("titleAZ / titleZA — case-insensitive")
+    func title() {
+        let items = [SortableStub("Banana"), SortableStub("apple"), SortableStub("Cherry")]
+        #expect(LibrarySort.titleAZ.sorted(items).map(\.title) == ["apple", "Banana", "Cherry"])
+        #expect(LibrarySort.titleZA.sorted(items).map(\.title) == ["Cherry", "Banana", "apple"])
+    }
+
+    @Test("yearNewest — yearless titles sort last")
+    func yearNewest() {
+        let items = [SortableStub("X", year: 2000), SortableStub("Y", year: nil), SortableStub("Z", year: 2020)]
+        #expect(LibrarySort.yearNewest.sorted(items).map(\.title) == ["Z", "X", "Y"])
+    }
+}

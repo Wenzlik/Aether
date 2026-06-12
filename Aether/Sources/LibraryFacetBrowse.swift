@@ -25,6 +25,10 @@ struct PersonEntry: Identifiable, Hashable {
     let name: String
     let kind: PersonKind
     let members: [MediaPerson]
+    /// First available headshot across the deduped source variants (#297).
+    var photoURL: URL? {
+        members.lazy.compactMap { $0.artwork?.posterURL(.thumbnail) }.first
+    }
 }
 
 // MARK: - Collections
@@ -145,7 +149,7 @@ struct PersonListView: View {
                     LazyVStack(spacing: AetherDesign.Spacing.m) {
                         ForEach(visibleEntries) { entry in
                             NavigationLink(value: LibraryBrowseRoute.person(entry)) {
-                                LibraryBrowseRow(title: entry.name)
+                                LibraryBrowseRow(title: entry.name, photoURL: entry.photoURL, showsHeadshot: true)
                             }
                             .buttonStyle(.plain)
                         }

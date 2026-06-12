@@ -144,6 +144,42 @@ public actor PlexMediaSource: MediaSource {
         return metadata.map { mapMetadataToMediaItem($0, base: base) }
     }
 
+    // MARK: - Audio-language filter (#295)
+
+    public nonisolated var supportsAudioLanguageFilter: Bool { true }
+
+    /// Plex's available audio-language filter values for a section
+    /// (`GET /library/sections/{id}/audioLanguage` → `Directory` key/title).
+    /// `key` is the language code Plex also accepts as `?audioLanguage=`.
+    public func audioLanguageOptions(in libraryID: Library.ID) async -> [String] {
+        guard let base = try? await resolveBaseURL() else { return [] }
+        let request = request(base: base, path: "/library/sections/\(libraryID.rawValue)/audioLanguage")
+        guard let response = try? await api.decode(
+            PlexAPI.DirectoryListResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return (response.mediaContainer.directories ?? []).map(\.key)
+    }
+
+    /// Server-side audio-language filtered listing
+    /// (`/library/sections/{id}/all?audioLanguage={code}`). Plex matches the code
+    /// against any audio stream on the title, which is exactly the capability
+    /// filter #295 wants.
+    public func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]? {
+        let base = try await resolveBaseURL()
+        let request = request(
+            base: base,
+            path: "/library/sections/\(libraryID.rawValue)/all",
+            queryItems: [
+                URLQueryItem(name: "audioLanguage", value: code),
+                URLQueryItem(name: "includeGuids", value: "1")
+            ]
+        )
+        let response = try await api.decode(
+            PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+        )
+        return (response.mediaContainer.metadata ?? []).map { mapMetadataToMediaItem($0, base: base) }
+    }
+
     /// Children of a container: a show's seasons, or a season's episodes.
     /// `GET /library/metadata/{ratingKey}/children` returns the same
     /// `MediaContainer.Metadata` shape as a library listing.
@@ -232,20 +268,34 @@ public actor PlexMediaSource: MediaSource {
         var seen: Set<String> = []
         var result: [MediaCollection] = []
         for section in sections {
-            let request = request(base: base, path: "/library/sections/\(section.id.rawValue)/collections")
-            guard let response = try? await api.decode(
-                PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
-            ) else { continue }
-            for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
-                result.append(MediaCollection(
-                    id: .init(source: id, rawValue: dto.ratingKey),
-                    title: dto.title,
-                    childCount: dto.childCount,
-                    artwork: ArtworkSource(
-                        provider: .plex, base: base, token: accessToken,
-                        posterPath: dto.thumb, backdropPath: dto.art
-                    )
-                ))
+            // `all?type=18` (type 18 = *collection*) is the listing Plex Web
+            // itself uses and is far more widely supported than the newer
+            // `/sections/{id}/collections`, which returned nothing on some
+            // servers — making real libraries look empty (#298). And log
+            // failures (token-safe) instead of swallowing them, so a server/API
+            // problem doesn't masquerade as "no collections".
+            let request = request(
+                base: base,
+                path: "/library/sections/\(section.id.rawValue)/all",
+                queryItems: [URLQueryItem(name: "type", value: "18")]
+            )
+            do {
+                let response = try await api.decode(
+                    PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+                )
+                for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                    result.append(MediaCollection(
+                        id: .init(source: id, rawValue: dto.ratingKey),
+                        title: dto.title,
+                        childCount: dto.childCount,
+                        artwork: ArtworkSource(
+                            provider: .plex, base: base, token: accessToken,
+                            posterPath: dto.thumb, backdropPath: dto.art
+                        )
+                    ))
+                }
+            } catch {
+                Self.log.error("Plex collections fetch failed for section \(section.id.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
         return result.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }

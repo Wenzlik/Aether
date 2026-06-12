@@ -4,6 +4,60 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-12
+
+Codename **Draco**. SMB grows up — a native browse/auth rewrite with downloads,
+poster matching, and a real player — plus Library/Search enhancements and a
+Settings consistency pass.
+
+### Added
+
+- **Native SMB** (#214) — browse + auth rewritten on the pure-Swift
+  `SMBClient` (Network-framework based), replacing VLC's opaque `libsmb2`
+  bridge that never surfaced auth errors or reliably triggered the iOS Local
+  Network prompt. Real errors, real reachability checks.
+- **SMB multi-folder picker** (#214) — at sign-in, browse the server's shares,
+  drill into subfolders, and add several folders to the library (an empty
+  selection still scans every share).
+- **SMB TMDb matching** (#214) — files carry no metadata, so inferred titles are
+  matched to TMDb posters/overviews and persisted in a bounded, battery-safe
+  store (each title matched once, misses remembered, no background daemon).
+- **SMB editable title & year** (#214) — fix a mis-named release so it matches a
+  poster; the correction re-matches TMDb on the next browse.
+- **SMB downloads** (#214) — SMB streams aren't HTTP, so a `CustomDownloadSource`
+  transfer path runs the byte copy as an async task with progress and
+  pause/cancel, alongside the existing URLSession pipeline.
+- **Rich VLC player** (#214) — the SMB/mkv player gains a scrubber, skip ±10s,
+  audio + subtitle track selection, time readouts, and an auto-hiding overlay
+  (iOS/visionOS; tvOS keeps its simpler controls).
+- **Filter Library by audio language** (#295) — a shared `MediaFilter` model;
+  Plex filters server-side, Jellyfin client-side from the audio tracks it
+  returns in list responses.
+- **Search by actor / director name** (#296) and **rating sort** as a
+  first-class Library option (#294).
+- **Personal TMDb token** in Settings ▸ Metadata — used instead of the built-in
+  key, validated against TMDb before saving.
+
+### Changed
+
+- **Plex collections** (#298) now load via `…/all?type=18` (the old `/collections`
+  path returned empty).
+- **Library actor/director rows** show headshots (#297).
+- **Tab navigation** (#300) — each tab keeps its stack across tab switches;
+  re-tapping the active tab pops it to root.
+- **SMB startup latency** — VLC `network-caching` trimmed 1500→800ms; a buffering
+  spinner shows during connect so a slow start doesn't look frozen.
+- **Settings consistency pass** — one picker style (disclosure → sheet) and one
+  toggle style across the screen; App Icon and the visionOS Cinema pickers no
+  longer use bespoke inline menus; watched-poster settings moved from Playback
+  into Appearance; the WATCHED label opacity is a Transparent↔Solid slider.
+
+### Fixed
+
+- **VLC player controls were unreachable on iOS** — the full-screen overlay
+  swallowed taps (so Done couldn't be reached); it now passes empty-area taps
+  through to the show/hide gesture and keeps the chrome above the video.
+
 ## [0.6.8] — 2026-06-11
 
 A new source type (SMB) plus Detail/watched polish.

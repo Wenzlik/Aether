@@ -216,9 +216,14 @@ struct YearListView: View {
 struct LibraryBrowseRow: View {
     let title: String
     var detail: String? = nil
+    /// Person rows (#297): a leading circular headshot, or a calm glyph
+    /// placeholder when the source has no photo.
+    var photoURL: URL? = nil
+    var showsHeadshot: Bool = false
 
     var body: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
+            if showsHeadshot { headshot }
             Text(title)
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
@@ -245,5 +250,25 @@ struct LibraryBrowseRow: View {
                 .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
         )
         .premiumFocus()
+    }
+
+    /// Circular headshot via the cached artwork pipeline, or a person glyph when
+    /// the source has no photo. Kept small so person rows stay list-friendly.
+    @ViewBuilder
+    private var headshot: some View {
+        Group {
+            if let photoURL {
+                CachedAsyncImage(url: photoURL, aspectRatio: 1, maxPixel: ArtworkTier.thumbnail.maxPixel)
+            } else {
+                ZStack {
+                    AetherDesign.Palette.surfaceElevated
+                    Image(systemName: "person.fill")
+                        .font(.title3)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(Circle())
     }
 }

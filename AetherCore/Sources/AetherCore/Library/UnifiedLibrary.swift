@@ -115,6 +115,83 @@ public actor UnifiedLibrary {
         return merged
     }
 
+    // MARK: - Audio-language filter (#295)
+
+    /// Available audio languages across connected sources for `kind`, as
+    /// display-ready options. Server-filterable sources (Plex) contribute their
+    /// own filter values; everything else is read off the loaded catalog's audio
+    /// tracks (Jellyfin carries them in its list responses). Deduped + sorted.
+    public func audioLanguageOptions(kind: MediaItem.Kind) async -> [AudioLanguageOption] {
+        // (a) Server-side filter values (Plex `/audioLanguage`).
+        let serverCodes = await withTaskGroup(of: [String].self) { group in
+            for source in sources where source.supportsAudioLanguageFilter {
+                group.addTask {
+                    guard let libraries = try? await source.libraries() else { return [] }
+                    return await withTaskGroup(of: [String].self) { inner in
+                        for library in libraries where library.kind == kind {
+                            inner.addTask { await source.audioLanguageOptions(in: library.id) }
+                        }
+                        var acc: [String] = []
+                        for await chunk in inner { acc += chunk }
+                        return acc
+                    }
+                }
+            }
+            var all: [String] = []
+            for await chunk in group { all += chunk }
+            return all
+        }
+
+        // (b) Languages carried in the loaded catalog's audio tracks. Plex grid
+        // items have none (its list omits streams) → they contribute nothing
+        // here and rely on (a); Jellyfin items carry theirs.
+        var rawCodes: [String?] = serverCodes.map { $0 }
+        for item in await unifiedItems(kind: kind) {
+            for source in item.sources {
+                rawCodes += source.item.audioTracks.map(\.languageCode)
+            }
+        }
+        return AudioLanguage.options(fromRawCodes: rawCodes)
+    }
+
+    /// Unified titles of `kind` whose audio is available in `audioLanguage`
+    /// (#295). Sources that filter server-side (Plex) re-query with the code;
+    /// the rest load normally and are filtered client-side from their audio
+    /// tracks. Not cached — filtering is an explicit, transient user action.
+    public func unifiedItems(kind: MediaItem.Kind, audioLanguage: String?) async -> [UnifiedMediaItem] {
+        guard let audioLanguage else { return await unifiedItems(kind: kind) }
+        async let downloadedTask = downloadedIDs()
+        let items = await withTaskGroup(of: [MediaItem].self) { group in
+            for source in sources {
+                group.addTask {
+                    guard let libraries = try? await source.libraries() else { return [] }
+                    return await withTaskGroup(of: [MediaItem].self) { inner in
+                        for library in libraries where library.kind == kind {
+                            inner.addTask {
+                                // Server-side filter when supported (Plex), else
+                                // load all + filter client-side by audio tracks.
+                                if case let .some(.some(filtered)) = try? await source.items(in: library.id, audioLanguage: audioLanguage) {
+                                    return filtered
+                                }
+                                let all = (try? await source.items(in: library.id)) ?? []
+                                let filter = MediaFilter(audioLanguage: audioLanguage)
+                                return all.filter { filter.matchesLocally($0) }
+                            }
+                        }
+                        var acc: [MediaItem] = []
+                        for await chunk in inner { acc += chunk }
+                        return acc
+                    }
+                }
+            }
+            var all: [MediaItem] = []
+            for await chunk in group { all += chunk }
+            return all
+        }
+        let downloaded = await downloadedTask
+        return Self.merge(items, downloaded: downloaded, serverNames: serverNames)
+    }
+
     /// Whether the persisted snapshot for `kind` is past the 1-hour staleness
     /// threshold (or absent). Views call this after painting the instant
     /// snapshot to decide whether to kick a silent background refresh.

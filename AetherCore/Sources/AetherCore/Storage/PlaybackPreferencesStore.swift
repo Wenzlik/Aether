@@ -125,9 +125,23 @@ public final class PlaybackPreferencesStore {
         didSet { defaults.set(watchedShowLabel, forKey: Keys.watchedShowLabel) }
     }
 
+    /// How translucent the "WATCHED" wordmark is, `0.15...1.0` (#280). Continuous
+    /// (a Settings slider on iOS); default `0.8`.
+    public var watchedLabelOpacity: Double {
+        didSet {
+            watchedLabelOpacity = Self.clampOpacity(watchedLabelOpacity)
+            defaults.set(watchedLabelOpacity, forKey: Keys.watchedLabelOpacity)
+        }
+    }
+
+    /// Keep the wordmark visible-but-faint at the low end (0 would be invisible,
+    /// which is what the Show-Label toggle is for).
+    public static let minLabelOpacity: Double = 0.15
+    static func clampOpacity(_ value: Double) -> Double { min(1.0, max(minLabelOpacity, value)) }
+
     /// Bundled into the value injected as `\.watchedDisplay`.
     public var watchedDisplayConfig: WatchedDisplayConfig {
-        WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel)
+        WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel, labelOpacity: watchedLabelOpacity)
     }
 
     /// Allowed countdown lengths, for the Settings picker.
@@ -144,6 +158,7 @@ public final class PlaybackPreferencesStore {
         static let hideWatched = "display.hideWatchedInDiscovery"
         static let watchedDimming = "display.watchedDimming"
         static let watchedShowLabel = "display.watchedShowLabel"
+        static let watchedLabelOpacity = "display.watchedLabelOpacity"
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
     }
@@ -171,6 +186,9 @@ public final class PlaybackPreferencesStore {
         self.hideWatchedInDiscovery = (defaults.object(forKey: Keys.hideWatched) as? Bool) ?? true
         self.watchedDimming = defaults.string(forKey: Keys.watchedDimming).flatMap(WatchedDimming.init) ?? .medium
         self.watchedShowLabel = (defaults.object(forKey: Keys.watchedShowLabel) as? Bool) ?? true
+        // `object(forKey:) as? Double` so a missing key (or the old string enum
+        // value from a prior build) cleanly falls back to the 0.8 default.
+        self.watchedLabelOpacity = (defaults.object(forKey: Keys.watchedLabelOpacity) as? Double).map(Self.clampOpacity) ?? 0.8
     }
 }
 

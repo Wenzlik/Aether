@@ -20,10 +20,20 @@ struct MediaSearchResults: View {
 
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
+    /// People (actors + directors) across the sources, loaded once with the
+    /// catalog so name matching is client-side (#296) — no per-keystroke server
+    /// query. Holds the owning source so we can fetch a person's titles.
+    @State private var peopleIndex: [PersonHit] = []
+    /// Titles derived from the people whose name matches the current query.
+    @State private var personItems: [UnifiedMediaItem] = []
+
+    private struct PersonHit { let person: MediaPerson; let source: any MediaSource }
 
     var body: some View {
         content
             .task(id: sourcesKey) { await load() }
+            // Debounced person lookup, re-run as the query changes (#296).
+            .task(id: query) { await loadPersonMatches() }
     }
 
     /// Stable reload key across the given sources.
@@ -71,7 +81,12 @@ struct MediaSearchResults: View {
     private var results: [UnifiedMediaItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return items.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        // Title matches first; then titles surfaced by a matching actor/director
+        // name (#296), deduped against the title hits.
+        let titleMatches = items.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        var seen = Set(titleMatches.map(\.id))
+        let personDerived = personItems.filter { seen.insert($0.id).inserted }
+        return titleMatches + personDerived
     }
 
     private var columns: [GridItem] {
@@ -102,5 +117,41 @@ struct MediaSearchResults: View {
             }
         }
         items = UnifiedLibrary.merge(collected)
+
+        // People index (#296): actors + directors per source, capped, so query
+        // matching stays client-side. Loaded once alongside the catalog.
+        var index: [PersonHit] = []
+        for source in sources where source.supportsPeople {
+            for kind in [PersonKind.actor, .director] {
+                let people = await source.people(kind)
+                index += people.prefix(2000).map { PersonHit(person: $0, source: source) }
+            }
+        }
+        peopleIndex = index
+    }
+
+    /// Resolve titles for the people whose name matches the query. Debounced and
+    /// re-run per query (the `.task(id: query)` cancels the prior run), and
+    /// capped to a handful of people — so typing never fires an unbounded number
+    /// of `items(withPerson:)` calls (#296).
+    private func loadPersonMatches() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Skip 0–1 char queries (every actor would "match") and empty state.
+        guard trimmed.count >= 2 else { personItems = []; return }
+        // Debounce: let typing settle before hitting the network.
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
+
+        let matches = peopleIndex
+            .filter { $0.person.name.localizedCaseInsensitiveContains(trimmed) }
+            .prefix(8)
+        guard !matches.isEmpty else { personItems = []; return }
+
+        var collected: [MediaItem] = []
+        for match in matches {
+            collected += await match.source.items(withPerson: match.person)
+        }
+        guard !Task.isCancelled else { return }
+        personItems = UnifiedLibrary.merge(collected)
     }
 }

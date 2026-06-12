@@ -25,6 +25,10 @@ struct UnifiedLibraryGridView: View {
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
+    /// Active audio-language filter (canonical code) — `nil` = All (#295). Unlike
+    /// genre, this re-loads the catalog (Plex filters server-side).
+    @State private var selectedAudioLanguage: String?
+    @State private var audioLanguageOptions: [AudioLanguageOption] = []
     #if os(tvOS)
     @State private var isSortSheetPresented = false
     #endif
@@ -66,11 +70,18 @@ struct UnifiedLibraryGridView: View {
         #else
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
-        .task(id: sourcesKey) { await load() }
+        .task(id: loadKey) { await load() }
+        .task(id: sourcesKey) { await loadAudioLanguageOptions() }
     }
 
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    /// Re-load when the source set *or* the audio-language filter changes (the
+    /// latter re-queries Plex server-side, so it's a load, not a client filter).
+    private var loadKey: String {
+        sourcesKey + "|lang=" + (selectedAudioLanguage ?? "all")
     }
 
     @ViewBuilder
@@ -78,12 +89,6 @@ struct UnifiedLibraryGridView: View {
         if isLoading && items.isEmpty {
             AetherLoadingState(.inline)
                 .padding(.top, AetherDesign.Spacing.l)
-        } else if items.isEmpty {
-            AetherEmptyState(
-                glyph: "tray",
-                title: "Nothing here yet",
-                message: "No \(title.lowercased()) found across your connected sources."
-            )
         } else {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                 #if os(tvOS)
@@ -92,16 +97,38 @@ struct UnifiedLibraryGridView: View {
                 if !availableGenres.isEmpty {
                     genreFilterRow
                 }
-                LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
-                    ForEach(sortedItems) { item in
-                        NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                // Audio filter stays visible whenever the catalog has languages —
+                // even with zero results — so a too-narrow filter can be cleared.
+                if !audioLanguageOptions.isEmpty {
+                    audioLanguageFilterRow
+                }
+                if sortedItems.isEmpty {
+                    AetherEmptyState(
+                        glyph: "tray",
+                        title: "Nothing here",
+                        message: emptyMessage
+                    )
+                    .padding(.top, AetherDesign.Spacing.l)
+                } else {
+                    LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
+                        ForEach(sortedItems) { item in
+                            NavigationLink(value: item) {
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
         }
+    }
+
+    /// Empty-state copy reflects whether a filter is narrowing the result.
+    private var emptyMessage: String {
+        if selectedAudioLanguage != nil || selectedGenre != nil {
+            return "No \(title.lowercased()) match the current filters."
+        }
+        return "No \(title.lowercased()) found across your connected sources."
     }
 
     /// Items after the genre filter, before sorting.
@@ -111,24 +138,9 @@ struct UnifiedLibraryGridView: View {
     }
 
     private var sortedItems: [UnifiedMediaItem] {
-        let base = filteredItems
-        switch sort {
-        case .titleAZ:
-            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .titleZA:
-            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
-        case .yearNewest:
-            return base.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
-        case .yearOldest:
-            return base.sorted { ($0.year ?? Int.max) < ($1.year ?? Int.max) }
-        case .recentlyAdded:
-            return base.sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
-        case .ratingHighest:
-            return base.sorted { ($0.communityRating ?? -1) > ($1.communityRating ?? -1) }
-        case .random:
-            // No stable random for a client-side grid; keep merge order.
-            return base
-        }
+        // Shared, tested ordering (#294) — same rating/rated-first behaviour
+        // everywhere Library sorts client-side.
+        sort.sorted(filteredItems)
     }
 
     /// Distinct genres across the loaded items, most common first, capped so the
@@ -163,6 +175,33 @@ struct UnifiedLibraryGridView: View {
                     genreChip(label: genre, isSelected: selectedGenre == genre) {
                         // Tapping the active genre again clears the filter.
                         selectedGenre = (selectedGenre == genre) ? nil : genre
+                    }
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    // MARK: - Audio-language filter (#295)
+
+    /// Capsule chips for audio language: "Audio" label + "All" + each language.
+    /// Selecting one re-loads the catalog (Plex filters server-side via `loadKey`).
+    private var audioLanguageFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Label("Audio", systemImage: "waveform")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .padding(.trailing, AetherDesign.Spacing.xxs)
+                genreChip(label: "All", isSelected: selectedAudioLanguage == nil) {
+                    selectedAudioLanguage = nil
+                }
+                ForEach(audioLanguageOptions) { option in
+                    genreChip(label: option.displayName, isSelected: selectedAudioLanguage == option.code) {
+                        selectedAudioLanguage = (selectedAudioLanguage == option.code) ? nil : option.code
                     }
                 }
             }
@@ -264,9 +303,21 @@ struct UnifiedLibraryGridView: View {
         isLoading = true
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let fetched = await library.unifiedItems(kind: kind)
+        // `audioLanguage: nil` delegates to the cached unfiltered path.
+        let fetched = await library.unifiedItems(kind: kind, audioLanguage: selectedAudioLanguage)
         items = fetched
         // Warm the artwork cache for the first screenful of the grid.
         AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
+    }
+
+    /// Derive the audio-language options from the full catalog (once per source
+    /// set) so the chip row stays stable regardless of the active filter (#295).
+    private func loadAudioLanguageOptions() async {
+        guard !connectedSources.isEmpty else {
+            audioLanguageOptions = []
+            return
+        }
+        let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
+        audioLanguageOptions = await library.audioLanguageOptions(kind: kind)
     }
 }

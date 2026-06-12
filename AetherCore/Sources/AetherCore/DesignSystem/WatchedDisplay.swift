@@ -36,14 +36,45 @@ public enum WatchedDimming: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Preset "WATCHED" wordmark opacities (#280). The stored value is a continuous
+/// `Double` (an iOS / visionOS slider); these presets back the tvOS picker,
+/// where `Slider` isn't available.
+public enum WatchedLabelOpacity: String, Codable, CaseIterable, Sendable {
+    case faint
+    case light
+    case medium
+    case solid
+
+    public var displayName: String {
+        switch self {
+        case .faint:  return "Faint"
+        case .light:  return "Light"
+        case .medium: return "Medium"
+        case .solid:  return "Solid"
+        }
+    }
+
+    public var value: Double {
+        switch self {
+        case .faint:  return 0.4
+        case .light:  return 0.6
+        case .medium: return 0.8
+        case .solid:  return 1.0
+        }
+    }
+}
+
 /// The watched-poster treatment, injected from the app's playback preferences.
 public struct WatchedDisplayConfig: Sendable, Hashable {
     public var dimming: WatchedDimming
     public var showLabel: Bool
+    /// Opacity of the "WATCHED" wordmark (0...1).
+    public var labelOpacity: Double
 
-    public init(dimming: WatchedDimming = .medium, showLabel: Bool = true) {
+    public init(dimming: WatchedDimming = .medium, showLabel: Bool = true, labelOpacity: Double = 0.8) {
         self.dimming = dimming
         self.showLabel = showLabel
+        self.labelOpacity = labelOpacity
     }
 }
 
