@@ -49,6 +49,9 @@ actor SMBMediaSource: MediaSource {
         let url: URL
         let inference: TitleInference
         var metadata: TMDbMetadata?
+        /// Resolution / codec / HDR / audio parsed from the release filename
+        /// (SMB has no probed stream metadata).
+        var mediaInfo: MediaInfo?
     }
 
     private nonisolated var moviesLibraryID: Library.ID { .init(source: id, rawValue: "movies") }
@@ -138,7 +141,8 @@ actor SMBMediaSource: MediaSource {
                 // leading to the file (drop the filename), e.g. ["HD","Movies"].
                 let pathComponents = [root.share] + entry.path.split(separator: "/").map(String.init).dropLast()
                 let inference = TitleInference(filename: entry.name, pathComponents: Array(pathComponents))
-                discovered.append(SMBFile(url: entry.streamURL, inference: inference))
+                let mediaInfo = MediaInfo.fromFilename(entry.name, container: (entry.name as NSString).pathExtension)
+                discovered.append(SMBFile(url: entry.streamURL, inference: inference, mediaInfo: mediaInfo))
             }
         }
         Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
@@ -185,7 +189,8 @@ actor SMBMediaSource: MediaSource {
             summary: file.metadata?.overview,
             posterURL: file.metadata?.posterURL,
             backdropURL: file.metadata?.backdropURL,
-            streamURL: file.url
+            streamURL: file.url,
+            mediaInfo: file.mediaInfo
         )
     }
 
@@ -199,6 +204,7 @@ actor SMBMediaSource: MediaSource {
             posterURL: file.metadata?.posterURL,
             backdropURL: file.metadata?.backdropURL,
             streamURL: file.url,
+            mediaInfo: file.mediaInfo,
             seriesTitle: file.inference.title,
             seasonNumber: file.inference.season,
             episodeNumber: file.inference.episode,
