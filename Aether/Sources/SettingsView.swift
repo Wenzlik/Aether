@@ -1133,14 +1133,56 @@ struct SettingsView: View {
 
             // Opacity only matters while the label is shown.
             if viewModel.playbackPreferences.watchedShowLabel {
-                AetherDisclosureRow(
-                    label: "Label Opacity",
-                    value: viewModel.playbackPreferences.watchedLabelOpacity.displayName
-                ) {
-                    openPicker = .watchedLabelOpacity
-                }
+                watchedLabelOpacityControl
             }
         }
+    }
+
+    /// Label-opacity control: a Transparent↔Solid slider on iOS / visionOS; a
+    /// preset picker on tvOS (no `Slider` there). Both write the same Double.
+    @ViewBuilder
+    private var watchedLabelOpacityControl: some View {
+        #if os(tvOS)
+        AetherDisclosureRow(
+            label: "Label Opacity",
+            value: "\(Int((viewModel.playbackPreferences.watchedLabelOpacity * 100).rounded()))%"
+        ) {
+            openPicker = .watchedLabelOpacity
+        }
+        #else
+        let opacityBinding = Binding(
+            get: { viewModel.playbackPreferences.watchedLabelOpacity },
+            set: { viewModel.playbackPreferences.watchedLabelOpacity = $0 }
+        )
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            HStack {
+                Text("Label Opacity")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Spacer()
+                // Live preview of the wordmark at the current opacity.
+                Text("WATCHED")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(viewModel.playbackPreferences.watchedLabelOpacity))
+                    .shadow(color: .black.opacity(0.75), radius: 3, y: 1)
+                    .padding(.horizontal, AetherDesign.Spacing.s)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.35), in: Capsule())
+            }
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Text("Transparent")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                Slider(value: opacityBinding, in: PlaybackPreferencesStore.minLabelOpacity...1.0)
+                    .tint(AetherDesign.Palette.accent)
+                Text("Solid")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
+        }
+        .padding(AetherDesign.Spacing.m)
+        #endif
     }
 
     // MARK: - Appearance
@@ -1199,9 +1241,9 @@ struct SettingsView: View {
             ForEach(WatchedLabelOpacity.allCases, id: \.self) { level in
                 AetherSelectionRow(
                     title: level.displayName,
-                    isSelected: viewModel.playbackPreferences.watchedLabelOpacity == level
+                    isSelected: abs(viewModel.playbackPreferences.watchedLabelOpacity - level.value) < 0.05
                 ) {
-                    viewModel.playbackPreferences.watchedLabelOpacity = level
+                    viewModel.playbackPreferences.watchedLabelOpacity = level.value
                     openPicker = nil
                 }
             }

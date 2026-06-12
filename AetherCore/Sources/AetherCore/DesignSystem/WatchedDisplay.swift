@@ -36,9 +36,9 @@ public enum WatchedDimming: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// How translucent the "WATCHED" wordmark is over a finished poster (#280).
-/// Discrete levels (not a slider) keep it consistent with `WatchedDimming` and
-/// focusable on tvOS.
+/// Preset "WATCHED" wordmark opacities (#280). The stored value is a continuous
+/// `Double` (an iOS / visionOS slider); these presets back the tvOS picker,
+/// where `Slider` isn't available.
 public enum WatchedLabelOpacity: String, Codable, CaseIterable, Sendable {
     case faint
     case light
