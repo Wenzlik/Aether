@@ -216,6 +216,22 @@ final class AppSession {
         await localLibraryStore.setArtwork(data, for: id)
     }
 
+    // MARK: SMB title/year editing (#213)
+
+    /// The user's current title/year correction for an SMB item, for pre-filling
+    /// the edit sheet. `nil` when uncorrected or SMB isn't configured.
+    func smbOverride(for itemID: MediaID) async -> SMBMetadataStore.Override? {
+        await smbSource?.override(forItem: itemID)
+    }
+
+    /// Persist a title/year correction for an SMB item (a `nil`/empty value
+    /// clears it), then drop the cached walk so the next browse re-matches TMDb
+    /// with the corrected title → fresh poster. Detail re-points on dismiss; the
+    /// library grid re-walks when next navigated to.
+    func saveSMBOverride(_ override: SMBMetadataStore.Override?, for itemID: MediaID) async {
+        await smbSource?.setOverride(override, forItem: itemID)
+    }
+
     // MARK: - Downloads
 
     /// Single-source-of-truth for download state. `nil` until `start()` has

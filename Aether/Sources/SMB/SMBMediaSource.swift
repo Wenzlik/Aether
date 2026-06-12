@@ -60,6 +60,16 @@ actor SMBMediaSource: MediaSource {
         /// Resolution / codec / HDR / audio parsed from the release filename
         /// (SMB has no probed stream metadata).
         var mediaInfo: MediaInfo?
+        /// User's title/year correction (#213), keyed by this file's stream URL.
+        /// Used for both the TMDb match key and the displayed title/year.
+        var override: SMBMetadataStore.Override?
+
+        /// Title to match + display: the user's correction wins over inference.
+        var effectiveTitle: String {
+            if let t = override?.title, !t.isEmpty { return t }
+            return inference.title
+        }
+        var effectiveYear: Int? { override?.year ?? inference.year }
     }
 
     private nonisolated var moviesLibraryID: Library.ID { .init(source: id, rawValue: "movies") }
@@ -133,6 +143,8 @@ actor SMBMediaSource: MediaSource {
             let shares = (try? await session.shares()) ?? []
             roots = shares.map { ($0, "/") }
         }
+        // User title/year corrections, keyed by stream URL (#213).
+        let overrides = await SMBMetadataStore.shared.allOverrides()
         var discovered: [SMBFile] = []
         for root in roots {
             let remaining = Self.maxFiles - discovered.count
@@ -150,7 +162,12 @@ actor SMBMediaSource: MediaSource {
                 let pathComponents = [root.share] + entry.path.split(separator: "/").map(String.init).dropLast()
                 let inference = TitleInference(filename: entry.name, pathComponents: Array(pathComponents))
                 let mediaInfo = MediaInfo.fromFilename(entry.name, container: (entry.name as NSString).pathExtension)
-                discovered.append(SMBFile(url: entry.streamURL, inference: inference, mediaInfo: mediaInfo))
+                discovered.append(SMBFile(
+                    url: entry.streamURL,
+                    inference: inference,
+                    mediaInfo: mediaInfo,
+                    override: overrides[entry.streamURL.absoluteString]
+                ))
             }
         }
         Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
@@ -171,8 +188,13 @@ actor SMBMediaSource: MediaSource {
         let store = SMBMetadataStore.shared
         let canMatch = tmdb?.isConfigured ?? false
         for index in files.indices {
-            let inference = files[index].inference
-            let key = SMBMetadataStore.key(title: inference.title, year: inference.year, isEpisode: inference.isEpisode)
+            let file = files[index]
+            // The user's correction (if any) drives the match key — editing a
+            // title/year yields a new key → a fresh TMDb match.
+            let title = file.effectiveTitle
+            let year = file.effectiveYear
+            let isEpisode = file.inference.isEpisode
+            let key = SMBMetadataStore.key(title: title, year: year, isEpisode: isEpisode)
             switch await store.lookup(key) {
             case .hit(let metadata):
                 files[index].metadata = metadata
@@ -180,7 +202,7 @@ actor SMBMediaSource: MediaSource {
                 continue   // tried before, no TMDb match → don't re-hit the network (battery)
             case .unknown:
                 guard canMatch, let tmdb else { continue }   // no key yet → leave for a later browse
-                let match = await tmdb.match(title: inference.title, year: inference.year, isEpisode: inference.isEpisode)
+                let match = await tmdb.match(title: title, year: year, isEpisode: isEpisode)
                 await store.record(match, for: key)           // persists (hit or miss)
                 files[index].metadata = match
             }
@@ -196,6 +218,21 @@ actor SMBMediaSource: MediaSource {
         await SMBMetadataStore.shared.clearMisses()
     }
 
+    /// The user's current title/year correction for an item (its stream URL),
+    /// so the edit sheet can pre-fill. `nil` when uncorrected.
+    func override(forItem itemID: MediaID) async -> SMBMetadataStore.Override? {
+        await SMBMetadataStore.shared.override(forItem: itemID.rawValue)
+    }
+
+    /// Save the user's title/year correction for an SMB item (#213), then drop
+    /// the cached walk so the next browse re-runs TitleInference with the
+    /// correction → a new TMDb match key → a fresh poster lookup.
+    func setOverride(_ override: SMBMetadataStore.Override?, forItem itemID: MediaID) async {
+        await SMBMetadataStore.shared.setOverride(override, forItem: itemID.rawValue)
+        cachedFiles = nil
+        lastStats = nil
+    }
+
     // MARK: - Mapping
 
     private nonisolated func showID(for series: String) -> MediaID {
@@ -205,10 +242,11 @@ actor SMBMediaSource: MediaSource {
     private nonisolated func movieItem(_ file: SMBFile) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: file.url.absoluteString),
-            // Canonical TMDb title when matched, else the inferred one.
-            title: file.metadata?.title ?? file.inference.title,
+            // Canonical TMDb title when matched, else the user's correction,
+            // else the inferred one.
+            title: file.metadata?.title ?? file.effectiveTitle,
             kind: .movie,
-            year: file.metadata?.year ?? file.inference.year,
+            year: file.metadata?.year ?? file.effectiveYear,
             summary: file.metadata?.overview,
             posterURL: file.metadata?.posterURL,
             backdropURL: file.metadata?.backdropURL,

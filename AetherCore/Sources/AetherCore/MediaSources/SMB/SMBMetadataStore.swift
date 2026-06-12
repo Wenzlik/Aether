@@ -27,13 +27,27 @@ public actor SMBMetadataStore {
         case hit(TMDbMetadata)       // matched → reuse
     }
 
+    /// A user correction of an SMB item's title/year (#213), so a mis-parsed
+    /// filename can be fixed to match TMDb. Keyed per item (its stream URL).
+    public struct Override: Codable, Sendable, Hashable {
+        public var title: String?
+        public var year: Int?
+        public init(title: String? = nil, year: Int? = nil) {
+            self.title = title
+            self.year = year
+        }
+        public var isEmpty: Bool { (title?.isEmpty ?? true) && year == nil }
+    }
+
     private struct Persisted: Codable {
         var matches: [String: TMDbMetadata] = [:]
         var tried: [String] = []
+        var overrides: [String: Override] = [:]
     }
 
     private var matches: [String: TMDbMetadata] = [:]
     private var tried: Set<String> = []
+    private var overrides: [String: Override] = [:]
     private var loaded = false
     private let fileURL: URL?
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb.metadata")
@@ -86,7 +100,33 @@ public actor SMBMetadataStore {
     public func clearAll() {
         matches = [:]
         tried = []
+        overrides = [:]
         loaded = true
+        persist()
+    }
+
+    // MARK: - User overrides (#213 title/year editing)
+
+    /// The user's title/year correction for an item (its stream URL), if any.
+    public func override(forItem itemKey: String) -> Override? {
+        loadIfNeeded()
+        return overrides[itemKey]
+    }
+
+    /// All overrides, for applying during a walk (keyed by item stream URL).
+    public func allOverrides() -> [String: Override] {
+        loadIfNeeded()
+        return overrides
+    }
+
+    /// Save (or clear, when empty) the user's correction for an item and persist.
+    public func setOverride(_ override: Override?, forItem itemKey: String) {
+        loadIfNeeded()
+        if let override, !override.isEmpty {
+            overrides[itemKey] = override
+        } else {
+            overrides[itemKey] = nil
+        }
         persist()
     }
 
@@ -97,11 +137,12 @@ public actor SMBMetadataStore {
               let decoded = try? JSONDecoder().decode(Persisted.self, from: data) else { return }
         matches = decoded.matches
         tried = Set(decoded.tried)
+        overrides = decoded.overrides
     }
 
     private func persist() {
         guard let fileURL else { return }
-        let snapshot = Persisted(matches: matches, tried: Array(tried))
+        let snapshot = Persisted(matches: matches, tried: Array(tried), overrides: overrides)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         do { try data.write(to: fileURL, options: .atomic) }
         catch { Self.log.error("SMB metadata persist failed: \(error.localizedDescription, privacy: .public)") }
