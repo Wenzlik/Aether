@@ -55,6 +55,7 @@ struct RootTabView: View {
     @State private var libraryPath = NavigationPath()
     @State private var discoverPath = NavigationPath()
     @State private var searchPath = NavigationPath()
+    @State private var settingsPath = NavigationPath()
 
     /// Selecting a tab — whether switching to it or re-tapping the current one —
     /// returns it to its **root**. A pushed Detail therefore never persists across
@@ -75,7 +76,7 @@ struct RootTabView: View {
                 case .library:  libraryPath = NavigationPath()
                 case .discover: discoverPath = NavigationPath()
                 case .search:   searchPath = NavigationPath()
-                case .settings: break
+                case .settings: settingsPath = NavigationPath()
                 }
                 selectedTab = newValue
             }
@@ -161,7 +162,8 @@ struct RootTabView: View {
                     playbackSession: session.playback,
                     libraryPreferences: session.libraryPreferences,
                     downloadManager: dlManager,
-                    downloads: dlObserver
+                    downloads: dlObserver,
+                    navigationPath: $settingsPath
                 )
             }
         }

@@ -20,6 +20,9 @@ struct SettingsView: View {
     var libraryPreferences: LibraryPreferencesStore
     var downloadManager: DownloadManager? = nil
     var downloads: DownloadObserver? = nil
+    /// Owned by `RootTabView` so re-tapping the Settings tab pops to the index
+    /// (#300) — global nav resets to the section root, not "restore deep state".
+    @Binding var navigationPath: NavigationPath
 
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
@@ -84,7 +87,7 @@ struct SettingsView: View {
     @AppStorage("developer.unlocked") private var developerUnlocked = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
