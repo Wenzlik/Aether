@@ -1898,4 +1898,54 @@ struct PlaybackPreferenceApplicationTests {
         let seeded = prefs.applied(to: episode("e3"))
         #expect(seeded.selectedAudioTrack?.languageCode == "cze")
     }
+
+    /// An episode whose tracks carry a label but no BCP-47 code — a strict
+    /// language-only compare dropped the carry-over here (#316).
+    private func untaggedEpisode(_ id: String) -> MediaItem {
+        MediaItem(
+            id: .init(source: .mock, rawValue: id), title: id, kind: .episode,
+            streamURL: URL(string: "https://s/\(id).mp4"),
+            audioTracks: [
+                .init(id: "\(id)-a1", title: "English", isSelected: true),
+                .init(id: "\(id)-a2", title: "Commentary"),
+            ],
+            subtitleTracks: [
+                .init(id: "\(id)-s1", title: "English"),
+                .init(id: "\(id)-s2", title: "Czech"),
+            ]
+        )
+    }
+
+    @Test("next episode carries the selection by title when no language code (#316)")
+    func nextEpisodeCarriesByTitle() {
+        let prefs = PlaybackPreferencesStore(defaults: UserDefaults(suiteName: "test-316-\(UUID())")!)
+        var current = untaggedEpisode("e1")
+        let commentary = current.audioTracks.first { $0.id == "e1-a2" }!
+        let czSub = current.subtitleTracks.first { $0.id == "e1-s2" }!
+        current = current.selectingAudioTrack(commentary).selectingSubtitleTrack(czSub)
+
+        let next = prefs.appliedToNextEpisode(untaggedEpisode("e2"), continuing: current)
+        #expect(next.selectedAudioTrack?.id == "e2-a2")        // matched "Commentary"
+        #expect(next.selectedSubtitleTrack?.id == "e2-s2")     // matched "Czech"
+    }
+
+    @Test("language match ignores region subtag — en-US carries to en (#316)")
+    func nextEpisodeMatchesAcrossRegionSubtag() {
+        let prefs = PlaybackPreferencesStore(defaults: UserDefaults(suiteName: "test-316b-\(UUID())")!)
+        let current = MediaItem(
+            id: .init(source: .mock, rawValue: "e1"), title: "e1", kind: .episode,
+            streamURL: URL(string: "https://s/e1.mp4"),
+            audioTracks: [.init(id: "e1-en", title: "English", languageCode: "en-US", isSelected: true)]
+        )
+        let next = MediaItem(
+            id: .init(source: .mock, rawValue: "e2"), title: "e2", kind: .episode,
+            streamURL: URL(string: "https://s/e2.mp4"),
+            audioTracks: [
+                .init(id: "e2-fr", title: "French", languageCode: "fr"),
+                .init(id: "e2-en", title: "English", languageCode: "en"),
+            ]
+        )
+        let configured = prefs.appliedToNextEpisode(next, continuing: current)
+        #expect(configured.selectedAudioTrack?.id == "e2-en")
+    }
 }
