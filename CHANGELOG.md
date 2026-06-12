@@ -4,6 +4,51 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-06-12
+
+Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
+0.7.0 on-device testing.
+
+### Added
+
+- **Czech localization** (#312) — the app follows the device language, with an
+  in-app **Language** switcher (Settings ▸ Appearance) that also covers System /
+  English; untranslated strings fall back to English. Built on a String Catalog,
+  ready for more languages.
+- **Edit SMB folders after sign-in** (#214) — the multi-folder picker is now
+  reachable from Settings ▸ SMB ▸ Folders, not only at sign-in.
+
+### Changed
+
+- **SMB goes dormant off-network** (#214) — it's LAN-only, so off your home
+  network it drops out of the Library (no failed walks, no errors) and
+  auto-reappears when you're back.
+- **Collections hidden when empty** (#298/#311) — the Collections row only shows
+  when a connected source actually has collections (a Plex-only library with
+  none no longer surfaces a dead row).
+- **tvOS Settings** — boolean rows render as clean On/Off rows instead of heavy
+  full-width toggle pills (#310).
+- **SMB poster matching** is more robust — concurrent walks are coalesced (no
+  TMDb rate-limit stampede) and a wholesale match failure no longer poisons the
+  cache.
+
+### Fixed
+
+- **Crash dragging the WATCHED label-opacity slider** — a self-assigning `didSet`
+  on an `@Observable` store recursed infinitely; clamping moved to the edges.
+- **tvOS dead-end screens** (#311) — an empty/loading/error screen pushed onto a
+  NavigationStack had nothing focusable, so the Back/Menu button exited the app
+  instead of popping. Those states are now focusable on tvOS.
+- **Auto-skipped credits now mark the episode watched** (#314) — with Skip
+  Credits = Automatically, finishing an episode no longer left it unwatched (a
+  seek to the end never posts the play-to-end notification we were relying on).
+- **Dismissing after Auto-Play-Next lands on the right episode** (#315) — when
+  playback had auto-advanced, closing the player now returns to the episode that
+  was actually playing, not the one Play was first pressed on.
+- **Audio / subtitle selection carries to the next episode** (#316) — Auto-Play-
+  Next now keeps the chosen audio + subtitle language even when tracks carry no
+  language code (matched by label) or differ only by region subtag.
+
 ## [0.7.0] — 2026-06-12
 
 Codename **Draco**. SMB grows up — a native browse/auth rewrite with downloads,

@@ -268,34 +268,38 @@ public actor PlexMediaSource: MediaSource {
         var seen: Set<String> = []
         var result: [MediaCollection] = []
         for section in sections {
-            // `all?type=18` (type 18 = *collection*) is the listing Plex Web
-            // itself uses and is far more widely supported than the newer
-            // `/sections/{id}/collections`, which returned nothing on some
-            // servers — making real libraries look empty (#298). And log
-            // failures (token-safe) instead of swallowing them, so a server/API
-            // problem doesn't masquerade as "no collections".
-            let request = request(
-                base: base,
-                path: "/library/sections/\(section.id.rawValue)/all",
-                queryItems: [URLQueryItem(name: "type", value: "18")]
-            )
-            do {
-                let response = try await api.decode(
-                    PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
-                )
-                for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
-                    result.append(MediaCollection(
-                        id: .init(source: id, rawValue: dto.ratingKey),
-                        title: dto.title,
-                        childCount: dto.childCount,
-                        artwork: ArtworkSource(
-                            provider: .plex, base: base, token: accessToken,
-                            posterPath: dto.thumb, backdropPath: dto.art
-                        )
-                    ))
+            // Servers disagree on which endpoint lists collections: the dedicated
+            // `/sections/{id}/collections` vs the `all?type=18` (type 18 =
+            // *collection*) listing. Both returned empty on the reporter's Plex
+            // while Jellyfin worked (#298), so query BOTH, merge + dedupe by
+            // ratingKey, and log each endpoint's count (token-safe) so a real
+            // server/API gap can't masquerade as "no collections".
+            let endpoints: [(path: String, query: [URLQueryItem])] = [
+                ("/library/sections/\(section.id.rawValue)/collections", []),
+                ("/library/sections/\(section.id.rawValue)/all", [URLQueryItem(name: "type", value: "18")]),
+            ]
+            for endpoint in endpoints {
+                let request = request(base: base, path: endpoint.path, queryItems: endpoint.query)
+                do {
+                    let response = try await api.decode(
+                        PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+                    )
+                    let dtos = response.mediaContainer.metadata ?? []
+                    Self.log.info("Plex collections \(endpoint.path, privacy: .public): \(dtos.count, privacy: .public) found")
+                    for dto in dtos where seen.insert(dto.ratingKey).inserted {
+                        result.append(MediaCollection(
+                            id: .init(source: id, rawValue: dto.ratingKey),
+                            title: dto.title,
+                            childCount: dto.childCount,
+                            artwork: ArtworkSource(
+                                provider: .plex, base: base, token: accessToken,
+                                posterPath: dto.thumb, backdropPath: dto.art
+                            )
+                        ))
+                    }
+                } catch {
+                    Self.log.error("Plex collections \(endpoint.path, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
                 }
-            } catch {
-                Self.log.error("Plex collections fetch failed for section \(section.id.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
         return result.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }

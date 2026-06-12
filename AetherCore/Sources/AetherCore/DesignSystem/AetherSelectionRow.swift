@@ -32,7 +32,7 @@ public struct AetherSelectionRow: View {
                     .foregroundStyle(isSelected ? AetherDesign.Palette.accent : AetherDesign.Palette.textTertiary)
                     .frame(width: 24)
 
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AetherDesign.Typography.body)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(1)
@@ -40,7 +40,7 @@ public struct AetherSelectionRow: View {
                 Spacer(minLength: AetherDesign.Spacing.s)
 
                 if let detail {
-                    Text(detail)
+                    Text(LocalizedStringKey(detail))
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                         .lineLimit(1)

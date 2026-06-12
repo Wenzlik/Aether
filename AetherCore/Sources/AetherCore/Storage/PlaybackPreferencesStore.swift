@@ -240,21 +240,21 @@ public extension PlaybackPreferencesStore {
     func appliedToNextEpisode(_ next: MediaItem, continuing current: MediaItem) -> MediaItem {
         var result = applied(to: next)
 
-        // Carry the playing audio language over (an explicit in-session pick
-        // beats the app default).
-        if let language = current.selectedAudioTrack?.languageCode?.lowercased(),
-           let track = result.audioTracks.first(where: {
-               $0.languageCode?.lowercased() == language
-           }) {
+        // Carry the playing audio track over (an explicit in-session pick beats
+        // the app default). Match by language first, then fall back to a title
+        // match — some sources ship tracks with no BCP-47 code but a label like
+        // "English", and a strict language-only compare silently dropped the
+        // carry-over to the container default on the next episode (#316).
+        if let selected = current.selectedAudioTrack,
+           let track = Self.matchingAudioTrack(in: result.audioTracks, like: selected) {
             result = result.selectingAudioTrack(track)
         }
 
-        // Subtitles: carry the current language; an explicitly-off state
-        // (no selected track despite available tracks) stays off.
-        if let language = current.selectedSubtitleTrack?.languageCode?.lowercased() {
-            if let track = result.subtitleTracks.first(where: {
-                $0.languageCode?.lowercased() == language
-            }) {
+        // Subtitles: carry the current track (same language-then-title match);
+        // an explicitly-off state (no selected track despite available tracks)
+        // stays off.
+        if let selected = current.selectedSubtitleTrack {
+            if let track = Self.matchingSubtitleTrack(in: result.subtitleTracks, like: selected) {
                 result = result.selectingSubtitleTrack(track)
             }
         } else if current.selectedSubtitleTrackID == nil, !current.subtitleTracks.isEmpty {
@@ -265,5 +265,55 @@ public extension PlaybackPreferencesStore {
         result = result.selectingQuality(current.selectedQuality)
 
         return result
+    }
+
+    /// The audio track in `tracks` that best continues `reference` — language
+    /// match first (normalised: lowercased, primary subtag only, so `en-US`
+    /// matches `eng`/`en`), then a normalised title match for tracks that carry
+    /// no language code. `nil` when nothing reasonable lines up (#316).
+    static func matchingAudioTrack(
+        in tracks: [MediaAudioTrack], like reference: MediaAudioTrack
+    ) -> MediaAudioTrack? {
+        if let lang = normalizedLanguage(reference.languageCode),
+           let track = tracks.first(where: { normalizedLanguage($0.languageCode) == lang }) {
+            return track
+        }
+        let title = normalizedTitle(reference.title)
+        if !title.isEmpty,
+           let track = tracks.first(where: { normalizedTitle($0.title) == title }) {
+            return track
+        }
+        return nil
+    }
+
+    /// Subtitle counterpart to `matchingAudioTrack` — language then title (#316).
+    static func matchingSubtitleTrack(
+        in tracks: [MediaSubtitleTrack], like reference: MediaSubtitleTrack
+    ) -> MediaSubtitleTrack? {
+        if let lang = normalizedLanguage(reference.languageCode),
+           let track = tracks.first(where: { normalizedLanguage($0.languageCode) == lang }) {
+            return track
+        }
+        let title = normalizedTitle(reference.title)
+        if !title.isEmpty,
+           let track = tracks.first(where: { normalizedTitle($0.title) == title }) {
+            return track
+        }
+        return nil
+    }
+
+    /// Lowercased primary language subtag (`en-US` / `en_us` → `en`), or `nil`
+    /// for an empty/absent code — so region-tagged variants of the same language
+    /// still match across episodes.
+    static func normalizedLanguage(_ code: String?) -> String? {
+        guard let code else { return nil }
+        let primary = code.lowercased()
+            .split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .first.map(String.init) ?? ""
+        return primary.isEmpty ? nil : primary
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
