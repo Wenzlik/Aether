@@ -174,6 +174,7 @@ struct DetailView: View {
         case audio, subtitles, quality, downloadQuality, technicalDetails
         #if !os(tvOS)
         case editMetadata
+        case smbEditMetadata
         #endif
         var id: String {
             switch self {
@@ -184,6 +185,7 @@ struct DetailView: View {
             case .technicalDetails: return "technicalDetails"
             #if !os(tvOS)
             case .editMetadata: return "editMetadata"
+            case .smbEditMetadata: return "smbEditMetadata"
             #endif
             }
         }
@@ -194,6 +196,12 @@ struct DetailView: View {
     /// playback-related state derives from this, so an "Available Sources"
     /// switch re-points hydration / playback / downloads at the chosen server.
     private var activeItem: MediaItem { overrideItem ?? item }
+
+    /// Whether a source id is an SMB share (drives the title/year editor, #213).
+    private func isSMBSource(_ source: MediaSourceID) -> Bool {
+        if case .smb = source { return true }
+        return false
+    }
 
     /// The item reflecting hydration + the user's track / quality selections.
     private var current: MediaItem { configuredItem ?? activeItem }
@@ -297,7 +305,7 @@ struct DetailView: View {
         // grouping, so pop back rather than render a contradictory screen.
         .task(id: localEditToken) {
             guard localEditToken != nil,
-                  activeItem.id.source == .local,
+                  activeItem.id.source == .local || isSMBSource(activeItem.id.source),
                   let source,
                   let refreshed = try? await source.item(for: activeItem.id) else { return }
             if refreshed.kind != activeItem.kind {
@@ -331,7 +339,15 @@ struct DetailView: View {
             playbackSelectorSheet(for: selector)
         }
         .fullScreenCover(item: $vlcPlayback) { playback in
-            VLCPlayerView(url: playback.url, options: playback.options) { vlcPlayback = nil }
+            // SMB has no pre-play track list, so hand the player the app's default
+            // audio/subtitle languages — it applies the matching tracks once VLC
+            // parses them ("choose before you watch", driven by Settings).
+            VLCPlayerView(
+                url: playback.url,
+                options: playback.options,
+                preferredAudioLanguage: playbackPreferences?.defaultAudioLanguage,
+                preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
+            ) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
         #if os(visionOS)
@@ -2180,6 +2196,15 @@ struct DetailView: View {
                     presentedSelector = .editMetadata
                 }
             }
+            // SMB items carry no metadata — let the user correct the title/year
+            // so a mis-named file matches a TMDb poster (#213). Movies/episodes
+            // only (not show containers, whose id is "show:<series>").
+            if isSMBSource(activeItem.id.source) && !activeItem.kind.isContainer {
+                AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
+                    dismissIconHint()
+                    presentedSelector = .smbEditMetadata
+                }
+            }
             #endif
             Spacer(minLength: 0)
         }
@@ -2244,7 +2269,13 @@ struct DetailView: View {
         switch downloadStatus {
         case .notDownloaded:
             Button {
-                presentedSelector = .downloadQuality
+                // SMB is a raw file share — no server transcode, so skip the
+                // quality picker and download the original file directly.
+                if isSMBSource(activeItem.id.source) {
+                    Task { await startDownload(quality: .original) }
+                } else {
+                    presentedSelector = .downloadQuality
+                }
             } label: { Label("Download", systemImage: "arrow.down.circle") }
             .disabled(isEnqueuingDownload)
         case .queued:
@@ -2488,6 +2519,15 @@ struct DetailView: View {
             LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
                 presentedSelector = nil
                 localEditToken = UUID()   // force a re-hydrate on dismiss
+            }
+        case .smbEditMetadata:
+            SMBMetadataEditSheet(
+                itemID: activeItem.id,
+                currentTitle: current.title,
+                currentYear: current.year
+            ) {
+                presentedSelector = nil
+                localEditToken = UUID()   // re-hydrate Detail with the corrected match
             }
         #endif
         }

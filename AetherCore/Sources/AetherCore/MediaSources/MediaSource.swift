@@ -141,6 +141,22 @@ public protocol MediaSource: Sendable {
     /// because Plex picks its filter parameter from the person's `kind`.
     /// Best-effort. Default: none.
     func items(withPerson person: MediaPerson) async -> [MediaItem]
+
+    /// Whether the source can filter a library by audio language **server-side**
+    /// (#295). Plex can (`?audioLanguage=`); Jellyfin carries audio tracks in its
+    /// list responses, so the unified layer filters it client-side instead.
+    /// Default: `false`.
+    var supportsAudioLanguageFilter: Bool { get }
+
+    /// Available audio languages for a library, as raw codes the source emits
+    /// (the unified layer canonicalizes + localizes them). Plex reads its
+    /// `/audioLanguage` filter values. Best-effort. Default: none.
+    func audioLanguageOptions(in libraryID: Library.ID) async -> [String]
+
+    /// Server-side audio-language-filtered listing for a library (#295). Returns
+    /// `nil` when the source doesn't filter server-side, signalling the caller to
+    /// filter client-side from the items' audio tracks. Default: `nil`.
+    func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]?
 }
 
 public extension MediaSource {
@@ -202,6 +218,16 @@ public extension MediaSource {
 
     /// Default: no people directory. Plex / Jellyfin override.
     func items(withPerson person: MediaPerson) async -> [MediaItem] { [] }
+
+    /// Default: no server-side audio-language filter. Plex overrides.
+    var supportsAudioLanguageFilter: Bool { false }
+
+    /// Default: no audio-language options. Plex overrides.
+    func audioLanguageOptions(in libraryID: Library.ID) async -> [String] { [] }
+
+    /// Default: no server-side audio-language filtering → caller filters
+    /// client-side. Plex overrides.
+    func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]? { nil }
 
     /// Generic next-episode resolver: hydrate the item, fetch its season's
     /// episodes, return the one after it. Works for any source that fills in

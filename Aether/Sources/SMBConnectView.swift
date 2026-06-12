@@ -13,7 +13,9 @@ struct SMBConnectView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var domain = ""
-    @State private var folder = ""
+    @State private var selectedRoots: [String] = []
+    @State private var showFolderPicker = false
+    @State private var isPreparingBrowse = false
     @State private var phase: Phase = .idle
 
     private enum Phase: Equatable {
@@ -22,6 +24,17 @@ struct SMBConnectView: View {
     }
 
     private var trimmedHost: String { host.trimmingCharacters(in: .whitespaces) }
+
+    /// A connection built from the current form, for the folder picker to browse.
+    private var draftConnection: SMBConnection {
+        SMBConnection(
+            host: trimmedHost,
+            username: username.isEmpty ? nil : username,
+            password: password.isEmpty ? nil : password,
+            domain: domain.isEmpty ? nil : domain,
+            roots: selectedRoots
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,11 +47,6 @@ struct SMBConnectView: View {
                         .keyboardType(.URL)
                         #endif
                         .autocorrectionDisabled()
-                    TextField("Folder (optional, e.g. Media/Movies)", text: $folder)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
                 }
                 Section("Credentials (leave blank for a guest share)") {
                     TextField("Username", text: $username)
@@ -52,6 +60,28 @@ struct SMBConnectView: View {
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
+                }
+                Section("Folders") {
+                    if selectedRoots.isEmpty {
+                        Text("All shares will be scanned. Browse to pick specific folders instead.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(selectedRoots, id: \.self) { root in
+                            Label(root, systemImage: "folder.fill")
+                        }
+                        .onDelete { selectedRoots.remove(atOffsets: $0) }
+                    }
+                    if isPreparingBrowse {
+                        HStack { ProgressView(); Text("Connecting…").foregroundStyle(.secondary) }
+                    } else {
+                        Button {
+                            Task { await prepareBrowse() }
+                        } label: {
+                            Label(selectedRoots.isEmpty ? "Browse Folders…" : "Add More Folders…", systemImage: "folder.badge.plus")
+                        }
+                        .disabled(trimmedHost.isEmpty)
+                    }
                 }
                 if case let .failed(message) = phase {
                     Section { Text(message).foregroundStyle(.red) }
@@ -79,14 +109,29 @@ struct SMBConnectView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showFolderPicker) {
+                SMBFolderPickerView(connection: draftConnection, selectedRoots: $selectedRoots)
+            }
         }
+    }
+
+    /// Trigger the Local Network prompt + confirm reachability before opening the
+    /// folder picker (the picker's first SMB call would otherwise be silently
+    /// blocked on a fresh install — same reason `connect()` probes first).
+    private func prepareBrowse() async {
+        isPreparingBrowse = true
+        defer { isPreparingBrowse = false }
+        phase = .idle
+        if await SMBNetworkProbe.probe(host: trimmedHost) == .blocked {
+            phase = .failed("Couldn't reach \(trimmedHost) on your network. Allow Local Network access (Settings ▸ Privacy & Security ▸ Local Network ▸ Aether) and check the IP is correct.")
+            return
+        }
+        showFolderPicker = true
     }
 
     private func connect() async {
         phase = .connecting
-        let roots = folder.trimmingCharacters(in: .whitespaces).isEmpty
-            ? []
-            : [folder.trimmingCharacters(in: .whitespaces)]
+        let roots = selectedRoots
         let connection = SMBConnection(
             host: trimmedHost,
             username: username.isEmpty ? nil : username,
@@ -105,36 +150,28 @@ struct SMBConnectView: View {
             return
         }
 
-        // Validate by listing the chosen root (or the host root). Use the rich
-        // browse so we can say *why* it came back empty rather than one generic
-        // failure — the status (timeout / failed / done-but-empty) maps to very
-        // different fixes.
-        let probeURL = roots.first.flatMap { connection.url(forPath: $0) } ?? connection.rootURL
-        guard let probeURL else { phase = .failed("Invalid host."); return }
-        let result = await SMBBrowser.browse(at: probeURL, options: connection.vlcMediaOptions, timeoutMilliseconds: 6000)
-
-        if !result.isEmpty {
+        // Validate via the native SMB client (AMSMB2) — it throws the *real*
+        // SMB error (bad credentials, no such share, host down), so we can show
+        // the actual reason instead of guessing from an empty VLC listing (#213).
+        let client = SMBSession(connection: connection)
+        do {
+            if let firstRoot = roots.first {
+                // A specific folder/share was given: connect + list it (throws on
+                // bad share / auth).
+                let (share, path) = SMBConnection.splitShareAndPath(firstRoot)
+                _ = try await client.list(share: share, path: path)
+            } else {
+                // No folder: enumerate the server's shares.
+                let shares = try await client.shares()
+                guard !shares.isEmpty else {
+                    phase = .failed("Connected to \(connection.host) but it has no shares we can read. Enter a specific Folder (e.g. \"Media\").")
+                    return
+                }
+            }
             await session.completeSMBSignIn(connection: connection)
             dismiss()
-            return
-        }
-
-        // libsmb2's own last error line, when it logged one — the most precise
-        // hint (e.g. STATUS_LOGON_FAILURE = creds, STATUS_BAD_NETWORK_NAME = share).
-        let detail = result.diagnostic.map { "\n\nServer said: \($0)" } ?? ""
-        let scanningWholeHost = roots.isEmpty
-        switch result.status {
-        case .timeout, .notStarted:
-            phase = .failed("Couldn't reach \(connection.host). Check the host/IP is correct and reachable, and that Local Network access is allowed for Aether (Settings ▸ Privacy ▸ Local Network on iOS). On the Simulator, Local Network access is unreliable — try a real device.\(detail)")
-        case .failed:
-            phase = .failed("\(connection.host) refused the request. Check the username, password and domain — and, if you set a Folder, that the path exists.\(detail)")
-        case .done where scanningWholeHost:
-            // Reached the host, but listing *shares* at smb://host/ returned
-            // nothing. Many NAS block anonymous share enumeration — the practical
-            // fix is to name a specific share instead of scanning the whole host.
-            phase = .failed("Reached \(connection.host) but couldn't list any shares — many NAS block browsing the whole server. Enter a specific Folder (e.g. Media or Movies) and try again.\(detail)")
-        case .done:
-            phase = .failed("Reached the folder on \(connection.host) but it held nothing we could list. Double-check the Folder path (it's relative to the server root, e.g. Media/Movies).\(detail)")
+        } catch {
+            phase = .failed("Couldn't connect to \(connection.host).\n\n\(error.localizedDescription)\n\nCheck the username, password, domain, and — if you set a Folder — that the share exists.")
         }
     }
 }

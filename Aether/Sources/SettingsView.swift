@@ -20,6 +20,9 @@ struct SettingsView: View {
     var libraryPreferences: LibraryPreferencesStore
     var downloadManager: DownloadManager? = nil
     var downloads: DownloadObserver? = nil
+    /// Owned by `RootTabView` so re-tapping the Settings tab pops to the index
+    /// (#300) — global nav resets to the section root, not "restore deep state".
+    @Binding var navigationPath: NavigationPath
 
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
@@ -32,6 +35,20 @@ struct SettingsView: View {
     @State private var deviceCapacity: DeviceCapacity?
     /// Current on-disk artwork cache size, shown next to "Clear Image Cache".
     @State private var imageCacheBytes: Int = 0
+    /// Gate the (destructive) cache clear behind a confirmation — it used to wipe
+    /// on a single tap, which was easy to hit by accident.
+    @State private var showClearCacheConfirm = false
+    /// "119 / 417" matched, once the SMB library has been browsed this session.
+    @State private var smbMatchSummary: String?
+    /// SMB details (account, match count, downloads, actions) tuck under an
+    /// expandable row so the Account section stays calm; expanded by tap.
+    @State private var smbExpanded = false
+    /// Presents the TMDb token editor (#214 — user fallback / override).
+    @State private var isEditingTMDbToken = false
+    /// Presents the SMB folder picker for the *connected* share (add/remove
+    /// folders after sign-in, #214), seeded with the current roots.
+    @State private var isEditingSMBFolders = false
+    @State private var smbEditRoots: [String] = []
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State private var appIconStore = AppIconStore()
@@ -43,7 +60,13 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming
+        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        #if os(iOS)
+        case appIcon
+        #endif
+        #if os(visionOS)
+        case cinemaScreen, cinemaSeat, cinemaEnvironment
+        #endif
         var id: String { rawValue }
     }
 
@@ -84,7 +107,7 @@ struct SettingsView: View {
     @AppStorage("developer.unlocked") private var developerUnlocked = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
@@ -151,6 +174,22 @@ struct SettingsView: View {
         }
         .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
         .sheet(item: $accountSheet) { sheet in accountSheetView(for: sheet) }
+        .sheet(isPresented: $isEditingTMDbToken) {
+            TMDbTokenEditSheet(
+                initialToken: viewModel.userTMDbToken,
+                hasBuiltInKey: viewModel.hasBuiltInTMDbKey,
+                validate: { await viewModel.validateTMDbToken($0) },
+                onSave: { await viewModel.setTMDbToken($0) }
+            )
+        }
+        .sheet(isPresented: $isEditingSMBFolders, onDismiss: {
+            // Persist the edited folder set on dismiss (no-op if unchanged).
+            Task { await viewModel.updateSMBRoots(smbEditRoots) }
+        }) {
+            if let connection = viewModel.smbConnection {
+                SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots)
+            }
+        }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
         #endif
@@ -190,9 +229,9 @@ struct SettingsView: View {
         var subtitle: String {
             switch self {
             case .accountsSources: return "Plex, Jellyfin, SMB, and local files"
-            case .playback: return "Quality, audio & subtitles, skip, watched"
+            case .playback: return "Quality, audio & subtitles, skip"
             case .libraryDownloads: return "Downloads, storage, and cache"
-            case .appearance: return "Theme and app icon"
+            case .appearance: return "Theme, app icon, and watched titles"
             case .supportAbout: return "Report a bug, diagnostics, about"
             }
         }
@@ -277,6 +316,7 @@ struct SettingsView: View {
         switch category {
         case .accountsSources:
             accountSection
+            metadataSection
             #if !os(tvOS)
             localLibrarySection
             #endif
@@ -293,9 +333,7 @@ struct SettingsView: View {
             imageCacheCard
         case .appearance:
             appearanceSection
-            #if os(iOS)
-            appIconSection
-            #endif
+            watchedDisplaySection
         case .supportAbout:
             #if !os(tvOS)
             supportSection
@@ -381,9 +419,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var rightColumnSections: some View {
         appearanceSection
-        #if os(iOS)
-        appIconSection
-        #endif
+        watchedDisplaySection
         #if !os(tvOS)
         supportSection
         #endif
@@ -397,48 +433,6 @@ struct SettingsView: View {
         imageCacheCard
     }
 
-    #if os(iOS)
-    /// App Icon (iOS / iPadOS): pick the home-screen icon. Backed by the
-    /// system's alternate-icon API (`AppIconStore`), which persists the choice.
-    private var appIconSection: some View {
-        AetherSettingsSection("App Icon") {
-            if appIconStore.isSupported {
-                // Label left + menu-picker right, same metrics as a disclosure
-                // row so it sits uniformly in the list (was a long description
-                // with the picker, which read differently from every other row).
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    Text("App Icon")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Spacer(minLength: AetherDesign.Spacing.s)
-                    Picker(
-                        "App Icon",
-                        selection: Binding(
-                            get: { appIconStore.current },
-                            set: { appIconStore.select($0) }
-                        )
-                    ) {
-                        ForEach(AetherAppIcon.allCases) { icon in
-                            Text(icon.displayName).tag(icon)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(AetherDesign.Palette.accent)
-                }
-                .padding(.vertical, AetherDesign.Spacing.m)
-                .padding(.horizontal, AetherDesign.Spacing.m)
-            } else {
-                Text("Not available on this device.")
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.vertical, AetherDesign.Spacing.s)
-            }
-        }
-    }
-    #endif
-
     #if os(visionOS)
     /// Cinema (visionOS): the home for immersive-playback preferences — the
     /// default screen size + seat the theater opens with, the environment, and
@@ -447,116 +441,39 @@ struct SettingsView: View {
     /// docked player's Theater tab.
     private var cinemaSection: some View {
         AetherSettingsSection("Cinema") {
-            cinemaMenuRow(
-                "Default Screen Size",
-                systemImage: "rectangle.expand.vertical",
+            // Same disclosure → sheet picker pattern as Theme / Playback (no
+            // inline menus, no per-row icons), for one consistent settings style.
+            AetherDisclosureRow(
+                label: "Default Screen Size",
                 description: "The size Cinema Mode opens with. You can still resize during playback.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.defaultScreenPreset },
-                    set: { viewModel.cinemaPreferences.defaultScreenPreset = $0 }
-                ),
-                options: CinemaScreenPreset.ordered,
-                label: \.displayName
-            )
-            cinemaMenuRow(
-                "Default Seating",
-                systemImage: "chair.lounge.fill",
+                value: viewModel.cinemaPreferences.defaultScreenPreset.displayName
+            ) { openPicker = .cinemaScreen }
+            AetherDisclosureRow(
+                label: "Default Seating",
                 description: "Where you sit when the theater opens.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.defaultSeat },
-                    set: { viewModel.cinemaPreferences.defaultSeat = $0 }
-                ),
-                options: CinemaSeat.ordered,
-                label: \.displayName
-            )
-            cinemaMenuRow(
-                "Environment",
-                systemImage: "theatermasks.fill",
+                value: viewModel.cinemaPreferences.defaultSeat.displayName
+            ) { openPicker = .cinemaSeat }
+            AetherDisclosureRow(
+                label: "Environment",
                 description: "The space rendered around the screen.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.environment },
-                    set: { viewModel.cinemaPreferences.environment = $0 }
-                ),
-                options: CinemaEnvironment.available,
-                label: \.displayName
-            )
-            cinemaToggleRow(
+                value: viewModel.cinemaPreferences.environment.displayName
+            ) { openPicker = .cinemaEnvironment }
+            settingsToggle(
                 "Auto-Enter Cinema",
-                systemImage: "sparkles.tv.fill",
                 description: "Enter Cinema Mode automatically when playback starts.",
                 isOn: Binding(
                     get: { viewModel.cinemaPreferences.autoEnterCinema },
                     set: { viewModel.cinemaPreferences.autoEnterCinema = $0 }
                 )
             )
-            cinemaToggleRow(
+            settingsToggle(
                 "Remember Last Setup",
-                systemImage: "clock.arrow.circlepath",
                 description: "Reopen with your last screen size and seat instead of the defaults.",
                 isOn: Binding(
                     get: { viewModel.cinemaPreferences.rememberLastSetup },
                     set: { viewModel.cinemaPreferences.rememberLastSetup = $0 }
                 )
             )
-        }
-    }
-
-    /// A Cinema settings row: icon + title + muted description, trailing inline
-    /// menu picker. Matches the frosted-card row rhythm without a chevron.
-    @ViewBuilder
-    private func cinemaMenuRow<T: Hashable>(
-        _ title: String,
-        systemImage: String,
-        description: String? = nil,
-        selection: Binding<T>,
-        options: [T],
-        label: @escaping (T) -> String
-    ) -> some View {
-        HStack(spacing: AetherDesign.Spacing.m) {
-            cinemaRowLabel(title, systemImage: systemImage, description: description)
-            Spacer(minLength: AetherDesign.Spacing.s)
-            Picker(title, selection: selection) {
-                ForEach(options, id: \.self) { Text(label($0)).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .tint(AetherDesign.Palette.accent)
-        }
-        .padding(AetherDesign.Spacing.m)
-    }
-
-    /// A Cinema settings row with a trailing toggle.
-    @ViewBuilder
-    private func cinemaToggleRow(
-        _ title: String,
-        systemImage: String,
-        description: String? = nil,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Toggle(isOn: isOn) {
-            cinemaRowLabel(title, systemImage: systemImage, description: description)
-        }
-        .tint(AetherDesign.Palette.accent)
-        .padding(AetherDesign.Spacing.m)
-    }
-
-    @ViewBuilder
-    private func cinemaRowLabel(_ title: String, systemImage: String, description: String?) -> some View {
-        HStack(spacing: AetherDesign.Spacing.m) {
-            Image(systemName: systemImage)
-                .foregroundStyle(AetherDesign.Palette.accent)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                if let description {
-                    Text(description)
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
         }
     }
     #endif
@@ -568,12 +485,28 @@ struct SettingsView: View {
         AetherSettingsSection("Cache") {
             AetherSettingsRow(
                 label: "Clear Image Cache",
-                systemImage: "photo.stack",
+                description: "Posters & artwork cached on this device (Plex, SMB, local). Tap to review the size before clearing.",
                 value: formatBytes(Int64(imageCacheBytes))
             ) {
+                // Re-measure, then confirm — never a one-tap wipe (#cache).
+                Task {
+                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                    showClearCacheConfirm = true
+                }
+            }
+        }
+        .confirmationDialog(
+            "Clear \(formatBytes(Int64(imageCacheBytes))) of cached artwork?",
+            isPresented: $showClearCacheConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Image Cache", role: .destructive) {
                 AetherImageCache.shared.clear()
                 imageCacheBytes = 0
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Posters re-download as you browse. No media is deleted.")
         }
     }
 
@@ -585,13 +518,11 @@ struct SettingsView: View {
         AetherSettingsSection("Storage Summary") {
             AetherSettingsRow(
                 label: "Downloads",
-                systemImage: "internaldrive.fill",
                 value: formatBytes(totalDownloadBytes)
             )
             if let capacity = deviceCapacity {
                 AetherSettingsRow(
                     label: "Free Space",
-                    systemImage: "externaldrive.badge.checkmark",
                     value: formatBytes(capacity.free)
                 )
             }
@@ -653,6 +584,27 @@ struct SettingsView: View {
         return formatter.string(fromByteCount: bytes)
     }
 
+    /// The single toggle-row style across Settings: label + optional muted
+    /// description, accent tint, no leading icon — matching the disclosure rows.
+    @ViewBuilder
+    private func settingsToggle(_ title: String, description: String? = nil, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let description {
+                    Text(description)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(AetherDesign.Palette.accent)
+        .padding(AetherDesign.Spacing.m)
+    }
+
     // MARK: - Sections
 
     /// Compact Account (§1/§2). On iOS / iPadOS / visionOS each connected service
@@ -663,12 +615,147 @@ struct SettingsView: View {
     /// and there's room here, so Sign Out stays a directly-focusable row.
     @ViewBuilder
     private var accountSection: some View {
-        #if os(tvOS)
-        accountSectionInline
-        #else
-        accountSectionCompact
-        #endif
+        Group {
+            #if os(tvOS)
+            accountSectionInline
+            #else
+            accountSectionCompact
+            #endif
+        }
+        .task { await loadSMBMatchSummary() }
     }
+
+    private func loadSMBMatchSummary() async {
+        guard viewModel.isSMBConnected, let stats = await viewModel.smbMatchSummary() else {
+            smbMatchSummary = nil
+            return
+        }
+        smbMatchSummary = "\(stats.matched) / \(stats.total)"
+    }
+
+    // MARK: - SMB disclosure (#214 settings)
+
+    /// Connected-SMB block: a tappable header that expands to show the account,
+    /// match/download stats, and actions — so the Account section stays calm and
+    /// SMB's detail is one tap away. tvOS-safe: a focusable header row + plain
+    /// focusable rows (no `DisclosureGroup`, which mis-handles tvOS focus).
+    @ViewBuilder
+    private var smbDisclosure: some View {
+        smbDisclosureHeader
+        if smbExpanded {
+            AetherSettingsRow(label: "Account", value: viewModel.smbUsername ?? "Guest")
+            if let host = viewModel.smbHost {
+                AetherSettingsRow(label: "Host", value: host)
+            }
+            AetherSettingsRow(label: "Folders", value: smbFoldersValue) {
+                smbEditRoots = viewModel.smbConnection?.roots ?? []
+                isEditingSMBFolders = true
+            }
+            AetherSettingsRow(label: "Posters Matched", value: smbMatchSummary ?? "Open Library to match")
+            #if !os(tvOS)
+            AetherSettingsRow(label: "Downloaded", value: smbDownloadedValue)
+            #endif
+            AetherSettingsRow(label: isRematching ? "Re-matching…" : "Re-match Posters", actionRole: .primary) {
+                Task {
+                    isRematching = true
+                    await viewModel.refreshSMB()
+                    await loadSMBMatchSummary()
+                    isRematching = false
+                }
+            }
+            .disabled(isRematching)
+            AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
+                Task { await viewModel.signOutOfSMB() }
+            }
+        }
+    }
+
+    /// The expand/collapse header — server name + matched count subtitle, a
+    /// chevron that rotates with state. Styled like an `AetherSettingsRow` so it
+    /// sits flush in the section, and uses the shared tvOS focus lift.
+    private var smbDisclosureHeader: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { smbExpanded.toggle() }
+        } label: {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SMB")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    if !viewModel.isSMBReachable {
+                        Text("Off network — reconnects automatically when you're home")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if let summary = smbMatchSummary {
+                        Text("\(summary) matched")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    }
+                }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Text(viewModel.isSMBReachable ? (viewModel.smbServerName ?? "Connected") : "Dormant")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .rotationEffect(.degrees(smbExpanded ? 90 : 0))
+            }
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .contentShape(Rectangle())
+            .aetherFocusRow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("SMB details")
+        .accessibilityValue(smbExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private var smbFoldersValue: String {
+        let count = viewModel.smbFolderCount
+        if count == 0 { return "All shares" }
+        return "\(count) folder\(count == 1 ? "" : "s")"
+    }
+
+    // MARK: - Metadata (TMDb token, #214)
+
+    /// Lets the user supply their own TMDb token — used instead of the built-in
+    /// key for poster/detail matching (SMB + Local). Backs the library-poster
+    /// fallback the user asked for.
+    private var metadataSection: some View {
+        AetherSettingsSection("Metadata") {
+            AetherSettingsRow(
+                label: "TMDb Token",
+                description: "Matches posters & details for SMB and local files. Add your own key if matching isn't working.",
+                value: tmdbTokenStatus
+            ) { isEditingTMDbToken = true }
+        }
+    }
+
+    /// "Custom" when the user set a token, else "Built-in" / "Not set".
+    private var tmdbTokenStatus: String {
+        if !viewModel.userTMDbToken.isEmpty { return "Custom" }
+        return viewModel.hasBuiltInTMDbKey ? "Built-in" : "Not set"
+    }
+
+    #if !os(tvOS)
+    /// Count + total size of completed SMB downloads, from the live snapshot.
+    private var smbDownloadedValue: String {
+        guard let snapshot = downloads?.snapshot else { return "None" }
+        var count = 0
+        var bytes: Int64 = 0
+        for job in snapshot.completed {
+            guard case .smb = job.mediaID.source else { continue }
+            count += 1
+            if case let .completed(_, sizeBytes) = snapshot.status(for: job.mediaID) { bytes += sizeBytes }
+        }
+        guard count > 0 else { return "None" }
+        return "\(count) file\(count == 1 ? "" : "s") · \(formatBytes(bytes))"
+    }
+    #endif
 
     private var accountSectionCompact: some View {
         AetherSettingsSection("Account") {
@@ -691,10 +778,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
-                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
-                    Task { await viewModel.signOutOfSMB() }
-                }
+                smbDisclosure
             } else {
                 AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
@@ -735,10 +819,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
-                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
-                    Task { await viewModel.signOutOfSMB() }
-                }
+                smbDisclosure
             } else {
                 AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
@@ -914,16 +995,10 @@ struct SettingsView: View {
             }
             // A plain on/off — an inline toggle reads better than a sheet with
             // two radio options.
-            Toggle(isOn: Binding(
+            settingsToggle("Auto-Play Next Episode", isOn: Binding(
                 get: { viewModel.playbackPreferences.autoPlayNext },
                 set: { viewModel.playbackPreferences.autoPlayNext = $0 }
-            )) {
-                Text("Auto-Play Next Episode")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-            }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
+            ))
 
             AetherDisclosureRow(
                 label: "Next Episode Countdown",
@@ -931,22 +1006,24 @@ struct SettingsView: View {
             ) {
                 openPicker = .countdown
             }
-            Toggle(isOn: Binding(
-                get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
-                set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Hide Watched in Home & Discover")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Text("Finished titles stay in your Library but leave the discovery rails.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
+        }
+    }
+
+    // MARK: - Watched (Interface)
+
+    /// How finished titles are presented — these are display/interface settings,
+    /// not playback, so they live under Interface (grouped together rather than
+    /// scattered through Playback).
+    private var watchedDisplaySection: some View {
+        AetherSettingsSection("Watched") {
+            settingsToggle(
+                "Hide Watched in Home & Discover",
+                description: "Finished titles stay in your Library but leave the discovery rails.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
+                    set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
+                )
+            )
 
             AetherDisclosureRow(
                 label: "Watched Dimming",
@@ -954,23 +1031,69 @@ struct SettingsView: View {
             ) {
                 openPicker = .watchedDimming
             }
-            Toggle(isOn: Binding(
-                get: { viewModel.playbackPreferences.watchedShowLabel },
-                set: { viewModel.playbackPreferences.watchedShowLabel = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Show “Watched” Label")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Text("A bold WATCHED tag over finished posters, on top of the dimming.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            settingsToggle(
+                "Show “Watched” Label",
+                description: "A bold WATCHED tag over finished posters, on top of the dimming.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.watchedShowLabel },
+                    set: { viewModel.playbackPreferences.watchedShowLabel = $0 }
+                )
+            )
+
+            // Opacity only matters while the label is shown.
+            if viewModel.playbackPreferences.watchedShowLabel {
+                watchedLabelOpacityControl
             }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
         }
+    }
+
+    /// Label-opacity control: a Transparent↔Solid slider on iOS / visionOS; a
+    /// preset picker on tvOS (no `Slider` there). Both write the same Double.
+    @ViewBuilder
+    private var watchedLabelOpacityControl: some View {
+        #if os(tvOS)
+        AetherDisclosureRow(
+            label: "Label Opacity",
+            value: "\(Int((viewModel.playbackPreferences.watchedLabelOpacity * 100).rounded()))%"
+        ) {
+            openPicker = .watchedLabelOpacity
+        }
+        #else
+        let opacityBinding = Binding(
+            get: { viewModel.playbackPreferences.watchedLabelOpacity },
+            // Clamp here (the store no longer self-clamps in didSet — that
+            // recursed under @Observable and crashed the slider).
+            set: { viewModel.playbackPreferences.watchedLabelOpacity = min(1.0, max(PlaybackPreferencesStore.minLabelOpacity, $0)) }
+        )
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            HStack {
+                Text("Label Opacity")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Spacer()
+                // Live preview of the wordmark at the current opacity.
+                Text("WATCHED")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(viewModel.playbackPreferences.watchedLabelOpacity))
+                    .shadow(color: .black.opacity(0.75), radius: 3, y: 1)
+                    .padding(.horizontal, AetherDesign.Spacing.s)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.35), in: Capsule())
+            }
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Text("Transparent")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                Slider(value: opacityBinding, in: PlaybackPreferencesStore.minLabelOpacity...1.0)
+                    .tint(AetherDesign.Palette.accent)
+                Text("Solid")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
+        }
+        .padding(AetherDesign.Spacing.m)
+        #endif
     }
 
     // MARK: - Appearance
@@ -989,6 +1112,18 @@ struct SettingsView: View {
             ) {
                 openPicker = .appearance
             }
+            #if os(iOS)
+            // App Icon is just another picker row here (no separate section) —
+            // same disclosure → sheet pattern as Theme, for consistency.
+            if appIconStore.isSupported {
+                AetherDisclosureRow(
+                    label: "App Icon",
+                    value: appIconStore.current.displayName
+                ) {
+                    openPicker = .appIcon
+                }
+            }
+            #endif
         }
     }
 
@@ -1006,8 +1141,65 @@ struct SettingsView: View {
         case .autoPlayNext:   autoPlayNextPickerSheet
         case .countdown:      countdownPickerSheet
         case .watchedDimming: watchedDimmingPickerSheet
+        case .watchedLabelOpacity: watchedLabelOpacityPickerSheet
+        #if os(iOS)
+        case .appIcon: appIconPickerSheet
+        #endif
+        #if os(visionOS)
+        case .cinemaScreen:
+            cinemaPickerSheet(title: "Default Screen Size", options: CinemaScreenPreset.ordered, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.defaultScreenPreset },
+                set: { viewModel.cinemaPreferences.defaultScreenPreset = $0 }
+            ))
+        case .cinemaSeat:
+            cinemaPickerSheet(title: "Default Seating", options: CinemaSeat.ordered, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.defaultSeat },
+                set: { viewModel.cinemaPreferences.defaultSeat = $0 }
+            ))
+        case .cinemaEnvironment:
+            cinemaPickerSheet(title: "Environment", options: CinemaEnvironment.available, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.environment },
+                set: { viewModel.cinemaPreferences.environment = $0 }
+            ))
+        #endif
         }
     }
+
+    #if os(visionOS)
+    /// Cinema preference picker — same sheet pattern as every other Settings
+    /// picker (replaces the old inline `.menu`).
+    private func cinemaPickerSheet<T: Hashable>(
+        title: String,
+        options: [T],
+        label: @escaping (T) -> String,
+        selection: Binding<T>
+    ) -> some View {
+        PreferencePickerSheet(title: title) {
+            ForEach(options, id: \.self) { option in
+                AetherSelectionRow(title: label(option), isSelected: selection.wrappedValue == option) {
+                    selection.wrappedValue = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+    #endif
+
+    #if os(iOS)
+    private var appIconPickerSheet: some View {
+        PreferencePickerSheet(title: "App Icon") {
+            ForEach(AetherAppIcon.allCases) { icon in
+                AetherSelectionRow(
+                    title: icon.displayName,
+                    isSelected: appIconStore.current == icon
+                ) {
+                    appIconStore.select(icon)
+                    openPicker = nil
+                }
+            }
+        }
+    }
+    #endif
 
     private var watchedDimmingPickerSheet: some View {
         PreferencePickerSheet(title: "Watched Dimming") {
@@ -1017,6 +1209,20 @@ struct SettingsView: View {
                     isSelected: viewModel.playbackPreferences.watchedDimming == level
                 ) {
                     viewModel.playbackPreferences.watchedDimming = level
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var watchedLabelOpacityPickerSheet: some View {
+        PreferencePickerSheet(title: "Label Opacity") {
+            ForEach(WatchedLabelOpacity.allCases, id: \.self) { level in
+                AetherSelectionRow(
+                    title: level.displayName,
+                    isSelected: abs(viewModel.playbackPreferences.watchedLabelOpacity - level.value) < 0.05
+                ) {
+                    viewModel.playbackPreferences.watchedLabelOpacity = level.value
                     openPicker = nil
                 }
             }

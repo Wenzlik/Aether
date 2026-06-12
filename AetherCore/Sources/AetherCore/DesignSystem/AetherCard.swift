@@ -189,7 +189,10 @@ struct WatchedArtworkTreatment: ViewModifier {
                     Text("WATCHED")
                         .font(.system(size: tagFontSize, weight: .heavy))
                         .tracking(2)
-                        .foregroundStyle(.white)
+                        // Translucent so it reads as an overlay, not a hard
+                        // label; opacity is user-tunable in Settings (#280). The
+                        // shadow keeps it legible over any poster.
+                        .foregroundStyle(.white.opacity(display.labelOpacity))
                         .shadow(color: .black.opacity(0.75), radius: 4, y: 1)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)

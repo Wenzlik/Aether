@@ -1,5 +1,6 @@
 import SwiftUI
 import AetherCore
+import Network
 
 #if canImport(UIKit)
 import UIKit
@@ -152,11 +153,56 @@ final class AppSession {
         localItemCount = await localLibraryStore.count()
     }
 
-    /// TMDb v3 key, injected at build time (Info.plist ← Config/Secrets.xcconfig
-    /// or Xcode Cloud). Empty ⇒ Local Library metadata matching is disabled.
-    var tmdbAPIKey: String {
+    private static let userTMDbTokenKey = "tmdb.userToken"
+
+    /// A TMDb token the user entered in Settings (#214). When set it's used for
+    /// poster matching **instead of** the built-in key — so a missing or
+    /// rate-limited built-in key can be fixed in-app without a rebuild. Persisted
+    /// in UserDefaults; observed, so the Settings row reflects changes live.
+    private(set) var userTMDbToken: String = (UserDefaults.standard.string(forKey: AppSession.userTMDbTokenKey) ?? "")
+        .trimmingCharacters(in: .whitespaces)
+
+    /// TMDb v3 key injected at build time (Info.plist ← Config/Secrets.xcconfig
+    /// or Xcode Cloud). Empty when none was built in (e.g. some TestFlight builds).
+    var builtInTMDbAPIKey: String {
         ((Bundle.main.object(forInfoDictionaryKey: "TMDBAPIKey") as? String) ?? "")
             .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The effective TMDb key for matching: the user's token wins when set, else
+    /// the built-in key. Empty ⇒ metadata matching is disabled.
+    var tmdbAPIKey: String {
+        userTMDbToken.isEmpty ? builtInTMDbAPIKey : userTMDbToken
+    }
+
+    /// Whether a built-in key is present (so the UI can label the user token a
+    /// "fallback" vs. the only source).
+    var hasBuiltInTMDbKey: Bool { !builtInTMDbAPIKey.isEmpty }
+
+    /// Check a token against TMDb before saving it (#214), so the user gets
+    /// "valid / rejected / unreachable" feedback instead of silently saving a bad
+    /// key. Doesn't persist anything.
+    func validateTMDbToken(_ token: String) async -> TMDbClient.ValidationResult {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+        return await TMDbClient(apiKey: trimmed, api: api).validate()
+    }
+
+    /// Save (or clear, when blank) the user's TMDb token. Rebuilds the SMB source
+    /// with the new matcher and clears its remembered misses so unmatched titles
+    /// retry on the next browse. Local-library matching reads the key fresh on
+    /// each call, so it picks the new token up automatically.
+    func setUserTMDbToken(_ token: String) async {
+        userTMDbToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if userTMDbToken.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.userTMDbTokenKey)
+        } else {
+            UserDefaults.standard.set(userTMDbToken, forKey: Self.userTMDbTokenKey)
+        }
+        if let connection = smbConnection {
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+            await SMBMetadataStore.shared.clearMisses()
+        }
     }
 
     /// Enrich a freshly-imported local item with TMDb metadata (poster /
@@ -214,6 +260,22 @@ final class AppSession {
     @discardableResult
     func saveLocalArtwork(_ data: Data, for id: String) async -> String? {
         await localLibraryStore.setArtwork(data, for: id)
+    }
+
+    // MARK: SMB title/year editing (#213)
+
+    /// The user's current title/year correction for an SMB item, for pre-filling
+    /// the edit sheet. `nil` when uncorrected or SMB isn't configured.
+    func smbOverride(for itemID: MediaID) async -> SMBMetadataStore.Override? {
+        await smbSource?.override(forItem: itemID)
+    }
+
+    /// Persist a title/year correction for an SMB item (a `nil`/empty value
+    /// clears it), then drop the cached walk so the next browse re-matches TMDb
+    /// with the corrected title → fresh poster. Detail re-points on dismiss; the
+    /// library grid re-walks when next navigated to.
+    func saveSMBOverride(_ override: SMBMetadataStore.Override?, for itemID: MediaID) async {
+        await smbSource?.setOverride(override, forItem: itemID)
     }
 
     // MARK: - Downloads
@@ -278,6 +340,16 @@ final class AppSession {
     var smbConnection: SMBConnection?
     private(set) var smbSource: SMBMediaSource?
     var isSMBConnected: Bool = false
+    /// Whether the connected SMB host is reachable right now. SMB is LAN-only, so
+    /// off-network this flips false and `connectedSources` drops the source —
+    /// dormant, no errors, hidden from the Library — until we're back (#214).
+    /// Optimistic default so a configured share shows instantly on launch; the
+    /// probe corrects it within a couple of seconds.
+    private(set) var isSMBReachable: Bool = true
+    /// Watches network changes to re-probe reachability (home ↔ away).
+    private var smbPathMonitor: NWPathMonitor?
+    /// Guards against overlapping probes when path changes arrive in a burst.
+    private var isProbingSMB = false
 
     // MARK: - Active source
 
@@ -473,7 +545,10 @@ final class AppSession {
         var list: [any MediaSource] = []
         if let plexSource { list.append(plexSource) }
         if let jellyfinSource { list.append(jellyfinSource) }
-        if let smbSource { list.append(smbSource) }
+        // SMB is LAN-only — surface it only while the NAS is actually reachable,
+        // so off-network it goes dormant (no failed walks, not shown in the
+        // Library) and auto-reappears when you're back on the network (#214).
+        if let smbSource, isSMBReachable { list.append(smbSource) }
         // Local is on-device + always available, but only counts as a connected
         // source once it has content — otherwise a fresh server-less install
         // would never show the "connect a source" welcome state.
@@ -694,14 +769,22 @@ final class AppSession {
 
     // MARK: - SMB (#214)
 
+    /// TMDb matcher handed to `SMBMediaSource` so SMB titles get posters/overview
+    /// (SMB files carry no artwork). `nil` when no key is built in.
+    private var smbTMDb: TMDbClient? {
+        isTMDbConfigured ? TMDbClient(apiKey: tmdbAPIKey, api: api) : nil
+    }
+
     private func restoreSMB() async {
         let store = SMBConnectionStore(keychain: keychain)
         smbConnectionStore = store
         do {
             guard let connection = try await store.read() else { return }
             smbConnection = connection
-            smbSource = SMBMediaSource(connection: connection)
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
             isSMBConnected = true
+            startSMBReachabilityMonitoring()
+            await refreshSMBReachability()
         } catch {
             // Corrupted record shouldn't break launch — leave SMB disconnected.
         }
@@ -712,17 +795,66 @@ final class AppSession {
         if smbConnectionStore == nil { smbConnectionStore = SMBConnectionStore(keychain: keychain) }
         do { try await smbConnectionStore?.write(connection) } catch { }
         smbConnection = connection
-        smbSource = SMBMediaSource(connection: connection)
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
         isSMBConnected = true
+        isSMBReachable = true   // just validated, so it's reachable now
         isSignInPresented = false
+        startSMBReachabilityMonitoring()
+    }
+
+    // MARK: SMB reachability (LAN-only dormancy, #214)
+
+    /// Re-probe whenever the network path changes (home ↔ away / Wi-Fi ↔ cellular).
+    private func startSMBReachabilityMonitoring() {
+        guard smbPathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        smbPathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in await self?.refreshSMBReachability() }
+        }
+        monitor.start(queue: DispatchQueue(label: "cz.zmrhal.aether.smb-reachability"))
+    }
+
+    /// Probe the configured SMB host; flip `isSMBReachable` (which gates
+    /// `connectedSources`). On a reachable→unreachable→reachable transition,
+    /// drop the cached walk + unified snapshot so the share re-scans fresh when
+    /// it comes back. A short timeout keeps it snappy on cellular.
+    func refreshSMBReachability() async {
+        guard let host = smbConnection?.host, !isProbingSMB else { return }
+        isProbingSMB = true
+        defer { isProbingSMB = false }
+        let reachable = await SMBNetworkProbe.probe(host: host, timeoutSeconds: 3) == .reachable
+        guard reachable != isSMBReachable else { return }
+        isSMBReachable = reachable
+        if reachable {
+            // Back on the network — clear stale caches so the next browse re-walks.
+            await smbSource?.invalidate()
+            await UnifiedLibrarySnapshotStore.shared.clearAll()
+        }
+    }
+
+    /// Change which folders the connected SMB share scans (#214) — add or remove
+    /// folders after sign-in (the picker was previously only reachable at
+    /// sign-in). Persists the new roots, rebuilds the source, and drops the
+    /// cached walk so the new set is scanned on the next browse.
+    func updateSMBRoots(_ roots: [String]) async {
+        guard var connection = smbConnection, connection.roots != roots else { return }
+        connection.roots = roots
+        do { try await smbConnectionStore?.write(connection) } catch { }
+        smbConnection = connection
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
     }
 
     func signOutOfSMB() async {
+        smbPathMonitor?.cancel()
+        smbPathMonitor = nil
         do { try await smbConnectionStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
         smbConnection = nil
         smbSource = nil
         isSMBConnected = false
+        isSMBReachable = true   // reset for the next connection
     }
 
     // MARK: - Keychain keys
