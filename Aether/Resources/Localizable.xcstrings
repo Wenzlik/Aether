@@ -1,0 +1,66 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Cancel" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zrušit" } }
+      }
+    },
+    "Connect" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Připojit" } }
+      }
+    },
+    "Discover" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Objevit" } }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hotovo" } }
+      }
+    },
+    "Download" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Stáhnout" } }
+      }
+    },
+    "Home" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Domů" } }
+      }
+    },
+    "Library" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Knihovna" } }
+      }
+    },
+    "Play" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Přehrát" } }
+      }
+    },
+    "Resume" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Pokračovat" } }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Uložit" } }
+      }
+    },
+    "Search" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hledat" } }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Nastavení" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
