@@ -26,11 +26,11 @@ public struct AetherSectionHeader: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                 if let subtitle {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                 }
@@ -40,7 +40,7 @@ public struct AetherSectionHeader: View {
 
             if let accessoryTitle, let accessoryAction {
                 Button(action: accessoryAction) {
-                    Text(accessoryTitle)
+                    Text(LocalizedStringKey(accessoryTitle))
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.accent)
                 }

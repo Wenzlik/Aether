@@ -95,11 +95,15 @@ public struct AetherSettingsRow: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(label)
+                // `LocalizedStringKey(_:)` over the String params: a static label
+                // ("Theme") resolves from the catalog (#312), while dynamic text
+                // (server name, "80%") isn't a key so it falls back to itself —
+                // localizes the chrome without changing the public String API.
+                Text(LocalizedStringKey(label))
                     .font(AetherDesign.Typography.body)
                     .foregroundStyle(labelColor)
                 if let description {
-                    Text(description)
+                    Text(LocalizedStringKey(description))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -114,14 +118,14 @@ public struct AetherSettingsRow: View {
                     // Truncate, never expand: a long value (server name, OS/build
                     // string, capacity) used to push the row wider than an iPhone,
                     // which made the whole Settings page pan sideways (#248).
-                    Text(value)
+                    Text(LocalizedStringKey(value))
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
             case let .status(status):
-                Text(status.text)
+                Text(LocalizedStringKey(status.text))
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(status.color)
                     .lineLimit(1)
@@ -166,7 +170,8 @@ public struct AetherSettingsSection<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-            Text(title.uppercased())
+            Text(LocalizedStringKey(title))
+                .textCase(.uppercase)   // localize the key, then uppercase (#312)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)

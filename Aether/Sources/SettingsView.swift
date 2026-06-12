@@ -60,7 +60,7 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        case quality, audio, subtitles, appearance, language, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
         #if os(iOS)
         case appIcon
         #endif
@@ -585,9 +585,40 @@ struct SettingsView: View {
     }
 
     /// The single toggle-row style across Settings: label + optional muted
-    /// description, accent tint, no leading icon — matching the disclosure rows.
+    /// description.
+    ///
+    /// iOS / visionOS use a native `Toggle` (a tidy trailing switch). tvOS does
+    /// NOT — its default `Toggle` renders as a heavy full-width blue "On" pill
+    /// that clashes with the disclosure rows beside it (#310). There it's a
+    /// focusable row showing "On" / "Off" on the right, flipping on select —
+    /// visually matching Theme / Watched Dimming / Label Opacity.
     @ViewBuilder
     private func settingsToggle(_ title: String, description: String? = nil, isOn: Binding<Bool>) -> some View {
+        #if os(tvOS)
+        Button { isOn.wrappedValue.toggle() } label: {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    if let description {
+                        Text(description)
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Text(isOn.wrappedValue ? "On" : "Off")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(isOn.wrappedValue ? AetherDesign.Palette.accent : AetherDesign.Palette.textSecondary)
+            }
+            .padding(AetherDesign.Spacing.m)
+            .contentShape(Rectangle())
+            .aetherFocusRow()
+        }
+        .buttonStyle(.plain)
+        #else
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -603,6 +634,7 @@ struct SettingsView: View {
         }
         .tint(AetherDesign.Palette.accent)
         .padding(AetherDesign.Spacing.m)
+        #endif
     }
 
     // MARK: - Sections
@@ -1106,6 +1138,13 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         AetherSettingsSection("Appearance") {
             AetherDisclosureRow(
+                label: "Language",
+                description: "Follow the device language, or pick one for Aether.",
+                value: viewModel.language.preference.displayName
+            ) {
+                openPicker = .language
+            }
+            AetherDisclosureRow(
                 label: "Theme",
                 description: "Match the system, or force Dark or Light.",
                 value: viewModel.appearance.preference.displayName
@@ -1136,6 +1175,7 @@ struct SettingsView: View {
         case .audio:          audioLanguagePickerSheet
         case .subtitles:      subtitlePickerSheet
         case .appearance:     appearancePickerSheet
+        case .language:       languagePickerSheet
         case .skipIntro:      skipModePickerSheet(title: "Skip Intro", selection: \.skipIntro)
         case .skipCredits:    skipModePickerSheet(title: "Skip Credits", selection: \.skipCredits)
         case .autoPlayNext:   autoPlayNextPickerSheet
@@ -1300,6 +1340,20 @@ struct SettingsView: View {
                     isSelected: viewModel.appearance.preference == option
                 ) {
                     viewModel.appearance.preference = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var languagePickerSheet: some View {
+        PreferencePickerSheet(title: "Language") {
+            ForEach(AppLanguage.allCases, id: \.self) { language in
+                AetherSelectionRow(
+                    title: language.displayName,
+                    isSelected: viewModel.language.preference == language
+                ) {
+                    viewModel.language.preference = language
                     openPicker = nil
                 }
             }

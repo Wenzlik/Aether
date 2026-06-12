@@ -53,11 +53,11 @@ public struct AetherDisclosureRow: View {
                         .frame(width: 28)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
+                    Text(LocalizedStringKey(label))
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                     if let description {
-                        Text(description)
+                        Text(LocalizedStringKey(description))
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -65,7 +65,7 @@ public struct AetherDisclosureRow: View {
                 }
                 Spacer(minLength: AetherDesign.Spacing.s)
                 if let value, !value.isEmpty {
-                    Text(value)
+                    Text(LocalizedStringKey(value))
                         .font(AetherDesign.Typography.metadata)
                         .foregroundStyle(AetherDesign.Palette.textSecondary)
                         .lineLimit(1)

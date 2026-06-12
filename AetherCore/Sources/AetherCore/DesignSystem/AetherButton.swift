@@ -58,7 +58,7 @@ private struct AetherButtonLabel: View {
             if let systemImage {
                 Image(systemName: systemImage)
             }
-            Text(title)
+            Text(LocalizedStringKey(title))   // localize static labels (#312)
         }
         .font(AetherDesign.Typography.cardTitle)
         .padding(.horizontal, AetherDesign.Spacing.l)

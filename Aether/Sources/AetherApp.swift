@@ -40,6 +40,11 @@ struct AetherApp: App {
         WindowGroup {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
+                // In-app UI language override (#312) — `.system` follows the
+                // device language (and the iOS per-app language setting); a
+                // specific choice overrides it live. Untranslated strings fall
+                // back to the en source language.
+                .environment(\.locale, session.language.resolvedLocale)
                 .tint(AetherDesign.Palette.accent)
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
@@ -50,6 +55,11 @@ struct AetherApp: App {
         WindowGroup {
             RootTabView(session: session)
                 .preferredColorScheme(session.appearance.preference.colorScheme)
+                // In-app UI language override (#312) — `.system` follows the
+                // device language (and the iOS per-app language setting); a
+                // specific choice overrides it live. Untranslated strings fall
+                // back to the en source language.
+                .environment(\.locale, session.language.resolvedLocale)
                 .tint(AetherDesign.Palette.accent)
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
@@ -136,6 +146,8 @@ final class AppSession {
     /// Settings picker round-trips anywhere; only visionOS renders the cinema.
     let cinemaPreferences: CinemaPreferencesStore
     let appearance: AppearancePreferenceStore
+    /// In-app UI language override (#312); `.system` follows the device language.
+    let language: LanguagePreferenceStore
 
     // MARK: - Local Library
 
@@ -399,6 +411,7 @@ final class AppSession {
         self.playbackPreferences = PlaybackPreferencesStore()
         self.cinemaPreferences = CinemaPreferencesStore()
         self.appearance = AppearancePreferenceStore()
+        self.language = LanguagePreferenceStore()
         self.localSource = LocalMediaSource(store: localLibraryStore)
     }
 
