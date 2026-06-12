@@ -73,15 +73,21 @@ fi
 echo "ci_post_clone: running xcodegen generate in $WORKSPACE"
 "$XCODEGEN" generate
 
-# Resolve Swift package dependencies now, while we can. Xcode Cloud runs its
-# archive with automatic package resolution DISABLED and expects a committed
-# `Package.resolved` — but ours lives inside the gitignored, XcodeGen-generated
-# `.xcodeproj`, and `xcodegen generate` above just recreated it without one. So
-# the archive fails to resolve any remote package (it broke the moment SMBClient
-# — our first remote SPM dependency — landed in 0.7.0). Resolving here writes the
-# `Package.resolved` the archive step then reads. (VLCKit is a local binary
-# target and resolves from path; SMBClient is the one that needs the network.)
-echo "ci_post_clone: resolving Swift package dependencies"
-xcodebuild -resolvePackageDependencies -project Aether.xcodeproj -scheme Aether
+# Install the pinned `Package.resolved` into the freshly generated project.
+#
+# Xcode Cloud runs the WHOLE build with automatic package resolution DISABLED —
+# even an explicit `xcodebuild -resolvePackageDependencies` is refused ("a
+# resolved file is required") — and expects a committed `Package.resolved`. But
+# ours lives inside the gitignored, XcodeGen-generated `.xcodeproj`, which the
+# `xcodegen generate` above just recreated without one. So we keep the pin file
+# checked in at `ci_scripts/Package.resolved.pinned` and copy it into place; the
+# archive then reads it and fetches the pinned packages without resolving. This
+# broke the moment SMBClient — our first remote SPM dependency — landed in 0.7.0.
+# Keep the pin in sync with project.yml's package versions (regenerate via
+# `xcodebuild -resolvePackageDependencies` locally and copy the result here).
+echo "ci_post_clone: installing pinned Package.resolved"
+SWIFTPM_DIR="$WORKSPACE/Aether.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
+mkdir -p "$SWIFTPM_DIR"
+cp "$WORKSPACE/ci_scripts/Package.resolved.pinned" "$SWIFTPM_DIR/Package.resolved"
 
 echo "ci_post_clone: done"
