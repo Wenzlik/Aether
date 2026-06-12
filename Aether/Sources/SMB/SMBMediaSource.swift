@@ -20,6 +20,10 @@ actor SMBMediaSource: MediaSource {
     nonisolated let vlcMediaOptions: [String]
 
     private let connection: SMBConnection
+    /// TMDb matcher — SMB files carry no artwork, so we enrich each inferred
+    /// title with a poster / backdrop / overview (same as the Local Library).
+    /// `nil` when no TMDb key is built in → titles stay text-only.
+    private let tmdb: TMDbClient?
     /// Cached recursive listing — the walk is expensive (network round-trips),
     /// so it's done once per source instance and reused across libraries/items.
     private var cachedFiles: [SMBFile]?
@@ -31,8 +35,9 @@ actor SMBMediaSource: MediaSource {
     private static let maxDepth = 4
     private static let maxFiles = 2000
 
-    init(connection: SMBConnection) {
+    init(connection: SMBConnection, tmdb: TMDbClient? = nil) {
         self.connection = connection
+        self.tmdb = tmdb
         self.id = connection.sourceID
         self.displayName = connection.displayName
         self.vlcMediaOptions = connection.vlcMediaOptions
@@ -41,6 +46,7 @@ actor SMBMediaSource: MediaSource {
     private struct SMBFile: Sendable {
         let url: URL
         let inference: TitleInference
+        var metadata: TMDbMetadata?
     }
 
     private nonisolated var moviesLibraryID: Library.ID { .init(source: id, rawValue: "movies") }
@@ -133,8 +139,29 @@ actor SMBMediaSource: MediaSource {
                 discovered.append(SMBFile(url: entry.streamURL, inference: inference))
             }
         }
+        await enrichWithTMDb(&discovered)
         cachedFiles = discovered
         return discovered
+    }
+
+    /// Attach TMDb posters/overview to each file (SMB has none). Matched once per
+    /// distinct (title, year, kind) and reused — episodes of a show all match the
+    /// series, so they share one lookup. Best-effort: no key / no match leaves
+    /// the inferred title text-only.
+    private func enrichWithTMDb(_ files: inout [SMBFile]) async {
+        guard let tmdb, tmdb.isConfigured, !files.isEmpty else { return }
+        var cache: [String: TMDbMetadata?] = [:]
+        for index in files.indices {
+            let inference = files[index].inference
+            let key = "\(inference.isEpisode ? "tv" : "movie")|\(inference.title.lowercased())|\(inference.year.map(String.init) ?? "")"
+            if let cached = cache[key] {
+                files[index].metadata = cached
+            } else {
+                let match = await tmdb.match(title: inference.title, year: inference.year, isEpisode: inference.isEpisode)
+                cache[key] = match
+                files[index].metadata = match
+            }
+        }
     }
 
     // MARK: - Mapping
@@ -146,9 +173,13 @@ actor SMBMediaSource: MediaSource {
     private nonisolated func movieItem(_ file: SMBFile) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: file.url.absoluteString),
-            title: file.inference.title,
+            // Canonical TMDb title when matched, else the inferred one.
+            title: file.metadata?.title ?? file.inference.title,
             kind: .movie,
-            year: file.inference.year,
+            year: file.metadata?.year ?? file.inference.year,
+            summary: file.metadata?.overview,
+            posterURL: file.metadata?.posterURL,
+            backdropURL: file.metadata?.backdropURL,
             streamURL: file.url
         )
     }
@@ -159,6 +190,9 @@ actor SMBMediaSource: MediaSource {
             title: episodeDisplayTitle(file.inference),
             kind: .episode,
             year: file.inference.year,
+            // The series' TMDb art (episodes share the show's poster/backdrop).
+            posterURL: file.metadata?.posterURL,
+            backdropURL: file.metadata?.backdropURL,
             streamURL: file.url,
             seriesTitle: file.inference.title,
             seasonNumber: file.inference.season,
@@ -168,10 +202,15 @@ actor SMBMediaSource: MediaSource {
     }
 
     private nonisolated func showContainer(series: String, episodes: [SMBFile]) -> MediaItem {
-        MediaItem(
+        // Series art from the first episode that got a TMDb match.
+        let metadata = episodes.compactMap(\.metadata).first
+        return MediaItem(
             id: showID(for: series),
-            title: series,
+            title: metadata?.title ?? series,
             kind: .show,
+            summary: metadata?.overview,
+            posterURL: metadata?.posterURL,
+            backdropURL: metadata?.backdropURL,
             episodeCount: episodes.count
         )
     }

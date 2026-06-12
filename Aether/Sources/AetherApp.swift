@@ -694,13 +694,19 @@ final class AppSession {
 
     // MARK: - SMB (#214)
 
+    /// TMDb matcher handed to `SMBMediaSource` so SMB titles get posters/overview
+    /// (SMB files carry no artwork). `nil` when no key is built in.
+    private var smbTMDb: TMDbClient? {
+        isTMDbConfigured ? TMDbClient(apiKey: tmdbAPIKey, api: api) : nil
+    }
+
     private func restoreSMB() async {
         let store = SMBConnectionStore(keychain: keychain)
         smbConnectionStore = store
         do {
             guard let connection = try await store.read() else { return }
             smbConnection = connection
-            smbSource = SMBMediaSource(connection: connection)
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
             isSMBConnected = true
         } catch {
             // Corrupted record shouldn't break launch — leave SMB disconnected.
@@ -712,7 +718,7 @@ final class AppSession {
         if smbConnectionStore == nil { smbConnectionStore = SMBConnectionStore(keychain: keychain) }
         do { try await smbConnectionStore?.write(connection) } catch { }
         smbConnection = connection
-        smbSource = SMBMediaSource(connection: connection)
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
         isSMBConnected = true
         isSignInPresented = false
     }
