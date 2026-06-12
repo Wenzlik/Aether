@@ -220,3 +220,6 @@ public struct UnifiedRails: Sendable, Equatable {
             && recentlyAdded.isEmpty && recentlyReleased.isEmpty
     }
 }
+
+// Orderable by LibrarySort.sorted(_:) — fields already present (#294).
+extension UnifiedMediaItem: LibrarySortable {}

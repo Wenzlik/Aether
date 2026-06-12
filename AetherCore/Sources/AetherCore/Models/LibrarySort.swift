@@ -71,3 +71,39 @@ public enum LibrarySort: String, Sendable, Hashable, Codable, CaseIterable {
         }
     }
 }
+
+/// A title that can be ordered by `LibrarySort` — the fields the client-side
+/// comparators read. `UnifiedMediaItem` conforms for free.
+public protocol LibrarySortable {
+    var title: String { get }
+    var year: Int? { get }
+    var dateAdded: Date? { get }
+    var communityRating: Double? { get }
+}
+
+public extension LibrarySort {
+    /// Order a unified list by this sort — the client-side counterpart to
+    /// `plexParameter`, shared by every Library grid (See All + facet grids) so
+    /// rating sort behaves identically everywhere (#294). Unrated / dateless /
+    /// yearless items always sort **after** the rest (via the `nil` sentinels),
+    /// never interleaved at the top. `.random` keeps the input (merge) order —
+    /// there's no stable client-side shuffle.
+    func sorted<T: LibrarySortable>(_ items: [T]) -> [T] {
+        switch self {
+        case .titleAZ:
+            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .titleZA:
+            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
+        case .yearNewest:
+            return items.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
+        case .yearOldest:
+            return items.sorted { ($0.year ?? Int.max) < ($1.year ?? Int.max) }
+        case .recentlyAdded:
+            return items.sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
+        case .ratingHighest:
+            return items.sorted { ($0.communityRating ?? -1) > ($1.communityRating ?? -1) }
+        case .random:
+            return items
+        }
+    }
+}

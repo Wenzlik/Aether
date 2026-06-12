@@ -111,24 +111,9 @@ struct UnifiedLibraryGridView: View {
     }
 
     private var sortedItems: [UnifiedMediaItem] {
-        let base = filteredItems
-        switch sort {
-        case .titleAZ:
-            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .titleZA:
-            return base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
-        case .yearNewest:
-            return base.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
-        case .yearOldest:
-            return base.sorted { ($0.year ?? Int.max) < ($1.year ?? Int.max) }
-        case .recentlyAdded:
-            return base.sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
-        case .ratingHighest:
-            return base.sorted { ($0.communityRating ?? -1) > ($1.communityRating ?? -1) }
-        case .random:
-            // No stable random for a client-side grid; keep merge order.
-            return base
-        }
+        // Shared, tested ordering (#294) — same rating/rated-first behaviour
+        // everywhere Library sorts client-side.
+        sort.sorted(filteredItems)
     }
 
     /// Distinct genres across the loaded items, most common first, capped so the
