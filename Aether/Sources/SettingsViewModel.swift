@@ -156,16 +156,18 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Native SMB — connect to a NAS, pick exactly which folders to include, get TMDb posters, fix mis-matched titles, and download files for offline",
-        "A real SMB/mkv player — scrub the timeline, skip ±10s, and switch audio & subtitle tracks",
-        "Filter your Library by audio language",
-        "Find titles by actor or director name in Search; sort the Library by rating; Plex collections now load",
-        "Add your own TMDb key in Settings (with a validity check) if posters aren't matching, and tune the WATCHED label opacity"
+        "Čeština! Aether now follows your device language, with an in-app Language switcher in Settings (more languages to come)",
+        "SMB goes quiet when you're off your home network — no errors, no empty rows — and reconnects automatically",
+        "Edit which SMB folders are scanned any time, not just at sign-in; posters match more reliably",
+        "Apple TV fixes — escape any empty screen with Back, tidier Settings toggles, and Collections hide when a source has none",
+        "Fixed a crash when dragging the WATCHED label-opacity slider"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.7.0", codename: "Draco",
+                    summary: "Native SMB (browse, downloads, a real player with track selection), audio-language Library filter, search by actor, rating sort, and a unified Settings."),
         ReleaseNote(version: "0.6.8", codename: "Cassiopeia",
                     summary: "The SMB source debut (browse + play a NAS over VLCKit), episode → Season / Show navigation, and tunable watched posters."),
         ReleaseNote(version: "0.6.7", codename: "Cassiopeia",
