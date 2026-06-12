@@ -105,34 +105,36 @@ actor SMBMediaSource: MediaSource {
 
     private func files() async -> [SMBFile] {
         if let cachedFiles { return cachedFiles }
-        var discovered: [SMBFile] = []
-        // Roots to scan: the configured ones, else every share at the host root.
-        var rootURLs: [URL] = connection.roots.compactMap { connection.url(forPath: $0) }
-        if rootURLs.isEmpty, let root = connection.rootURL {
-            let shares = await SMBBrowser.entries(at: root, options: connection.vlcMediaOptions)
-            rootURLs = shares.filter(\.isDirectory).map(\.url)
+        let session = SMBSession(connection: connection)
+        // Roots to scan: the configured ones (share + path), else every share at
+        // the host. Native browse via the pure-Swift SMBClient (#213) — real
+        // errors, no VLC. `SMBSession` owns the depth/count-capped BFS per share.
+        var roots: [(share: String, path: String)] = connection.roots.map { SMBConnection.splitShareAndPath($0) }
+        if roots.isEmpty {
+            let shares = (try? await session.shares()) ?? []
+            roots = shares.map { ($0, "/") }
         }
-        for root in rootURLs {
-            await walk(root, depth: 0, into: &discovered)
-            if discovered.count >= Self.maxFiles { break }
+        var discovered: [SMBFile] = []
+        for root in roots {
+            let remaining = Self.maxFiles - discovered.count
+            if remaining <= 0 { break }
+            let entries = await session.walkVideos(
+                share: root.share,
+                basePath: root.path,
+                maxDepth: Self.maxDepth,
+                maxFiles: remaining,
+                videoExtensions: Self.videoExtensions
+            )
+            for entry in entries {
+                // Path components for TitleInference: the share + the folders
+                // leading to the file (drop the filename), e.g. ["HD","Movies"].
+                let pathComponents = [root.share] + entry.path.split(separator: "/").map(String.init).dropLast()
+                let inference = TitleInference(filename: entry.name, pathComponents: Array(pathComponents))
+                discovered.append(SMBFile(url: entry.streamURL, inference: inference))
+            }
         }
         cachedFiles = discovered
         return discovered
-    }
-
-    private func walk(_ url: URL, depth: Int, into discovered: inout [SMBFile]) async {
-        guard depth <= Self.maxDepth, discovered.count < Self.maxFiles else { return }
-        let entries = await SMBBrowser.entries(at: url, options: connection.vlcMediaOptions)
-        for entry in entries {
-            if discovered.count >= Self.maxFiles { return }
-            if entry.isDirectory {
-                await walk(entry.url, depth: depth + 1, into: &discovered)
-            } else if Self.videoExtensions.contains(entry.url.pathExtension.lowercased()) {
-                let pathComponents = Array(entry.url.pathComponents.dropLast())
-                let inference = TitleInference(filename: entry.name, pathComponents: pathComponents)
-                discovered.append(SMBFile(url: entry.url, inference: inference))
-            }
-        }
     }
 
     // MARK: - Mapping

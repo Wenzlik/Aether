@@ -59,6 +59,16 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
         if let domain, !domain.isEmpty { options.append(":smb-domain=\(domain)") }
         return options
     }
+
+    /// Split a configured root ("HD" or "HD/Movies") into the SMB **share name**
+    /// (the first path component) and the **path within that share** (leading
+    /// "/"). AMSMB2 connects per-share, so browsing needs them separated.
+    static func splitShareAndPath(_ root: String) -> (share: String, path: String) {
+        let parts = root.split(separator: "/").map(String.init)
+        guard let share = parts.first else { return ("", "/") }
+        let rest = parts.dropFirst().joined(separator: "/")
+        return (share, rest.isEmpty ? "/" : "/\(rest)")
+    }
 }
 
 extension URL {

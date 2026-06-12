@@ -44,6 +44,14 @@ packages:
   # fallback player for containers AVFoundation can't open (mkv). See #173.
   VLCKit:
     path: Vendor/VLCKit
+  # Pure-Swift SMB2/3 client for browse + auth — replaces the VLCKit-based SMB
+  # bridge, which was an undebuggable black box that failed on-device. Pure
+  # Swift (no libsmb2 / no unsafe build flags → clean SPM, and Network-framework
+  # sockets trigger the iOS Local Network prompt natively). See #213/#214.
+  # VLCKit stays for MKV playback only.
+  SMBClient:
+    url: https://github.com/kishikawakatsumi/SMBClient
+    from: 0.1.0
 
 targets:
   # Single multiplatform target. One bundle ID
@@ -77,6 +85,8 @@ targets:
         product: AetherCore
       - package: VLCKit
         product: VLCKit
+      - package: SMBClient
+        product: SMBClient
     # Base xcconfig that pulls in the (gitignored) TMDb key — see Config/.
     configFiles:
       Debug: Config/App.xcconfig
