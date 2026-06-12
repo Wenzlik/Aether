@@ -60,6 +60,9 @@ struct SettingsView: View {
         #if os(iOS)
         case appIcon
         #endif
+        #if os(visionOS)
+        case cinemaScreen, cinemaSeat, cinemaEnvironment
+        #endif
         var id: String { rawValue }
     }
 
@@ -426,116 +429,39 @@ struct SettingsView: View {
     /// docked player's Theater tab.
     private var cinemaSection: some View {
         AetherSettingsSection("Cinema") {
-            cinemaMenuRow(
-                "Default Screen Size",
-                systemImage: "rectangle.expand.vertical",
+            // Same disclosure → sheet picker pattern as Theme / Playback (no
+            // inline menus, no per-row icons), for one consistent settings style.
+            AetherDisclosureRow(
+                label: "Default Screen Size",
                 description: "The size Cinema Mode opens with. You can still resize during playback.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.defaultScreenPreset },
-                    set: { viewModel.cinemaPreferences.defaultScreenPreset = $0 }
-                ),
-                options: CinemaScreenPreset.ordered,
-                label: \.displayName
-            )
-            cinemaMenuRow(
-                "Default Seating",
-                systemImage: "chair.lounge.fill",
+                value: viewModel.cinemaPreferences.defaultScreenPreset.displayName
+            ) { openPicker = .cinemaScreen }
+            AetherDisclosureRow(
+                label: "Default Seating",
                 description: "Where you sit when the theater opens.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.defaultSeat },
-                    set: { viewModel.cinemaPreferences.defaultSeat = $0 }
-                ),
-                options: CinemaSeat.ordered,
-                label: \.displayName
-            )
-            cinemaMenuRow(
-                "Environment",
-                systemImage: "theatermasks.fill",
+                value: viewModel.cinemaPreferences.defaultSeat.displayName
+            ) { openPicker = .cinemaSeat }
+            AetherDisclosureRow(
+                label: "Environment",
                 description: "The space rendered around the screen.",
-                selection: Binding(
-                    get: { viewModel.cinemaPreferences.environment },
-                    set: { viewModel.cinemaPreferences.environment = $0 }
-                ),
-                options: CinemaEnvironment.available,
-                label: \.displayName
-            )
-            cinemaToggleRow(
+                value: viewModel.cinemaPreferences.environment.displayName
+            ) { openPicker = .cinemaEnvironment }
+            settingsToggle(
                 "Auto-Enter Cinema",
-                systemImage: "sparkles.tv.fill",
                 description: "Enter Cinema Mode automatically when playback starts.",
                 isOn: Binding(
                     get: { viewModel.cinemaPreferences.autoEnterCinema },
                     set: { viewModel.cinemaPreferences.autoEnterCinema = $0 }
                 )
             )
-            cinemaToggleRow(
+            settingsToggle(
                 "Remember Last Setup",
-                systemImage: "clock.arrow.circlepath",
                 description: "Reopen with your last screen size and seat instead of the defaults.",
                 isOn: Binding(
                     get: { viewModel.cinemaPreferences.rememberLastSetup },
                     set: { viewModel.cinemaPreferences.rememberLastSetup = $0 }
                 )
             )
-        }
-    }
-
-    /// A Cinema settings row: icon + title + muted description, trailing inline
-    /// menu picker. Matches the frosted-card row rhythm without a chevron.
-    @ViewBuilder
-    private func cinemaMenuRow<T: Hashable>(
-        _ title: String,
-        systemImage: String,
-        description: String? = nil,
-        selection: Binding<T>,
-        options: [T],
-        label: @escaping (T) -> String
-    ) -> some View {
-        HStack(spacing: AetherDesign.Spacing.m) {
-            cinemaRowLabel(title, systemImage: systemImage, description: description)
-            Spacer(minLength: AetherDesign.Spacing.s)
-            Picker(title, selection: selection) {
-                ForEach(options, id: \.self) { Text(label($0)).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .tint(AetherDesign.Palette.accent)
-        }
-        .padding(AetherDesign.Spacing.m)
-    }
-
-    /// A Cinema settings row with a trailing toggle.
-    @ViewBuilder
-    private func cinemaToggleRow(
-        _ title: String,
-        systemImage: String,
-        description: String? = nil,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Toggle(isOn: isOn) {
-            cinemaRowLabel(title, systemImage: systemImage, description: description)
-        }
-        .tint(AetherDesign.Palette.accent)
-        .padding(AetherDesign.Spacing.m)
-    }
-
-    @ViewBuilder
-    private func cinemaRowLabel(_ title: String, systemImage: String, description: String?) -> some View {
-        HStack(spacing: AetherDesign.Spacing.m) {
-            Image(systemName: systemImage)
-                .foregroundStyle(AetherDesign.Palette.accent)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                if let description {
-                    Text(description)
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
         }
     }
     #endif
@@ -548,7 +474,6 @@ struct SettingsView: View {
             AetherSettingsRow(
                 label: "Clear Image Cache",
                 description: "Posters & artwork cached on this device (Plex, SMB, local). Tap to review the size before clearing.",
-                systemImage: "photo.stack",
                 value: formatBytes(Int64(imageCacheBytes))
             ) {
                 // Re-measure, then confirm — never a one-tap wipe (#cache).
@@ -581,13 +506,11 @@ struct SettingsView: View {
         AetherSettingsSection("Storage Summary") {
             AetherSettingsRow(
                 label: "Downloads",
-                systemImage: "internaldrive.fill",
                 value: formatBytes(totalDownloadBytes)
             )
             if let capacity = deviceCapacity {
                 AetherSettingsRow(
                     label: "Free Space",
-                    systemImage: "externaldrive.badge.checkmark",
                     value: formatBytes(capacity.free)
                 )
             }
@@ -647,6 +570,27 @@ struct SettingsView: View {
         formatter.countStyle = .file
         formatter.allowedUnits = [.useGB, .useMB, .useKB]
         return formatter.string(fromByteCount: bytes)
+    }
+
+    /// The single toggle-row style across Settings: label + optional muted
+    /// description, accent tint, no leading icon — matching the disclosure rows.
+    @ViewBuilder
+    private func settingsToggle(_ title: String, description: String? = nil, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if let description {
+                    Text(description)
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(AetherDesign.Palette.accent)
+        .padding(AetherDesign.Spacing.m)
     }
 
     // MARK: - Sections
@@ -1031,16 +975,10 @@ struct SettingsView: View {
             }
             // A plain on/off — an inline toggle reads better than a sheet with
             // two radio options.
-            Toggle(isOn: Binding(
+            settingsToggle("Auto-Play Next Episode", isOn: Binding(
                 get: { viewModel.playbackPreferences.autoPlayNext },
                 set: { viewModel.playbackPreferences.autoPlayNext = $0 }
-            )) {
-                Text("Auto-Play Next Episode")
-                    .font(AetherDesign.Typography.body)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-            }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
+            ))
 
             AetherDisclosureRow(
                 label: "Next Episode Countdown",
@@ -1058,22 +996,14 @@ struct SettingsView: View {
     /// scattered through Playback).
     private var watchedDisplaySection: some View {
         AetherSettingsSection("Watched") {
-            Toggle(isOn: Binding(
-                get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
-                set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Hide Watched in Home & Discover")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Text("Finished titles stay in your Library but leave the discovery rails.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
+            settingsToggle(
+                "Hide Watched in Home & Discover",
+                description: "Finished titles stay in your Library but leave the discovery rails.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
+                    set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
+                )
+            )
 
             AetherDisclosureRow(
                 label: "Watched Dimming",
@@ -1081,22 +1011,14 @@ struct SettingsView: View {
             ) {
                 openPicker = .watchedDimming
             }
-            Toggle(isOn: Binding(
-                get: { viewModel.playbackPreferences.watchedShowLabel },
-                set: { viewModel.playbackPreferences.watchedShowLabel = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Show “Watched” Label")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Text("A bold WATCHED tag over finished posters, on top of the dimming.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .tint(AetherDesign.Palette.accent)
-            .padding(AetherDesign.Spacing.m)
+            settingsToggle(
+                "Show “Watched” Label",
+                description: "A bold WATCHED tag over finished posters, on top of the dimming.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.watchedShowLabel },
+                    set: { viewModel.playbackPreferences.watchedShowLabel = $0 }
+                )
+            )
 
             // Opacity only matters while the label is shown.
             if viewModel.playbackPreferences.watchedShowLabel {
@@ -1201,8 +1123,45 @@ struct SettingsView: View {
         #if os(iOS)
         case .appIcon: appIconPickerSheet
         #endif
+        #if os(visionOS)
+        case .cinemaScreen:
+            cinemaPickerSheet(title: "Default Screen Size", options: CinemaScreenPreset.ordered, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.defaultScreenPreset },
+                set: { viewModel.cinemaPreferences.defaultScreenPreset = $0 }
+            ))
+        case .cinemaSeat:
+            cinemaPickerSheet(title: "Default Seating", options: CinemaSeat.ordered, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.defaultSeat },
+                set: { viewModel.cinemaPreferences.defaultSeat = $0 }
+            ))
+        case .cinemaEnvironment:
+            cinemaPickerSheet(title: "Environment", options: CinemaEnvironment.available, label: \.displayName, selection: Binding(
+                get: { viewModel.cinemaPreferences.environment },
+                set: { viewModel.cinemaPreferences.environment = $0 }
+            ))
+        #endif
         }
     }
+
+    #if os(visionOS)
+    /// Cinema preference picker — same sheet pattern as every other Settings
+    /// picker (replaces the old inline `.menu`).
+    private func cinemaPickerSheet<T: Hashable>(
+        title: String,
+        options: [T],
+        label: @escaping (T) -> String,
+        selection: Binding<T>
+    ) -> some View {
+        PreferencePickerSheet(title: title) {
+            ForEach(options, id: \.self) { option in
+                AetherSelectionRow(title: label(option), isSelected: selection.wrappedValue == option) {
+                    selection.wrappedValue = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+    #endif
 
     #if os(iOS)
     private var appIconPickerSheet: some View {
