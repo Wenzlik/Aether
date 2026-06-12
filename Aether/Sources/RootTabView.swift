@@ -57,26 +57,29 @@ struct RootTabView: View {
     @State private var searchPath = NavigationPath()
     @State private var settingsPath = NavigationPath()
 
-    /// Selecting a tab — whether switching to it or re-tapping the current one —
-    /// returns it to its **root**. A pushed Detail therefore never persists across
-    /// tab changes (the bug: open a movie on Home, visit Library, come back to
-    /// Home, and the Detail was still there with no clear way out), and a re-tap
-    /// of the active tab acts as the iOS-standard "pop to root". Matches Apple TV
-    /// / Netflix / Infuse.
+    /// Each tab keeps its own navigation stack **across tab switches** — leave
+    /// Settings mid-drill for Home and come back, and you're still where you were
+    /// (the same for a pushed Detail on Home, Library, etc.). The iOS-standard
+    /// "pop to root" fires only when you **re-tap the tab you're already on**.
+    /// Matches Apple TV / Netflix / Infuse.
     ///
-    /// We clear the *destination* tab's path on the way in, so every tab is
-    /// entered at its root. A plain `selection` binding only fires on a change;
-    /// intercepting the setter lets us also catch the re-tap of the current tab.
+    /// A plain `selection` binding only fires on a *change*, so it can't see a
+    /// re-tap of the current tab. Intercepting the setter lets us detect that
+    /// (`newValue == selectedTab`) and clear just that tab's path — and only
+    /// then, so switching away never resets anything.
     private var tabSelection: Binding<AppTab> {
         Binding(
             get: { selectedTab },
             set: { newValue in
-                switch newValue {
-                case .home:     homePath = NavigationPath()
-                case .library:  libraryPath = NavigationPath()
-                case .discover: discoverPath = NavigationPath()
-                case .search:   searchPath = NavigationPath()
-                case .settings: settingsPath = NavigationPath()
+                if newValue == selectedTab {
+                    // Re-tap of the active tab → pop it to its root.
+                    switch newValue {
+                    case .home:     homePath = NavigationPath()
+                    case .library:  libraryPath = NavigationPath()
+                    case .discover: discoverPath = NavigationPath()
+                    case .search:   searchPath = NavigationPath()
+                    case .settings: settingsPath = NavigationPath()
+                    }
                 }
                 selectedTab = newValue
             }
