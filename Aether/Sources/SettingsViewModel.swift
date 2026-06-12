@@ -64,6 +64,14 @@ final class SettingsViewModel {
 
     var isSMBConnected: Bool { session.isSMBConnected }
     var smbServerName: String? { session.smbConnection?.displayName }
+    var smbHost: String? { session.smbConnection?.host }
+    /// The signed-in SMB account, or `nil` for a guest share.
+    var smbUsername: String? {
+        guard let user = session.smbConnection?.username, !user.isEmpty else { return nil }
+        return user
+    }
+    /// Number of folders the share is scoped to (0 = all shares scanned).
+    var smbFolderCount: Int { session.smbConnection?.roots.count ?? 0 }
 
     /// TMDb match stats from the last SMB walk, for the Settings readout (#SMB
     /// info). `nil` until the SMB library has been browsed this session.

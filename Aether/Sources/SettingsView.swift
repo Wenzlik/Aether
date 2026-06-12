@@ -38,9 +38,11 @@ struct SettingsView: View {
     /// Gate the (destructive) cache clear behind a confirmation — it used to wipe
     /// on a single tap, which was easy to hit by accident.
     @State private var showClearCacheConfirm = false
-    /// "119/417 titles matched to TMDb" under the SMB row, once the SMB library
-    /// has been browsed this session (#SMB info).
+    /// "119 / 417" matched, once the SMB library has been browsed this session.
     @State private var smbMatchSummary: String?
+    /// SMB details (account, match count, downloads, actions) tuck under an
+    /// expandable row so the Account section stays calm; expanded by tap.
+    @State private var smbExpanded = false
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State private var appIconStore = AppIconStore()
@@ -696,11 +698,111 @@ struct SettingsView: View {
             accountSectionCompact
             #endif
         }
-        .task {
-            guard viewModel.isSMBConnected, let stats = await viewModel.smbMatchSummary() else { return }
-            smbMatchSummary = "\(stats.matched)/\(stats.total) titles matched to TMDb"
+        .task { await loadSMBMatchSummary() }
+    }
+
+    private func loadSMBMatchSummary() async {
+        guard viewModel.isSMBConnected, let stats = await viewModel.smbMatchSummary() else {
+            smbMatchSummary = nil
+            return
+        }
+        smbMatchSummary = "\(stats.matched) / \(stats.total)"
+    }
+
+    // MARK: - SMB disclosure (#214 settings)
+
+    /// Connected-SMB block: a tappable header that expands to show the account,
+    /// match/download stats, and actions — so the Account section stays calm and
+    /// SMB's detail is one tap away. tvOS-safe: a focusable header row + plain
+    /// focusable rows (no `DisclosureGroup`, which mis-handles tvOS focus).
+    @ViewBuilder
+    private var smbDisclosure: some View {
+        smbDisclosureHeader
+        if smbExpanded {
+            AetherSettingsRow(label: "Account", value: viewModel.smbUsername ?? "Guest")
+            if let host = viewModel.smbHost {
+                AetherSettingsRow(label: "Host", value: host)
+            }
+            AetherSettingsRow(label: "Folders", value: smbFoldersValue)
+            AetherSettingsRow(label: "Posters Matched", value: smbMatchSummary ?? "Open Library to match")
+            #if !os(tvOS)
+            AetherSettingsRow(label: "Downloaded", value: smbDownloadedValue)
+            #endif
+            AetherSettingsRow(label: isRematching ? "Re-matching…" : "Re-match Posters", actionRole: .primary) {
+                Task {
+                    isRematching = true
+                    await viewModel.refreshSMB()
+                    await loadSMBMatchSummary()
+                    isRematching = false
+                }
+            }
+            .disabled(isRematching)
+            AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
+                Task { await viewModel.signOutOfSMB() }
+            }
         }
     }
+
+    /// The expand/collapse header — server name + matched count subtitle, a
+    /// chevron that rotates with state. Styled like an `AetherSettingsRow` so it
+    /// sits flush in the section, and uses the shared tvOS focus lift.
+    private var smbDisclosureHeader: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { smbExpanded.toggle() }
+        } label: {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SMB")
+                        .font(AetherDesign.Typography.body)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    if let summary = smbMatchSummary {
+                        Text("\(summary) matched")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    }
+                }
+                Spacer(minLength: AetherDesign.Spacing.s)
+                Text(viewModel.smbServerName ?? "Connected")
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .rotationEffect(.degrees(smbExpanded ? 90 : 0))
+            }
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .contentShape(Rectangle())
+            .aetherFocusRow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("SMB details")
+        .accessibilityValue(smbExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private var smbFoldersValue: String {
+        let count = viewModel.smbFolderCount
+        if count == 0 { return "All shares" }
+        return "\(count) folder\(count == 1 ? "" : "s")"
+    }
+
+    #if !os(tvOS)
+    /// Count + total size of completed SMB downloads, from the live snapshot.
+    private var smbDownloadedValue: String {
+        guard let snapshot = downloads?.snapshot else { return "None" }
+        var count = 0
+        var bytes: Int64 = 0
+        for job in snapshot.completed {
+            guard case .smb = job.mediaID.source else { continue }
+            count += 1
+            if case let .completed(_, sizeBytes) = snapshot.status(for: job.mediaID) { bytes += sizeBytes }
+        }
+        guard count > 0 else { return "None" }
+        return "\(count) file\(count == 1 ? "" : "s") · \(formatBytes(bytes))"
+    }
+    #endif
 
     private var accountSectionCompact: some View {
         AetherSettingsSection("Account") {
@@ -723,13 +825,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
-                AetherSettingsRow(label: "Re-match Posters", actionRole: .primary) {
-                    Task { await viewModel.refreshSMB(); smbMatchSummary = nil }
-                }
-                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
-                    Task { await viewModel.signOutOfSMB() }
-                }
+                smbDisclosure
             } else {
                 AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
@@ -770,13 +866,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
-                AetherSettingsRow(label: "Re-match Posters", actionRole: .primary) {
-                    Task { await viewModel.refreshSMB(); smbMatchSummary = nil }
-                }
-                AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
-                    Task { await viewModel.signOutOfSMB() }
-                }
+                smbDisclosure
             } else {
                 AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
