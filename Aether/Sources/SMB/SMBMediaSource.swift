@@ -167,19 +167,33 @@ actor SMBMediaSource: MediaSource {
     /// series, so they share one lookup. Best-effort: no key / no match leaves
     /// the inferred title text-only.
     private func enrichWithTMDb(_ files: inout [SMBFile]) async {
-        guard let tmdb, tmdb.isConfigured, !files.isEmpty else { return }
-        var cache: [String: TMDbMetadata?] = [:]
+        guard !files.isEmpty else { return }
+        let store = SMBMetadataStore.shared
+        let canMatch = tmdb?.isConfigured ?? false
         for index in files.indices {
             let inference = files[index].inference
-            let key = "\(inference.isEpisode ? "tv" : "movie")|\(inference.title.lowercased())|\(inference.year.map(String.init) ?? "")"
-            if let cached = cache[key] {
-                files[index].metadata = cached
-            } else {
+            let key = SMBMetadataStore.key(title: inference.title, year: inference.year, isEpisode: inference.isEpisode)
+            switch await store.lookup(key) {
+            case .hit(let metadata):
+                files[index].metadata = metadata
+            case .miss:
+                continue   // tried before, no TMDb match → don't re-hit the network (battery)
+            case .unknown:
+                guard canMatch, let tmdb else { continue }   // no key yet → leave for a later browse
                 let match = await tmdb.match(title: inference.title, year: inference.year, isEpisode: inference.isEpisode)
-                cache[key] = match
+                await store.record(match, for: key)           // persists (hit or miss)
                 files[index].metadata = match
             }
         }
+    }
+
+    /// Drop the cached walk + retry unmatched titles on the next browse — backs a
+    /// "Re-match" / refresh action (the persistent store otherwise never retries
+    /// a miss). Hits stay cached, so it's cheap.
+    func invalidate() async {
+        cachedFiles = nil
+        lastStats = nil
+        await SMBMetadataStore.shared.clearMisses()
     }
 
     // MARK: - Mapping

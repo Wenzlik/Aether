@@ -72,6 +72,12 @@ final class SettingsViewModel {
         return await source.matchSummary()
     }
 
+    /// Drop the cached SMB walk + retry unmatched titles — re-matched on the next
+    /// time the SMB Library is opened (hits stay cached, so it's cheap).
+    func refreshSMB() async {
+        await session.smbSource?.invalidate()
+    }
+
     let synologyStatus: AetherStatus = .comingSoon
 
     // MARK: - Active source

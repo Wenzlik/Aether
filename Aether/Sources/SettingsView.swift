@@ -724,6 +724,9 @@ struct SettingsView: View {
 
             if viewModel.isSMBConnected {
                 AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "Re-match Posters", actionRole: .primary) {
+                    Task { await viewModel.refreshSMB(); smbMatchSummary = nil }
+                }
                 AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
                     Task { await viewModel.signOutOfSMB() }
                 }
@@ -768,6 +771,9 @@ struct SettingsView: View {
 
             if viewModel.isSMBConnected {
                 AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "Re-match Posters", actionRole: .primary) {
+                    Task { await viewModel.refreshSMB(); smbMatchSummary = nil }
+                }
                 AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
                     Task { await viewModel.signOutOfSMB() }
                 }
