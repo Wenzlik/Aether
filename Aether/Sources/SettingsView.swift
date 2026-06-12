@@ -57,6 +57,9 @@ struct SettingsView: View {
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
         case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        #if os(iOS)
+        case appIcon
+        #endif
         var id: String { rawValue }
     }
 
@@ -315,9 +318,6 @@ struct SettingsView: View {
             imageCacheCard
         case .appearance:
             appearanceSection
-            #if os(iOS)
-            appIconSection
-            #endif
             watchedDisplaySection
         case .supportAbout:
             #if !os(tvOS)
@@ -404,9 +404,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var rightColumnSections: some View {
         appearanceSection
-        #if os(iOS)
-        appIconSection
-        #endif
         watchedDisplaySection
         #if !os(tvOS)
         supportSection
@@ -420,48 +417,6 @@ struct SettingsView: View {
         #endif
         imageCacheCard
     }
-
-    #if os(iOS)
-    /// App Icon (iOS / iPadOS): pick the home-screen icon. Backed by the
-    /// system's alternate-icon API (`AppIconStore`), which persists the choice.
-    private var appIconSection: some View {
-        AetherSettingsSection("App Icon") {
-            if appIconStore.isSupported {
-                // Label left + menu-picker right, same metrics as a disclosure
-                // row so it sits uniformly in the list (was a long description
-                // with the picker, which read differently from every other row).
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    Text("App Icon")
-                        .font(AetherDesign.Typography.body)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    Spacer(minLength: AetherDesign.Spacing.s)
-                    Picker(
-                        "App Icon",
-                        selection: Binding(
-                            get: { appIconStore.current },
-                            set: { appIconStore.select($0) }
-                        )
-                    ) {
-                        ForEach(AetherAppIcon.allCases) { icon in
-                            Text(icon.displayName).tag(icon)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(AetherDesign.Palette.accent)
-                }
-                .padding(.vertical, AetherDesign.Spacing.m)
-                .padding(.horizontal, AetherDesign.Spacing.m)
-            } else {
-                Text("Not available on this device.")
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.vertical, AetherDesign.Spacing.s)
-            }
-        }
-    }
-    #endif
 
     #if os(visionOS)
     /// Cinema (visionOS): the home for immersive-playback preferences — the
@@ -1213,6 +1168,18 @@ struct SettingsView: View {
             ) {
                 openPicker = .appearance
             }
+            #if os(iOS)
+            // App Icon is just another picker row here (no separate section) —
+            // same disclosure → sheet pattern as Theme, for consistency.
+            if appIconStore.isSupported {
+                AetherDisclosureRow(
+                    label: "App Icon",
+                    value: appIconStore.current.displayName
+                ) {
+                    openPicker = .appIcon
+                }
+            }
+            #endif
         }
     }
 
@@ -1231,8 +1198,27 @@ struct SettingsView: View {
         case .countdown:      countdownPickerSheet
         case .watchedDimming: watchedDimmingPickerSheet
         case .watchedLabelOpacity: watchedLabelOpacityPickerSheet
+        #if os(iOS)
+        case .appIcon: appIconPickerSheet
+        #endif
         }
     }
+
+    #if os(iOS)
+    private var appIconPickerSheet: some View {
+        PreferencePickerSheet(title: "App Icon") {
+            ForEach(AetherAppIcon.allCases) { icon in
+                AetherSelectionRow(
+                    title: icon.displayName,
+                    isSelected: appIconStore.current == icon
+                ) {
+                    appIconStore.select(icon)
+                    openPicker = nil
+                }
+            }
+        }
+    }
+    #endif
 
     private var watchedDimmingPickerSheet: some View {
         PreferencePickerSheet(title: "Watched Dimming") {
