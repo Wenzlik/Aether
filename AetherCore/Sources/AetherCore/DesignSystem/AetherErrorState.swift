@@ -47,6 +47,12 @@ public struct AetherErrorState: View {
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.xxl)
         .frame(maxWidth: 520, alignment: .leading)
+        #if os(tvOS)
+        // Keep a pushed error screen escapable on tvOS — without a focusable
+        // element the Menu button exits the app instead of popping. When there's
+        // a retry button that already provides focus; only self-focus otherwise (#311).
+        .focusable(retry == nil)
+        #endif
     }
 
     public struct Retry {

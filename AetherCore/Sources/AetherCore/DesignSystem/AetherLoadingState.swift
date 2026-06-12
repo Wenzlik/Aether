@@ -19,6 +19,17 @@ public struct AetherLoadingState: View {
     }
 
     public var body: some View {
+        content
+        #if os(tvOS)
+        // A pushed screen stuck on a loading state has nothing focusable, so the
+        // Menu button would exit the app instead of popping. Make the loading
+        // state focusable on tvOS so Back works even mid-load (#311).
+        .focusable()
+        #endif
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch style {
         case let .rails(count):
             railsBody(count: count)

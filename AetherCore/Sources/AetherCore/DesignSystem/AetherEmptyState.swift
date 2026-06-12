@@ -52,8 +52,9 @@ public struct AetherEmptyState: View {
         // On tvOS a pushed screen with NOTHING focusable is a trap: the Menu
         // button exits the app instead of popping the navigation, so an empty
         // Collections / Actors view leaves the user stuck (force-quit only).
-        // Make the empty state focusable so Menu pops back to the Library (#311).
-        .focusable()
+        // Make the empty state itself focusable (only when there's no CTA to
+        // focus) so Menu pops back to the Library (#311).
+        .focusable(action == nil)
         #endif
     }
 
