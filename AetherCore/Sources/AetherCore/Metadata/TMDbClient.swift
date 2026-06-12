@@ -89,22 +89,35 @@ public struct TMDbClient: Sendable {
 
     // MARK: - Request
 
+    /// A TMDb **v4** Read Access Token (JWT, `eyJ…`) authenticates via an
+    /// `Authorization: Bearer` header on the v3 REST endpoints; a classic **v3**
+    /// API key goes in the `api_key` query param. Support both so either kind of
+    /// credential works.
+    private var usesBearerToken: Bool { apiKey.hasPrefix("eyJ") }
+
     private func searchRequest(title: String, year: Int?, isEpisode: Bool) -> URLRequest? {
         let path = isEpisode ? "/search/tv" : "/search/movie"
         var components = URLComponents(
             url: Self.base.appendingPathComponent(path), resolvingAgainstBaseURL: false
         )
         var items = [
-            URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "query", value: title),
             URLQueryItem(name: "include_adult", value: "false")
         ]
+        if !usesBearerToken {
+            items.insert(URLQueryItem(name: "api_key", value: apiKey), at: 0)
+        }
         if let year {
             items.append(URLQueryItem(name: isEpisode ? "first_air_date_year" : "year", value: String(year)))
         }
         components?.queryItems = items
         guard let url = components?.url else { return nil }
-        return URLRequest(url: url)
+        var request = URLRequest(url: url)
+        if usesBearerToken {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "accept")
+        }
+        return request
     }
 
     static func imageURL(_ path: String?, size: String) -> URL? {

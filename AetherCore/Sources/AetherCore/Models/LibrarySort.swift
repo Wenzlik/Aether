@@ -46,8 +46,8 @@ public enum LibrarySort: String, Sendable, Hashable, Codable, CaseIterable {
     /// SF Symbol that pairs with each sort, used in the picker.
     public var systemImage: String {
         switch self {
-        case .titleAZ:        return "characters"
-        case .titleZA:        return "characters"
+        case .titleAZ:        return "textformat"
+        case .titleZA:        return "textformat"
         case .yearNewest:     return "calendar.badge.clock"
         case .yearOldest:     return "calendar"
         case .recentlyAdded:  return "clock.arrow.circlepath"

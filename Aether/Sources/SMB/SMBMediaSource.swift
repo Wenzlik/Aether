@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AetherCore
 
 /// An SMB share as a `MediaSource` (#214). Lives in the app target (not
@@ -34,6 +35,7 @@ actor SMBMediaSource: MediaSource {
     ]
     private static let maxDepth = 4
     private static let maxFiles = 2000
+    private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb")
 
     init(connection: SMBConnection, tmdb: TMDbClient? = nil) {
         self.connection = connection
@@ -139,7 +141,10 @@ actor SMBMediaSource: MediaSource {
                 discovered.append(SMBFile(url: entry.streamURL, inference: inference))
             }
         }
+        Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
         await enrichWithTMDb(&discovered)
+        let matched = discovered.filter { $0.metadata != nil }.count
+        Self.log.info("SMB TMDb: matched \(matched, privacy: .public)/\(discovered.count, privacy: .public) titles")
         cachedFiles = discovered
         return discovered
     }
