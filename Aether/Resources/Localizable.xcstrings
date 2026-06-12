@@ -40,6 +40,7 @@
     "Import Media…" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Importovat média…" } } } },
     "Imported" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Importováno" } } } },
     "Label Opacity" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Průhlednost štítku" } } } },
+    "Language" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Jazyk" } } } },
     "Library" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Knihovna" } } } },
     "Local Library" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Místní knihovna" } } } },
     "Lock Developer Mode" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zamknout vývojářský režim" } } } },

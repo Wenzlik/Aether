@@ -60,7 +60,7 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        case quality, audio, subtitles, appearance, language, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
         #if os(iOS)
         case appIcon
         #endif
@@ -1138,6 +1138,13 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         AetherSettingsSection("Appearance") {
             AetherDisclosureRow(
+                label: "Language",
+                description: "Follow the device language, or pick one for Aether.",
+                value: viewModel.language.preference.displayName
+            ) {
+                openPicker = .language
+            }
+            AetherDisclosureRow(
                 label: "Theme",
                 description: "Match the system, or force Dark or Light.",
                 value: viewModel.appearance.preference.displayName
@@ -1168,6 +1175,7 @@ struct SettingsView: View {
         case .audio:          audioLanguagePickerSheet
         case .subtitles:      subtitlePickerSheet
         case .appearance:     appearancePickerSheet
+        case .language:       languagePickerSheet
         case .skipIntro:      skipModePickerSheet(title: "Skip Intro", selection: \.skipIntro)
         case .skipCredits:    skipModePickerSheet(title: "Skip Credits", selection: \.skipCredits)
         case .autoPlayNext:   autoPlayNextPickerSheet
@@ -1332,6 +1340,20 @@ struct SettingsView: View {
                     isSelected: viewModel.appearance.preference == option
                 ) {
                     viewModel.appearance.preference = option
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var languagePickerSheet: some View {
+        PreferencePickerSheet(title: "Language") {
+            ForEach(AppLanguage.allCases, id: \.self) { language in
+                AetherSelectionRow(
+                    title: language.displayName,
+                    isSelected: viewModel.language.preference == language
+                ) {
+                    viewModel.language.preference = language
                     openPicker = nil
                 }
             }

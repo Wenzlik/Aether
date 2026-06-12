@@ -29,6 +29,7 @@ final class SettingsViewModel {
 
     /// The app-wide appearance store (System / Dark / Light).
     var appearance: AppearancePreferenceStore { session.appearance }
+    var language: LanguagePreferenceStore { session.language }
 
     // MARK: - Account
 
