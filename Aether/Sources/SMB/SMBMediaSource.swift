@@ -28,6 +28,14 @@ actor SMBMediaSource: MediaSource {
     /// Cached recursive listing — the walk is expensive (network round-trips),
     /// so it's done once per source instance and reused across libraries/items.
     private var cachedFiles: [SMBFile]?
+    /// Last walk's match stats (TMDb-matched / total), for the Settings readout
+    /// (#SMB info). `nil` until the library has been walked at least once.
+    private var lastStats: (matched: Int, total: Int)?
+
+    /// TMDb match summary from the most recent walk — `nil` if the SMB library
+    /// hasn't been browsed yet this session (we don't kick off a walk just for
+    /// the Settings readout). Surfaced under the SMB row in Settings.
+    func matchSummary() -> (matched: Int, total: Int)? { lastStats }
 
     private static let videoExtensions: Set<String> = [
         "mkv", "mp4", "m4v", "mov", "avi", "ts", "m2ts", "webm", "flv", "wmv",
@@ -149,6 +157,7 @@ actor SMBMediaSource: MediaSource {
         await enrichWithTMDb(&discovered)
         let matched = discovered.filter { $0.metadata != nil }.count
         Self.log.info("SMB TMDb: matched \(matched, privacy: .public)/\(discovered.count, privacy: .public) titles")
+        lastStats = (matched: matched, total: discovered.count)
         cachedFiles = discovered
         return discovered
     }

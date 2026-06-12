@@ -65,6 +65,13 @@ final class SettingsViewModel {
     var isSMBConnected: Bool { session.isSMBConnected }
     var smbServerName: String? { session.smbConnection?.displayName }
 
+    /// TMDb match stats from the last SMB walk, for the Settings readout (#SMB
+    /// info). `nil` until the SMB library has been browsed this session.
+    func smbMatchSummary() async -> (matched: Int, total: Int)? {
+        guard let source = session.smbSource else { return nil }
+        return await source.matchSummary()
+    }
+
     let synologyStatus: AetherStatus = .comingSoon
 
     // MARK: - Active source

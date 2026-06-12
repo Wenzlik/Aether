@@ -35,6 +35,12 @@ struct SettingsView: View {
     @State private var deviceCapacity: DeviceCapacity?
     /// Current on-disk artwork cache size, shown next to "Clear Image Cache".
     @State private var imageCacheBytes: Int = 0
+    /// Gate the (destructive) cache clear behind a confirmation — it used to wipe
+    /// on a single tap, which was easy to hit by accident.
+    @State private var showClearCacheConfirm = false
+    /// "119/417 titles matched to TMDb" under the SMB row, once the SMB library
+    /// has been browsed this session (#SMB info).
+    @State private var smbMatchSummary: String?
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State private var appIconStore = AppIconStore()
@@ -571,12 +577,29 @@ struct SettingsView: View {
         AetherSettingsSection("Cache") {
             AetherSettingsRow(
                 label: "Clear Image Cache",
+                description: "Posters & artwork cached on this device (Plex, SMB, local). Tap to review the size before clearing.",
                 systemImage: "photo.stack",
                 value: formatBytes(Int64(imageCacheBytes))
             ) {
+                // Re-measure, then confirm — never a one-tap wipe (#cache).
+                Task {
+                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                    showClearCacheConfirm = true
+                }
+            }
+        }
+        .confirmationDialog(
+            "Clear \(formatBytes(Int64(imageCacheBytes))) of cached artwork?",
+            isPresented: $showClearCacheConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Image Cache", role: .destructive) {
                 AetherImageCache.shared.clear()
                 imageCacheBytes = 0
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Posters re-download as you browse. No media is deleted.")
         }
     }
 
@@ -666,11 +689,17 @@ struct SettingsView: View {
     /// and there's room here, so Sign Out stays a directly-focusable row.
     @ViewBuilder
     private var accountSection: some View {
-        #if os(tvOS)
-        accountSectionInline
-        #else
-        accountSectionCompact
-        #endif
+        Group {
+            #if os(tvOS)
+            accountSectionInline
+            #else
+            accountSectionCompact
+            #endif
+        }
+        .task {
+            guard viewModel.isSMBConnected, let stats = await viewModel.smbMatchSummary() else { return }
+            smbMatchSummary = "\(stats.matched)/\(stats.total) titles matched to TMDb"
+        }
     }
 
     private var accountSectionCompact: some View {
@@ -694,7 +723,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
                 AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
                     Task { await viewModel.signOutOfSMB() }
                 }
@@ -738,7 +767,7 @@ struct SettingsView: View {
             }
 
             if viewModel.isSMBConnected {
-                AetherSettingsRow(label: "SMB", value: viewModel.smbServerName ?? "Connected")
+                AetherSettingsRow(label: "SMB", description: smbMatchSummary, value: viewModel.smbServerName ?? "Connected")
                 AetherSettingsRow(label: "Disconnect SMB", actionRole: .destructive) {
                     Task { await viewModel.signOutOfSMB() }
                 }
