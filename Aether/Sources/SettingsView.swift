@@ -1061,7 +1061,9 @@ struct SettingsView: View {
         #else
         let opacityBinding = Binding(
             get: { viewModel.playbackPreferences.watchedLabelOpacity },
-            set: { viewModel.playbackPreferences.watchedLabelOpacity = $0 }
+            // Clamp here (the store no longer self-clamps in didSet — that
+            // recursed under @Observable and crashed the slider).
+            set: { viewModel.playbackPreferences.watchedLabelOpacity = min(1.0, max(PlaybackPreferencesStore.minLabelOpacity, $0)) }
         )
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
             HStack {

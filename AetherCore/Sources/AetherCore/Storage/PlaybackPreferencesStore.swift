@@ -127,11 +127,14 @@ public final class PlaybackPreferencesStore {
 
     /// How translucent the "WATCHED" wordmark is, `0.15...1.0` (#280). Continuous
     /// (a Settings slider on iOS); default `0.8`.
+    ///
+    /// NOTE: do **not** re-assign this inside `didSet`. `@Observable` makes stored
+    /// properties computed, so a self-assignment in `didSet` re-enters the setter
+    /// → re-runs `didSet` → infinite recursion (it crashed the opacity slider).
+    /// The value is kept in range at the edges instead: the Slider's range clamps
+    /// writes, and `init` clamps whatever is loaded from disk.
     public var watchedLabelOpacity: Double {
-        didSet {
-            watchedLabelOpacity = Self.clampOpacity(watchedLabelOpacity)
-            defaults.set(watchedLabelOpacity, forKey: Keys.watchedLabelOpacity)
-        }
+        didSet { defaults.set(watchedLabelOpacity, forKey: Keys.watchedLabelOpacity) }
     }
 
     /// Keep the wordmark visible-but-faint at the low end (0 would be invisible,
