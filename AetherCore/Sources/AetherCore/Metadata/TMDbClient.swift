@@ -43,6 +43,32 @@ public struct TMDbClient: Sendable {
     /// Whether a non-empty key was supplied (matching is possible).
     public var isConfigured: Bool { !apiKey.trimmingCharacters(in: .whitespaces).isEmpty }
 
+    /// Outcome of checking a token against TMDb (#214 token validation).
+    public enum ValidationResult: Sendable, Equatable {
+        case empty          // nothing entered
+        case valid          // TMDb accepted it
+        case invalid        // TMDb rejected it (401 / 403) — wrong key
+        case networkError   // couldn't reach TMDb — can't tell either way
+    }
+
+    /// Verify the token with a real TMDb call. Uses `/authentication`, which
+    /// requires a valid credential and returns 200 regardless of library content
+    /// — so it's a clean key check independent of any title. Works for both a v3
+    /// api_key and a v4 bearer token.
+    public func validate() async -> ValidationResult {
+        guard isConfigured, let request = authenticationRequest() else { return .empty }
+        do {
+            let (_, response) = try await api.data(for: request)
+            switch response.statusCode {
+            case 200...299: return .valid
+            case 401, 403:  return .invalid
+            default:        return .networkError
+            }
+        } catch {
+            return .networkError
+        }
+    }
+
     /// Best match for a title — searches TV when `isEpisode`, else movies. Picks
     /// the first (most-relevant) result. `nil` on any failure.
     public func match(title: String, year: Int?, isEpisode: Bool) async -> TMDbMetadata? {
@@ -111,6 +137,24 @@ public struct TMDbClient: Sendable {
             items.append(URLQueryItem(name: isEpisode ? "first_air_date_year" : "year", value: String(year)))
         }
         components?.queryItems = items
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        if usesBearerToken {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "accept")
+        }
+        return request
+    }
+
+    /// `GET /authentication` with the credential attached the same way as a
+    /// search request — for `validate()`.
+    private func authenticationRequest() -> URLRequest? {
+        var components = URLComponents(
+            url: Self.base.appendingPathComponent("/authentication"), resolvingAgainstBaseURL: false
+        )
+        if !usesBearerToken {
+            components?.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
+        }
         guard let url = components?.url else { return nil }
         var request = URLRequest(url: url)
         if usesBearerToken {

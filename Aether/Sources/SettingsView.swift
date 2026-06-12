@@ -167,8 +167,10 @@ struct SettingsView: View {
         .sheet(isPresented: $isEditingTMDbToken) {
             TMDbTokenEditSheet(
                 initialToken: viewModel.userTMDbToken,
-                hasBuiltInKey: viewModel.hasBuiltInTMDbKey
-            ) { token in await viewModel.setTMDbToken(token) }
+                hasBuiltInKey: viewModel.hasBuiltInTMDbKey,
+                validate: { await viewModel.validateTMDbToken($0) },
+                onSave: { await viewModel.setTMDbToken($0) }
+            )
         }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }

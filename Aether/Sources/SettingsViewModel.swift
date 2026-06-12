@@ -291,6 +291,11 @@ final class SettingsViewModel {
     /// matcher + clears its misses so posters re-match on the next browse.
     func setTMDbToken(_ token: String) async { await session.setUserTMDbToken(token) }
 
+    /// Validate a token with TMDb before saving (valid / rejected / unreachable).
+    func validateTMDbToken(_ token: String) async -> TMDbClient.ValidationResult {
+        await session.validateTMDbToken(token)
+    }
+
     /// Fill in posters/details for titles imported before the key was set.
     func rematchLocalMetadata() async { await session.rematchLocalMetadata() }
 

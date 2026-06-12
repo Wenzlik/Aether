@@ -178,6 +178,15 @@ final class AppSession {
     /// "fallback" vs. the only source).
     var hasBuiltInTMDbKey: Bool { !builtInTMDbAPIKey.isEmpty }
 
+    /// Check a token against TMDb before saving it (#214), so the user gets
+    /// "valid / rejected / unreachable" feedback instead of silently saving a bad
+    /// key. Doesn't persist anything.
+    func validateTMDbToken(_ token: String) async -> TMDbClient.ValidationResult {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+        return await TMDbClient(apiKey: trimmed, api: api).validate()
+    }
+
     /// Save (or clear, when blank) the user's TMDb token. Rebuilds the SMB source
     /// with the new matcher and clears its remembered misses so unmatched titles
     /// retry on the next browse. Local-library matching reads the key fresh on

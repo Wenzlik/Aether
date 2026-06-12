@@ -8,12 +8,16 @@ import AetherCore
 struct TMDbTokenEditSheet: View {
     let initialToken: String
     let hasBuiltInKey: Bool
+    let validate: (String) async -> TMDbClient.ValidationResult
     let onSave: (String) async -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var token = ""
     @State private var isSaving = false
     @State private var loaded = false
+    /// Validation feedback for the last Save attempt.
+    @State private var validationMessage: String?
+    @State private var allowSaveAnyway = false
 
     var body: some View {
         ScrollView {
@@ -43,8 +47,17 @@ struct TMDbTokenEditSheet: View {
                                 RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
                                     .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
                             }
+                            // A fresh edit invalidates the last check.
+                            .onChange(of: token) { _, _ in validationMessage = nil; allowSaveAnyway = false }
                     }
                     .padding(AetherDesign.Spacing.m)
+                }
+
+                if let validationMessage {
+                    Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 saveRow
@@ -81,10 +94,11 @@ struct TMDbTokenEditSheet: View {
 
     private var saveRow: some View {
         VStack(spacing: AetherDesign.Spacing.s) {
-            AetherButton(isSaving ? "Saving…" : "Save", systemImage: "checkmark", role: .primary) {
+            AetherButton(saveLabel, systemImage: "checkmark", role: .primary) {
                 guard !isSaving else { return }
-                Task { isSaving = true; await onSave(token); isSaving = false; dismiss() }
+                Task { await attemptSave() }
             }
+            .disabled(isSaving)
             if !initialToken.isEmpty {
                 AetherButton("Clear Custom Token", role: .destructive) {
                     Task { await onSave(""); dismiss() }
@@ -92,5 +106,36 @@ struct TMDbTokenEditSheet: View {
             }
         }
         .padding(.top, AetherDesign.Spacing.s)
+    }
+
+    private var saveLabel: String {
+        if isSaving { return "Checking…" }
+        return allowSaveAnyway ? "Save Anyway" : "Save"
+    }
+
+    /// Validate against TMDb, then save. A blank token clears (no check needed).
+    /// A rejected token blocks the save; an unreachable TMDb offers "Save Anyway"
+    /// (the key may still be fine — it just couldn't be checked right now).
+    private func attemptSave() async {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { await onSave(""); dismiss(); return }
+        if allowSaveAnyway { await onSave(trimmed); dismiss(); return }
+
+        isSaving = true
+        defer { isSaving = false }
+        switch await validate(trimmed) {
+        case .valid:
+            await onSave(trimmed)
+            dismiss()
+        case .invalid:
+            validationMessage = "TMDb rejected this token. Check you copied the full v3 API key or v4 Read Access Token."
+            allowSaveAnyway = false
+        case .networkError:
+            validationMessage = "Couldn't reach TMDb to check the token. Tap Save Anyway to keep it, or try again."
+            allowSaveAnyway = true
+        case .empty:
+            await onSave("")
+            dismiss()
+        }
     }
 }
