@@ -211,9 +211,9 @@ struct SettingsView: View {
         var subtitle: String {
             switch self {
             case .accountsSources: return "Plex, Jellyfin, SMB, and local files"
-            case .playback: return "Quality, audio & subtitles, skip, watched"
+            case .playback: return "Quality, audio & subtitles, skip"
             case .libraryDownloads: return "Downloads, storage, and cache"
-            case .appearance: return "Theme and app icon"
+            case .appearance: return "Theme, app icon, and watched titles"
             case .supportAbout: return "Report a bug, diagnostics, about"
             }
         }
@@ -318,6 +318,7 @@ struct SettingsView: View {
             #if os(iOS)
             appIconSection
             #endif
+            watchedDisplaySection
         case .supportAbout:
             #if !os(tvOS)
             supportSection
@@ -406,6 +407,7 @@ struct SettingsView: View {
         #if os(iOS)
         appIconSection
         #endif
+        watchedDisplaySection
         #if !os(tvOS)
         supportSection
         #endif
@@ -1091,6 +1093,16 @@ struct SettingsView: View {
             ) {
                 openPicker = .countdown
             }
+        }
+    }
+
+    // MARK: - Watched (Interface)
+
+    /// How finished titles are presented — these are display/interface settings,
+    /// not playback, so they live under Interface (grouped together rather than
+    /// scattered through Playback).
+    private var watchedDisplaySection: some View {
+        AetherSettingsSection("Watched") {
             Toggle(isOn: Binding(
                 get: { viewModel.playbackPreferences.hideWatchedInDiscovery },
                 set: { viewModel.playbackPreferences.hideWatchedInDiscovery = $0 }
