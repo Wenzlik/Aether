@@ -339,7 +339,15 @@ struct DetailView: View {
             playbackSelectorSheet(for: selector)
         }
         .fullScreenCover(item: $vlcPlayback) { playback in
-            VLCPlayerView(url: playback.url, options: playback.options) { vlcPlayback = nil }
+            // SMB has no pre-play track list, so hand the player the app's default
+            // audio/subtitle languages — it applies the matching tracks once VLC
+            // parses them ("choose before you watch", driven by Settings).
+            VLCPlayerView(
+                url: playback.url,
+                options: playback.options,
+                preferredAudioLanguage: playbackPreferences?.defaultAudioLanguage,
+                preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
+            ) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
         #if os(visionOS)

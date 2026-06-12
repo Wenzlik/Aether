@@ -12,10 +12,23 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     /// VLCKit media options applied before play — carries SMB credentials
     /// (`:smb-user=` / `:smb-pwd=` / `:smb-domain=`) and tuned caching (#214).
     var options: [String] = []
+    /// Preferred audio / subtitle **language** (the app's playback defaults).
+    /// SMB files carry no track list before playback, so instead of a Detail
+    /// picker we auto-select the matching track the moment VLC parses them — the
+    /// "choose before you watch" outcome, driven by Settings. `"off"` subtitle
+    /// preference disables subtitles. `nil` = leave VLC's defaults.
+    var preferredAudioLanguage: String? = nil
+    var preferredSubtitleLanguage: String? = nil
     let onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> VLCPlaybackController {
-        VLCPlaybackController(url: url, options: options, onDismiss: onDismiss)
+        VLCPlaybackController(
+            url: url,
+            options: options,
+            preferredAudioLanguage: preferredAudioLanguage,
+            preferredSubtitleLanguage: preferredSubtitleLanguage,
+            onDismiss: onDismiss
+        )
     }
     func updateUIViewController(_ controller: VLCPlaybackController, context: Context) {}
 }
@@ -23,6 +36,9 @@ struct VLCPlayerView: UIViewControllerRepresentable {
 final class VLCPlaybackController: UIViewController {
     private let url: URL
     private let options: [String]
+    private let preferredAudioLanguage: String?
+    private let preferredSubtitleLanguage: String?
+    private var appliedPreferredTracks = false
     private let onDismiss: () -> Void
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
@@ -55,9 +71,17 @@ final class VLCPlaybackController: UIViewController {
     private static let skipInterval: Double = 10
     #endif
 
-    init(url: URL, options: [String] = [], onDismiss: @escaping () -> Void) {
+    init(
+        url: URL,
+        options: [String] = [],
+        preferredAudioLanguage: String? = nil,
+        preferredSubtitleLanguage: String? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.url = url
         self.options = options
+        self.preferredAudioLanguage = preferredAudioLanguage
+        self.preferredSubtitleLanguage = preferredSubtitleLanguage
         self.onDismiss = onDismiss
         super.init(nibName: nil, bundle: nil)
     }
@@ -155,6 +179,36 @@ final class VLCPlaybackController: UIViewController {
         else if !spinner.isAnimating { spinner.startAnimating() }
     }
 
+    /// Once VLC has parsed the tracks, select the audio/subtitle matching the
+    /// app's default languages — the "choose before you watch" behaviour for SMB
+    /// (which has no pre-play track list). Runs once.
+    @discardableResult
+    private func applyPreferredTracksIfNeeded() -> Bool {
+        guard !appliedPreferredTracks else { return false }
+        let audio = player.audioTracks
+        let text = player.textTracks
+        guard !audio.isEmpty || !text.isEmpty else { return false }   // wait for parse
+        appliedPreferredTracks = true
+
+        if let pref = preferredAudioLanguage, !pref.isEmpty {
+            let want = AudioLanguage.canonical(pref)
+            if let match = audio.first(where: { AudioLanguage.canonical($0.language) == want }) {
+                match.isSelectedExclusively = true
+            }
+        }
+        if let pref = preferredSubtitleLanguage {
+            if pref == "off" {
+                player.deselectAllTextTracks()
+            } else if !pref.isEmpty {
+                let want = AudioLanguage.canonical(pref)
+                if let match = text.first(where: { AudioLanguage.canonical($0.language) == want }) {
+                    match.isSelectedExclusively = true
+                }
+            }
+        }
+        return true
+    }
+
     @objc private func togglePlay() {
         if player.isPlaying { player.pause() } else { player.play() }
         #if !os(tvOS)
@@ -190,6 +244,7 @@ final class VLCPlaybackController: UIViewController {
 
     private func tick() {
         updateSpinner()
+        applyPreferredTracksIfNeeded()
         progress.setProgress(Float(player.position), animated: false)
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
         playPauseButton.setImage(UIImage(systemName: glyph), for: .normal)
@@ -306,6 +361,9 @@ final class VLCPlaybackController: UIViewController {
             totalLabel.text = totalTime?.stringValue ?? player.media?.length.stringValue ?? "0:00"
         }
         refreshTracksMenuIfNeeded()
+        // Auto-select the preferred audio/subtitle once tracks parse; refresh the
+        // menu so the new selection's checkmarks show.
+        if applyPreferredTracksIfNeeded() { rebuildTracksMenu() }
     }
 
     /// Total duration as a `VLCTime` — `media.length` once parsed, else derived
