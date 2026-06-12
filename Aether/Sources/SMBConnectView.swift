@@ -13,7 +13,9 @@ struct SMBConnectView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var domain = ""
-    @State private var folder = ""
+    @State private var selectedRoots: [String] = []
+    @State private var showFolderPicker = false
+    @State private var isPreparingBrowse = false
     @State private var phase: Phase = .idle
 
     private enum Phase: Equatable {
@@ -22,6 +24,17 @@ struct SMBConnectView: View {
     }
 
     private var trimmedHost: String { host.trimmingCharacters(in: .whitespaces) }
+
+    /// A connection built from the current form, for the folder picker to browse.
+    private var draftConnection: SMBConnection {
+        SMBConnection(
+            host: trimmedHost,
+            username: username.isEmpty ? nil : username,
+            password: password.isEmpty ? nil : password,
+            domain: domain.isEmpty ? nil : domain,
+            roots: selectedRoots
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,11 +47,6 @@ struct SMBConnectView: View {
                         .keyboardType(.URL)
                         #endif
                         .autocorrectionDisabled()
-                    TextField("Folder (optional, e.g. Media/Movies)", text: $folder)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
                 }
                 Section("Credentials (leave blank for a guest share)") {
                     TextField("Username", text: $username)
@@ -52,6 +60,28 @@ struct SMBConnectView: View {
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
+                }
+                Section("Folders") {
+                    if selectedRoots.isEmpty {
+                        Text("All shares will be scanned. Browse to pick specific folders instead.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(selectedRoots, id: \.self) { root in
+                            Label(root, systemImage: "folder.fill")
+                        }
+                        .onDelete { selectedRoots.remove(atOffsets: $0) }
+                    }
+                    if isPreparingBrowse {
+                        HStack { ProgressView(); Text("Connecting…").foregroundStyle(.secondary) }
+                    } else {
+                        Button {
+                            Task { await prepareBrowse() }
+                        } label: {
+                            Label(selectedRoots.isEmpty ? "Browse Folders…" : "Add More Folders…", systemImage: "folder.badge.plus")
+                        }
+                        .disabled(trimmedHost.isEmpty)
+                    }
                 }
                 if case let .failed(message) = phase {
                     Section { Text(message).foregroundStyle(.red) }
@@ -79,14 +109,29 @@ struct SMBConnectView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showFolderPicker) {
+                SMBFolderPickerView(connection: draftConnection, selectedRoots: $selectedRoots)
+            }
         }
+    }
+
+    /// Trigger the Local Network prompt + confirm reachability before opening the
+    /// folder picker (the picker's first SMB call would otherwise be silently
+    /// blocked on a fresh install — same reason `connect()` probes first).
+    private func prepareBrowse() async {
+        isPreparingBrowse = true
+        defer { isPreparingBrowse = false }
+        phase = .idle
+        if await SMBNetworkProbe.probe(host: trimmedHost) == .blocked {
+            phase = .failed("Couldn't reach \(trimmedHost) on your network. Allow Local Network access (Settings ▸ Privacy & Security ▸ Local Network ▸ Aether) and check the IP is correct.")
+            return
+        }
+        showFolderPicker = true
     }
 
     private func connect() async {
         phase = .connecting
-        let roots = folder.trimmingCharacters(in: .whitespaces).isEmpty
-            ? []
-            : [folder.trimmingCharacters(in: .whitespaces)]
+        let roots = selectedRoots
         let connection = SMBConnection(
             host: trimmedHost,
             username: username.isEmpty ? nil : username,
