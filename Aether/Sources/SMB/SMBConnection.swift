@@ -49,11 +49,19 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
         return URL(string: "smb://\(host)/\(trimmed)")
     }
 
-    /// VLCKit media options carrying the credentials — applied to both browse
-    /// `VLCMedia` and the player's media before `play()`. Guest shares → no
-    /// auth options (empty array means anonymous).
+    /// VLC's prebuffer before playback starts, in ms. VLC fills this much of the
+    /// network buffer *before the first frame shows*, so it's the dominant
+    /// startup-latency lever for SMB. 1500 ms was a debugging-era safety margin;
+    /// SMB is LAN, so a smaller buffer starts noticeably faster while still
+    /// absorbing Wi-Fi jitter. (The real cure for SMB latency is the local
+    /// range-proxy — letting VLC read over fast localhost HTTP — see #213.)
+    static let networkCachingMilliseconds = 800
+
+    /// VLCKit media options carrying the credentials — applied to the player's
+    /// media before `play()` (browsing is native now). Guest shares → no auth
+    /// options (empty array means anonymous).
     var vlcMediaOptions: [String] {
-        var options: [String] = [":network-caching=1500"]
+        var options: [String] = [":network-caching=\(Self.networkCachingMilliseconds)"]
         if let username, !username.isEmpty { options.append(":smb-user=\(username)") }
         if let password, !password.isEmpty { options.append(":smb-pwd=\(password)") }
         if let domain, !domain.isEmpty { options.append(":smb-domain=\(domain)") }
