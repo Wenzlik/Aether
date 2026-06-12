@@ -56,7 +56,7 @@ struct SettingsView: View {
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
-        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming
+        case quality, audio, subtitles, appearance, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
         var id: String { rawValue }
     }
 
@@ -1130,6 +1130,16 @@ struct SettingsView: View {
             }
             .tint(AetherDesign.Palette.accent)
             .padding(AetherDesign.Spacing.m)
+
+            // Opacity only matters while the label is shown.
+            if viewModel.playbackPreferences.watchedShowLabel {
+                AetherDisclosureRow(
+                    label: "Label Opacity",
+                    value: viewModel.playbackPreferences.watchedLabelOpacity.displayName
+                ) {
+                    openPicker = .watchedLabelOpacity
+                }
+            }
         }
     }
 
@@ -1166,6 +1176,7 @@ struct SettingsView: View {
         case .autoPlayNext:   autoPlayNextPickerSheet
         case .countdown:      countdownPickerSheet
         case .watchedDimming: watchedDimmingPickerSheet
+        case .watchedLabelOpacity: watchedLabelOpacityPickerSheet
         }
     }
 
@@ -1177,6 +1188,20 @@ struct SettingsView: View {
                     isSelected: viewModel.playbackPreferences.watchedDimming == level
                 ) {
                     viewModel.playbackPreferences.watchedDimming = level
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var watchedLabelOpacityPickerSheet: some View {
+        PreferencePickerSheet(title: "Label Opacity") {
+            ForEach(WatchedLabelOpacity.allCases, id: \.self) { level in
+                AetherSelectionRow(
+                    title: level.displayName,
+                    isSelected: viewModel.playbackPreferences.watchedLabelOpacity == level
+                ) {
+                    viewModel.playbackPreferences.watchedLabelOpacity = level
                     openPicker = nil
                 }
             }

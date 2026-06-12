@@ -125,9 +125,14 @@ public final class PlaybackPreferencesStore {
         didSet { defaults.set(watchedShowLabel, forKey: Keys.watchedShowLabel) }
     }
 
+    /// How translucent the "WATCHED" wordmark is (#280). Default `.medium` (0.8).
+    public var watchedLabelOpacity: WatchedLabelOpacity {
+        didSet { defaults.set(watchedLabelOpacity.rawValue, forKey: Keys.watchedLabelOpacity) }
+    }
+
     /// Bundled into the value injected as `\.watchedDisplay`.
     public var watchedDisplayConfig: WatchedDisplayConfig {
-        WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel)
+        WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel, labelOpacity: watchedLabelOpacity.value)
     }
 
     /// Allowed countdown lengths, for the Settings picker.
@@ -144,6 +149,7 @@ public final class PlaybackPreferencesStore {
         static let hideWatched = "display.hideWatchedInDiscovery"
         static let watchedDimming = "display.watchedDimming"
         static let watchedShowLabel = "display.watchedShowLabel"
+        static let watchedLabelOpacity = "display.watchedLabelOpacity"
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
     }
@@ -171,6 +177,7 @@ public final class PlaybackPreferencesStore {
         self.hideWatchedInDiscovery = (defaults.object(forKey: Keys.hideWatched) as? Bool) ?? true
         self.watchedDimming = defaults.string(forKey: Keys.watchedDimming).flatMap(WatchedDimming.init) ?? .medium
         self.watchedShowLabel = (defaults.object(forKey: Keys.watchedShowLabel) as? Bool) ?? true
+        self.watchedLabelOpacity = defaults.string(forKey: Keys.watchedLabelOpacity).flatMap(WatchedLabelOpacity.init) ?? .medium
     }
 }
 

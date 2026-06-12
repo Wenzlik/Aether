@@ -36,14 +36,45 @@ public enum WatchedDimming: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// How translucent the "WATCHED" wordmark is over a finished poster (#280).
+/// Discrete levels (not a slider) keep it consistent with `WatchedDimming` and
+/// focusable on tvOS.
+public enum WatchedLabelOpacity: String, Codable, CaseIterable, Sendable {
+    case faint
+    case light
+    case medium
+    case solid
+
+    public var displayName: String {
+        switch self {
+        case .faint:  return "Faint"
+        case .light:  return "Light"
+        case .medium: return "Medium"
+        case .solid:  return "Solid"
+        }
+    }
+
+    public var value: Double {
+        switch self {
+        case .faint:  return 0.4
+        case .light:  return 0.6
+        case .medium: return 0.8
+        case .solid:  return 1.0
+        }
+    }
+}
+
 /// The watched-poster treatment, injected from the app's playback preferences.
 public struct WatchedDisplayConfig: Sendable, Hashable {
     public var dimming: WatchedDimming
     public var showLabel: Bool
+    /// Opacity of the "WATCHED" wordmark (0...1).
+    public var labelOpacity: Double
 
-    public init(dimming: WatchedDimming = .medium, showLabel: Bool = true) {
+    public init(dimming: WatchedDimming = .medium, showLabel: Bool = true, labelOpacity: Double = 0.8) {
         self.dimming = dimming
         self.showLabel = showLabel
+        self.labelOpacity = labelOpacity
     }
 }
 
