@@ -48,6 +48,13 @@ public struct AetherEmptyState: View {
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.xxl)
         .frame(maxWidth: 520, alignment: .leading)
+        #if os(tvOS)
+        // On tvOS a pushed screen with NOTHING focusable is a trap: the Menu
+        // button exits the app instead of popping the navigation, so an empty
+        // Collections / Actors view leaves the user stuck (force-quit only).
+        // Make the empty state focusable so Menu pops back to the Library (#311).
+        .focusable()
+        #endif
     }
 
     public struct Action {
