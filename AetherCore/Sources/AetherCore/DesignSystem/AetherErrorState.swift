@@ -30,11 +30,11 @@ public struct AetherErrorState: View {
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .padding(.bottom, AetherDesign.Spacing.xs)
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(AetherDesign.Typography.sectionTitle)
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(AetherDesign.Typography.body)
                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

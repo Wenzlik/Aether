@@ -1,66 +1,78 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Cancel" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zrušit" } }
-      }
-    },
-    "Connect" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Připojit" } }
-      }
-    },
-    "Discover" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Objevit" } }
-      }
-    },
-    "Done" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hotovo" } }
-      }
-    },
-    "Download" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Stáhnout" } }
-      }
-    },
-    "Home" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Domů" } }
-      }
-    },
-    "Library" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Knihovna" } }
-      }
-    },
-    "Play" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Přehrát" } }
-      }
-    },
-    "Resume" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Pokračovat" } }
-      }
-    },
-    "Save" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Uložit" } }
-      }
-    },
-    "Search" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hledat" } }
-      }
-    },
-    "Settings" : {
-      "localizations" : {
-        "cs" : { "stringUnit" : { "state" : "translated", "value" : "Nastavení" } }
-      }
-    }
+    "About" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "O aplikaci" } } } },
+    "About Aether" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "O aplikaci Aether" } } } },
+    "Account" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Účet" } } } },
+    "Actors" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Herci" } } } },
+    "App Icon" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Ikona aplikace" } } } },
+    "Appearance" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Vzhled" } } } },
+    "Audio Language" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Jazyk zvuku" } } } },
+    "Auto-Play Next Episode" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Automaticky přehrát další díl" } } } },
+    "Available" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Dostupné" } } } },
+    "Browse" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Procházet" } } } },
+    "Build" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Sestavení" } } } },
+    "Cache" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Mezipaměť" } } } },
+    "Cancel" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zrušit" } } } },
+    "Cinema" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Kino" } } } },
+    "Clear Image Cache" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Vymazat mezipaměť obrázků" } } } },
+    "Collections" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Kolekce" } } } },
+    "Connect" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Připojit" } } } },
+    "Connected" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Připojeno" } } } },
+    "Contact the Creator" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Kontaktovat autora" } } } },
+    "Dark" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Tmavý" } } } },
+    "Default Quality" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výchozí kvalita" } } } },
+    "Developer" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Vývojář" } } } },
+    "Device" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zařízení" } } } },
+    "Diagnostics" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Diagnostika" } } } },
+    "Directors" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Režiséři" } } } },
+    "Disconnect SMB" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Odpojit SMB" } } } },
+    "Discover" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Objevit" } } } },
+    "Done" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hotovo" } } } },
+    "Download" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Stáhnout" } } } },
+    "Downloaded" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Staženo" } } } },
+    "Downloads" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Stahování" } } } },
+    "Folders" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Složky" } } } },
+    "Free Space" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Volné místo" } } } },
+    "Genres" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Žánry" } } } },
+    "Home" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Domů" } } } },
+    "Host" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hostitel" } } } },
+    "Import Media…" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Importovat média…" } } } },
+    "Imported" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Importováno" } } } },
+    "Label Opacity" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Průhlednost štítku" } } } },
+    "Library" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Knihovna" } } } },
+    "Local Library" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Místní knihovna" } } } },
+    "Lock Developer Mode" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zamknout vývojářský režim" } } } },
+    "Manage Downloads" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Spravovat stahování" } } } },
+    "Medium" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Střední" } } } },
+    "Movies" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Filmy" } } } },
+    "Next Episode Countdown" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Odpočet do dalšího dílu" } } } },
+    "Off" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Vypnuto" } } } },
+    "On" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zapnuto" } } } },
+    "Playback" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Přehrávání" } } } },
+    "Play" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Přehrát" } } } },
+    "Re-match Metadata" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Znovu spárovat metadata" } } } },
+    "Re-match Posters" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Znovu spárovat plakáty" } } } },
+    "Report a Bug" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Nahlásit chybu" } } } },
+    "Feature Request" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Návrh funkce" } } } },
+    "Resume" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Pokračovat" } } } },
+    "Save" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Uložit" } } } },
+    "Search" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Hledat" } } } },
+    "Send Diagnostics" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Odeslat diagnostiku" } } } },
+    "Settings" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Nastavení" } } } },
+    "Storage Summary" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Přehled úložiště" } } } },
+    "Strong" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Silné" } } } },
+    "Subtitle Language" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Jazyk titulků" } } } },
+    "Subtle" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Jemné" } } } },
+    "Support" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Podpora" } } } },
+    "System" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Systém" } } } },
+    "TV Shows" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Seriály" } } } },
+    "Theme" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Motiv" } } } },
+    "Try again" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zkusit znovu" } } } },
+    "Version" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Verze" } } } },
+    "Watched" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zhlédnuto" } } } },
+    "Watched Dimming" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Ztlumení zhlédnutých" } } } },
+    "Years" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Roky" } } } }
   },
   "version" : "1.0"
 }
