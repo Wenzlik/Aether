@@ -232,20 +232,34 @@ public actor PlexMediaSource: MediaSource {
         var seen: Set<String> = []
         var result: [MediaCollection] = []
         for section in sections {
-            let request = request(base: base, path: "/library/sections/\(section.id.rawValue)/collections")
-            guard let response = try? await api.decode(
-                PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
-            ) else { continue }
-            for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
-                result.append(MediaCollection(
-                    id: .init(source: id, rawValue: dto.ratingKey),
-                    title: dto.title,
-                    childCount: dto.childCount,
-                    artwork: ArtworkSource(
-                        provider: .plex, base: base, token: accessToken,
-                        posterPath: dto.thumb, backdropPath: dto.art
-                    )
-                ))
+            // `all?type=18` (type 18 = *collection*) is the listing Plex Web
+            // itself uses and is far more widely supported than the newer
+            // `/sections/{id}/collections`, which returned nothing on some
+            // servers — making real libraries look empty (#298). And log
+            // failures (token-safe) instead of swallowing them, so a server/API
+            // problem doesn't masquerade as "no collections".
+            let request = request(
+                base: base,
+                path: "/library/sections/\(section.id.rawValue)/all",
+                queryItems: [URLQueryItem(name: "type", value: "18")]
+            )
+            do {
+                let response = try await api.decode(
+                    PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+                )
+                for dto in response.mediaContainer.metadata ?? [] where seen.insert(dto.ratingKey).inserted {
+                    result.append(MediaCollection(
+                        id: .init(source: id, rawValue: dto.ratingKey),
+                        title: dto.title,
+                        childCount: dto.childCount,
+                        artwork: ArtworkSource(
+                            provider: .plex, base: base, token: accessToken,
+                            posterPath: dto.thumb, backdropPath: dto.art
+                        )
+                    ))
+                }
+            } catch {
+                Self.log.error("Plex collections fetch failed for section \(section.id.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
         return result.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }

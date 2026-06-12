@@ -90,22 +90,24 @@ extension URL {
     }
 }
 
-/// Builds the VLC MRL + media options for a libsmb2 (SMB2/3) request.
+/// Builds the VLC MRL + media options for SMB **playback** through VLCKit's
+/// libsmb2 module. (Browsing is native now — `SMBSession` — so this is only the
+/// player path.)
 ///
-/// Two things libsmb2 needs that the plain `smb://` + options form didn't give:
-/// 1. the **`smb2://` scheme** so libVLC picks libsmb2, not the SMB1 `dsm` module
-///    (which stalls on NetBIOS against SMB1-disabled NAS);
-/// 2. the **username + domain folded into the URL** (`smb2://domain;user@host/share`)
-///    — libsmb2 reads the identity from the URL, NOT from VLC's `smb-user` /
-///    `smb-domain` options, so passing them only as options left the session
-///    anonymous and the NAS refused it even with valid credentials (confirmed:
-///    the macOS SMB client authenticates fine with the very same creds). The
-///    password still rides as `:smb-pwd=` (libsmb2 takes it via vlc_credential).
+/// The MRL keeps the **`smb://` scheme** with the **username/domain folded into
+/// the URL** (`smb://domain;user@host/share/path`), which is exactly the form
+/// libsmb2's `smb2_parse_url` expects — the password rides as `:smb-pwd=`.
+///
+/// NOTE: do *not* use an `smb2://` scheme here. VLC's smb2 module feeds the raw
+/// MRL straight to `smb2_parse_url`, which only understands `smb://`; an
+/// `smb2://` MRL made it fail with "smb2_parse_url failed" and the file
+/// wouldn't open. libsmb2 reads the identity from the URL (not VLC's `smb-user`
+/// option), so the creds must be in the URL.
 ///
 /// No-op for non-`smb` URLs (HTTP / local files pass straight through).
 func smb2VLCRequest(url: URL, options: [String]) -> (url: URL, options: [String]) {
     guard url.scheme == "smb", let host = url.host else {
-        return (url.forcingSMB2VLCModule, options)
+        return (url, options)
     }
     var user: String?
     var domain: String?
@@ -125,6 +127,6 @@ func smb2VLCRequest(url: URL, options: [String]) -> (url: URL, options: [String]
     }
     let portPart = url.port.map { ":\($0)" } ?? ""
     let path = url.path.isEmpty ? "/" : url.path   // already percent-encoded by URL
-    let built = URL(string: "smb2://\(auth)\(host)\(portPart)\(path)")
-    return (built ?? url.forcingSMB2VLCModule, passthrough)
+    let built = URL(string: "smb://\(auth)\(host)\(portPart)\(path)")
+    return (built ?? url, passthrough)
 }
