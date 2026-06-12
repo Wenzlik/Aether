@@ -64,6 +64,11 @@ final class SettingsViewModel {
 
     var isSMBConnected: Bool { session.isSMBConnected }
     var smbServerName: String? { session.smbConnection?.displayName }
+    /// The live SMB connection, so the folder picker can browse + seed its
+    /// current folder selection.
+    var smbConnection: SMBConnection? { session.smbConnection }
+    /// Change which folders the connected share scans (add/remove after sign-in).
+    func updateSMBRoots(_ roots: [String]) async { await session.updateSMBRoots(roots) }
     var smbHost: String? { session.smbConnection?.host }
     /// The signed-in SMB account, or `nil` for a guest share.
     var smbUsername: String? {

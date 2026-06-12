@@ -784,6 +784,19 @@ final class AppSession {
         isSignInPresented = false
     }
 
+    /// Change which folders the connected SMB share scans (#214) — add or remove
+    /// folders after sign-in (the picker was previously only reachable at
+    /// sign-in). Persists the new roots, rebuilds the source, and drops the
+    /// cached walk so the new set is scanned on the next browse.
+    func updateSMBRoots(_ roots: [String]) async {
+        guard var connection = smbConnection, connection.roots != roots else { return }
+        connection.roots = roots
+        do { try await smbConnectionStore?.write(connection) } catch { }
+        smbConnection = connection
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+    }
+
     func signOutOfSMB() async {
         do { try await smbConnectionStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()

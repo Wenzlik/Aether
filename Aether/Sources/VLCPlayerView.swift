@@ -227,8 +227,8 @@ final class VLCPlaybackController: UIViewController {
         tracksButton.tintColor = .white
         tracksButton.setImage(UIImage(systemName: "captions.bubble"), for: .normal)
         tracksButton.showsMenuAsPrimaryAction = true
-        tracksButton.isEnabled = false
         tracksButton.translatesAutoresizingMaskIntoConstraints = false
+        rebuildTracksMenu()   // seed an empty-state menu so the button works immediately
 
         slider.minimumValue = 0
         slider.maximumValue = 1
@@ -357,7 +357,6 @@ final class VLCPlaybackController: UIViewController {
         guard audio.count != lastAudioCount || text.count != lastTextCount else { return }
         lastAudioCount = audio.count
         lastTextCount = text.count
-        tracksButton.isEnabled = !audio.isEmpty || !text.isEmpty
         rebuildTracksMenu()
     }
 
@@ -386,6 +385,13 @@ final class VLCPlaybackController: UIViewController {
                 }
             }
             sections.append(UIMenu(title: "Subtitles", options: .displayInline, children: [off] + items))
+        }
+        // Keep the button tappable even before tracks parse (SMB negotiation can
+        // lag) — an empty-state item so a tap gives feedback rather than nothing;
+        // the 0.5s ticker rebuilds it the moment VLC reports tracks.
+        if sections.isEmpty {
+            let placeholder = UIAction(title: "No alternate tracks yet…", attributes: .disabled) { _ in }
+            sections.append(placeholder)
         }
         tracksButton.menu = UIMenu(title: "", children: sections)
     }

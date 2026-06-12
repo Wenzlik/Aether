@@ -170,8 +170,26 @@ actor SMBMediaSource: CustomDownloadSource {
 
     // MARK: - Walk
 
+    /// Coalesces concurrent `files()` callers onto one walk. `SMBMediaSource` is
+    /// an actor and `files()` awaits a long walk, so without this the actor's
+    /// reentrancy let every concurrent caller (Home / Library / Search / grid /
+    /// audio-options) start its *own* walk while the first was still running — a
+    /// stampede that re-scanned the share many times and hammered TMDb into a
+    /// rate-limit (→ 0 posters). One walk, shared by all waiters.
+    private var walkTask: Task<[SMBFile], Never>?
+
     private func files() async -> [SMBFile] {
         if let cachedFiles { return cachedFiles }
+        if let walkTask { return await walkTask.value }
+        let task = Task { await performWalk() }
+        walkTask = task
+        let result = await task.value
+        cachedFiles = result
+        walkTask = nil
+        return result
+    }
+
+    private func performWalk() async -> [SMBFile] {
         let session = SMBSession(connection: connection)
         // Roots to scan: the configured ones (share + path), else every share at
         // the host. Native browse via the pure-Swift SMBClient (#213) — real
@@ -213,8 +231,7 @@ actor SMBMediaSource: CustomDownloadSource {
         let matched = discovered.filter { $0.metadata != nil }.count
         Self.log.info("SMB TMDb: matched \(matched, privacy: .public)/\(discovered.count, privacy: .public) titles")
         lastStats = (matched: matched, total: discovered.count)
-        cachedFiles = discovered
-        return discovered
+        return discovered   // `files()` owns caching
     }
 
     /// Attach TMDb posters/overview to each file (SMB has none). Matched once per
@@ -225,6 +242,9 @@ actor SMBMediaSource: CustomDownloadSource {
         guard !files.isEmpty else { return }
         let store = SMBMetadataStore.shared
         let canMatch = tmdb?.isConfigured ?? false
+        var attempted = 0
+        var succeeded = 0
+        var pendingMisses: [String] = []
         for index in files.indices {
             let file = files[index]
             // The user's correction (if any) drives the match key — editing a
@@ -240,10 +260,25 @@ actor SMBMediaSource: CustomDownloadSource {
                 continue   // tried before, no TMDb match → don't re-hit the network (battery)
             case .unknown:
                 guard canMatch, let tmdb else { continue }   // no key yet → leave for a later browse
-                let match = await tmdb.match(title: title, year: year, isEpisode: isEpisode)
-                await store.record(match, for: key)           // persists (hit or miss)
-                files[index].metadata = match
+                attempted += 1
+                if let match = await tmdb.match(title: title, year: year, isEpisode: isEpisode) {
+                    await store.record(match, for: key)   // persist hits immediately
+                    files[index].metadata = match
+                    succeeded += 1
+                } else {
+                    pendingMisses.append(key)              // hold — decide below
+                }
             }
+        }
+        // Only persist misses once we've proven the key actually works this pass
+        // (≥1 hit). A wholesale 0% rate means a rate-limited / wrong key or no
+        // network — NOT hundreds of genuinely-unmatchable files; caching those as
+        // misses would poison the store so even a working key shows nothing until
+        // a manual Re-match. Leaving them un-recorded lets the next browse retry.
+        if succeeded > 0 || attempted == 0 {
+            for key in pendingMisses { await store.record(nil, for: key) }
+        } else if attempted > 0 {
+            Self.log.error("SMB TMDb: 0/\(attempted, privacy: .public) matched — likely a rate-limited/invalid key or no network; not caching misses, will retry next browse.")
         }
     }
 
