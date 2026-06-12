@@ -32,11 +32,14 @@ final class VLCPlaybackController: UIViewController {
     private let playPauseButton = UIButton(type: .system)
     private let doneButton = UIButton(type: .system)
 
+    private let spinner = UIActivityIndicatorView(style: .large)
     #if os(tvOS)
     private let progress = UIProgressView(progressViewStyle: .default)
     #else
-    // Rich controls (iOS / visionOS)
-    private let controlsOverlay = UIView()
+    // Rich controls (iOS / visionOS). The overlay passes taps in its empty
+    // areas through to the video (so the tap-to-toggle gesture always fires),
+    // while still capturing taps on the actual buttons / slider.
+    private let controlsOverlay = PassthroughView()
     private let scrim = UIView()
     private let skipBackButton = UIButton(type: .system)
     private let skipForwardButton = UIButton(type: .system)
@@ -86,6 +89,18 @@ final class VLCPlaybackController: UIViewController {
 
         setupControls()
 
+        // Loading indicator while the stream connects + buffers — SMB can take a
+        // few seconds, and a blank black screen with no spinner reads as frozen.
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.hidesWhenStopped = true
+        spinner.color = .white
+        view.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+        spinner.startAnimating()
+
         player.drawable = videoView
         // Build the libsmb2 request (SMB → smb:// with creds folded into the URL;
         // password stays an option). No-op for non-SMB URLs.
@@ -95,6 +110,9 @@ final class VLCPlaybackController: UIViewController {
             player.media = media
         }
         player.play()
+        // VLC owns `videoView`'s rendering surface; make sure our controls stay
+        // above it (the chrome was unreachable when the video layer sat on top).
+        bringControlsToFront()
 
         // 0.5s ticker drives the progress / time UI and the play-state glyph.
         // Scheduled on the main run loop, so it fires on the main actor.
@@ -103,11 +121,38 @@ final class VLCPlaybackController: UIViewController {
         }
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Re-assert z-order after VLC has attached its render surface.
+        bringControlsToFront()
+    }
+
+    private func bringControlsToFront() {
+        view.bringSubviewToFront(spinner)
+        #if !os(tvOS)
+        view.bringSubviewToFront(scrim)
+        view.bringSubviewToFront(controlsOverlay)
+        #else
+        view.bringSubviewToFront(doneButton)
+        view.bringSubviewToFront(playPauseButton)
+        view.bringSubviewToFront(progress)
+        #endif
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         ticker?.invalidate()
         ticker = nil
         if player.isPlaying { player.stop() }
+    }
+
+    /// Show the buffering spinner until frames are actually flowing (playing, or
+    /// position has advanced), then hide it. Keeps the long SMB connect from
+    /// looking like a frozen black screen.
+    private func updateSpinner() {
+        let active = player.isPlaying || player.position > 0
+        if active { spinner.stopAnimating() }
+        else if !spinner.isAnimating { spinner.startAnimating() }
     }
 
     @objc private func togglePlay() {
@@ -144,6 +189,7 @@ final class VLCPlaybackController: UIViewController {
     }
 
     private func tick() {
+        updateSpinner()
         progress.setProgress(Float(player.position), animated: false)
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
         playPauseButton.setImage(UIImage(systemName: glyph), for: .normal)
@@ -250,6 +296,7 @@ final class VLCPlaybackController: UIViewController {
     }
 
     private func tick() {
+        updateSpinner()
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
         playPauseButton.setImage(UIImage(systemName: glyph), for: .normal)
 
@@ -381,3 +428,17 @@ final class VLCPlaybackController: UIViewController {
     }
     #endif
 }
+
+#if !os(tvOS)
+/// A control overlay that only captures touches landing on an actual control
+/// (button / slider), letting taps in its empty regions fall through to the
+/// video's tap-to-toggle gesture. Without this, the full-screen overlay
+/// swallowed every tap, so the controls couldn't be toggled (the "tap does
+/// nothing / can't reach Done" bug).
+final class PassthroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+}
+#endif
