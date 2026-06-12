@@ -2261,7 +2261,13 @@ struct DetailView: View {
         switch downloadStatus {
         case .notDownloaded:
             Button {
-                presentedSelector = .downloadQuality
+                // SMB is a raw file share — no server transcode, so skip the
+                // quality picker and download the original file directly.
+                if isSMBSource(activeItem.id.source) {
+                    Task { await startDownload(quality: .original) }
+                } else {
+                    presentedSelector = .downloadQuality
+                }
             } label: { Label("Download", systemImage: "arrow.down.circle") }
             .disabled(isEnqueuingDownload)
         case .queued:

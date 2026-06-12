@@ -13,7 +13,20 @@ import AetherCore
 /// into "Movies" / "TV Shows" libraries. Playback is direct: `streamURL` is the
 /// credential-free `smb://` URL, routed to VLCKit by `PlaybackEngine`, with
 /// credentials supplied as media options at play time (`vlcMediaOptions`).
-actor SMBMediaSource: MediaSource {
+/// Why an SMB download couldn't start (the transfer itself throws SMBClient's
+/// own errors, which already read clearly).
+enum SMBDownloadError: LocalizedError {
+    case noStreamURL
+    case badStreamURL
+    var errorDescription: String? {
+        switch self {
+        case .noStreamURL: return "This item has no SMB file to download."
+        case .badStreamURL: return "Couldn't read the SMB path for this item."
+        }
+    }
+}
+
+actor SMBMediaSource: CustomDownloadSource {
     nonisolated let id: MediaSourceID
     nonisolated let displayName: String
     /// Credentials for the player layer (DetailView reads this off the resolved
@@ -128,7 +141,32 @@ actor SMBMediaSource: MediaSource {
 
     // `resolvePlayback` uses the protocol default → returns `streamURL` for
     // direct play. PlaybackEngine routes the smb:// URL to VLCKit.
-    nonisolated var supportsDownloads: Bool { false }
+    //
+    // Downloads run through `CustomDownloadSource` (not URLSession — `smb://`
+    // isn't an HTTP URL): the DownloadManager calls `performDownload` to stream
+    // the file's bytes to disk via SMBClient. Always "original" — SMB is a raw
+    // file share, no server transcode.
+    nonisolated var supportsDownloads: Bool { true }
+
+    nonisolated func downloadFileExtension(for item: MediaItem) -> String? {
+        guard let ext = item.streamURL?.pathExtension, !ext.isEmpty else { return nil }
+        return ext
+    }
+
+    func performDownload(
+        of item: MediaItem,
+        to destination: URL,
+        progress: @Sendable @escaping (Double) -> Void
+    ) async throws {
+        guard let streamURL = item.streamURL else {
+            throw SMBDownloadError.noStreamURL
+        }
+        let (share, path) = SMBSession.shareAndPath(from: streamURL)
+        guard !share.isEmpty else { throw SMBDownloadError.badStreamURL }
+        let session = SMBSession(connection: connection)
+        try await session.download(share: share, path: path, to: destination, progress: progress)
+        Self.log.info("SMB download complete: \(item.title, privacy: .public)")
+    }
 
     // MARK: - Walk
 

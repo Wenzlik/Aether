@@ -86,6 +86,55 @@ struct SMBSession: Sendable {
         return results
     }
 
+    /// Download one file (`share` + share-relative `path`) to `destination`,
+    /// reporting fractional progress. A hand-rolled chunked loop (rather than
+    /// `FileReader.download(to:)`) so it can check `Task.isCancelled` between
+    /// reads — pause/cancel then stop promptly. Overwrites any partial file.
+    func download(
+        share: String,
+        path: String,
+        to destination: URL,
+        progress: @Sendable (Double) -> Void
+    ) async throws {
+        let client = try await loggedIn()
+        try await client.connectShare(share)
+        let reader = client.fileReader(path: Self.relative(path))
+        do {
+            let total = try await reader.fileSize
+            // Truncate/create the destination fresh.
+            FileManager.default.createFile(atPath: destination.path, contents: nil)
+            guard let handle = FileHandle(forWritingAtPath: destination.path) else {
+                throw URLError(.cannotWriteToFile)
+            }
+            defer { try? handle.close() }
+
+            var offset: UInt64 = 0
+            while total == 0 || offset < total {
+                try Task.checkCancellation()
+                let chunk = try await reader.read(offset: offset)
+                if chunk.isEmpty { break }
+                try handle.write(contentsOf: chunk)
+                offset += UInt64(chunk.count)
+                progress(total > 0 ? min(1.0, Double(offset) / Double(total)) : 0)
+            }
+            progress(1.0)
+            try await reader.close()
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+    }
+
+    /// Split an `smb://host/share/sub/file.mkv` stream URL into the SMB **share**
+    /// (first path component) and the **share-relative path** (the rest). Used to
+    /// turn a stored item's `streamURL` back into download coordinates.
+    static func shareAndPath(from url: URL) -> (share: String, path: String) {
+        // `url.path` is percent-decoded — the real names SMBClient expects.
+        let components = url.path.split(separator: "/").map(String.init)
+        guard let share = components.first else { return ("", "") }
+        return (share, components.dropFirst().joined(separator: "/"))
+    }
+
     // MARK: - Helpers
 
     /// SMBClient paths are share-relative with no leading slash ("" = root).

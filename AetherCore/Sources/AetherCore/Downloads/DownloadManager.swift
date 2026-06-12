@@ -41,6 +41,15 @@ public actor DownloadManager {
     /// carries the same uuid string, so delegate events can map back.
     private var tasksByJobID: [UUID: URLSessionDownloadTask] = [:]
 
+    /// Custom (non-URLSession) transfers — SMB byte reads run as plain async
+    /// tasks here instead of on the background session (#214). The source + item
+    /// are kept so a Resume can restart the transfer (no byte-range resume), and
+    /// the last fraction so a Pause can hold the progress bar where it was.
+    private var customTasksByJobID: [UUID: Task<Void, Never>] = [:]
+    private var customSourcesByJobID: [UUID: any CustomDownloadSource] = [:]
+    private var customItemsByJobID: [UUID: MediaItem] = [:]
+    private var customProgressByJobID: [UUID: Double] = [:]
+
     /// Resume-data blobs for paused downloads. URLSession gives us this
     /// when we cancel a task with `cancel(byProducingResumeData:)`; we
     /// keep it in memory (it's a few hundred KB at most) until the user
@@ -204,6 +213,13 @@ public actor DownloadManager {
         )
         await store.record(job)
 
+        // SMB (and any non-HTTP source) transfers via its own async task, not a
+        // URLSession download — see `CustomDownloadSource`.
+        if let custom = source as? any CustomDownloadSource {
+            await startCustomDownload(job: job, source: custom, item: item)
+            return job
+        }
+
         guard let url = try await source.downloadURL(for: item, quality: quality) else {
             await store.updateStatus(job.id, status: .failed(reason: "Source doesn't support downloads."))
             throw DownloadError.sourceDoesNotSupportDownloads
@@ -223,6 +239,73 @@ public actor DownloadManager {
         persistPoster(for: resolvedJob, posterURL: item.posterURL)
         Self.log.notice("enqueued job=\(resolvedJob.id, privacy: .public) item=\(item.id.rawValue, privacy: .public) quality=\(quality.rawValue, privacy: .public)")
         return resolvedJob
+    }
+
+    // MARK: - Custom (non-URLSession) downloads
+
+    /// Begin a custom transfer (SMB): persist the poster, mark downloading, and
+    /// launch the async task. The source + item are retained so Resume can
+    /// restart it within this process launch.
+    private func startCustomDownload(job: DownloadJob, source: any CustomDownloadSource, item: MediaItem) async {
+        customSourcesByJobID[job.id] = source
+        customItemsByJobID[job.id] = item
+        customProgressByJobID[job.id] = 0
+        persistPoster(for: job, posterURL: item.posterURL)
+        await store.updateStatus(job.id, status: .downloading(fractionCompleted: 0))
+        launchCustomTask(jobID: job.id, source: source, item: item)
+        Self.log.notice("enqueued custom job=\(job.id, privacy: .public) item=\(item.id.rawValue, privacy: .public)")
+    }
+
+    private func customDestination(jobID: UUID, source: any CustomDownloadSource, item: MediaItem) -> URL {
+        let ext = source.downloadFileExtension(for: item) ?? "mp4"
+        return downloadsDirectory.appendingPathComponent("\(jobID.uuidString).\(ext)")
+    }
+
+    private func launchCustomTask(jobID: UUID, source: any CustomDownloadSource, item: MediaItem) {
+        let destination = customDestination(jobID: jobID, source: source, item: item)
+        // Throttle progress→store hops to ~1% steps so we don't spawn a task per
+        // read chunk. The closure is called serially from one transfer loop.
+        let throttle = ProgressThrottle()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await source.performDownload(of: item, to: destination) { fraction in
+                    guard throttle.shouldEmit(fraction) else { return }
+                    Task { [weak self] in await self?.recordCustomProgress(jobID, fraction: fraction) }
+                }
+                try Task.checkCancellation()
+                await self.finishCustomDownload(jobID, destination: destination)
+            } catch is CancellationError {
+                // pause()/cancel()/remove() already set the status + cleaned up.
+            } catch {
+                await self.failCustomDownload(jobID, error: error)
+            }
+        }
+        customTasksByJobID[jobID] = task
+    }
+
+    private func recordCustomProgress(_ jobID: UUID, fraction: Double) async {
+        guard customTasksByJobID[jobID] != nil else { return }  // dropped after cancel/finish
+        customProgressByJobID[jobID] = fraction
+        await store.updateStatus(jobID, status: .downloading(fractionCompleted: fraction))
+    }
+
+    private func finishCustomDownload(_ jobID: UUID, destination: URL) async {
+        customTasksByJobID[jobID] = nil
+        customSourcesByJobID[jobID] = nil
+        customItemsByJobID[jobID] = nil
+        customProgressByJobID[jobID] = nil
+        let attrs = try? FileManager.default.attributesOfItem(atPath: destination.path)
+        let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+        await store.updateStatus(jobID, status: .completed(localURL: destination, sizeBytes: size))
+        Self.log.notice("completed custom job=\(jobID, privacy: .public) size=\(size, privacy: .public)B")
+    }
+
+    private func failCustomDownload(_ jobID: UUID, error: any Error) async {
+        customTasksByJobID[jobID] = nil
+        if expectedCancellations.remove(jobID) != nil { return }
+        await store.updateStatus(jobID, status: .failed(reason: Self.userFacing(error: error)))
+        Self.log.error("failed custom job=\(jobID, privacy: .public) error=\(String(describing: error), privacy: .public)")
     }
 
     /// Download `posterURL` and write it to `{downloadsDirectory}/{jobID}.poster`,
@@ -261,6 +344,16 @@ public actor DownloadManager {
     /// `.failed("Cancelled")`. Marking the id as expected before the
     /// cancel ensures the delegate's `.failed` event is dropped.
     public func pause(_ jobID: UUID) async {
+        // Custom transfers (SMB) have no byte-range resume — cancel the task and
+        // hold the bar at the last fraction; a later Resume restarts from zero.
+        if let custom = customTasksByJobID[jobID] {
+            let progress = customProgressByJobID[jobID] ?? 0
+            custom.cancel()
+            customTasksByJobID[jobID] = nil
+            await store.updateStatus(jobID, status: .paused(fractionCompleted: progress))
+            Self.log.notice("paused custom job=\(jobID, privacy: .public) progress=\(progress, privacy: .public)")
+            return
+        }
         guard let task = tasksByJobID[jobID] else { return }
         let progress = task.progress.fractionCompleted
         expectedCancellations.insert(jobID)
@@ -282,6 +375,17 @@ public actor DownloadManager {
     /// gone (RAM evicted, never produced). Only marks `.failed` when neither a
     /// blob nor a URL is available to restart from.
     public func resume(_ jobID: UUID) async {
+        // Custom transfer (SMB): restart from zero via the retained source. If
+        // the source is gone (relaunch), fall through — startOrRestart will mark
+        // it un-resumable since there's no URLSession resume data / source URL.
+        if customTasksByJobID[jobID] == nil,
+           let source = customSourcesByJobID[jobID],
+           let item = customItemsByJobID[jobID] {
+            customProgressByJobID[jobID] = 0
+            await store.updateStatus(jobID, status: .downloading(fractionCompleted: 0))
+            launchCustomTask(jobID: jobID, source: source, item: item)
+            return
+        }
         guard tasksByJobID[jobID] == nil else { return }  // already running
         await startOrRestart(jobID)
     }
@@ -300,10 +404,22 @@ public actor DownloadManager {
             task.cancel()
             tasksByJobID[jobID] = nil
         }
+        cancelCustomTask(jobID)
         discardResumeData(for: jobID)
         clearSpeedTracking(jobID)
         await store.updateStatus(jobID, status: .failed(reason: "Cancelled"))
         Self.log.notice("cancelled job=\(jobID, privacy: .public)")
+    }
+
+    /// Cancel + forget a custom (SMB) transfer's task and retained source/item.
+    /// The CancellationError path in `launchCustomTask` is a no-op, so the
+    /// caller owns the resulting status.
+    private func cancelCustomTask(_ jobID: UUID) {
+        customTasksByJobID[jobID]?.cancel()
+        customTasksByJobID[jobID] = nil
+        customSourcesByJobID[jobID] = nil
+        customItemsByJobID[jobID] = nil
+        customProgressByJobID[jobID] = nil
     }
 
     /// Fully remove a download — cancels any task, deletes the on-disk file
@@ -316,6 +432,7 @@ public actor DownloadManager {
             task.cancel()
             tasksByJobID[jobID] = nil
         }
+        cancelCustomTask(jobID)
         discardResumeData(for: jobID)
         clearSpeedTracking(jobID)
         autoResumeAttempts[jobID] = nil
@@ -581,6 +698,21 @@ public actor DownloadManager {
         default:
             return ns.localizedDescription
         }
+    }
+}
+
+/// Gates a `0...1` progress stream to ~1% steps (and always the final 1.0), so
+/// a custom transfer's per-chunk callbacks don't spawn a store-update task each
+/// time. Called serially from a single transfer loop, so the plain `var` is
+/// safe; `@unchecked Sendable` to cross into the progress closure.
+private final class ProgressThrottle: @unchecked Sendable {
+    private var last: Double = -1
+    func shouldEmit(_ value: Double) -> Bool {
+        if value >= 1.0 || value - last >= 0.01 {
+            last = value
+            return true
+        }
+        return false
     }
 }
 
