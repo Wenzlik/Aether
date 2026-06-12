@@ -73,4 +73,15 @@ fi
 echo "ci_post_clone: running xcodegen generate in $WORKSPACE"
 "$XCODEGEN" generate
 
+# Resolve Swift package dependencies now, while we can. Xcode Cloud runs its
+# archive with automatic package resolution DISABLED and expects a committed
+# `Package.resolved` — but ours lives inside the gitignored, XcodeGen-generated
+# `.xcodeproj`, and `xcodegen generate` above just recreated it without one. So
+# the archive fails to resolve any remote package (it broke the moment SMBClient
+# — our first remote SPM dependency — landed in 0.7.0). Resolving here writes the
+# `Package.resolved` the archive step then reads. (VLCKit is a local binary
+# target and resolves from path; SMBClient is the one that needs the network.)
+echo "ci_post_clone: resolving Swift package dependencies"
+xcodebuild -resolvePackageDependencies -project Aether.xcodeproj -scheme Aether
+
 echo "ci_post_clone: done"
