@@ -52,6 +52,10 @@ struct DetailView: View {
     /// Set when a local file needs the VLCKit engine (mkv etc.) instead of AVKit.
     @State private var vlcPlayback: VLCPlayback?
     @State private var playbackItem: MediaItem?
+    /// Set when Auto-Play-Next advanced the player to a *different* episode in
+    /// place, so the screen re-points at the episode actually playing (and stays
+    /// there after dismiss) instead of the one Play was pressed on (#315).
+    @State private var advancedItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
     @State private var playbackStartAt: Double?
@@ -195,7 +199,7 @@ struct DetailView: View {
     /// override, or the navigated `item` (the title's preferred source). All
     /// playback-related state derives from this, so an "Available Sources"
     /// switch re-points hydration / playback / downloads at the chosen server.
-    private var activeItem: MediaItem { overrideItem ?? item }
+    private var activeItem: MediaItem { advancedItem ?? overrideItem ?? item }
 
     /// Whether a source id is an SMB share (drives the title/year editor, #213).
     private func isSMBSource(_ source: MediaSourceID) -> Bool {
@@ -261,7 +265,8 @@ struct DetailView: View {
                     redockToken: cinemaRedockToken,
                     makeCinemaInfoControllers: makeCinemaInfoControllers,
                     playbackPreferences: playbackPreferences,
-                    onDismiss: dismissPlayer
+                    onDismiss: dismissPlayer,
+                    onAdvance: { advancedItem = $0 }
                 )
                 .transition(.opacity)
                 .zIndex(10)
@@ -2065,6 +2070,7 @@ struct DetailView: View {
         guard src.playable, src.item.id != activeItem.id else { return }
         configuredItem = nil
         playbackItem = nil
+        advancedItem = nil   // a manual source switch supersedes any auto-advance
         children = []
         related = []
         resume = nil

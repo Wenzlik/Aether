@@ -39,6 +39,15 @@ Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
 - **tvOS dead-end screens** (#311) — an empty/loading/error screen pushed onto a
   NavigationStack had nothing focusable, so the Back/Menu button exited the app
   instead of popping. Those states are now focusable on tvOS.
+- **Auto-skipped credits now mark the episode watched** (#314) — with Skip
+  Credits = Automatically, finishing an episode no longer left it unwatched (a
+  seek to the end never posts the play-to-end notification we were relying on).
+- **Dismissing after Auto-Play-Next lands on the right episode** (#315) — when
+  playback had auto-advanced, closing the player now returns to the episode that
+  was actually playing, not the one Play was first pressed on.
+- **Audio / subtitle selection carries to the next episode** (#316) — Auto-Play-
+  Next now keeps the chosen audio + subtitle language even when tracks carry no
+  language code (matched by label) or differ only by region subtag.
 
 ## [0.7.0] — 2026-06-12
 

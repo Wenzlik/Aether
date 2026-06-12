@@ -21,6 +21,10 @@ struct PlayerView: View {
     /// `0` (or any explicit value) starts there, ignoring the saved resume.
     let startAt: Double?
     let onDismiss: () -> Void
+    /// Called when Auto-Play-Next advances to a different episode *in place*, so
+    /// the host Detail can re-point itself at the episode that's actually
+    /// playing instead of the one the user pressed Play on (#315).
+    let onAdvance: (MediaItem) -> Void
     /// Playback defaults — drives Skip Intro / Skip Credits (Button /
     /// Automatically / Off). `nil` falls back to "Show Button".
     let playbackPreferences: PlaybackPreferencesStore?
@@ -70,7 +74,8 @@ struct PlayerView: View {
         redockToken: UUID? = nil,
         makeCinemaInfoControllers: (() -> [UIViewController])? = nil,
         playbackPreferences: PlaybackPreferencesStore? = nil,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onAdvance: @escaping (MediaItem) -> Void = { _ in }
     ) {
         self.item = item
         self.source = source
@@ -80,6 +85,7 @@ struct PlayerView: View {
         self.makeCinemaInfoControllers = makeCinemaInfoControllers
         self.playbackPreferences = playbackPreferences
         self.onDismiss = onDismiss
+        self.onAdvance = onAdvance
         _viewModel = State(initialValue: PlayerStateViewModel(session: session))
     }
 
@@ -188,16 +194,9 @@ struct PlayerView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
             guard let current = viewModel.player?.currentItem,
                   (note.object as? AVPlayerItem) === current else { return }
-            // Played to the end → auto-advance to the next episode if enabled
-            // and one exists (`playNext` also marks the finished one watched);
-            // otherwise mark watched and dismiss.
-            if autoPlayNext, nextItem != nil {
-                Task { await playNext() }
-            } else {
-                let finishedID = viewModel.state.item?.id ?? item.id
-                if let source { Task { await source.markWatched(finishedID) } }
-                Task { await dismissPlayer() }
-            }
+            // Played to the end → finish: auto-advance if enabled, else mark
+            // watched and dismiss.
+            finishPlayback()
         }
         #if os(tvOS)
         .onExitCommand { Task { await dismissPlayer() } }
@@ -350,6 +349,9 @@ struct PlayerView: View {
         // episode (language-matched), with the app defaults as the base —
         // episode 2 used to revert to the container's default track (#68).
         let configured = playbackPreferences?.appliedToNextEpisode(next, continuing: finished) ?? next
+        // Tell the host Detail we've moved on, so dismissing later lands on the
+        // episode that was actually playing, not the one Play was pressed on (#315).
+        onAdvance(configured)
         await viewModel.open(configured, source: source, startAt: 0)
         await loadNextItem()
     }
@@ -362,7 +364,45 @@ struct PlayerView: View {
             Task { await viewModel.skip(toContentSeconds: intro.end) }
         } else if creditsMode == .automatically, let credits = activeCredits, !autoSkipped.contains(credits.id) {
             autoSkipped.insert(credits.id)
-            Task { await viewModel.skip(toContentSeconds: credits.end) }
+            // Credits are the terminal segment. Three cases (#314):
+            //  • Auto-Play-Next will advance → let the Up Next countdown
+            //    (`updateNextEpisodePrompt`) own the credits region. Seeking past
+            //    them here would cancel that countdown *and* skip the watched
+            //    write-back, which is exactly the reported bug.
+            //  • No advance, credits run to the end → finish in place (mark
+            //    watched + dismiss). A programmatic seek to EOF never posts
+            //    `didPlayToEndTime`, so we must not lean on it to mark watched.
+            //  • Credits somehow aren't terminal → fall back to a plain skip.
+            if autoPlayNext, nextItem != nil {
+                // countdown drives the advance — nothing to do here.
+            } else if isTerminalSegment(credits) {
+                finishPlayback()
+            } else {
+                Task { await viewModel.skip(toContentSeconds: credits.end) }
+            }
+        }
+    }
+
+    /// Whether `segment` runs to (within 5s of) the end of the item — i.e. the
+    /// credits/outro with nothing meaningful after it. Unknown duration ⇒ treat
+    /// as terminal, since auto-skipped credits effectively are. (#314)
+    private func isTerminalSegment(_ segment: PlaybackSegment) -> Bool {
+        guard let duration = viewModel.state.duration else { return true }
+        let total = Double(duration.components.seconds)
+        return total <= 0 || segment.end >= total - 5
+    }
+
+    /// End-of-playback handoff, shared by the natural play-to-end and the
+    /// auto-skip-credits paths: advance to the next episode when Auto-Play-Next
+    /// is on and one exists (`playNext` marks the finished one watched), else
+    /// mark the finished episode watched and dismiss. (#314)
+    private func finishPlayback() {
+        if autoPlayNext, nextItem != nil {
+            Task { await playNext() }
+        } else {
+            let finishedID = viewModel.state.item?.id ?? item.id
+            if let source { Task { await source.markWatched(finishedID) } }
+            Task { await dismissPlayer() }
         }
     }
 
