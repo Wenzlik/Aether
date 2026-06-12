@@ -119,7 +119,7 @@ performance work that made it feel fast. Shipped across the 0.4.x line.
 - ✅ **Versioning + codenames** — constellation codenames (Andromeda → Boötes →
   Cassiopeia) and release-process docs (`0.4.1`).
 
-**Shipped in staging** (awaiting a TestFlight build to land in main).
+**Shipped in main.**
 
 ---
 
@@ -144,7 +144,7 @@ offline and think **Movies / TV Shows / Downloads**.
   release/added dates, season/episode counts, end-year and continuing status from
   both connectors.
 
-**Shipped in staging.** Notes:
+**Shipped in main.** Notes:
 [`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-library.md).
 
 ---
@@ -214,6 +214,34 @@ Notes: [`docs/next-steps/ux-refresh-060.md`](docs/next-steps/ux-refresh-060.md).
 
 ---
 
+## ✅ 0.6.x — Polish & first non-server sources
+
+Incremental releases on the 0.6 line, all shipped to main through the staging
+pipeline.
+
+- ✅ **Settings as a product hub (0.6.1)** — Support (Report a Bug / Feature
+  Request / Send Diagnostics / Contact the Creator), visionOS Cinema prefs,
+  About + release history.
+- ✅ **Detail redesign (0.6.2)** — Infuse-density layout: action hierarchy,
+  genres, collapsible overview, Cast & Crew, Technical Details (incl. Jellyfin
+  MediaInfo), server-side Favorite.
+- ✅ **tvOS polish + clearLogo + Library facets (0.6.6 / 0.6.7)** — focus pass
+  across Detail / Library, season preview; stylized title-logo hero art;
+  browse by Collections / Actors / Directors.
+- ✅ **0.6.8 train** — first **SMB source** (connect-by-host) *(VLC bridge — see
+  the SMB note below; it fails on-device and is being replaced)*, tunable
+  watched posters (#280), tvOS technical metadata moved to a sheet (#281),
+  episode → Season / Show navigation (#282), audio-track selection fix (#68),
+  localized season titles + Hide-Watched toggle.
+- ✅ **UI refresh** — Settings rebuilt as a **category index + focused
+  subsections** (#289, #287); Detail uses the title artwork as a **full-screen
+  cinematic background** (#290); Home / Library search collapsed to a top-right
+  search button on iOS / visionOS; **swipe-down to dismiss** the player (#288);
+  watch-progress correctness — partial vs fully-watched, recency-based Next Up,
+  in-progress episode bars (#260).
+
+---
+
 ## ⬜ Search & Filtering (proposed 0.7)
 
 Builds on the Unified Library: richer, **source-agnostic** filtering that works
@@ -245,8 +273,15 @@ New connectors that slot into the Unified Library — each is just another
 
 - ⬜ **Emby connector** — auth + libraries + items + playback, alongside Plex /
   Jellyfin. ([#171](https://github.com/Wenzlik/Aether/issues/171))
-- ⬜ **SMB / DLNA** — browse and play from network shares / DLNA servers without a
-  media-server backend. ([#172](https://github.com/Wenzlik/Aether/issues/172))
+- 🚧 **SMB / DLNA** — browse and play from network shares without a media-server
+  backend ([#172](https://github.com/Wenzlik/Aether/issues/172)). A first SMB
+  bridge over VLCKit's `libsmb2` shipped in 0.6.8 but **fails on-device** (an
+  opaque black box — no surfaced auth error, never triggers the iOS Local
+  Network prompt), so SMB is moving to a **native AMSMB2** client for
+  browse/auth + a local HTTP range proxy for playback; VLCKit stays for MKV
+  decoding only ([#214](https://github.com/Wenzlik/Aether/issues/214),
+  [#213](https://github.com/Wenzlik/Aether/issues/213)). DLNA/UPnP still to come
+  ([#212](https://github.com/Wenzlik/Aether/issues/212)).
 - ⬜ **Local Library & file uploads** — import / play local files on-device.
   ([#173](https://github.com/Wenzlik/Aether/issues/173))
 - ⬜ **Synology connector** *(optional, deprioritized)* — DSM session or Video
