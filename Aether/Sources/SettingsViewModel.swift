@@ -140,22 +140,25 @@ final class SettingsViewModel {
     /// Codename for the current release, shown in the What's New modal. Theme:
     /// constellations, alphabetical per release (see AGENTS.md → Release
     /// process). Update this when `MARKETING_VERSION` bumps to a new version.
-    let releaseCodename = "Cassiopeia"
+    let releaseCodename = "Draco"
 
     /// Headline highlights for the **current** release, surfaced in What's New.
     /// Previous releases appear below under "Release History" (`releaseHistory`);
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Connect an SMB share — point Aether at a NAS by host, browse your files, and play them (mkv and all) through the built-in engine",
-        "Jump from an episode to its Season or Show — opening an episode from Home is no longer a dead end",
-        "Watched titles stand out more — a bigger WATCHED tag and stronger dimming, both tunable in Settings (or turn the label off)",
-        "Apple TV: technical details moved behind a tidy info button so they stop crowding the detail screen"
+        "Native SMB — connect to a NAS, pick exactly which folders to include, get TMDb posters, fix mis-matched titles, and download files for offline",
+        "A real SMB/mkv player — scrub the timeline, skip ±10s, and switch audio & subtitle tracks",
+        "Filter your Library by audio language",
+        "Find titles by actor or director name in Search; sort the Library by rating; Plex collections now load",
+        "Add your own TMDb key in Settings (with a validity check) if posters aren't matching, and tune the WATCHED label opacity"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.6.8", codename: "Cassiopeia",
+                    summary: "The SMB source debut (browse + play a NAS over VLCKit), episode → Season / Show navigation, and tunable watched posters."),
         ReleaseNote(version: "0.6.7", codename: "Cassiopeia",
                     summary: "Title logo art on the Detail hero, Library browsing by Collections / Actors / Directors, a richer Season Detail (episode preview, season cast, Next Up), and a localized-season-title fix."),
         ReleaseNote(version: "0.6.6", codename: "Cassiopeia",

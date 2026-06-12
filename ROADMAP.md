@@ -227,12 +227,15 @@ one source satisfies all active dimensions.
 
 - ✅ **Search keyboard dismissal** — `@FocusState`; tap-outside / scroll /
   select / Search-Done all dismiss the keyboard. *(Shipped ahead, PR #107.)*
-- ⬜ **`MediaFilter` model + matching** (AetherCore, unit-tested).
-- ⬜ **Compact filter UI** (button + badge → chip sheet), wired into **Search**,
-  then **Library**.
-- ⬜ **Jellyfin `mediaInfo` backfill** — map Jellyfin `MediaStreams` → `MediaInfo`
-  so **video filters** (4K/HDR/DV/codec) work for Jellyfin too. Until then video
-  filters are **Plex-only** (audio/subtitle/source work everywhere).
+- ✅ **`MediaFilter` model + matching** (AetherCore, unit-tested) — audio-language
+  facet shipped 0.7.0 ([#295](https://github.com/Wenzlik/Aether/issues/295)).
+- ✅ **Search by actor / director name** — shipped 0.7.0
+  ([#296](https://github.com/Wenzlik/Aether/issues/296)).
+- 🚧 **Audio-language filter UI** — chip row live in **Library** (Plex server-side,
+  Jellyfin client-side); **Search** wiring is the remaining piece (#295).
+- ⬜ **More filter dimensions** (subtitle language, video 4K/HDR/DV/codec, audio
+  format) — needs Jellyfin `MediaStreams` → `MediaInfo` backfill; video filters
+  stay Plex-only until then.
 
 Notes: [`docs/next-steps/0.6-search-filtering.md`](docs/next-steps/0.6-search-filtering.md).
 
@@ -245,8 +248,13 @@ New connectors that slot into the Unified Library — each is just another
 
 - ⬜ **Emby connector** — auth + libraries + items + playback, alongside Plex /
   Jellyfin. ([#171](https://github.com/Wenzlik/Aether/issues/171))
-- ⬜ **SMB / DLNA** — browse and play from network shares / DLNA servers without a
-  media-server backend. ([#172](https://github.com/Wenzlik/Aether/issues/172))
+- ✅ **SMB** — connect to a NAS, browse + auth natively (pure-Swift `SMBClient`),
+  play through VLCKit, with a multi-folder picker, TMDb poster matching, editable
+  titles, and downloads. *(Shipped 0.7.0; [#214](https://github.com/Wenzlik/Aether/issues/214).)*
+  The HTTP range proxy for lower startup latency is still open
+  ([#213](https://github.com/Wenzlik/Aether/issues/213)).
+- ⬜ **DLNA / UPnP** — discovery + ContentDirectory browse + playback.
+  ([#212](https://github.com/Wenzlik/Aether/issues/212))
 - ⬜ **Local Library & file uploads** — import / play local files on-device.
   ([#173](https://github.com/Wenzlik/Aether/issues/173))
 - ⬜ **Synology connector** *(optional, deprioritized)* — DSM session or Video
