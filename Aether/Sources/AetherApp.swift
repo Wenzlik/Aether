@@ -152,11 +152,47 @@ final class AppSession {
         localItemCount = await localLibraryStore.count()
     }
 
-    /// TMDb v3 key, injected at build time (Info.plist ← Config/Secrets.xcconfig
-    /// or Xcode Cloud). Empty ⇒ Local Library metadata matching is disabled.
-    var tmdbAPIKey: String {
+    private static let userTMDbTokenKey = "tmdb.userToken"
+
+    /// A TMDb token the user entered in Settings (#214). When set it's used for
+    /// poster matching **instead of** the built-in key — so a missing or
+    /// rate-limited built-in key can be fixed in-app without a rebuild. Persisted
+    /// in UserDefaults; observed, so the Settings row reflects changes live.
+    private(set) var userTMDbToken: String = (UserDefaults.standard.string(forKey: AppSession.userTMDbTokenKey) ?? "")
+        .trimmingCharacters(in: .whitespaces)
+
+    /// TMDb v3 key injected at build time (Info.plist ← Config/Secrets.xcconfig
+    /// or Xcode Cloud). Empty when none was built in (e.g. some TestFlight builds).
+    var builtInTMDbAPIKey: String {
         ((Bundle.main.object(forInfoDictionaryKey: "TMDBAPIKey") as? String) ?? "")
             .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The effective TMDb key for matching: the user's token wins when set, else
+    /// the built-in key. Empty ⇒ metadata matching is disabled.
+    var tmdbAPIKey: String {
+        userTMDbToken.isEmpty ? builtInTMDbAPIKey : userTMDbToken
+    }
+
+    /// Whether a built-in key is present (so the UI can label the user token a
+    /// "fallback" vs. the only source).
+    var hasBuiltInTMDbKey: Bool { !builtInTMDbAPIKey.isEmpty }
+
+    /// Save (or clear, when blank) the user's TMDb token. Rebuilds the SMB source
+    /// with the new matcher and clears its remembered misses so unmatched titles
+    /// retry on the next browse. Local-library matching reads the key fresh on
+    /// each call, so it picks the new token up automatically.
+    func setUserTMDbToken(_ token: String) async {
+        userTMDbToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if userTMDbToken.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.userTMDbTokenKey)
+        } else {
+            UserDefaults.standard.set(userTMDbToken, forKey: Self.userTMDbTokenKey)
+        }
+        if let connection = smbConnection {
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+            await SMBMetadataStore.shared.clearMisses()
+        }
     }
 
     /// Enrich a freshly-imported local item with TMDb metadata (poster /

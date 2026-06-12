@@ -43,6 +43,8 @@ struct SettingsView: View {
     /// SMB details (account, match count, downloads, actions) tuck under an
     /// expandable row so the Account section stays calm; expanded by tap.
     @State private var smbExpanded = false
+    /// Presents the TMDb token editor (#214 — user fallback / override).
+    @State private var isEditingTMDbToken = false
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State private var appIconStore = AppIconStore()
@@ -162,6 +164,12 @@ struct SettingsView: View {
         }
         .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
         .sheet(item: $accountSheet) { sheet in accountSheetView(for: sheet) }
+        .sheet(isPresented: $isEditingTMDbToken) {
+            TMDbTokenEditSheet(
+                initialToken: viewModel.userTMDbToken,
+                hasBuiltInKey: viewModel.hasBuiltInTMDbKey
+            ) { token in await viewModel.setTMDbToken(token) }
+        }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
         #endif
@@ -288,6 +296,7 @@ struct SettingsView: View {
         switch category {
         case .accountsSources:
             accountSection
+            metadataSection
             #if !os(tvOS)
             localLibrarySection
             #endif
@@ -786,6 +795,27 @@ struct SettingsView: View {
         let count = viewModel.smbFolderCount
         if count == 0 { return "All shares" }
         return "\(count) folder\(count == 1 ? "" : "s")"
+    }
+
+    // MARK: - Metadata (TMDb token, #214)
+
+    /// Lets the user supply their own TMDb token — used instead of the built-in
+    /// key for poster/detail matching (SMB + Local). Backs the library-poster
+    /// fallback the user asked for.
+    private var metadataSection: some View {
+        AetherSettingsSection("Metadata") {
+            AetherSettingsRow(
+                label: "TMDb Token",
+                description: "Matches posters & details for SMB and local files. Add your own key if matching isn't working.",
+                value: tmdbTokenStatus
+            ) { isEditingTMDbToken = true }
+        }
+    }
+
+    /// "Custom" when the user set a token, else "Built-in" / "Not set".
+    private var tmdbTokenStatus: String {
+        if !viewModel.userTMDbToken.isEmpty { return "Custom" }
+        return viewModel.hasBuiltInTMDbKey ? "Built-in" : "Not set"
     }
 
     #if !os(tvOS)

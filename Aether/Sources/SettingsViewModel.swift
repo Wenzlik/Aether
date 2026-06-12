@@ -279,6 +279,18 @@ final class SettingsViewModel {
     /// "Re-match metadata" action.
     var isTMDbConfigured: Bool { session.isTMDbConfigured }
 
+    // MARK: TMDb token (#214 — user fallback / override)
+
+    /// The user's own TMDb token from Settings, or "" when unset.
+    var userTMDbToken: String { session.userTMDbToken }
+    /// Whether a key shipped in the build (so the UI can call the user token a
+    /// "fallback" vs. the only source of posters).
+    var hasBuiltInTMDbKey: Bool { session.hasBuiltInTMDbKey }
+
+    /// Save or clear the user's TMDb token (blank clears). Rebuilds the SMB
+    /// matcher + clears its misses so posters re-match on the next browse.
+    func setTMDbToken(_ token: String) async { await session.setUserTMDbToken(token) }
+
     /// Fill in posters/details for titles imported before the key was set.
     func rematchLocalMetadata() async { await session.rematchLocalMetadata() }
 
