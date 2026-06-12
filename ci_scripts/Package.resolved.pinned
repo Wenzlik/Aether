@@ -1,0 +1,15 @@
+{
+  "originHash" : "0b4572b727126e0b773931a1641bf73c4825f5ac3080a1b08efa1dda790c5f59",
+  "pins" : [
+    {
+      "identity" : "smbclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kishikawakatsumi/SMBClient",
+      "state" : {
+        "revision" : "e636c2b2458930770932a36d311ec9d478575b90",
+        "version" : "0.3.1"
+      }
+    }
+  ],
+  "version" : 3
+}
