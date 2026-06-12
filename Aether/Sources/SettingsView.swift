@@ -45,6 +45,10 @@ struct SettingsView: View {
     @State private var smbExpanded = false
     /// Presents the TMDb token editor (#214 — user fallback / override).
     @State private var isEditingTMDbToken = false
+    /// Presents the SMB folder picker for the *connected* share (add/remove
+    /// folders after sign-in, #214), seeded with the current roots.
+    @State private var isEditingSMBFolders = false
+    @State private var smbEditRoots: [String] = []
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State private var appIconStore = AppIconStore()
@@ -177,6 +181,14 @@ struct SettingsView: View {
                 validate: { await viewModel.validateTMDbToken($0) },
                 onSave: { await viewModel.setTMDbToken($0) }
             )
+        }
+        .sheet(isPresented: $isEditingSMBFolders, onDismiss: {
+            // Persist the edited folder set on dismiss (no-op if unchanged).
+            Task { await viewModel.updateSMBRoots(smbEditRoots) }
+        }) {
+            if let connection = viewModel.smbConnection {
+                SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots)
+            }
         }
         #if !os(tvOS)
         .sheet(item: $supportSheet) { sheet in supportSheetView(for: sheet) }
@@ -635,7 +647,10 @@ struct SettingsView: View {
             if let host = viewModel.smbHost {
                 AetherSettingsRow(label: "Host", value: host)
             }
-            AetherSettingsRow(label: "Folders", value: smbFoldersValue)
+            AetherSettingsRow(label: "Folders", value: smbFoldersValue) {
+                smbEditRoots = viewModel.smbConnection?.roots ?? []
+                isEditingSMBFolders = true
+            }
             AetherSettingsRow(label: "Posters Matched", value: smbMatchSummary ?? "Open Library to match")
             #if !os(tvOS)
             AetherSettingsRow(label: "Downloaded", value: smbDownloadedValue)
@@ -667,14 +682,19 @@ struct SettingsView: View {
                     Text("SMB")
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    if let summary = smbMatchSummary {
+                    if !viewModel.isSMBReachable {
+                        Text("Off network — reconnects automatically when you're home")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if let summary = smbMatchSummary {
                         Text("\(summary) matched")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                     }
                 }
                 Spacer(minLength: AetherDesign.Spacing.s)
-                Text(viewModel.smbServerName ?? "Connected")
+                Text(viewModel.isSMBReachable ? (viewModel.smbServerName ?? "Connected") : "Dormant")
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
                     .lineLimit(1)

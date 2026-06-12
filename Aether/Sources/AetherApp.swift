@@ -1,5 +1,6 @@
 import SwiftUI
 import AetherCore
+import Network
 
 #if canImport(UIKit)
 import UIKit
@@ -339,6 +340,16 @@ final class AppSession {
     var smbConnection: SMBConnection?
     private(set) var smbSource: SMBMediaSource?
     var isSMBConnected: Bool = false
+    /// Whether the connected SMB host is reachable right now. SMB is LAN-only, so
+    /// off-network this flips false and `connectedSources` drops the source —
+    /// dormant, no errors, hidden from the Library — until we're back (#214).
+    /// Optimistic default so a configured share shows instantly on launch; the
+    /// probe corrects it within a couple of seconds.
+    private(set) var isSMBReachable: Bool = true
+    /// Watches network changes to re-probe reachability (home ↔ away).
+    private var smbPathMonitor: NWPathMonitor?
+    /// Guards against overlapping probes when path changes arrive in a burst.
+    private var isProbingSMB = false
 
     // MARK: - Active source
 
@@ -534,7 +545,10 @@ final class AppSession {
         var list: [any MediaSource] = []
         if let plexSource { list.append(plexSource) }
         if let jellyfinSource { list.append(jellyfinSource) }
-        if let smbSource { list.append(smbSource) }
+        // SMB is LAN-only — surface it only while the NAS is actually reachable,
+        // so off-network it goes dormant (no failed walks, not shown in the
+        // Library) and auto-reappears when you're back on the network (#214).
+        if let smbSource, isSMBReachable { list.append(smbSource) }
         // Local is on-device + always available, but only counts as a connected
         // source once it has content — otherwise a fresh server-less install
         // would never show the "connect a source" welcome state.
@@ -769,6 +783,8 @@ final class AppSession {
             smbConnection = connection
             smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
             isSMBConnected = true
+            startSMBReachabilityMonitoring()
+            await refreshSMBReachability()
         } catch {
             // Corrupted record shouldn't break launch — leave SMB disconnected.
         }
@@ -781,15 +797,64 @@ final class AppSession {
         smbConnection = connection
         smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
         isSMBConnected = true
+        isSMBReachable = true   // just validated, so it's reachable now
         isSignInPresented = false
+        startSMBReachabilityMonitoring()
+    }
+
+    // MARK: SMB reachability (LAN-only dormancy, #214)
+
+    /// Re-probe whenever the network path changes (home ↔ away / Wi-Fi ↔ cellular).
+    private func startSMBReachabilityMonitoring() {
+        guard smbPathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        smbPathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in await self?.refreshSMBReachability() }
+        }
+        monitor.start(queue: DispatchQueue(label: "cz.zmrhal.aether.smb-reachability"))
+    }
+
+    /// Probe the configured SMB host; flip `isSMBReachable` (which gates
+    /// `connectedSources`). On a reachable→unreachable→reachable transition,
+    /// drop the cached walk + unified snapshot so the share re-scans fresh when
+    /// it comes back. A short timeout keeps it snappy on cellular.
+    func refreshSMBReachability() async {
+        guard let host = smbConnection?.host, !isProbingSMB else { return }
+        isProbingSMB = true
+        defer { isProbingSMB = false }
+        let reachable = await SMBNetworkProbe.probe(host: host, timeoutSeconds: 3) == .reachable
+        guard reachable != isSMBReachable else { return }
+        isSMBReachable = reachable
+        if reachable {
+            // Back on the network — clear stale caches so the next browse re-walks.
+            await smbSource?.invalidate()
+            await UnifiedLibrarySnapshotStore.shared.clearAll()
+        }
+    }
+
+    /// Change which folders the connected SMB share scans (#214) — add or remove
+    /// folders after sign-in (the picker was previously only reachable at
+    /// sign-in). Persists the new roots, rebuilds the source, and drops the
+    /// cached walk so the new set is scanned on the next browse.
+    func updateSMBRoots(_ roots: [String]) async {
+        guard var connection = smbConnection, connection.roots != roots else { return }
+        connection.roots = roots
+        do { try await smbConnectionStore?.write(connection) } catch { }
+        smbConnection = connection
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
     }
 
     func signOutOfSMB() async {
+        smbPathMonitor?.cancel()
+        smbPathMonitor = nil
         do { try await smbConnectionStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
         smbConnection = nil
         smbSource = nil
         isSMBConnected = false
+        isSMBReachable = true   // reset for the next connection
     }
 
     // MARK: - Keychain keys
