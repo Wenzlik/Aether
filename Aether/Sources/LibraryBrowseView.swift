@@ -45,6 +45,11 @@ struct LibraryBrowseView: View {
     /// empty" (→ empty state), so a refresh never flashes the empty state.
     @State private var hasLoaded = false
     @State private var loadError: String?
+    /// Whether any connected source has **actual** collections — the Collections
+    /// browse entry is gated on this, not just on `supportsCollections`. A
+    /// Plex-only setup whose server has no collections (common) otherwise showed
+    /// a Collections row that led to a dead empty screen (#298/#311).
+    @State private var hasCollections = false
     /// One automatic retry on an empty result (transient first-load), so the
     /// library self-heals instead of sticking on an empty state.
     @State private var autoRetried = false
@@ -134,6 +139,7 @@ struct LibraryBrowseView: View {
             }
         }
         .task(id: sourcesKey) { await load() }
+        .task(id: sourcesKey) { await refreshCollectionsAvailability() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load() } }
         }
@@ -315,7 +321,7 @@ struct LibraryBrowseView: View {
                     LibraryBrowseRow(title: "Years")
                 }
                 .buttonStyle(.plain)
-                if connectedSources.contains(where: { $0.supportsCollections }) {
+                if hasCollections {
                     NavigationLink(value: LibraryBrowseRoute.collections) {
                         LibraryBrowseRow(title: "Collections")
                     }
@@ -374,7 +380,7 @@ struct LibraryBrowseView: View {
                     LibraryBrowseRow(title: "Years")
                 }
                 .buttonStyle(.plain)
-                if connectedSources.contains(where: { $0.supportsCollections }) {
+                if hasCollections {
                     NavigationLink(value: LibraryBrowseRoute.collections) {
                         LibraryBrowseRow(title: "Collections")
                     }
@@ -560,6 +566,22 @@ struct LibraryBrowseView: View {
     }
 
     // MARK: - Loading
+
+    /// Decide whether to show the Collections browse entry by checking for
+    /// *actual* collections (not just the `supportsCollections` capability), so a
+    /// Plex-only library with no collections doesn't surface a dead row (#298/#311).
+    private func refreshCollectionsAvailability() async {
+        let sources = connectedSources.filter { $0.supportsCollections }
+        guard !sources.isEmpty else { hasCollections = false; return }
+        var any = false
+        await withTaskGroup(of: Bool.self) { group in
+            for source in sources {
+                group.addTask { !(await source.collections()).isEmpty }
+            }
+            for await nonEmpty in group where nonEmpty { any = true }
+        }
+        hasCollections = any
+    }
 
     private func load(forceRefresh: Bool = false) async {
         loadError = nil
