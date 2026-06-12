@@ -119,7 +119,7 @@ performance work that made it feel fast. Shipped across the 0.4.x line.
 - ✅ **Versioning + codenames** — constellation codenames (Andromeda → Boötes →
   Cassiopeia) and release-process docs (`0.4.1`).
 
-**Shipped in staging** (awaiting a TestFlight build to land in main).
+**Shipped in main.**
 
 ---
 
@@ -144,7 +144,7 @@ offline and think **Movies / TV Shows / Downloads**.
   release/added dates, season/episode counts, end-year and continuing status from
   both connectors.
 
-**Shipped in staging.** Notes:
+**Shipped in main.** Notes:
 [`docs/next-steps/0.5-unified-library.md`](docs/next-steps/0.5-unified-library.md).
 
 ---
@@ -211,6 +211,34 @@ one release (foundation-first, then ripple). Full spec + milestone breakdown:
   riskiest, device-only bits; everything else is in 0.6.0.
 
 Notes: [`docs/next-steps/ux-refresh-060.md`](docs/next-steps/ux-refresh-060.md).
+
+---
+
+## ✅ 0.6.x — Polish & first non-server sources
+
+Incremental releases on the 0.6 line, all shipped to main through the staging
+pipeline.
+
+- ✅ **Settings as a product hub (0.6.1)** — Support (Report a Bug / Feature
+  Request / Send Diagnostics / Contact the Creator), visionOS Cinema prefs,
+  About + release history.
+- ✅ **Detail redesign (0.6.2)** — Infuse-density layout: action hierarchy,
+  genres, collapsible overview, Cast & Crew, Technical Details (incl. Jellyfin
+  MediaInfo), server-side Favorite.
+- ✅ **tvOS polish + clearLogo + Library facets (0.6.6 / 0.6.7)** — focus pass
+  across Detail / Library, season preview; stylized title-logo hero art;
+  browse by Collections / Actors / Directors.
+- ✅ **0.6.8 train** — first **SMB source** (connect-by-host) *(VLC bridge — see
+  the SMB note below; it fails on-device and is being replaced)*, tunable
+  watched posters (#280), tvOS technical metadata moved to a sheet (#281),
+  episode → Season / Show navigation (#282), audio-track selection fix (#68),
+  localized season titles + Hide-Watched toggle.
+- ✅ **UI refresh** — Settings rebuilt as a **category index + focused
+  subsections** (#289, #287); Detail uses the title artwork as a **full-screen
+  cinematic background** (#290); Home / Library search collapsed to a top-right
+  search button on iOS / visionOS; **swipe-down to dismiss** the player (#288);
+  watch-progress correctness — partial vs fully-watched, recency-based Next Up,
+  in-progress episode bars (#260).
 
 ---
 
