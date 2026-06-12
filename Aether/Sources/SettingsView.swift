@@ -682,14 +682,19 @@ struct SettingsView: View {
                     Text("SMB")
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
-                    if let summary = smbMatchSummary {
+                    if !viewModel.isSMBReachable {
+                        Text("Off network — reconnects automatically when you're home")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if let summary = smbMatchSummary {
                         Text("\(summary) matched")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                     }
                 }
                 Spacer(minLength: AetherDesign.Spacing.s)
-                Text(viewModel.smbServerName ?? "Connected")
+                Text(viewModel.isSMBReachable ? (viewModel.smbServerName ?? "Connected") : "Dormant")
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
                     .lineLimit(1)

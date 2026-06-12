@@ -63,6 +63,9 @@ final class SettingsViewModel {
     }
 
     var isSMBConnected: Bool { session.isSMBConnected }
+    /// `false` when off the LAN — the share is dormant (hidden from the Library),
+    /// not broken. Surfaced as an "Off network" note rather than an error (#214).
+    var isSMBReachable: Bool { session.isSMBReachable }
     var smbServerName: String? { session.smbConnection?.displayName }
     /// The live SMB connection, so the folder picker can browse + seed its
     /// current folder selection.
