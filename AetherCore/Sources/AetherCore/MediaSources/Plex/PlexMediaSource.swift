@@ -954,7 +954,8 @@ public actor PlexMediaSource: MediaSource {
                               posterPath: $0, backdropPath: nil).posterURL(.thumbnail)
             }
             return CastMember(id: "\(index)-\(name)", name: name,
-                              role: role.role?.nonEmptyTrimmed, photoURL: photoURL)
+                              role: role.role?.nonEmptyTrimmed, photoURL: photoURL,
+                              personID: role.id.map(String.init))
         }
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
