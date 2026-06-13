@@ -4,7 +4,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.7.2] — Unreleased · "Draco"
+## [0.7.3] — Unreleased · "Draco"
+
+### Fixed
+
+- **Settings now fully localizes** (#332) — the Settings category cards, screen
+  titles, and toggle rows rendered raw strings (and row *descriptions* were
+  never in the catalog), so a Czech/Ukrainian device still saw English there.
+  Those surfaces now localize, with the missing strings translated into both
+  languages.
+
+## [0.7.2] — 2026-06-13 · "Draco"
 
 ### Added
 
