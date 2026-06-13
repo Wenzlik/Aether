@@ -319,12 +319,23 @@ final class AppSession {
     private(set) var plexResourceClient: PlexResourceClient?
     private(set) var plexServerStore: PlexServerStore?
 
-    /// The currently-selected server (loaded on launch or set on discovery).
-    var plexServer: PlexServerRecord?
+    /// The enabled Plex servers — several can be connected at once from one
+    /// account (#325). Loaded on launch, set on discovery, edited in the picker.
+    /// Ordered best-first (discovery ranking); `.first` is the "primary".
+    private(set) var plexServers: [PlexServerRecord] = []
 
-    /// The live `PlexMediaSource` built from `plexServer`. `nil` until either
-    /// the persisted server is loaded on launch or discovery completes.
-    private(set) var plexSource: PlexMediaSource?
+    /// The live `PlexMediaSource`s built from `plexServers`, same order. The
+    /// Unified Library fans out over all of them (`connectedSources`); the few
+    /// remaining single-source call sites use the primary via `plexSource`.
+    private(set) var plexSources: [PlexMediaSource] = []
+
+    /// The primary (first) enabled server — back-compat for single-source
+    /// consumers (the Plex account row, Home's On Deck rail, `source`). `nil`
+    /// when no Plex server is enabled.
+    var plexServer: PlexServerRecord? { plexServers.first }
+
+    /// The primary (first) live source. `nil` until a server is enabled.
+    var plexSource: PlexMediaSource? { plexSources.first }
 
     /// User-visible discovery state. Drives `PlexDiscoveryView`.
     var discoveryState: DiscoveryState = .idle
@@ -524,11 +535,9 @@ final class AppSession {
     private func restorePlexServer() async {
         guard let store = plexServerStore else { return }
         do {
-            guard let record = try await store.read() else { return }
-            plexServer = record
-            plexSource = makePlexSource(from: record)
-            discoveryState = .completed(serverName: record.name)
-            refreshActiveSource()
+            let records = try await store.readAll()
+            guard !records.isEmpty else { return }
+            applyEnabledPlexServers(records)
         } catch {
             // Reading a corrupted record shouldn't break launch — just leave
             // the user signed-in-but-no-server, which prompts a re-discovery.
@@ -556,7 +565,9 @@ final class AppSession {
     /// paths still use. Unified surfaces (Home / Search, Phase 2b+) read this.
     var connectedSources: [any MediaSource] {
         var list: [any MediaSource] = []
-        if let plexSource { list.append(plexSource) }
+        // All enabled Plex servers — the Unified Library merges + dedupes them
+        // (and Jellyfin/SMB/Local) by shared external ids (#325).
+        list.append(contentsOf: plexSources)
         if let jellyfinSource { list.append(jellyfinSource) }
         // SMB is LAN-only — surface it only while the NAS is actually reachable,
         // so off-network it goes dormant (no failed walks, not shown in the
@@ -640,8 +651,8 @@ final class AppSession {
         // Drop the cross-launch library snapshot so a signed-out account's
         // catalog can't be read off disk (#197).
         await UnifiedLibrarySnapshotStore.shared.clearAll()
-        plexServer = nil
-        plexSource = nil
+        plexServers = []
+        plexSources = []
         discoveryState = .idle
         isPlexSignedIn = false
         // Fall back to Jellyfin if it's connected, otherwise the welcome state.
@@ -659,7 +670,7 @@ final class AppSession {
     func discoverPlexServers() async {
         guard
             let resourceClient = plexResourceClient,
-            let store = plexServerStore
+            plexServerStore != nil
         else {
             discoveryState = .failed(message: "Plex isn't set up yet.")
             return
@@ -687,15 +698,78 @@ final class AppSession {
                 return
             }
 
-            let record = pick.makeRecord()
-            try await store.write(record)
-            plexServer = record
-            plexSource = makePlexSource(from: record)
-            discoveryState = .completed(serverName: record.name)
-            refreshActiveSource()
+            // First connect auto-enables the single best server (unchanged from
+            // single-server behaviour); the user adds others in the picker
+            // (#325). If servers are already enabled, leave the set intact.
+            if plexServers.isEmpty {
+                await setEnabledPlexServers([pick.makeRecord()])
+            } else {
+                discoveryState = .completed(serverName: plexServer?.name ?? pick.server.name)
+            }
         } catch {
             discoveryState = .failed(message: error.localizedDescription)
         }
+    }
+
+    // MARK: - Server picker (#323 / #325)
+
+    /// Every Plex server the account can currently reach, ranked best-first.
+    ///
+    /// Re-fetches resources live (the reachable set changes with the network —
+    /// a LAN server drops off when you leave the house), so the Settings picker
+    /// always reflects what's actually connectable right now. Returns `[]` when
+    /// Plex isn't set up or no token is on file; throws only on the network /
+    /// decode failure, so the caller can show "couldn't load servers".
+    func availablePlexServers() async throws -> [PlexServerRecord] {
+        guard let resourceClient = plexResourceClient,
+              let token = try? await keychain.string(for: Self.plexTokenKey),
+              !token.isEmpty
+        else { return [] }
+
+        let resources = try await resourceClient.resources(token: token)
+        return PlexServerSelector()
+            .rankedSelections(from: resources)
+            .map { $0.makeRecord() }
+    }
+
+    /// Currently-enabled server ids — marks the toggled rows in the picker.
+    var enabledPlexServerIDs: Set<String> {
+        Set(plexServers.map(\.clientIdentifier))
+    }
+
+    /// Enable or disable a Plex server (toggled in the Settings picker, #325).
+    /// Several servers from one account can be on at once; their content merges
+    /// in the Unified Library. The last enabled server can't be turned off here —
+    /// use **Sign Out** to disconnect Plex entirely.
+    func setPlexServerEnabled(_ record: PlexServerRecord, enabled: Bool) async {
+        var records = plexServers
+        if enabled {
+            guard !records.contains(where: { $0.clientIdentifier == record.clientIdentifier }) else { return }
+            records.append(record)
+        } else {
+            guard records.count > 1 else { return }   // keep at least one enabled
+            records.removeAll { $0.clientIdentifier == record.clientIdentifier }
+        }
+        await setEnabledPlexServers(records)
+        if plexSource != nil { setActiveSource(.plex) }
+    }
+
+    /// Set the enabled-servers list, rebuild the live sources, and persist.
+    private func setEnabledPlexServers(_ records: [PlexServerRecord]) async {
+        applyEnabledPlexServers(records)
+        do { try await plexServerStore?.writeAll(records) } catch { }
+    }
+
+    /// In-memory apply (no persistence): rebuild sources, mark discovery
+    /// complete, re-point the active source. Shared by restore + `setEnabled…`,
+    /// and the seam tests use to seed a connected-server state.
+    func applyEnabledPlexServers(_ records: [PlexServerRecord]) {
+        plexServers = records
+        plexSources = records.compactMap { makePlexSource(from: $0) }
+        if let primary = records.first {
+            discoveryState = .completed(serverName: primary.name)
+        }
+        refreshActiveSource()
     }
 
     // MARK: - Jellyfin setup + lifecycle

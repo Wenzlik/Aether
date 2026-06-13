@@ -681,6 +681,39 @@ struct UnifiedLibraryAggregatorTests {
         #expect(movies[0].sources.map(\.kind) == [.plex, .jellyfin])
         #expect(movies[0].sources.first?.serverName == "Plex")
     }
+
+    @Test("audioLanguageMembership maps each language to the unified items that have it (#319)")
+    func audioLanguageMembership() async {
+        let lib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "m"), title: "Movies", kind: .movie)
+        func movie(_ id: String, _ title: String, langs: [String]) -> MediaItem {
+            MediaItem(
+                id: .init(source: .plex(serverID: "s1"), rawValue: id), title: title, kind: .movie,
+                streamURL: URL(string: "http://p/\(id)"),
+                audioTracks: langs.enumerated().map {
+                    MediaAudioTrack(id: "\(id)-\($0.offset)", title: $0.element, languageCode: $0.element)
+                }
+            )
+        }
+        // Alpha = English, Beta = Czech, Gamma = both. (StubSource has no
+        // server-side filter, so this exercises the client-side fallback.)
+        let items = [movie("1", "Alpha", langs: ["eng"]),
+                     movie("2", "Beta", langs: ["cze"]),
+                     movie("3", "Gamma", langs: ["eng", "cze"])]
+        let src = StubSource(id: .plex(serverID: "s1"), displayName: "Plex",
+                             libs: [lib], itemsByLib: [lib.id: items], failsLibraries: false)
+        let library = UnifiedLibrary(sources: [src])
+
+        let base = await library.unifiedItems(kind: .movie, forceRefresh: true)
+        let baseIDs = Set(base.map(\.id))
+        let membership = await library.audioLanguageMembership(kind: .movie, languages: ["en", "cs"])
+
+        #expect(base.count == 3)
+        #expect(membership["en"]?.count == 2)                       // Alpha + Gamma
+        #expect(membership["cs"]?.count == 2)                       // Beta + Gamma
+        #expect(membership["en"]?.intersection(membership["cs"] ?? []).count == 1)  // Gamma
+        // Every membership id is a real catalog id (so the grid can filter by it).
+        #expect((membership["en"] ?? []).union(membership["cs"] ?? []).isSubset(of: baseIDs))
+    }
 }
 
 @Suite("AetherCore — UnifiedLibrary home rails")
@@ -1947,5 +1980,49 @@ struct PlaybackPreferenceApplicationTests {
         )
         let configured = prefs.appliedToNextEpisode(next, continuing: current)
         #expect(configured.selectedAudioTrack?.id == "e2-en")
+    }
+}
+
+@Suite("AetherCore — AppLanguage / UI language preference (#320)")
+@MainActor
+struct AppLanguagePreferenceTests {
+    private func preference(persisted raw: String?) -> AppLanguage {
+        let defaults = UserDefaults(suiteName: "lang-\(UUID())")!
+        if let raw { defaults.set(raw, forKey: "ui.language") }
+        return LanguagePreferenceStore(defaults: defaults).preference
+    }
+
+    @Test("legacy enum rawValues migrate to language codes")
+    func migratesLegacyValues() {
+        #expect(preference(persisted: "czech") == AppLanguage(code: "cs"))
+        #expect(preference(persisted: "english") == AppLanguage(code: "en"))
+        #expect(preference(persisted: "system") == .system)
+        #expect(preference(persisted: nil) == .system)
+        // A value already stored in the new format round-trips unchanged.
+        #expect(preference(persisted: "cs") == AppLanguage(code: "cs"))
+    }
+
+    @Test("a chosen language persists as its code and reloads")
+    func persistsCode() {
+        let defaults = UserDefaults(suiteName: "lang-\(UUID())")!
+        let store = LanguagePreferenceStore(defaults: defaults)
+        store.preference = AppLanguage(code: "cs")
+        #expect(defaults.string(forKey: "ui.language") == "cs")
+        #expect(LanguagePreferenceStore(defaults: defaults).preference == AppLanguage(code: "cs"))
+    }
+
+    @Test("system follows the device locale; a code applies its own")
+    func resolvedLocale() {
+        #expect(AppLanguage.system.locale == nil)
+        #expect(AppLanguage(code: "cs").locale == Locale(identifier: "cs"))
+    }
+
+    @Test("real languages display a capitalized endonym; system is non-empty")
+    func endonyms() {
+        #expect(AppLanguage(code: "en").displayName == "English")
+        let czech = AppLanguage(code: "cs").displayName
+        #expect(!czech.isEmpty)
+        #expect(czech.first?.isUppercase == true)   // endonym, capitalized ("Čeština")
+        #expect(!AppLanguage.system.displayName.isEmpty)
     }
 }

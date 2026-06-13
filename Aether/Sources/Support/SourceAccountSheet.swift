@@ -14,6 +14,9 @@ struct SourceAccountSheet: View {
     var canSetActive: Bool = false
     let isSigningOut: Bool
     var onSetActive: (() -> Void)? = nil
+    /// When set, a **Choose Server** row is shown — for accounts that can reach
+    /// more than one server (Plex, #323). Opens the server picker.
+    var onChooseServer: (() -> Void)? = nil
     let onSignOut: () -> Void
     let onClose: () -> Void
 
@@ -28,6 +31,15 @@ struct SourceAccountSheet: View {
                     AetherSettingsRow(label: "Status", status: status)
                     if let serverName {
                         AetherSettingsRow(label: "Server", value: serverName)
+                    }
+                    if let onChooseServer {
+                        AetherSettingsRow(
+                            label: "Manage Servers",
+                            description: "Turn servers on your account on or off — content from several is merged.",
+                            systemImage: "rack",
+                            value: nil,
+                            action: onChooseServer
+                        )
                     }
                 }
 

@@ -507,6 +507,58 @@ struct PlexServerSelectorRankingTests {
         #expect(record.connections.last?.isRelay == true)
         #expect(record.primaryURL?.absoluteString == "https://lan.plex.direct:32400")
     }
+
+    // MARK: - rankedSelections (server picker, #323)
+
+    @Test("rankedSelections returns one entry per usable server, ranked best-first")
+    func rankedSelectionsRanksServers() throws {
+        let lan = PlexAPI.Resource.Connection.make(local: true, relay: false, connectionProtocol: "https")
+        let wan = PlexAPI.Resource.Connection.make(local: false, relay: false, connectionProtocol: "https")
+        let relayOnly = PlexAPI.Resource.Connection.make(local: false, relay: true, connectionProtocol: "https")
+
+        let home = PlexAPI.Resource.make(name: "Home", clientIdentifier: "home", connections: [lan])
+        let friend = PlexAPI.Resource.make(name: "Friend", clientIdentifier: "friend", owned: false, connections: [relayOnly])
+        let cabin = PlexAPI.Resource.make(name: "Cabin", clientIdentifier: "cabin", connections: [wan])
+        // A non-server resource must be filtered out entirely.
+        let player = PlexAPI.Resource.make(name: "TV", provides: "player")
+
+        let ranked = selector.rankedSelections(from: [friend, cabin, home, player])
+
+        // Home (LAN) > Cabin (remote direct) > Friend (relay).
+        #expect(ranked.map(\.server.name) == ["Home", "Cabin", "Friend"])
+        // One Selection per server — no per-connection duplicates.
+        #expect(ranked.count == 3)
+    }
+
+    @Test("rankedSelections pairs each server with its own best connection")
+    func rankedSelectionsPicksPerServerBest() throws {
+        let lan = PlexAPI.Resource.Connection.make(uri: "https://lan", local: true, relay: false, connectionProtocol: "https")
+        let relay = PlexAPI.Resource.Connection.make(uri: "https://relay", local: false, relay: true, connectionProtocol: "https")
+        // Best connection sits last to prove the per-server max isn't order-dependent.
+        let server = PlexAPI.Resource.make(name: "Tower", connections: [relay, lan])
+
+        let ranked = selector.rankedSelections(from: [server])
+        #expect(ranked.count == 1)
+        #expect(ranked.first?.connection.uri == "https://lan")
+    }
+
+    @Test("rankedSelections is empty when no resource qualifies")
+    func rankedSelectionsEmptyPool() {
+        let onlyPlayer = PlexAPI.Resource.make(provides: "player")
+        #expect(selector.rankedSelections(from: [onlyPlayer]).isEmpty)
+    }
+
+    @Test("selectBest is the first of rankedSelections")
+    func selectBestMatchesRankedFirst() throws {
+        let lan = PlexAPI.Resource.Connection.make(local: true, relay: false, connectionProtocol: "https")
+        let wan = PlexAPI.Resource.Connection.make(local: false, relay: false, connectionProtocol: "https")
+        let home = PlexAPI.Resource.make(name: "Home", clientIdentifier: "home", connections: [lan])
+        let cabin = PlexAPI.Resource.make(name: "Cabin", clientIdentifier: "cabin", connections: [wan])
+
+        let best = try #require(selector.selectBest(from: [cabin, home]))
+        let rankedFirst = try #require(selector.rankedSelections(from: [cabin, home]).first)
+        #expect(best == rankedFirst)
+    }
 }
 
 @Suite("Plex — PlexServerStore round-trip")
@@ -555,6 +607,59 @@ struct PlexServerStoreTests {
         try await store.clear()
         let read = try await store.read()
         #expect(read == nil)
+    }
+
+    // MARK: - Multi-server list (#325)
+
+    private func secondRecord() -> PlexServerRecord {
+        PlexServerRecord(
+            clientIdentifier: "uuid-2",
+            name: "Cabin",
+            accessToken: "token-2",
+            connections: [.init(uri: "https://wan:32400", isLocal: false, isRelay: false)]
+        )
+    }
+
+    @Test("writeAll → readAll round-trips the list, order preserved")
+    func writeReadAllRoundTrip() async throws {
+        let store = makeStore()
+        let records = [sampleRecord(), secondRecord()]
+        try await store.writeAll(records)
+        let read = try await store.readAll()
+        #expect(read == records)
+    }
+
+    @Test("readAll migrates a legacy single record into a one-element list")
+    func readAllMigratesLegacy() async throws {
+        let store = makeStore()
+        // Simulate a pre-#325 install: only the single-record key is present.
+        try await store.write(sampleRecord())
+        let read = try await store.readAll()
+        #expect(read == [sampleRecord()])
+    }
+
+    @Test("writeAll clears the legacy single key so the two can't diverge")
+    func writeAllClearsLegacyKey() async throws {
+        let store = makeStore()
+        try await store.write(sampleRecord())            // legacy single
+        try await store.writeAll([secondRecord()])       // new list supersedes it
+        let legacy = try await store.read()
+        #expect(legacy == nil)
+        #expect(try await store.readAll() == [secondRecord()])
+    }
+
+    @Test("readAll returns empty when nothing is stored")
+    func readAllEmpty() async throws {
+        let store = makeStore()
+        #expect(try await store.readAll().isEmpty)
+    }
+
+    @Test("clear removes the list too")
+    func clearRemovesList() async throws {
+        let store = makeStore()
+        try await store.writeAll([sampleRecord(), secondRecord()])
+        try await store.clear()
+        #expect(try await store.readAll().isEmpty)
     }
 }
 

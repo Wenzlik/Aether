@@ -4,6 +4,36 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.2] — Unreleased · "Draco"
+
+### Added
+
+- **Connect multiple Plex servers from one account** (#325) — enable several
+  servers at once; their libraries merge into one deduplicated Library (no
+  switching). Existing single-server installs migrate with no re-sign-in.
+- **Choose which Plex server to use** (#323) — when an account reaches several
+  servers, a Settings picker overrides the automatic best-connection pick.
+- **Ukrainian (uk) localization** — a full Ukrainian translation (290 strings);
+  it appeared in Settings ▸ Language with no code change, the first language
+  added purely by translating the catalog.
+
+### Changed
+
+- **More of the UI is Czech** (#320) — settings, Detail, Home, Discover, Search,
+  empty/error states, the support flow, and the new multi-server picker now
+  localize (~80 strings added to the catalog).
+- **Adding a language is now just translating it** (#320) — the in-app Language
+  list is derived from the bundle's localizations, so a new language appears in
+  Settings automatically once it's translated, with no code change.
+
+### Fixed
+
+- **Instant, lag-free Library audio-language filter** (#319) — the audio chip
+  row filters the loaded catalog client-side from a prebuilt language→items
+  map, so tapping a language is immediate and no longer shows the previous
+  selection (the filter used to re-query the server per tap and could land a
+  stale result).
+
 ## [0.7.1] — 2026-06-12
 
 Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
