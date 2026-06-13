@@ -45,6 +45,9 @@ struct SettingsView: View {
     @State private var smbExpanded = false
     /// Presents the TMDb token editor (#214 — user fallback / override).
     @State private var isEditingTMDbToken = false
+    /// Presents the Plex server picker — switch servers when the account can
+    /// reach more than one (#323). Opened from the Plex account sheet.
+    @State private var isPickingPlexServer = false
     /// Presents the SMB folder picker for the *connected* share (add/remove
     /// folders after sign-in, #214), seeded with the current roots.
     @State private var isEditingSMBFolders = false
@@ -871,9 +874,21 @@ struct SettingsView: View {
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.plex),
                 isSigningOut: isSigningOut,
                 onSetActive: { viewModel.setActive(.plex); accountSheet = nil },
+                // Present the server picker *on top* of this sheet (#323), so
+                // selecting returns here with the new server shown. Stacking on
+                // the account sheet is more reliable than swapping two sheets
+                // that share the Settings anchor.
+                onChooseServer: { isPickingPlexServer = true },
                 onSignOut: { Task { await performSignOut(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
+            .sheet(isPresented: $isPickingPlexServer) {
+                PlexServerPickerSheet(
+                    currentServerID: viewModel.currentPlexServerID,
+                    load: { await viewModel.availablePlexServers() },
+                    onSelect: { await viewModel.selectPlexServer($0) }
+                )
+            }
         case .jellyfin:
             SourceAccountSheet(
                 title: "Jellyfin",

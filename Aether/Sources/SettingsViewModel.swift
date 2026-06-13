@@ -49,6 +49,21 @@ final class SettingsViewModel {
         connectedServerName.map { "Server: \($0)" }
     }
 
+    /// The currently-used Plex server's stable id — marks the checked row in the
+    /// server picker (#323).
+    var currentPlexServerID: String? { session.plexServer?.clientIdentifier }
+
+    /// Every Plex server the account can currently reach, ranked best-first.
+    /// Swallows errors to `[]` — the picker just shows its empty/failed state.
+    func availablePlexServers() async -> [PlexServerRecord] {
+        (try? await session.availablePlexServers()) ?? []
+    }
+
+    /// Switch the active Plex server to the one the user picked (#323).
+    func selectPlexServer(_ record: PlexServerRecord) async {
+        await session.selectPlexServer(record)
+    }
+
     // MARK: - Sources
 
     var plexSourceStatus: AetherStatus {

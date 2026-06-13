@@ -687,15 +687,51 @@ final class AppSession {
                 return
             }
 
-            let record = pick.makeRecord()
-            try await store.write(record)
-            plexServer = record
-            plexSource = makePlexSource(from: record)
-            discoveryState = .completed(serverName: record.name)
-            refreshActiveSource()
+            await applyPlexServer(pick.makeRecord(), persistingTo: store)
         } catch {
             discoveryState = .failed(message: error.localizedDescription)
         }
+    }
+
+    // MARK: - Server picker (#323)
+
+    /// Every Plex server the account can currently reach, ranked best-first.
+    ///
+    /// Re-fetches resources live (the reachable set changes with the network —
+    /// a LAN server drops off when you leave the house), so the Settings picker
+    /// always reflects what's actually connectable right now. Returns `[]` when
+    /// Plex isn't set up or no token is on file; throws only on the network /
+    /// decode failure, so the caller can show "couldn't load servers".
+    func availablePlexServers() async throws -> [PlexServerRecord] {
+        guard let resourceClient = plexResourceClient,
+              let token = try? await keychain.string(for: Self.plexTokenKey),
+              !token.isEmpty
+        else { return [] }
+
+        let resources = try await resourceClient.resources(token: token)
+        return PlexServerSelector()
+            .rankedSelections(from: resources)
+            .map { $0.makeRecord() }
+    }
+
+    /// Switch to `record` (chosen in the Settings picker) — persist it, rebuild
+    /// the live source, and make Plex the active source. The same tail as
+    /// discovery, so a manual pick and the automatic one converge on one path.
+    func selectPlexServer(_ record: PlexServerRecord) async {
+        guard let store = plexServerStore else { return }
+        await applyPlexServer(record, persistingTo: store)
+        if plexSource != nil { setActiveSource(.plex) }
+    }
+
+    /// Shared tail for "this is the server we use now": persist, build the
+    /// source, mark discovery complete, re-point the active source. Used by both
+    /// automatic discovery and the manual picker.
+    private func applyPlexServer(_ record: PlexServerRecord, persistingTo store: PlexServerStore) async {
+        try? await store.write(record)
+        plexServer = record
+        plexSource = makePlexSource(from: record)
+        discoveryState = .completed(serverName: record.name)
+        refreshActiveSource()
     }
 
     // MARK: - Jellyfin setup + lifecycle

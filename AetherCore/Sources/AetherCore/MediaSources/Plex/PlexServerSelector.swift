@@ -5,9 +5,9 @@ import Foundation
 ///
 /// No I/O, no actor — every method is a deterministic function of its input.
 /// That keeps it trivially testable and lets the caller mix-and-match: the
-/// production flow calls `selectBest(from:)`, but a future Settings → Server
-/// Picker screen will reuse `mediaServers(from:)` + `score(server:connection:)`
-/// to show all candidates ranked.
+/// onboarding flow calls `selectBest(from:)` for the automatic default, while
+/// the Settings server picker (#323) calls `rankedSelections(from:)` to show
+/// every reachable server ranked so the user can override that choice.
 ///
 /// ## Ranking strategy (intentionally simple)
 ///
@@ -71,23 +71,37 @@ public struct PlexServerSelector: Sendable {
 
     // MARK: - Selection
 
+    /// One `Selection` per usable media server — each paired with *its own* best
+    /// connection — sorted best-server-first by that connection's score.
+    ///
+    /// This is the candidate list a Settings **server picker** shows when an
+    /// account can reach more than one server (#323). `selectBest` is just its
+    /// first element; the picker offers the rest so the user can override the
+    /// automatic choice (e.g. browse a friend's server, or a second NAS).
+    ///
+    /// Ties (same score) keep the input order — Plex's resource order — which is
+    /// good enough for a visible list the user picks from by name.
+    public func rankedSelections(
+        from resources: [PlexAPI.Resource]
+    ) -> [Selection] {
+        mediaServers(from: resources)
+            .compactMap { server in
+                // The server's best connection — `connections` is non-empty here
+                // (mediaServers filters out connection-less resources), so the
+                // `max` only returns nil defensively.
+                server.connections
+                    .map { Selection(server: server, connection: $0, score: score(server: server, connection: $0)) }
+                    .max { $0.score < $1.score }
+            }
+            .sorted { $0.score > $1.score }
+    }
+
     /// Pick the single best `(server, connection)` pair across all candidates.
     /// Returns `nil` when no resource is a usable Plex Media Server.
     public func selectBest(
         from resources: [PlexAPI.Resource]
     ) -> Selection? {
-        var best: (server: PlexAPI.Resource, connection: PlexAPI.Resource.Connection, score: Int)?
-
-        for server in mediaServers(from: resources) {
-            for connection in server.connections {
-                let s = score(server: server, connection: connection)
-                if best == nil || s > best!.score {
-                    best = (server, connection, s)
-                }
-            }
-        }
-
-        return best.map { Selection(server: $0.server, connection: $0.connection, score: $0.score) }
+        rankedSelections(from: resources).first
     }
 
     /// The picked pair plus its score, surfaced so UI/tests can introspect.
