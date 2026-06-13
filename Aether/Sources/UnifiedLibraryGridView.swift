@@ -22,6 +22,9 @@ struct UnifiedLibraryGridView: View {
 
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
+    /// App language (#320) — audio-language option names format in this locale,
+    /// not the device's `Locale.current`.
+    @Environment(\.locale) private var locale
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
@@ -345,7 +348,7 @@ struct UnifiedLibraryGridView: View {
         }
         let key = sourcesKey
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let options = await library.audioLanguageOptions(kind: kind)
+        let options = await library.audioLanguageOptions(kind: kind, locale: locale)
         guard key == sourcesKey else { return }
         audioLanguageOptions = options
     }

@@ -121,7 +121,7 @@ public actor UnifiedLibrary {
     /// display-ready options. Server-filterable sources (Plex) contribute their
     /// own filter values; everything else is read off the loaded catalog's audio
     /// tracks (Jellyfin carries them in its list responses). Deduped + sorted.
-    public func audioLanguageOptions(kind: MediaItem.Kind) async -> [AudioLanguageOption] {
+    public func audioLanguageOptions(kind: MediaItem.Kind, locale: Locale = .current) async -> [AudioLanguageOption] {
         // (a) Server-side filter values (Plex `/audioLanguage`).
         let serverCodes = await withTaskGroup(of: [String].self) { group in
             for source in sources where source.supportsAudioLanguageFilter {
@@ -151,7 +151,7 @@ public actor UnifiedLibrary {
                 rawCodes += source.item.audioTracks.map(\.languageCode)
             }
         }
-        return AudioLanguage.options(fromRawCodes: rawCodes)
+        return AudioLanguage.options(fromRawCodes: rawCodes, locale: locale)
     }
 
     /// Unified titles of `kind` whose audio is available in `audioLanguage`

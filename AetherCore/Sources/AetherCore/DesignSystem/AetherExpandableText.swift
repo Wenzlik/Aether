@@ -29,8 +29,15 @@ public struct AetherExpandableText: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if isLong {
-                Button(expanded ? "Less" : "More") {
+                // Two separate literal labels (not a `String` ternary) so each
+                // is a localizable `LocalizedStringKey` — a `String` ternary
+                // binds the non-localizing `Button(_:)` overload (#320).
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    // Literal `Text` per branch — a `String` ternary would bind
+                    // the verbatim, non-localizing initializer.
+                    if expanded { Text("Less") } else { Text("More") }
                 }
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.accent)
