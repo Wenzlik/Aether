@@ -4,6 +4,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.2] — Unreleased · "Draco"
+
+### Fixed
+
+- **Instant, lag-free Library audio-language filter** (#319) — the audio chip
+  row filters the loaded catalog client-side from a prebuilt language→items
+  map, so tapping a language is immediate and no longer shows the previous
+  selection (the filter used to re-query the server per tap and could land a
+  stale result).
+
 ## [0.7.1] — 2026-06-12
 
 Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
