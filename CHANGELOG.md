@@ -6,6 +6,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.3] — Unreleased · "Draco"
 
+### Changed
+
+- **Faster Library filtering & facet browsing** (#334) — the audio-language
+  filter no longer warms up every language on open; it loads the picked
+  language lazily and caches it, so the grid opens instantly and re-filtering
+  is free. Collections / Actors / Directors are cached too, so re-visiting them
+  no longer re-fetches from every server.
+
 ### Fixed
 
 - **Settings now fully localizes** (#332) — the Settings category cards, screen
