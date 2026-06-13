@@ -869,13 +869,13 @@ struct SettingsView: View {
         case .plex:
             SourceAccountSheet(
                 title: "Plex",
-                serverName: viewModel.connectedServerName,
+                serverName: viewModel.plexServerSummary,
                 status: (viewModel.canSwitchSources && viewModel.isActiveSource(.plex)) ? .neutral("Active") : .connected,
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.plex),
                 isSigningOut: isSigningOut,
                 onSetActive: { viewModel.setActive(.plex); accountSheet = nil },
-                // Present the server picker *on top* of this sheet (#323), so
-                // selecting returns here with the new server shown. Stacking on
+                // Present the server picker *on top* of this sheet (#325), so
+                // toggling returns here with the updated server set. Stacking on
                 // the account sheet is more reliable than swapping two sheets
                 // that share the Settings anchor.
                 onChooseServer: { isPickingPlexServer = true },
@@ -884,9 +884,9 @@ struct SettingsView: View {
             )
             .sheet(isPresented: $isPickingPlexServer) {
                 PlexServerPickerSheet(
-                    currentServerID: viewModel.currentPlexServerID,
+                    enabledIDs: viewModel.enabledPlexServerIDs,
                     load: { await viewModel.availablePlexServers() },
-                    onSelect: { await viewModel.selectPlexServer($0) }
+                    onToggle: { await viewModel.setPlexServerEnabled($0, enabled: $1) }
                 )
             }
         case .jellyfin:

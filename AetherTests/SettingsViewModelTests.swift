@@ -27,7 +27,7 @@ struct SettingsViewModelTests {
     func accountStatusWithServer() {
         let session = makeSession()
         session.isPlexSignedIn = true
-        session.plexServer = sampleServer(name: "Living Room")
+        session.applyEnabledPlexServers([sampleServer(name: "Living Room")])
 
         let viewModel = SettingsViewModel(session: session)
         #expect(viewModel.plexAccountStatus == .connected)
@@ -39,7 +39,7 @@ struct SettingsViewModelTests {
     func accountStatusSignedInOnly() {
         let session = makeSession()
         session.isPlexSignedIn = true
-        session.plexServer = nil
+        session.applyEnabledPlexServers([])
 
         let viewModel = SettingsViewModel(session: session)
         #expect(viewModel.plexAccountStatus == .neutral("Signed in"))
@@ -94,7 +94,7 @@ struct SettingsViewModelTests {
     func signOutDelegatesAndResets() async {
         let session = makeSession()
         session.isPlexSignedIn = true
-        session.plexServer = sampleServer()
+        session.applyEnabledPlexServers([sampleServer()])
 
         let viewModel = SettingsViewModel(session: session)
         await viewModel.signOut()

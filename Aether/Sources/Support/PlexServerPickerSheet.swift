@@ -1,20 +1,22 @@
 import SwiftUI
 import AetherCore
 
-/// Choose which Plex server Aether uses when the account can reach more than
-/// one (#323). Loads the reachable servers on appear (ranked best-first by
-/// `PlexServerSelector`), marks the current one, and switches on tap.
+/// Enable which Plex servers Aether uses — several from one account can be on at
+/// once (#325), their content merged in the Unified Library. Loads the reachable
+/// servers on appear (ranked best-first by `PlexServerSelector`) and toggles each
+/// on/off in place.
 ///
-/// The reachable set is network-dependent (a LAN server drops off when you
-/// leave home), so this always re-fetches rather than trusting a stale list —
-/// what you see is what's actually connectable right now.
+/// The reachable set is network-dependent (a LAN server drops off when you leave
+/// home), so this always re-fetches rather than trusting a stale list — what you
+/// see is what's actually connectable right now.
 struct PlexServerPickerSheet: View {
-    /// Stable id of the server in use, to mark the checked row.
-    let currentServerID: String?
+    /// Stable ids of the currently-enabled servers (seeds the toggles).
+    let enabledIDs: Set<String>
     /// Fetches the reachable servers, ranked best-first. Returns `[]` on failure.
     let load: () async -> [PlexServerRecord]
-    /// Switch to the chosen server.
-    let onSelect: (PlexServerRecord) async -> Void
+    /// Enable / disable a server. The view mirrors the session's "keep ≥1
+    /// enabled" rule so the last toggle can't be turned off.
+    let onToggle: (PlexServerRecord, Bool) async -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -24,14 +26,17 @@ struct PlexServerPickerSheet: View {
         case failed
     }
     @State private var state: LoadState = .loading
-    /// The server being switched to, so its row shows progress and the list
-    /// disables while the source rebuilds.
-    @State private var switchingTo: String?
+    /// Local, optimistic enabled set so toggles feel instant; seeded from
+    /// `enabledIDs` once the list loads.
+    @State private var enabled: Set<String> = []
+    @State private var seeded = false
+    /// A server mid-toggle, so its row shows progress and the list locks briefly.
+    @State private var busy: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                Text("Choose Server")
+                Text("Plex Servers")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
 
@@ -77,9 +82,9 @@ struct PlexServerPickerSheet: View {
             )
 
         case let .loaded(servers) where servers.count == 1:
-            // Nothing to switch to — be honest rather than offer a one-item picker.
+            // Only one reachable server — nothing to combine, so just confirm it.
             AetherSettingsSection("Server") {
-                AetherSettingsRow(label: servers[0].name, value: "In use")
+                AetherSettingsRow(label: servers[0].name, description: connectionDetail(servers[0]), value: "On")
             }
             Text("This is the only Plex server reachable on your account right now.")
                 .font(AetherDesign.Typography.caption)
@@ -87,23 +92,28 @@ struct PlexServerPickerSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
 
         case let .loaded(servers):
-            Text("Pick which server to browse. Aether ranks them by connection quality — the one on your network is preferred.")
+            Text("Turn on the servers you want in your Library. Content from several servers on your account is merged into one collection.")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
 
             AetherSettingsSection("Reachable Servers") {
                 ForEach(servers, id: \.clientIdentifier) { server in
-                    AetherSelectionRow(
-                        title: server.name,
-                        detail: switchingTo == server.clientIdentifier ? "Switching…" : connectionDetail(server),
-                        isSelected: server.clientIdentifier == currentServerID
+                    let isOn = enabled.contains(server.clientIdentifier)
+                    AetherSettingsRow(
+                        label: server.name,
+                        description: connectionDetail(server),
+                        value: busy == server.clientIdentifier ? "…" : (isOn ? "On" : "Off")
                     ) {
-                        Task { await select(server) }
+                        Task { await toggle(server) }
                     }
-                    .disabled(switchingTo != nil)
+                    .disabled(busy != nil)
                 }
             }
+
+            Text("To disconnect Plex entirely, use Sign Out.")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
         }
     }
 
@@ -119,17 +129,25 @@ struct PlexServerPickerSheet: View {
     private func refresh() async {
         state = .loading
         let servers = await load()
-        // `load` maps failures to `[]`; we can't tell "empty" from "errored", so
-        // treat a nil-ish result conservatively — but an empty fetch is far more
-        // likely "no servers" than a hard failure, so show the empty state.
+        // `load` maps failures to `[]`; an empty fetch is far more likely "no
+        // servers reachable" than a hard error, so show the empty state.
+        if !seeded {
+            enabled = enabledIDs
+            seeded = true
+        }
         state = .loaded(servers)
     }
 
-    private func select(_ server: PlexServerRecord) async {
-        guard server.clientIdentifier != currentServerID else { dismiss(); return }
-        switchingTo = server.clientIdentifier
-        await onSelect(server)
-        switchingTo = nil
-        dismiss()
+    private func toggle(_ server: PlexServerRecord) async {
+        let id = server.clientIdentifier
+        let turnOn = !enabled.contains(id)
+        // Mirror the session's "keep at least one enabled" rule — turning off the
+        // last server is a no-op here (Sign Out is the way to disconnect).
+        if !turnOn && enabled.count <= 1 { return }
+
+        busy = id
+        await onToggle(server, turnOn)
+        if turnOn { enabled.insert(id) } else { enabled.remove(id) }
+        busy = nil
     }
 }
