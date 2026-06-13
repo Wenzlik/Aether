@@ -1885,6 +1885,1216 @@
           }
         }
       }
+    },
+    "Edit Metadata": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upravit metadata"
+          }
+        }
+      }
+    },
+    "Edit Title & Year": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upravit název a rok"
+          }
+        }
+      }
+    },
+    "Leave a field blank to use the detected value.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ponechte pole prázdné pro použití zjištěné hodnoty."
+          }
+        }
+      }
+    },
+    "No downloads yet. Tap Download on a movie or episode to save it here.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím nic staženého. Klepnutím na Stáhnout u filmu nebo epizody jej uložíte sem."
+          }
+        }
+      }
+    },
+    "Open in Safari": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otevřít v Safari"
+          }
+        }
+      }
+    },
+    "Review the report below, then send it to the developer. No tokens, passwords, or account details are included.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zkontrolujte zprávu níže a poté ji odešlete vývojáři. Neobsahuje žádné tokeny, hesla ani údaje o účtu."
+          }
+        }
+      }
+    },
+    "SMB files have no metadata. Correct the title and year to match a poster on TMDb.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soubory SMB nemají metadata. Opravte název a rok, aby odpovídaly plakátu na TMDb."
+          }
+        }
+      }
+    },
+    "Solid": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plné"
+          }
+        }
+      }
+    },
+    "Transparent": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Průhledné"
+          }
+        }
+      }
+    },
+    "WATCHED": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ZHLÉDNUTO"
+          }
+        }
+      }
+    },
+    "Add a source": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidat zdroj"
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vše"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zpět"
+          }
+        }
+      }
+    },
+    "Bitrate": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datový tok"
+          }
+        }
+      }
+    },
+    "Category": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kategorie"
+          }
+        }
+      }
+    },
+    "Continue Watching": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pokračovat ve sledování"
+          }
+        }
+      }
+    },
+    "Couldn't build Discover": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se sestavit Objevovat"
+          }
+        }
+      }
+    },
+    "Couldn't load servers": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se načíst servery"
+          }
+        }
+      }
+    },
+    "Couldn't load your library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se načíst knihovnu"
+          }
+        }
+      }
+    },
+    "Couldn't reach your server": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se připojit k serveru"
+          }
+        }
+      }
+    },
+    "Creator": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tvůrce"
+          }
+        }
+      }
+    },
+    "Curated from your library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vybráno z vaší knihovny"
+          }
+        }
+      }
+    },
+    "Default Audio Language": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí jazyk zvuku"
+          }
+        }
+      }
+    },
+    "Default Screen Size": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí velikost plátna"
+          }
+        }
+      }
+    },
+    "Default Seating": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí umístění sedadla"
+          }
+        }
+      }
+    },
+    "Default Subtitle Language": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí jazyk titulků"
+          }
+        }
+      }
+    },
+    "Description": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Popis"
+          }
+        }
+      }
+    },
+    "Designer": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Designér"
+          }
+        }
+      }
+    },
+    "Download Quality": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kvalita stahování"
+          }
+        }
+      }
+    },
+    "Environment": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prostředí"
+          }
+        }
+      }
+    },
+    "Featured": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doporučené"
+          }
+        }
+      }
+    },
+    "File Size": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velikost souboru"
+          }
+        }
+      }
+    },
+    "First Aired": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "První vysílání"
+          }
+        }
+      }
+    },
+    "Follow source default": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí podle zdroje"
+          }
+        }
+      }
+    },
+    "Image Cache": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mezipaměť obrázků"
+          }
+        }
+      }
+    },
+    "Images": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obrázky"
+          }
+        }
+      }
+    },
+    "Items": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Položky"
+          }
+        }
+      }
+    },
+    "Library is empty": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knihovna je prázdná"
+          }
+        }
+      }
+    },
+    "Manage Servers": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spravovat servery"
+          }
+        }
+      }
+    },
+    "No alternate tracks yet…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádné alternativní stopy…"
+          }
+        }
+      }
+    },
+    "No collections": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žádné kolekce"
+          }
+        }
+      }
+    },
+    "No genres": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žádné žánry"
+          }
+        }
+      }
+    },
+    "No library yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádná knihovna"
+          }
+        }
+      }
+    },
+    "No matches": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žádné výsledky"
+          }
+        }
+      }
+    },
+    "No years": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žádné roky"
+          }
+        }
+      }
+    },
+    "None connected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nic nepřipojeno"
+          }
+        }
+      }
+    },
+    "Nothing here": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nic tu není"
+          }
+        }
+      }
+    },
+    "Nothing here yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím tu nic není"
+          }
+        }
+      }
+    },
+    "Nothing to discover yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím není co objevovat"
+          }
+        }
+      }
+    },
+    "Nothing to search yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím není co hledat"
+          }
+        }
+      }
+    },
+    "Pick up where you left off": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pokračujte tam, kde jste skončili"
+          }
+        }
+      }
+    },
+    "Picked for You": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vybráno pro vás"
+          }
+        }
+      }
+    },
+    "Platform": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platforma"
+          }
+        }
+      }
+    },
+    "Playback unavailable": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrávání není dostupné"
+          }
+        }
+      }
+    },
+    "Posters Matched": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spárované plakáty"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kvalita"
+          }
+        }
+      }
+    },
+    "Rating": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hodnocení"
+          }
+        }
+      }
+    },
+    "Recent Searches": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávná hledání"
+          }
+        }
+      }
+    },
+    "Recently Added": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno přidané"
+          }
+        }
+      }
+    },
+    "Recently Released": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno vydané"
+          }
+        }
+      }
+    },
+    "Remove Custom Poster": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odebrat vlastní plakát"
+          }
+        }
+      }
+    },
+    "Roadmap": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plán vývoje"
+          }
+        }
+      }
+    },
+    "Search your library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prohledat knihovnu"
+          }
+        }
+      }
+    },
+    "Set Jellyfin as Active Source": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nastavit Jellyfin jako aktivní zdroj"
+          }
+        }
+      }
+    },
+    "Set Plex as Active Source": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nastavit Plex jako aktivní zdroj"
+          }
+        }
+      }
+    },
+    "Set as Active Source": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nastavit jako aktivní zdroj"
+          }
+        }
+      }
+    },
+    "Skip Credits": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přeskočit titulky"
+          }
+        }
+      }
+    },
+    "Skip Intro": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přeskočit úvod"
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zdroj"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stav"
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Úložiště"
+          }
+        }
+      }
+    },
+    "Subject": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Předmět"
+          }
+        }
+      }
+    },
+    "Subtitles": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titulky"
+          }
+        }
+      }
+    },
+    "Tell us what went wrong. Your app version and device are attached automatically — no account details are included.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Popište, co se pokazilo. Verze aplikace a zařízení se přiloží automaticky — žádné údaje o účtu nejsou zahrnuty."
+          }
+        }
+      }
+    },
+    "This library is empty": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tato knihovna je prázdná"
+          }
+        }
+      }
+    },
+    "Title": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Název"
+          }
+        }
+      }
+    },
+    "Top Rated": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nejlépe hodnocené"
+          }
+        }
+      }
+    },
+    "Website": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web"
+          }
+        }
+      }
+    },
+    "Have an idea for Aether? We'd love to hear it.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máte nápad pro Aether? Rádi si ho poslechneme."
+          }
+        }
+      }
+    },
+    "Continuing": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probíhá"
+          }
+        }
+      }
+    },
+    "Ended": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ukončeno"
+          }
+        }
+      }
+    },
+    "Automatically": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automaticky"
+          }
+        }
+      }
+    },
+    "Show Button": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit tlačítko"
+          }
+        }
+      }
+    },
+    "Original": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Originál"
+          }
+        }
+      }
+    },
+    "Convert Automatically": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Převést automaticky"
+          }
+        }
+      }
+    },
+    "Random": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Náhodně"
+          }
+        }
+      }
+    },
+    "Recently added": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno přidané"
+          }
+        }
+      }
+    },
+    "Title (A–Z)": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Název (A–Z)"
+          }
+        }
+      }
+    },
+    "Title (Z–A)": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Název (Z–A)"
+          }
+        }
+      }
+    },
+    "Top rated": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nejlépe hodnocené"
+          }
+        }
+      }
+    },
+    "Year (newest)": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rok (nejnovější)"
+          }
+        }
+      }
+    },
+    "Year (oldest)": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rok (nejstarší)"
+          }
+        }
+      }
+    },
+    "Accounts & Sources": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Účty a zdroje"
+          }
+        }
+      }
+    },
+    "Library & Downloads": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knihovna a stahování"
+          }
+        }
+      }
+    },
+    "Support & About": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podpora a o aplikaci"
+          }
+        }
+      }
+    },
+    "Plex, Jellyfin, SMB, and local files": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex, Jellyfin, SMB a místní soubory"
+          }
+        }
+      }
+    },
+    "Quality, audio & subtitles, skip": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kvalita, zvuk a titulky, přeskakování"
+          }
+        }
+      }
+    },
+    "Downloads, storage, and cache": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stahování, úložiště a mezipaměť"
+          }
+        }
+      }
+    },
+    "Theme, app icon, and watched titles": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motiv, ikona aplikace a zhlédnuté tituly"
+          }
+        }
+      }
+    },
+    "Report a bug, diagnostics, about": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nahlásit chybu, diagnostika, o aplikaci"
+          }
+        }
+      }
+    },
+    "Source default": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí podle zdroje"
+          }
+        }
+      }
+    },
+    "All shares": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Všechny sdílené složky"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vlastní"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žádné"
+          }
+        }
+      }
+    },
+    "Faint": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slabé"
+          }
+        }
+      }
+    },
+    "Light": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Světlé"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neznámý"
+          }
+        }
+      }
+    },
+    "Other": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jiné"
+          }
+        }
+      }
+    },
+    "Couldn't read the SMB path for this item.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se přečíst SMB cestu k této položce."
+          }
+        }
+      }
+    },
+    "This item has no SMB file to download.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tato položka nemá SMB soubor ke stažení."
+          }
+        }
+      }
+    },
+    "Used by Aether downloads": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Použito staženými soubory Aetheru"
+          }
+        }
+      }
+    },
+    "Front": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vepředu"
+          }
+        }
+      }
+    },
+    "Middle": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uprostřed"
+          }
+        }
+      }
+    },
+    "Large": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velké"
+          }
+        }
+      }
+    },
+    "Wall": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stěna"
+          }
+        }
+      }
+    },
+    "Dark Theater": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temné kino"
+          }
+        }
+      }
+    },
+    "Deep Space": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hluboký vesmír"
+          }
+        }
+      }
+    },
+    "Nebula": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mlhovina"
+          }
+        }
+      }
+    },
+    "Orbit Station": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orbitální stanice"
+          }
+        }
+      }
+    },
+    "Original · Direct Play": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Originál · Direct Play"
+          }
+        }
+      }
+    },
+    "Original · Direct Stream": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Originál · Direct Stream"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

@@ -1982,3 +1982,47 @@ struct PlaybackPreferenceApplicationTests {
         #expect(configured.selectedAudioTrack?.id == "e2-en")
     }
 }
+
+@Suite("AetherCore — AppLanguage / UI language preference (#320)")
+@MainActor
+struct AppLanguagePreferenceTests {
+    private func preference(persisted raw: String?) -> AppLanguage {
+        let defaults = UserDefaults(suiteName: "lang-\(UUID())")!
+        if let raw { defaults.set(raw, forKey: "ui.language") }
+        return LanguagePreferenceStore(defaults: defaults).preference
+    }
+
+    @Test("legacy enum rawValues migrate to language codes")
+    func migratesLegacyValues() {
+        #expect(preference(persisted: "czech") == AppLanguage(code: "cs"))
+        #expect(preference(persisted: "english") == AppLanguage(code: "en"))
+        #expect(preference(persisted: "system") == .system)
+        #expect(preference(persisted: nil) == .system)
+        // A value already stored in the new format round-trips unchanged.
+        #expect(preference(persisted: "cs") == AppLanguage(code: "cs"))
+    }
+
+    @Test("a chosen language persists as its code and reloads")
+    func persistsCode() {
+        let defaults = UserDefaults(suiteName: "lang-\(UUID())")!
+        let store = LanguagePreferenceStore(defaults: defaults)
+        store.preference = AppLanguage(code: "cs")
+        #expect(defaults.string(forKey: "ui.language") == "cs")
+        #expect(LanguagePreferenceStore(defaults: defaults).preference == AppLanguage(code: "cs"))
+    }
+
+    @Test("system follows the device locale; a code applies its own")
+    func resolvedLocale() {
+        #expect(AppLanguage.system.locale == nil)
+        #expect(AppLanguage(code: "cs").locale == Locale(identifier: "cs"))
+    }
+
+    @Test("real languages display a capitalized endonym; system is non-empty")
+    func endonyms() {
+        #expect(AppLanguage(code: "en").displayName == "English")
+        let czech = AppLanguage(code: "cs").displayName
+        #expect(!czech.isEmpty)
+        #expect(czech.first?.isUppercase == true)   // endonym, capitalized ("Čeština")
+        #expect(!AppLanguage.system.displayName.isEmpty)
+    }
+}
