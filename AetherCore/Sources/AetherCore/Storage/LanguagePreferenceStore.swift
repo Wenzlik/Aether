@@ -5,31 +5,46 @@ import SwiftUI
 /// SwiftUI `Text` / String Catalog lookups live (the same mechanism Xcode
 /// previews use to switch localizations) — no relaunch.
 ///
-/// **Adding a language:** add a `case`, its endonym in `displayName`, and its
-/// locale identifier in `locale`. That's it — the Settings picker is data-driven
-/// over `allCases`, and the String Catalog supplies the translations.
-public enum AppLanguage: String, CaseIterable, Codable, Sendable {
-    case system
-    case english
-    case czech
+/// **Adding a language is just translating it.** The selectable list is derived
+/// from the bundle's actual localizations (`Bundle.main.localizations`, i.e. the
+/// compiled String Catalog), so translating `Localizable.xcstrings` into a new
+/// language makes it appear here automatically — no code change, no new `case`.
+public struct AppLanguage: Identifiable, Hashable, Sendable {
+    /// BCP-47 code of the language, or `nil` = follow the system language.
+    public let code: String?
 
-    /// Picker label. Languages use their **endonym** (their own name, shown the
-    /// same regardless of UI language); `system` localizes via the catalog.
-    public var displayName: String {
-        switch self {
-        case .system:  return "System"
-        case .english: return "English"
-        case .czech:   return "Čeština"
-        }
+    public init(code: String?) { self.code = code }
+
+    public var id: String { code ?? "system" }
+
+    /// Follow the device language.
+    public static let system = AppLanguage(code: nil)
+
+    /// **System** first, then every UI language the app bundle ships, ordered by
+    /// display name. This is the whole reason adding a language needs no code.
+    public static var available: [AppLanguage] {
+        let languages = Bundle.main.localizations
+            .filter { $0 != "Base" }
+            .map { AppLanguage(code: $0) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        return [.system] + languages
     }
 
     /// The locale to apply, or `nil` for "follow the system language".
-    public var locale: Locale? {
-        switch self {
-        case .system:  return nil
-        case .english: return Locale(identifier: "en")
-        case .czech:   return Locale(identifier: "cs")
+    public var locale: Locale? { code.map(Locale.init(identifier:)) }
+
+    /// Picker label. A real language shows its **endonym** (its own name — e.g.
+    /// "Čeština", "English", "Deutsch" — stable regardless of the active UI
+    /// language); `system` localizes through the catalog.
+    public var displayName: String {
+        guard let code else {
+            return String(localized: "System", comment: "Language option: follow the device language")
         }
+        let locale = Locale(identifier: code)
+        let name = locale.localizedString(forLanguageCode: code)
+            ?? locale.localizedString(forIdentifier: code)
+            ?? code
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 }
 
@@ -40,7 +55,7 @@ public enum AppLanguage: String, CaseIterable, Codable, Sendable {
 public final class LanguagePreferenceStore {
 
     public var preference: AppLanguage {
-        didSet { defaults.set(preference.rawValue, forKey: Keys.language) }
+        didSet { defaults.set(preference.id, forKey: Keys.language) }
     }
 
     /// The locale to hand `.environment(\.locale, …)`: the chosen language, or
@@ -54,10 +69,17 @@ public final class LanguagePreferenceStore {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let raw = defaults.string(forKey: Keys.language), let value = AppLanguage(rawValue: raw) {
-            self.preference = value
-        } else {
-            self.preference = .system
+        self.preference = Self.stored(from: defaults.string(forKey: Keys.language))
+    }
+
+    /// Read the persisted choice, migrating the legacy enum rawValues
+    /// (`"english"` / `"czech"`) from the pre-#320 build to language codes.
+    private static func stored(from raw: String?) -> AppLanguage {
+        switch raw {
+        case nil, "system":   return .system
+        case "english":       return AppLanguage(code: "en")
+        case "czech":         return AppLanguage(code: "cs")
+        case let .some(code): return AppLanguage(code: code)
         }
     }
 }

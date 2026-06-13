@@ -1363,7 +1363,7 @@ struct SettingsView: View {
 
     private var languagePickerSheet: some View {
         PreferencePickerSheet(title: "Language") {
-            ForEach(AppLanguage.allCases, id: \.self) { language in
+            ForEach(AppLanguage.available, id: \.self) { language in
                 AetherSelectionRow(
                     title: language.displayName,
                     isSelected: viewModel.language.preference == language
