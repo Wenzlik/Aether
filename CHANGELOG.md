@@ -13,6 +13,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   switching). Existing single-server installs migrate with no re-sign-in.
 - **Choose which Plex server to use** (#323) — when an account reaches several
   servers, a Settings picker overrides the automatic best-connection pick.
+- **Ukrainian (uk) localization** — a full Ukrainian translation (290 strings);
+  it appeared in Settings ▸ Language with no code change, the first language
+  added purely by translating the catalog.
 
 ### Changed
 
