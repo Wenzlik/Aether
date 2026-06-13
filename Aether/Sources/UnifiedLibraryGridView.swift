@@ -25,10 +25,18 @@ struct UnifiedLibraryGridView: View {
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
-    /// Active audio-language filter (canonical code) — `nil` = All (#295). Unlike
-    /// genre, this re-loads the catalog (Plex filters server-side).
+    /// Active audio-language filter (canonical code) — `nil` = All (#295/#319).
+    /// Applied **client-side** from `audioMembership`, so tapping a chip is
+    /// instant — no per-tap server round-trip, and structurally no off-by-one
+    /// (nothing async fires on a tap).
     @State private var selectedAudioLanguage: String?
     @State private var audioLanguageOptions: [AudioLanguageOption] = []
+    /// `code -> set of UnifiedMediaItem.id` that have that audio language, built
+    /// once in the background after the options load (#319). Until it's ready an
+    /// audio selection shows the full set (never the wrong language); the grid
+    /// narrows automatically the moment the map lands.
+    @State private var audioMembership: [String: Set<String>] = [:]
+    @State private var isAudioMembershipReady = false
     #if os(tvOS)
     @State private var isSortSheetPresented = false
     #endif
@@ -70,18 +78,14 @@ struct UnifiedLibraryGridView: View {
         #else
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
-        .task(id: loadKey) { await load() }
+        // The grid loads the *full* catalog once per source set — audio + genre
+        // are both client-side filters now, so a chip tap never reloads (#319).
+        .task(id: sourcesKey) { await load() }
         .task(id: sourcesKey) { await loadAudioLanguageOptions() }
     }
 
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
-    }
-
-    /// Re-load when the source set *or* the audio-language filter changes (the
-    /// latter re-queries Plex server-side, so it's a load, not a client filter).
-    private var loadKey: String {
-        sourcesKey + "|lang=" + (selectedAudioLanguage ?? "all")
     }
 
     @ViewBuilder
@@ -131,10 +135,21 @@ struct UnifiedLibraryGridView: View {
         return "No \(title.lowercased()) found across your connected sources."
     }
 
-    /// Items after the genre filter, before sorting.
+    /// Items after the audio-language + genre filters, before sorting. Both are
+    /// client-side over the loaded catalog, so they apply instantly (#319).
     private var filteredItems: [UnifiedMediaItem] {
-        guard let selectedGenre else { return items }
-        return items.filter { $0.genres.contains(selectedGenre) }
+        var result = items
+        // Audio language (#319): filter by the prebuilt membership map. While the
+        // map is still warming, leave the set unfiltered so we never flash the
+        // *wrong* language — the grid narrows once `isAudioMembershipReady`.
+        if let language = selectedAudioLanguage, isAudioMembershipReady {
+            let matching = audioMembership[language] ?? []
+            result = result.filter { matching.contains($0.id) }
+        }
+        if let selectedGenre {
+            result = result.filter { $0.genres.contains(selectedGenre) }
+        }
+        return result
     }
 
     private var sortedItems: [UnifiedMediaItem] {
@@ -185,10 +200,11 @@ struct UnifiedLibraryGridView: View {
         #endif
     }
 
-    // MARK: - Audio-language filter (#295)
+    // MARK: - Audio-language filter (#295/#319)
 
     /// Capsule chips for audio language: "Audio" label + "All" + each language.
-    /// Selecting one re-loads the catalog (Plex filters server-side via `loadKey`).
+    /// Selecting one filters the loaded catalog client-side from the membership
+    /// map (instant). A small spinner shows while that map is still warming.
     private var audioLanguageFilterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AetherDesign.Spacing.s) {
@@ -196,6 +212,11 @@ struct UnifiedLibraryGridView: View {
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .padding(.trailing, AetherDesign.Spacing.xxs)
+                if !isAudioMembershipReady {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing, AetherDesign.Spacing.xxs)
+                }
                 genreChip(label: "All", isSelected: selectedAudioLanguage == nil) {
                     selectedAudioLanguage = nil
                 }
@@ -300,24 +321,46 @@ struct UnifiedLibraryGridView: View {
             items = []
             return
         }
+        let key = sourcesKey
         isLoading = true
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        // `audioLanguage: nil` delegates to the cached unfiltered path.
-        let fetched = await library.unifiedItems(kind: kind, audioLanguage: selectedAudioLanguage)
+        // Always the full catalog — audio + genre are client-side filters (#319).
+        let fetched = await library.unifiedItems(kind: kind)
+        // Drop a stale result if the source set changed while we were loading.
+        guard key == sourcesKey else { return }
         items = fetched
         // Warm the artwork cache for the first screenful of the grid.
         AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
     }
 
-    /// Derive the audio-language options from the full catalog (once per source
-    /// set) so the chip row stays stable regardless of the active filter (#295).
+    /// Derive the audio-language options + the per-language membership map from
+    /// the catalog (once per source set), so the chip row is stable and the
+    /// filter applies client-side and instantly (#295/#319).
     private func loadAudioLanguageOptions() async {
         guard !connectedSources.isEmpty else {
             audioLanguageOptions = []
+            audioMembership = [:]
+            isAudioMembershipReady = false
             return
         }
+        let key = sourcesKey
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        audioLanguageOptions = await library.audioLanguageOptions(kind: kind)
+        let options = await library.audioLanguageOptions(kind: kind)
+        guard key == sourcesKey else { return }
+        audioLanguageOptions = options
+        guard !options.isEmpty else {
+            audioMembership = [:]
+            isAudioMembershipReady = true
+            return
+        }
+        // Build the membership in the background; the chip row shows a warming
+        // hint until it lands, and a selection made early narrows the grid the
+        // moment it does.
+        isAudioMembershipReady = false
+        let membership = await library.audioLanguageMembership(kind: kind, languages: options.map(\.code))
+        guard key == sourcesKey else { return }
+        audioMembership = membership
+        isAudioMembershipReady = true
     }
 }

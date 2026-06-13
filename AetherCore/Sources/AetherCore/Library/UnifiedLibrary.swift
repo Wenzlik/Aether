@@ -192,6 +192,32 @@ public actor UnifiedLibrary {
         return Self.merge(items, downloaded: downloaded, serverNames: serverNames)
     }
 
+    /// Audio-language **membership map** for the catalog: `code -> set of
+    /// `UnifiedMediaItem.id`` that have an audio track in that language (#319).
+    ///
+    /// The Library grid builds this once (in the background) and then filters
+    /// the already-loaded items client-side — so tapping an audio chip is
+    /// instant, with no per-tap server round-trip and no off-by-one from a
+    /// stale async result landing after a newer selection. The per-language
+    /// queries reuse `unifiedItems(kind:audioLanguage:)` (Plex server-side,
+    /// Jellyfin client-side), run concurrently, and dedup the same way as the
+    /// base catalog so the ids line up with the displayed items.
+    public func audioLanguageMembership(
+        kind: MediaItem.Kind, languages: [String]
+    ) async -> [String: Set<String>] {
+        await withTaskGroup(of: (String, Set<String>).self) { group in
+            for code in languages {
+                group.addTask {
+                    let matching = await self.unifiedItems(kind: kind, audioLanguage: code)
+                    return (code, Set(matching.map(\.id)))
+                }
+            }
+            var membership: [String: Set<String>] = [:]
+            for await (code, ids) in group { membership[code] = ids }
+            return membership
+        }
+    }
+
     /// Whether the persisted snapshot for `kind` is past the 1-hour staleness
     /// threshold (or absent). Views call this after painting the instant
     /// snapshot to decide whether to kick a silent background refresh.
