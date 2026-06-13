@@ -413,7 +413,7 @@ struct HomeView: View {
                     ForEach(feed.continueWatching) { entry in
                         NavigationLink(value: entry.item) {
                             AetherCard.episode(
-                                title: entry.item.title,
+                                title: DetailFormatting.continueWatchingLabel(entry.item),
                                 thumbURL: entry.item.backdropURL ?? entry.item.posterURL,
                                 progress: entry.progress
                             )

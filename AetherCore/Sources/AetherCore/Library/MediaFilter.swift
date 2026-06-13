@@ -105,23 +105,28 @@ public enum AudioLanguage {
 
     /// A localized display name for a canonical code, e.g. `en` → "English".
     /// Falls back to the uppercased code when the system can't localize it.
-    public static func displayName(for code: String) -> String {
+    ///
+    /// Pass the **app** locale (the view's `\.locale`) so names follow Aether's
+    /// language, not the device's — `Locale.current` is the *system* locale and
+    /// leaked English names while the app was in Čeština (#320 root-cause c).
+    public static func displayName(for code: String, locale: Locale = .current) -> String {
         if code == unknown { return "Unknown" }
-        if let name = Locale.current.localizedString(forLanguageCode: code), !name.isEmpty {
-            return name.capitalized(with: .current)
+        if let name = locale.localizedString(forLanguageCode: code), !name.isEmpty {
+            return name.capitalized(with: locale)
         }
         return code.uppercased()
     }
 
     /// Build a deduplicated, display-sorted option list from raw codes, dropping
-    /// `unknown` (it isn't a useful filter target — issue #295).
-    public static func options(fromRawCodes codes: [String?]) -> [AudioLanguageOption] {
+    /// `unknown` (it isn't a useful filter target — issue #295). `locale` drives
+    /// the display names (pass the app locale, #320).
+    public static func options(fromRawCodes codes: [String?], locale: Locale = .current) -> [AudioLanguageOption] {
         var seen: Set<String> = []
         var options: [AudioLanguageOption] = []
         for raw in codes {
             let code = canonical(raw)
             guard code != unknown, seen.insert(code).inserted else { continue }
-            options.append(AudioLanguageOption(code: code, displayName: displayName(for: code)))
+            options.append(AudioLanguageOption(code: code, displayName: displayName(for: code, locale: locale)))
         }
         return options.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }

@@ -527,12 +527,17 @@ public struct CastMember: Identifiable, Hashable, Sendable, Codable {
     /// ("Director"). `nil` when the source didn't provide one.
     public let role: String?
     public let photoURL: URL?
+    /// Source-scoped person id queryable via `items(withPerson:)` — Plex tag id /
+    /// Jellyfin person GUID. Drives the tappable Cast → filmography (#341). `nil`
+    /// when the source didn't supply one (the card stays non-interactive).
+    public let personID: String?
 
-    public init(id: String, name: String, role: String? = nil, photoURL: URL? = nil) {
+    public init(id: String, name: String, role: String? = nil, photoURL: URL? = nil, personID: String? = nil) {
         self.id = id
         self.name = name
         self.role = role
         self.photoURL = photoURL
+        self.personID = personID
     }
 }
 

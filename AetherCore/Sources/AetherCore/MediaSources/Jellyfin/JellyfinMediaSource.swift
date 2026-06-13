@@ -527,7 +527,7 @@ public actor JellyfinMediaSource: MediaSource {
             let role = person.role?.nonEmptyTrimmed
                 ?? (person.type == "Actor" ? nil : person.type?.nonEmptyTrimmed)
             return CastMember(id: person.id ?? "\(index)-\(name)", name: name,
-                              role: role, photoURL: photoURL)
+                              role: role, photoURL: photoURL, personID: person.id)
         }
     }
 

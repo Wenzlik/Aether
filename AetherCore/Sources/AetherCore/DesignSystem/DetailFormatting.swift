@@ -73,6 +73,21 @@ public enum DetailFormatting {
         return episode.title
     }
 
+    /// Label for a Continue Watching card. For a series episode, identifies it
+    /// across shows: "American Dad! · S1E5 · Roger Codger" (or "S1E5 · Roger
+    /// Codger" when the show name is unknown). Movies / standalone items fall
+    /// back to the bare title. (#339)
+    public static func continueWatchingLabel(_ item: MediaItem) -> String {
+        guard let season = item.seasonNumber, let number = item.episodeNumber else {
+            return item.title
+        }
+        let code = "S\(season)E\(number) · \(item.title)"
+        if let show = item.seriesTitle, !show.isEmpty {
+            return "\(show) · \(code)"
+        }
+        return code
+    }
+
     /// "S1 • E2 - Ladies Room" — the episode-context line shown beneath the
     /// **series** title on an episode's Detail hero (the series name is the big
     /// title; this carries the season/episode + episode name). Falls back to the
@@ -84,14 +99,24 @@ public enum DetailFormatting {
         return episode.title
     }
 
-    /// "Jul 26, 2007" — an air/release date for the metadata line. Fixed
-    /// `en_US_POSIX` month-day-year so it reads the same everywhere (the app's UI
-    /// strings are English) and stays deterministic for tests.
-    public static func airDate(_ date: Date) -> String {
+    /// An air/release date for the metadata line, formatted for the **app
+    /// language** (#320 root-cause c): pass the view's `\.locale` and the date
+    /// reads "6. 6. 2005" in Čeština, "Jun 6, 2005" in English — a localized
+    /// `.medium` style, not a fixed `en_US_POSIX` format.
+    ///
+    /// When `locale` is nil the legacy fixed `en_US_POSIX` "MMM d, yyyy" is used,
+    /// keeping existing call sites + tests deterministic until they thread a
+    /// locale through.
+    public static func airDate(_ date: Date, locale: Locale? = nil) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "MMM d, yyyy"
+        if let locale {
+            formatter.locale = locale
+            formatter.dateStyle = .medium
+        } else {
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "MMM d, yyyy"
+        }
         return formatter.string(from: date)
     }
 

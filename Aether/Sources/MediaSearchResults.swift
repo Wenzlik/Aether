@@ -82,8 +82,12 @@ struct MediaSearchResults: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         // Title matches first; then titles surfaced by a matching actor/director
-        // name (#296), deduped against the title hits.
-        let titleMatches = items.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        // name (#296), deduped against the title hits. Match is diacritic- and
+        // case-insensitive so "pribehy" finds "Příběhy" (#345); matching across
+        // original/localized title variants waits on #344.
+        let titleMatches = items.filter {
+            $0.title.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
         var seen = Set(titleMatches.map(\.id))
         let personDerived = personItems.filter { seen.insert($0.id).inserted }
         return titleMatches + personDerived
