@@ -681,6 +681,39 @@ struct UnifiedLibraryAggregatorTests {
         #expect(movies[0].sources.map(\.kind) == [.plex, .jellyfin])
         #expect(movies[0].sources.first?.serverName == "Plex")
     }
+
+    @Test("audioLanguageMembership maps each language to the unified items that have it (#319)")
+    func audioLanguageMembership() async {
+        let lib = Library(id: .init(source: .plex(serverID: "s1"), rawValue: "m"), title: "Movies", kind: .movie)
+        func movie(_ id: String, _ title: String, langs: [String]) -> MediaItem {
+            MediaItem(
+                id: .init(source: .plex(serverID: "s1"), rawValue: id), title: title, kind: .movie,
+                streamURL: URL(string: "http://p/\(id)"),
+                audioTracks: langs.enumerated().map {
+                    MediaAudioTrack(id: "\(id)-\($0.offset)", title: $0.element, languageCode: $0.element)
+                }
+            )
+        }
+        // Alpha = English, Beta = Czech, Gamma = both. (StubSource has no
+        // server-side filter, so this exercises the client-side fallback.)
+        let items = [movie("1", "Alpha", langs: ["eng"]),
+                     movie("2", "Beta", langs: ["cze"]),
+                     movie("3", "Gamma", langs: ["eng", "cze"])]
+        let src = StubSource(id: .plex(serverID: "s1"), displayName: "Plex",
+                             libs: [lib], itemsByLib: [lib.id: items], failsLibraries: false)
+        let library = UnifiedLibrary(sources: [src])
+
+        let base = await library.unifiedItems(kind: .movie, forceRefresh: true)
+        let baseIDs = Set(base.map(\.id))
+        let membership = await library.audioLanguageMembership(kind: .movie, languages: ["en", "cs"])
+
+        #expect(base.count == 3)
+        #expect(membership["en"]?.count == 2)                       // Alpha + Gamma
+        #expect(membership["cs"]?.count == 2)                       // Beta + Gamma
+        #expect(membership["en"]?.intersection(membership["cs"] ?? []).count == 1)  // Gamma
+        // Every membership id is a real catalog id (so the grid can filter by it).
+        #expect((membership["en"] ?? []).union(membership["cs"] ?? []).isSubset(of: baseIDs))
+    }
 }
 
 @Suite("AetherCore — UnifiedLibrary home rails")
