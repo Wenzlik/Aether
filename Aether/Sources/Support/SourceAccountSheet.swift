@@ -34,8 +34,8 @@ struct SourceAccountSheet: View {
                     }
                     if let onChooseServer {
                         AetherSettingsRow(
-                            label: "Choose Server",
-                            description: "Switch to another server on your account.",
+                            label: "Manage Servers",
+                            description: "Turn servers on your account on or off — content from several is merged.",
                             systemImage: "rack",
                             value: nil,
                             action: onChooseServer

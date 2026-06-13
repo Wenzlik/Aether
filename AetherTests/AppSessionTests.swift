@@ -31,7 +31,7 @@ struct AppSessionSignOutTests {
         // Seed a signed-in state. Skipping `start()` deliberately so we don't
         // touch the real network; we set the publishable state directly.
         session.isPlexSignedIn = true
-        session.plexServer = sampleServer()
+        session.applyEnabledPlexServers([sampleServer()])
         session.source = MockMediaSource()
         session.discoveryState = .completed(serverName: "Tower")
 
@@ -48,7 +48,7 @@ struct AppSessionSignOutTests {
     func idempotent() async {
         let session = makeSession()
         session.isPlexSignedIn = true
-        session.plexServer = sampleServer()
+        session.applyEnabledPlexServers([sampleServer()])
 
         await session.signOutOfPlex()
         // Capture the cleared state, then call again. Nothing should change.

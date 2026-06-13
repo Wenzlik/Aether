@@ -37,6 +37,17 @@ final class SettingsViewModel {
 
     var connectedServerName: String? { session.plexServer?.name }
 
+    /// Trailing label for the Plex account row: the server name, or "N servers"
+    /// when several are enabled at once (#325).
+    var plexServerSummary: String? {
+        let count = session.plexServers.count
+        switch count {
+        case 0:  return nil
+        case 1:  return session.plexServers[0].name
+        default: return "\(count) servers"
+        }
+    }
+
     /// Colour-coded account state for the Account card.
     var plexAccountStatus: AetherStatus {
         if connectedServerName != nil { return .connected }
@@ -49,9 +60,9 @@ final class SettingsViewModel {
         connectedServerName.map { "Server: \($0)" }
     }
 
-    /// The currently-used Plex server's stable id — marks the checked row in the
-    /// server picker (#323).
-    var currentPlexServerID: String? { session.plexServer?.clientIdentifier }
+    /// Stable ids of the currently-enabled servers — marks the toggled rows in
+    /// the picker (#325).
+    var enabledPlexServerIDs: Set<String> { session.enabledPlexServerIDs }
 
     /// Every Plex server the account can currently reach, ranked best-first.
     /// Swallows errors to `[]` — the picker just shows its empty/failed state.
@@ -59,9 +70,10 @@ final class SettingsViewModel {
         (try? await session.availablePlexServers()) ?? []
     }
 
-    /// Switch the active Plex server to the one the user picked (#323).
-    func selectPlexServer(_ record: PlexServerRecord) async {
-        await session.selectPlexServer(record)
+    /// Enable / disable a server in the picker (#325). The last enabled server
+    /// can't be turned off — Sign Out disconnects Plex entirely.
+    func setPlexServerEnabled(_ record: PlexServerRecord, enabled: Bool) async {
+        await session.setPlexServerEnabled(record, enabled: enabled)
     }
 
     // MARK: - Sources

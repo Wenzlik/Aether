@@ -608,6 +608,59 @@ struct PlexServerStoreTests {
         let read = try await store.read()
         #expect(read == nil)
     }
+
+    // MARK: - Multi-server list (#325)
+
+    private func secondRecord() -> PlexServerRecord {
+        PlexServerRecord(
+            clientIdentifier: "uuid-2",
+            name: "Cabin",
+            accessToken: "token-2",
+            connections: [.init(uri: "https://wan:32400", isLocal: false, isRelay: false)]
+        )
+    }
+
+    @Test("writeAll → readAll round-trips the list, order preserved")
+    func writeReadAllRoundTrip() async throws {
+        let store = makeStore()
+        let records = [sampleRecord(), secondRecord()]
+        try await store.writeAll(records)
+        let read = try await store.readAll()
+        #expect(read == records)
+    }
+
+    @Test("readAll migrates a legacy single record into a one-element list")
+    func readAllMigratesLegacy() async throws {
+        let store = makeStore()
+        // Simulate a pre-#325 install: only the single-record key is present.
+        try await store.write(sampleRecord())
+        let read = try await store.readAll()
+        #expect(read == [sampleRecord()])
+    }
+
+    @Test("writeAll clears the legacy single key so the two can't diverge")
+    func writeAllClearsLegacyKey() async throws {
+        let store = makeStore()
+        try await store.write(sampleRecord())            // legacy single
+        try await store.writeAll([secondRecord()])       // new list supersedes it
+        let legacy = try await store.read()
+        #expect(legacy == nil)
+        #expect(try await store.readAll() == [secondRecord()])
+    }
+
+    @Test("readAll returns empty when nothing is stored")
+    func readAllEmpty() async throws {
+        let store = makeStore()
+        #expect(try await store.readAll().isEmpty)
+    }
+
+    @Test("clear removes the list too")
+    func clearRemovesList() async throws {
+        let store = makeStore()
+        try await store.writeAll([sampleRecord(), secondRecord()])
+        try await store.clear()
+        #expect(try await store.readAll().isEmpty)
+    }
 }
 
 @Suite("Plex — PlexResourceClient")
