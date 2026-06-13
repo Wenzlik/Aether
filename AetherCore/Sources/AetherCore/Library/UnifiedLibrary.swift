@@ -207,15 +207,26 @@ public actor UnifiedLibrary {
     ) async -> [String: Set<String>] {
         await withTaskGroup(of: (String, Set<String>).self) { group in
             for code in languages {
-                group.addTask {
-                    let matching = await self.unifiedItems(kind: kind, audioLanguage: code)
-                    return (code, Set(matching.map(\.id)))
-                }
+                group.addTask { (code, await self.audioLanguageIDs(kind: kind, language: code)) }
             }
             var membership: [String: Set<String>] = [:]
             for await (code, ids) in group { membership[code] = ids }
             return membership
         }
+    }
+
+    /// The `UnifiedMediaItem.id`s whose audio includes `code`, for a **single**
+    /// language — process-cached (30 min) so the grid resolves an audio-chip tap
+    /// lazily (only the tapped language is queried) and re-uses it across opens.
+    /// This replaces the eager all-languages warm-up that made the first filter
+    /// slow and re-ran every visit (#319 perf). Empty results aren't cached (a
+    /// transient empty fan-out, same reasoning as `unifiedItems`).
+    public func audioLanguageIDs(kind: MediaItem.Kind, language code: String) async -> Set<String> {
+        let key = cacheKey(kind: kind) + "|lang=\(code)"
+        if let cached = await AudioLanguageMembershipCache.shared.ids(for: key) { return cached }
+        let ids = Set(await unifiedItems(kind: kind, audioLanguage: code).map(\.id))
+        if !ids.isEmpty { await AudioLanguageMembershipCache.shared.set(ids, for: key) }
+        return ids
     }
 
     /// Whether the persisted snapshot for `kind` is past the 1-hour staleness
@@ -538,5 +549,27 @@ private actor UnifiedLibraryCache {
 
     func set(_ items: [UnifiedMediaItem], for key: String) {
         store[key] = Entry(items: items, at: clock.now)
+    }
+}
+
+/// Process-shared cache of per-language audio membership (`UnifiedMediaItem.id`
+/// sets), keyed by source-set + kind + language code. Long TTL — audio-language
+/// membership of a catalog is stable, and the point is to stop re-querying it on
+/// every Library "See all" visit (#319 perf).
+private actor AudioLanguageMembershipCache {
+    static let shared = AudioLanguageMembershipCache()
+
+    private struct Entry { let ids: Set<String>; let at: ContinuousClock.Instant }
+    private var store: [String: Entry] = [:]
+    private let ttl: Duration = .seconds(30 * 60)
+    private let clock = ContinuousClock()
+
+    func ids(for key: String) -> Set<String>? {
+        guard let entry = store[key], entry.at.duration(to: clock.now) < ttl else { return nil }
+        return entry.ids
+    }
+
+    func set(_ ids: Set<String>, for key: String) {
+        store[key] = Entry(ids: ids, at: clock.now)
     }
 }

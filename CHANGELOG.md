@@ -4,7 +4,25 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.7.2] — Unreleased · "Draco"
+## [0.7.3] — Unreleased · "Draco"
+
+### Changed
+
+- **Faster Library filtering & facet browsing** (#334) — the audio-language
+  filter no longer warms up every language on open; it loads the picked
+  language lazily and caches it, so the grid opens instantly and re-filtering
+  is free. Collections / Actors / Directors are cached too, so re-visiting them
+  no longer re-fetches from every server.
+
+### Fixed
+
+- **Settings now fully localizes** (#332) — the Settings category cards, screen
+  titles, and toggle rows rendered raw strings (and row *descriptions* were
+  never in the catalog), so a Czech/Ukrainian device still saw English there.
+  Those surfaces now localize, with the missing strings translated into both
+  languages.
+
+## [0.7.2] — 2026-06-13 · "Draco"
 
 ### Added
 
