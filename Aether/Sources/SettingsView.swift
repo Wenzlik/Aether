@@ -259,10 +259,10 @@ struct SettingsView: View {
                             .foregroundStyle(AetherDesign.Palette.accent)
                             .frame(width: 34)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(category.title)
+                            Text(LocalizedStringKey(category.title))
                                 .font(AetherDesign.Typography.cardTitle)
                                 .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            Text(category.subtitle)
+                            Text(LocalizedStringKey(category.subtitle))
                                 .font(AetherDesign.Typography.caption)
                                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                                 .lineLimit(2)
@@ -305,7 +305,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .navigationTitle(category.title)
+        .navigationTitle(LocalizedStringKey(category.title))
         #if os(iOS)
         // Inline (centered) on every category screen — consistent and reliable.
         // Large titles collapsed unpredictably inside the GeometryReader+ScrollView
@@ -601,11 +601,11 @@ struct SettingsView: View {
         Button { isOn.wrappedValue.toggle() } label: {
             HStack(spacing: AetherDesign.Spacing.m) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(LocalizedStringKey(title))
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                     if let description {
-                        Text(description)
+                        Text(LocalizedStringKey(description))
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -624,11 +624,11 @@ struct SettingsView: View {
         #else
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AetherDesign.Typography.body)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                 if let description {
-                    Text(description)
+                    Text(LocalizedStringKey(description))
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)

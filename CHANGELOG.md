@@ -4,7 +4,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.7.2] — Unreleased · "Draco"
+## [0.7.2] — 2026-06-13 · "Draco"
 
 ### Added
 
@@ -25,6 +25,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **Adding a language is now just translating it** (#320) — the in-app Language
   list is derived from the bundle's localizations, so a new language appears in
   Settings automatically once it's translated, with no code change.
+- **Faster Library filtering & facet browsing** (#334) — the audio-language
+  filter loads the picked language lazily and caches it (no all-languages
+  warm-up on open); Collections / Actors / Directors are cached too, so
+  re-visiting them no longer re-fetches from every server.
 
 ### Fixed
 
@@ -33,6 +37,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   map, so tapping a language is immediate and no longer shows the previous
   selection (the filter used to re-query the server per tap and could land a
   stale result).
+- **Settings fully localizes** (#332) — the Settings category cards, screen
+  titles, and toggle rows rendered raw strings (and row *descriptions* were
+  never in the catalog), so a Czech/Ukrainian device still saw English there;
+  those surfaces now localize, with the missing strings translated into both.
 
 ## [0.7.1] — 2026-06-12
 

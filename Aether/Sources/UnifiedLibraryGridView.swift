@@ -26,17 +26,18 @@ struct UnifiedLibraryGridView: View {
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
     /// Active audio-language filter (canonical code) — `nil` = All (#295/#319).
-    /// Applied **client-side** from `audioMembership`, so tapping a chip is
-    /// instant — no per-tap server round-trip, and structurally no off-by-one
-    /// (nothing async fires on a tap).
+    /// Applied **client-side** from `audioMembership`.
     @State private var selectedAudioLanguage: String?
     @State private var audioLanguageOptions: [AudioLanguageOption] = []
-    /// `code -> set of UnifiedMediaItem.id` that have that audio language, built
-    /// once in the background after the options load (#319). Until it's ready an
-    /// audio selection shows the full set (never the wrong language); the grid
-    /// narrows automatically the moment the map lands.
+    /// `code -> set of UnifiedMediaItem.id` that have that audio language, filled
+    /// **lazily** the first time a language is tapped and process-cached, so the
+    /// grid no longer pays an eager all-languages warm-up on every visit (#319
+    /// perf). A selection whose set hasn't loaded yet shows the full catalog
+    /// (never the wrong language) and narrows the moment it arrives.
     @State private var audioMembership: [String: Set<String>] = [:]
-    @State private var isAudioMembershipReady = false
+    /// The language code whose membership is being fetched right now (drives a
+    /// small spinner on the chip row); `nil` when nothing's loading.
+    @State private var loadingLanguage: String?
     #if os(tvOS)
     @State private var isSortSheetPresented = false
     #endif
@@ -139,11 +140,10 @@ struct UnifiedLibraryGridView: View {
     /// client-side over the loaded catalog, so they apply instantly (#319).
     private var filteredItems: [UnifiedMediaItem] {
         var result = items
-        // Audio language (#319): filter by the prebuilt membership map. While the
-        // map is still warming, leave the set unfiltered so we never flash the
-        // *wrong* language — the grid narrows once `isAudioMembershipReady`.
-        if let language = selectedAudioLanguage, isAudioMembershipReady {
-            let matching = audioMembership[language] ?? []
+        // Audio language (#319): filter by the lazily-loaded membership set. If
+        // the tapped language hasn't loaded yet, leave the set unfiltered so we
+        // never flash the *wrong* language — it narrows the moment the set lands.
+        if let language = selectedAudioLanguage, let matching = audioMembership[language] {
             result = result.filter { matching.contains($0.id) }
         }
         if let selectedGenre {
@@ -203,8 +203,9 @@ struct UnifiedLibraryGridView: View {
     // MARK: - Audio-language filter (#295/#319)
 
     /// Capsule chips for audio language: "Audio" label + "All" + each language.
-    /// Selecting one filters the loaded catalog client-side from the membership
-    /// map (instant). A small spinner shows while that map is still warming.
+    /// Selecting one filters the loaded catalog client-side; the first time a
+    /// language is picked its membership loads (cached after), shown by a small
+    /// spinner. "All" is always instant.
     private var audioLanguageFilterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AetherDesign.Spacing.s) {
@@ -212,17 +213,17 @@ struct UnifiedLibraryGridView: View {
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .padding(.trailing, AetherDesign.Spacing.xxs)
-                if !isAudioMembershipReady {
+                if loadingLanguage != nil {
                     ProgressView()
                         .controlSize(.small)
                         .padding(.trailing, AetherDesign.Spacing.xxs)
                 }
                 genreChip(label: "All", isSelected: selectedAudioLanguage == nil) {
-                    selectedAudioLanguage = nil
+                    selectAudioLanguage(nil)
                 }
                 ForEach(audioLanguageOptions) { option in
                     genreChip(label: option.displayName, isSelected: selectedAudioLanguage == option.code) {
-                        selectedAudioLanguage = (selectedAudioLanguage == option.code) ? nil : option.code
+                        selectAudioLanguage(option.code)
                     }
                 }
             }
@@ -334,14 +335,12 @@ struct UnifiedLibraryGridView: View {
         AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
     }
 
-    /// Derive the audio-language options + the per-language membership map from
-    /// the catalog (once per source set), so the chip row is stable and the
-    /// filter applies client-side and instantly (#295/#319).
+    /// Derive just the audio-language **options** (the chip row) once per source
+    /// set. Membership for a language loads lazily on first tap (#295/#319).
     private func loadAudioLanguageOptions() async {
         guard !connectedSources.isEmpty else {
             audioLanguageOptions = []
             audioMembership = [:]
-            isAudioMembershipReady = false
             return
         }
         let key = sourcesKey
@@ -349,18 +348,24 @@ struct UnifiedLibraryGridView: View {
         let options = await library.audioLanguageOptions(kind: kind)
         guard key == sourcesKey else { return }
         audioLanguageOptions = options
-        guard !options.isEmpty else {
-            audioMembership = [:]
-            isAudioMembershipReady = true
-            return
-        }
-        // Build the membership in the background; the chip row shows a warming
-        // hint until it lands, and a selection made early narrows the grid the
-        // moment it does.
-        isAudioMembershipReady = false
-        let membership = await library.audioLanguageMembership(kind: kind, languages: options.map(\.code))
+    }
+
+    /// Toggle the audio-language chip and lazily load that language's membership
+    /// the first time it's picked (cached after) — no eager all-languages
+    /// warm-up on grid open (#319 perf).
+    private func selectAudioLanguage(_ code: String?) {
+        selectedAudioLanguage = (selectedAudioLanguage == code) ? nil : code
+        guard let language = selectedAudioLanguage, audioMembership[language] == nil else { return }
+        Task { await loadMembership(for: language) }
+    }
+
+    private func loadMembership(for code: String) async {
+        let key = sourcesKey
+        loadingLanguage = code
+        defer { if loadingLanguage == code { loadingLanguage = nil } }
+        let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
+        let ids = await library.audioLanguageIDs(kind: kind, language: code)
         guard key == sourcesKey else { return }
-        audioMembership = membership
-        isAudioMembershipReady = true
+        audioMembership[code] = ids
     }
 }

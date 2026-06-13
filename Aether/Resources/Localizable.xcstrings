@@ -4837,6 +4837,534 @@
           }
         }
       }
+    },
+    "A bold WATCHED tag over finished posters, on top of the dimming.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výrazný štítek ZHLÉDNUTO přes dokoukané plakáty, navrch ztlumení."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Помітна позначка ПЕРЕГЛЯНУТО на завершених постерах, поверх затемнення."
+          }
+        }
+      }
+    },
+    "A readable snapshot of sources, library, downloads, and cache.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čitelný přehled zdrojů, knihovny, stahování a mezipaměti."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Читабельний знімок джерел, бібліотеки, завантажень і кешу."
+          }
+        }
+      }
+    },
+    "Add video files from Files to play without a server.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidejte videosoubory ze Souborů a přehrávejte bez serveru."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додайте відеофайли з «Файлів» для відтворення без сервера."
+          }
+        }
+      }
+    },
+    "Browse this server in your Library.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Procházejte tento server ve své knihovně."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переглядайте цей сервер у своїй бібліотеці."
+          }
+        }
+      }
+    },
+    "Email a readable report of app state — no account details.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odešlete e-mailem čitelný přehled stavu aplikace — bez údajů o účtu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надішліть електронною поштою читабельний звіт про стан застосунку — без даних облікового запису."
+          }
+        }
+      }
+    },
+    "Enter Cinema Mode automatically when playback starts.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Při spuštění přehrávání automaticky vstoupit do režimu kina."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автоматично вмикати режим кінотеатру на початку відтворення."
+          }
+        }
+      }
+    },
+    "Fetch posters & details for titles imported before a key was set.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Načíst plakáty a detaily pro tituly importované před nastavením klíče."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отримати постери та деталі для записів, імпортованих до встановлення ключа."
+          }
+        }
+      }
+    },
+    "Finished titles stay in your Library but leave the discovery rails.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokoukané tituly zůstanou v knihovně, ale zmizí z objevovacích řad."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершені записи залишаються в бібліотеці, але зникають зі стрічок огляду."
+          }
+        }
+      }
+    },
+    "Follow the device language, or pick one for Aether.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sledovat jazyk zařízení, nebo vybrat jeden pro Aether."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слідувати мові пристрою або обрати одну для Aether."
+          }
+        }
+      }
+    },
+    "Get in touch with the person behind Aether.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spojte se s člověkem, který stojí za Aetherem."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зв'яжіться з людиною, яка стоїть за Aether."
+          }
+        }
+      }
+    },
+    "Match the system, or force Dark or Light.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podle systému, nebo vynutit tmavý či světlý."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За системою або примусово темна чи світла."
+          }
+        }
+      }
+    },
+    "Matches posters & details for SMB and local files. Add your own key if matching isn't working.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Páruje plakáty a detaily pro SMB a místní soubory. Přidejte vlastní klíč, pokud párování nefunguje."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зіставляє постери та деталі для SMB і локальних файлів. Додайте власний ключ, якщо зіставлення не працює."
+          }
+        }
+      }
+    },
+    "Posters & artwork cached on this device (Plex, SMB, local). Tap to review the size before clearing.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plakáty a grafika v mezipaměti na tomto zařízení (Plex, SMB, místní). Klepnutím zkontrolujete velikost před vymazáním."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постери та графіка в кеші на цьому пристрої (Plex, SMB, локальні). Торкніться, щоб переглянути розмір перед очищенням."
+          }
+        }
+      }
+    },
+    "Reopen with your last screen size and seat instead of the defaults.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otevřít znovu s poslední velikostí plátna a místem místo výchozích."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відкривати знову з останнім розміром екрана та місцем замість стандартних."
+          }
+        }
+      }
+    },
+    "Search by the title & year below, then pick the right result.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyhledejte podle názvu a roku níže, poté vyberte správný výsledek."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шукайте за назвою та роком нижче, потім оберіть правильний результат."
+          }
+        }
+      }
+    },
+    "Something not working? Your build and device are attached automatically.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Něco nefunguje? Vaše sestavení a zařízení se přiloží automaticky."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Щось не працює? Ваша збірка та пристрій додаються автоматично."
+          }
+        }
+      }
+    },
+    "Suggest an idea for a future version.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navrhněte nápad pro budoucí verzi."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запропонуйте ідею для майбутньої версії."
+          }
+        }
+      }
+    },
+    "The size Cinema Mode opens with. You can still resize during playback.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velikost, se kterou se režim kina otevře. Velikost lze měnit i během přehrávání."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Розмір, з яким відкривається режим кінотеатру. Розмір можна змінювати під час відтворення."
+          }
+        }
+      }
+    },
+    "The space rendered around the screen.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prostor vykreslený kolem plátna."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Простір, відтворений навколо екрана."
+          }
+        }
+      }
+    },
+    "Turn servers on your account on or off — content from several is merged.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapněte nebo vypněte servery svého účtu — obsah z více serverů se sloučí."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вмикайте чи вимикайте сервери свого облікового запису — вміст із кількох об'єднується."
+          }
+        }
+      }
+    },
+    "What Aether is, who made it, and where it's going.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Co je Aether, kdo ho vytvořil a kam směřuje."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Що таке Aether, хто його створив і куди він рухається."
+          }
+        }
+      }
+    },
+    "Where you sit when the theater opens.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kde sedíte, když se kino otevře."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Де ви сидите, коли відкривається кінотеатр."
+          }
+        }
+      }
+    },
+    "Auto-Enter Cinema": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automaticky vstoupit do kina"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автоматичний вхід у кінотеатр"
+          }
+        }
+      }
+    },
+    "Hide Watched in Home & Discover": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrýt zhlédnuté na Domů a Objevit"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сховати переглянуте на Головній та в Огляді"
+          }
+        }
+      }
+    },
+    "Remember Last Setup": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapamatovat poslední nastavení"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запам'ятати останнє налаштування"
+          }
+        }
+      }
+    },
+    "Show “Watched” Label": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit štítek „Zhlédnuto“"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показувати позначку «Переглянуто»"
+          }
+        }
+      }
+    },
+    "English": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angličtina"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Англійська"
+          }
+        }
+      }
+    },
+    "Czech": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čeština"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чеська"
+          }
+        }
+      }
+    },
+    "Default": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За замовчуванням"
+          }
+        }
+      }
+    },
+    "Built-in": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vestavěný"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вбудований"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepřipojeno"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не підключено"
+          }
+        }
+      }
+    },
+    "Active": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivní"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активний"
+          }
+        }
+      }
+    },
+    "Dormant": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neaktivní"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неактивний"
+          }
+        }
+      }
     }
   },
   "version": "1.1"
