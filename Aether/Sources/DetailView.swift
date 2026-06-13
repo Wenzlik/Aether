@@ -139,6 +139,8 @@ struct DetailView: View {
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(\.dismiss) private var dismiss
+    /// App language locale (#320) — release dates format in this locale.
+    @Environment(\.locale) private var locale
     /// Watched dimming + label preference, so episode-row stills match the
     /// poster cards' watched treatment (#280 follow-up).
     @Environment(\.watchedDisplay) private var watchedDisplay
@@ -381,8 +383,11 @@ struct DetailView: View {
                     // Hero artwork now comes from the full-screen cinematic
                     // background (#290) — reserve the band height so the title
                     // sits below it, over the art, with no second backdrop.
+                    // On iPhone, shows use a shorter band so the Continue
+                    // Watching / Next Up card and Seasons aren't pushed below
+                    // the fold (#337) — the resume action is a series' primary CTA.
                     Color.clear
-                        .frame(height: hSizeClass == .regular ? backdropMaxHeight : 220)
+                        .frame(height: compactHeroBandHeight)
 
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                         heroTitleBlock
@@ -639,6 +644,16 @@ struct DetailView: View {
         #else
         return .backdrop
         #endif
+    }
+
+    /// Reserved hero-band height in `scrollContent` (the `Color.clear` spacer
+    /// the title sits below). On regular width it matches the backdrop; on
+    /// iPhone, **shows** get a shorter band so the Continue Watching / Next Up
+    /// card and Seasons rise toward the top instead of sitting below the fold
+    /// (#337). Movies keep the taller cinematic band.
+    private var compactHeroBandHeight: CGFloat {
+        if hSizeClass == .regular { return backdropMaxHeight }
+        return isShow ? 150 : 220
     }
 
     private var backdropMaxHeight: CGFloat {
@@ -1147,7 +1162,7 @@ struct DetailView: View {
         if let resume = episodeResume[episode.id], !episode.isWatched {
             return "Resume \(DetailFormatting.position(resume.position))"
         }
-        if let date = episode.releaseDate { return DetailFormatting.airDate(date) }
+        if let date = episode.releaseDate { return DetailFormatting.airDate(date, locale: locale) }
         if let runtime = episode.runtime { return DetailFormatting.runtime(runtime) }
         return ""
     }
@@ -1211,7 +1226,7 @@ struct DetailView: View {
     private func episodePreviewMeta(_ episode: MediaItem) -> String? {
         var parts: [String] = []
         if let runtime = episode.runtime { parts.append(DetailFormatting.runtime(runtime)) }
-        if let date = episode.releaseDate { parts.append(DetailFormatting.airDate(date)) }
+        if let date = episode.releaseDate { parts.append(DetailFormatting.airDate(date, locale: locale)) }
         if let resume = episodeResume[episode.id], !episode.isWatched {
             parts.append("Resume \(DetailFormatting.position(resume.position))")
         } else if episode.isWatched {
@@ -1738,7 +1753,7 @@ struct DetailView: View {
             // Episode: runtime + air date. The series name and "S1 • E2 - Title"
             // live in the hero title block, so no year or "Episode" label here.
             if let runtime = activeItem.runtime { parts.append(DetailFormatting.runtime(runtime)) }
-            if let date = activeItem.releaseDate { parts.append(DetailFormatting.airDate(date)) }
+            if let date = activeItem.releaseDate { parts.append(DetailFormatting.airDate(date, locale: locale)) }
         } else {
             // Movie: year + runtime. The kind label is dropped — it's obvious and
             // the Infuse-style reference omits it — keeping the line dense.
