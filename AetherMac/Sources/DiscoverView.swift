@@ -29,6 +29,9 @@ struct DiscoverView: View {
                     rail("Top Rated", filtered(topRated))
                     rail("Movies", filtered(rails.movies))
                     rail("TV Shows", filtered(rails.shows))
+                    ForEach(genreRails, id: \.name) { genre in
+                        rail(genre.name, genre.items)
+                    }
                 }
                 .padding(.vertical, 24)
             }
@@ -52,6 +55,22 @@ struct DiscoverView: View {
             .sorted { ($0.communityRating ?? 0) > ($1.communityRating ?? 0) }
             .prefix(20)
             .map { $0 }
+    }
+
+    /// One rail per popular genre across the catalog (mobile parity) — the genres
+    /// with the most titles, each rail the (filtered) titles carrying that genre.
+    private var genreRails: [(name: String, items: [UnifiedMediaItem])] {
+        let pool = filtered(rails.movies + rails.shows)
+        var counts: [String: Int] = [:]
+        for item in pool { for g in item.genres { counts[g, default: 0] += 1 } }
+        let topGenres = counts
+            .filter { $0.value >= 3 }                       // skip near-empty rails
+            .sorted { $0.value > $1.value }
+            .prefix(6)
+            .map(\.key)
+        return topGenres.map { genre in
+            (genre, pool.filter { $0.genres.contains(genre) })
+        }
     }
 
     @ViewBuilder

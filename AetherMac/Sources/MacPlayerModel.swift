@@ -46,10 +46,22 @@ final class MacPlayerModel {
     func load(_ url: URL) {
         guard url != loadedURL else { return }
         loadedURL = url
-        title = url.deletingPathExtension().lastPathComponent
+        title = Self.displayTitle(for: url)
         player.media = VLCMedia(url: url)   // VLCKit 3: non-optional
         mediaReady = true
         playIfReady()
+    }
+
+    /// A human title for the window — the local filename, but **blank** for a
+    /// server stream whose URL filename is a transcode placeholder (`start.m3u8`,
+    /// `master.m3u8`, …). Showing "start" was worse than showing nothing.
+    private static func displayTitle(for url: URL) -> String {
+        let name = url.deletingPathExtension().lastPathComponent
+        let placeholders: Set<String> = ["start", "master", "index", "live", "playlist", "stream"]
+        if url.pathExtension.lowercased() == "m3u8" || placeholders.contains(name.lowercased()) {
+            return ""
+        }
+        return name
     }
 
     /// Called by the video view once attached to a window (GL surface ready).
@@ -100,8 +112,8 @@ final class MacPlayerModel {
     private func tick() {
         isPlaying = player.isPlaying
         if !isScrubbing { position = Double(player.position) }
-        timeText = player.time.stringValue ?? "0:00"
-        durationText = player.media?.length.stringValue ?? player.time.stringValue ?? "0:00"
+        timeText = player.time.stringValue
+        durationText = player.media?.length.stringValue ?? player.time.stringValue
         currentAudioID = Int(player.currentAudioTrackIndex)
         currentSubtitleID = Int(player.currentVideoSubTitleIndex)
         let audio = Self.options(player.audioTrackIndexes, player.audioTrackNames)

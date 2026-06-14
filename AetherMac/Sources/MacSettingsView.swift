@@ -2,9 +2,9 @@ import SwiftUI
 import AetherCore
 
 /// The native macOS **Settings** window (⌘, / "Aether ▸ Settings…"), surfaced
-/// via the `Settings` scene. Kept honest — only what actually works on the Mac
-/// today: connecting / disconnecting sources, and About. Playback preferences
-/// follow once they're wired into the Mac playback path.
+/// via the `Settings` scene: Accounts, Playback defaults, Appearance (watched
+/// display), and About. All bound to the same stores the iOS app uses, so a
+/// preference set on either platform carries over.
 struct MacSettingsView: View {
     var session: MacSession
 
@@ -33,7 +33,9 @@ private struct AccountsSettings: View {
         Form {
             Section("Plex") {
                 if session.isPlexConnected {
-                    LabeledContent("Status", value: "Connected")
+                    ForEach(session.plexServerNames, id: \.self) { name in
+                        LabeledContent("Server", value: name)
+                    }
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }
                     }
@@ -43,8 +45,8 @@ private struct AccountsSettings: View {
                 }
             }
             Section("Jellyfin") {
-                if session.isJellyfinConnected {
-                    LabeledContent("Status", value: "Connected")
+                if let name = session.jellyfinServerName {
+                    LabeledContent("Server", value: name)
                     Button("Sign Out of Jellyfin", role: .destructive) {
                         Task { await session.signOutJellyfin() }
                     }
@@ -52,6 +54,10 @@ private struct AccountsSettings: View {
                     LabeledContent("Status", value: "Not connected")
                     Button("Connect Jellyfin…") { signIn = .jellyfin }
                 }
+            }
+            Section("Other Sources") {
+                LabeledContent("SMB / NAS", value: "Coming soon")
+                LabeledContent("Local Library", value: "Coming soon")
             }
         }
         .formStyle(.grouped)
@@ -132,26 +138,53 @@ private struct AppearanceSettings: View {
 }
 
 private struct AboutSettings: View {
-    private var version: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-        return "\(v) (\(b))"
+    @State private var cacheBytes: Int = AetherImageCache.shared.diskUsageBytes()
+
+    private static let repoURL = URL(string: "https://github.com/Wenzlik/Aether")!
+
+    private var shortVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+    private var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "play.rectangle.on.rectangle")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.tint)
-            Text("Aether").font(.title.bold())
-            Text("Version \(version)").foregroundStyle(.secondary)
-            Text("Personal media, beautifully played.")
-                .font(.callout).foregroundStyle(.secondary)
-            Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
-                .font(.caption).foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    Image(systemName: "play.rectangle.on.rectangle")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Aether").font(.title2.bold())
+                        Text("Personal media, beautifully played.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Section("Version") {
+                LabeledContent("Version", value: shortVersion)
+                LabeledContent("Build", value: build)
+                LabeledContent("Platform", value: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
+            }
+            Section("Storage") {
+                LabeledContent("Image Cache", value: DetailFormatting.fileSize(Int64(cacheBytes)))
+                Button("Clear Image Cache") {
+                    AetherImageCache.shared.clear()
+                    cacheBytes = AetherImageCache.shared.diskUsageBytes()
+                }
+            }
+            Section("Support") {
+                Link("Report a Bug", destination: Self.repoURL.appendingPathComponent("issues/new"))
+                Link("Feature Request", destination: Self.repoURL.appendingPathComponent("issues/new"))
+                Link("Source on GitHub", destination: Self.repoURL)
+            }
+            Section {
+                Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
+        .formStyle(.grouped)
     }
 }

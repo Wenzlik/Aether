@@ -22,6 +22,12 @@ final class MacSession {
     private(set) var plexSources: [PlexMediaSource] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
 
+    /// Server display names, mirrored as plain strings for the Settings UI —
+    /// the source objects are actors, so their `displayName` can't be read from
+    /// the main actor synchronously.
+    private(set) var plexServerNames: [String] = []
+    private(set) var jellyfinServerName: String?
+
     /// App-wide display + playback defaults, shared with the iOS app's model.
     /// On Mac we wire the ones that affect what's on screen: the watched-poster
     /// treatment (`\.watchedDisplay`) and hide-watched-in-discovery.
@@ -74,9 +80,11 @@ final class MacSession {
     func restore() async {
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
+            plexServerNames = records.map(\.name)
         }
         if let record = try? await jellyfinServerStore.read(), let source = makeJellyfinSource(record) {
             jellyfinSource = source
+            jellyfinServerName = record.serverName
         }
     }
 
@@ -91,12 +99,14 @@ final class MacSession {
         guard !records.isEmpty else { return }
         try? await plexServerStore.writeAll(records)
         plexSources = records.map(makePlexSource)
+        plexServerNames = records.map(\.name)
     }
 
     func signOutPlex() async {
         try? await keychain.removeValue(for: Self.plexTokenKey)
         try? await plexServerStore.clear()
         plexSources = []
+        plexServerNames = []
     }
 
     private func makePlexSource(_ record: PlexServerRecord) -> PlexMediaSource {
@@ -115,11 +125,13 @@ final class MacSession {
     func completeJellyfinSignIn(_ record: JellyfinServerRecord) async {
         try? await jellyfinServerStore.write(record)
         jellyfinSource = makeJellyfinSource(record)
+        jellyfinServerName = record.serverName
     }
 
     func signOutJellyfin() async {
         try? await jellyfinServerStore.clear()
         jellyfinSource = nil
+        jellyfinServerName = nil
     }
 
     private func makeJellyfinSource(_ record: JellyfinServerRecord) -> JellyfinMediaSource? {

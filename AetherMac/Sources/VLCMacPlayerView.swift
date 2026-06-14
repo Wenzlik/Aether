@@ -49,7 +49,6 @@ struct VLCPlayerScreen: View {
 
             if controlsVisible {
                 VStack(spacing: 0) {
-                    titleBar
                     Spacer(minLength: 0)
                     controlBar(model)
                 }
@@ -74,21 +73,6 @@ struct VLCPlayerScreen: View {
     }
 
     // MARK: Chrome
-
-    private var titleBar: some View {
-        HStack {
-            Text(model.title)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .shadow(radius: 4)
-            Spacer()
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
-        )
-    }
 
     private func controlBar(_ model: MacPlayerModel) -> some View {
         @Bindable var model = model
