@@ -157,6 +157,7 @@ struct VLCPlayerScreen: View {
             Button("") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
             Button("") { model.skipBackward() }.keyboardShortcut(.leftArrow, modifiers: [])
             Button("") { model.skipForward() }.keyboardShortcut(.rightArrow, modifiers: [])
+            Button("") { NSApp.keyWindow?.toggleFullScreen(nil) }.keyboardShortcut("f", modifiers: [])
         }
         .opacity(0)
     }

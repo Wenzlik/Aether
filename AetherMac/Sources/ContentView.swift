@@ -56,6 +56,12 @@ struct HomeView: View {
         // Finder "Open With ▸ Aether" / double-click on a registered video type
         // (#232) → straight to a player window.
         .onOpenURL { url in open(url) }
+        // Drag a video file onto the window to play it — Mac-native.
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first else { return false }
+            open(url)
+            return true
+        }
     }
 
     // MARK: Content
