@@ -24,7 +24,8 @@ struct LibraryGridView: View {
     var body: some View {
         ScrollView {
             if isLoading && movies.isEmpty && shows.isEmpty {
-                ProgressView("Loading library…").padding(40)
+                // Calm skeleton (parity with iOS) instead of a bare spinner.
+                AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     section("Movies", movies, route: .movies)
@@ -64,17 +65,29 @@ struct LibraryGridView: View {
 
     private func load() async {
         guard session.hasAnySource else { movies = []; shows = []; return }
-        isLoading = true
+        // Only show the skeleton when we have nothing yet — a warm cache/snapshot
+        // paints instantly, no full-screen loading (parity with iOS, #197).
+        if movies.isEmpty && shows.isEmpty { isLoading = true }
         let library = session.makeLibrary()
         movies = await library.unifiedItems(kind: .movie)
         shows = await library.unifiedItems(kind: .show)
         isLoading = false
+        // Stale-while-revalidate: the snapshot was served instantly above; if it's
+        // older than the freshness window, quietly refresh in the background.
+        let staleMovies = await library.isStale(kind: .movie)
+        let staleShows = await library.isStale(kind: .show)
+        if staleMovies || staleShows {
+            let freshMovies = await library.unifiedItems(kind: .movie, forceRefresh: true)
+            let freshShows = await library.unifiedItems(kind: .show, forceRefresh: true)
+            if !freshMovies.isEmpty { movies = freshMovies }
+            if !freshShows.isEmpty { shows = freshShows }
+        }
     }
 }
 
 /// A poster that navigates to its base item's detail (shared by the library +
 /// browse grids).
-@ViewBuilder
+@MainActor @ViewBuilder
 func posterLink(_ item: UnifiedMediaItem) -> some View {
     if let base = item.preferredSource?.item ?? item.sources.first?.item {
         NavigationLink(value: base) { MacPoster(item: item) }
@@ -93,22 +106,39 @@ struct LibraryBrowseView: View {
     @State private var items: [UnifiedMediaItem] = []
     @State private var sort: LibrarySort = .titleAZ
     @State private var genre: String? = nil
+    /// Multi-select release years (#351) — empty = all years.
+    @State private var selectedYears: Set<Int> = []
+    /// Minimum community rating (#342 parity) — `nil` = any.
+    @State private var minRating: Double? = nil
     @State private var isLoading = false
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
+    private let ratingBuckets: [Double] = [9, 8, 7, 6]
 
     private var genres: [String] {
         Array(Set(items.flatMap(\.genres))).sorted()
     }
+    /// Distinct release years, newest first (#351).
+    private var years: [Int] {
+        Array(Set(items.compactMap(\.year))).sorted(by: >)
+    }
+    private var hasActiveFilter: Bool {
+        genre != nil || !selectedYears.isEmpty || minRating != nil
+    }
     private var shown: [UnifiedMediaItem] {
-        let filtered = genre.map { g in items.filter { $0.genres.contains(g) } } ?? items
+        var filtered = items
+        if let genre { filtered = filtered.filter { $0.genres.contains(genre) } }
+        if !selectedYears.isEmpty {
+            filtered = filtered.filter { $0.year.map { selectedYears.contains($0) } ?? false }
+        }
+        if let minRating { filtered = filtered.filter { ($0.communityRating ?? 0) >= minRating } }
         return sort.sorted(filtered)
     }
 
     var body: some View {
         ScrollView {
             if isLoading && items.isEmpty {
-                ProgressView().padding(40)
+                AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(shown) { posterLink($0) }
@@ -121,21 +151,53 @@ struct LibraryBrowseView: View {
         .toolbar {
             ToolbarItem {
                 Menu {
+                    // Inline so the options show on the first click — a plain
+                    // Picker nests them behind a "Sort >" submenu (extra click).
                     Picker("Sort", selection: $sort) {
                         ForEach(LibrarySort.allCases, id: \.self) { s in
                             Label(s.displayName, systemImage: s.systemImage).tag(s)
                         }
                     }
+                    .pickerStyle(.inline)
                 } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
             }
-            if !genres.isEmpty {
-                ToolbarItem {
-                    Menu {
+            // One Filter menu: Genre + Rating + Year (multi-select) (#342/#351).
+            ToolbarItem {
+                Menu {
+                    if !genres.isEmpty {
                         Picker("Genre", selection: $genre) {
                             Text("All Genres").tag(String?.none)
                             ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
                         }
-                    } label: { Label("Filter", systemImage: "line.3.horizontal.decrease.circle") }
+                    }
+                    Picker("Minimum Rating", selection: $minRating) {
+                        Text("Any Rating").tag(Double?.none)
+                        ForEach(ratingBuckets, id: \.self) { Text("\(Int($0))+").tag(Optional($0)) }
+                    }
+                    if !years.isEmpty {
+                        Menu("Year") {
+                            ForEach(years, id: \.self) { y in
+                                Toggle(String(y), isOn: Binding(
+                                    get: { selectedYears.contains(y) },
+                                    set: { on in
+                                        if on { selectedYears.insert(y) } else { selectedYears.remove(y) }
+                                    }
+                                ))
+                            }
+                            if !selectedYears.isEmpty {
+                                Divider()
+                                Button("Clear Years") { selectedYears = [] }
+                            }
+                        }
+                    }
+                    if hasActiveFilter {
+                        Divider()
+                        Button("Clear Filters") { genre = nil; selectedYears = []; minRating = nil }
+                    }
+                } label: {
+                    Label("Filter", systemImage: hasActiveFilter
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
                 }
             }
         }
@@ -144,8 +206,13 @@ struct LibraryBrowseView: View {
 
     private func load() async {
         guard session.hasAnySource else { items = []; return }
-        isLoading = true
-        items = await session.makeLibrary().unifiedItems(kind: route.kind)
+        if items.isEmpty { isLoading = true }
+        let library = session.makeLibrary()
+        items = await library.unifiedItems(kind: route.kind)
         isLoading = false
+        if await library.isStale(kind: route.kind) {
+            let fresh = await library.unifiedItems(kind: route.kind, forceRefresh: true)
+            if !fresh.isEmpty { items = fresh }
+        }
     }
 }

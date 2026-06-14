@@ -32,6 +32,9 @@ struct PlayerView: View {
     @State private var showFailureDetails = false
     /// Foreground/background — drives suspending the UI-refresh poll while
     /// backgrounded (audio keeps playing; we just stop the 500 ms CPU churn).
+    /// The app session — marks the finished item watched on **every** connected
+    /// source that has it, keeping cross-source titles in sync (#232 follow-up).
+    @Environment(AppSession.self) private var appSession
     @Environment(\.scenePhase) private var scenePhase
     /// Segments already auto-skipped this session, so `.automatically` fires
     /// once per segment instead of on every time tick.
@@ -342,7 +345,7 @@ struct PlayerView: View {
         guard let next = nextItem else { return }
         cancelCountdown()
         let finished = viewModel.state.item ?? item
-        if let source { await source.markWatched(finished.id) }
+        await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
         nextItem = nil
         // Carry the session's audio/subtitle/quality choices onto the next
@@ -400,8 +403,8 @@ struct PlayerView: View {
         if autoPlayNext, nextItem != nil {
             Task { await playNext() }
         } else {
-            let finishedID = viewModel.state.item?.id ?? item.id
-            if let source { Task { await source.markWatched(finishedID) } }
+            let finished = viewModel.state.item ?? item
+            Task { await appSession.markWatchedEverywhere(finished) }
             Task { await dismissPlayer() }
         }
     }

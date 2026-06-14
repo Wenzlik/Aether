@@ -1469,7 +1469,7 @@ struct SettingsView: View {
             SendDiagnosticsSheet(gather: { await viewModel.gatherDiagnostics() }) { supportSheet = nil }
         case .contact:
             MailComposeView(
-                recipient: SupportDiagnostics.supportEmail,
+                recipient: SupportDiagnostics.creatorEmail,
                 subject: "Aether — Hello",
                 body: "\n\n\(SupportDiagnostics.featureRequestFooter())",
                 attachment: nil
@@ -1484,7 +1484,7 @@ struct SettingsView: View {
         if MailComposeView.canSend {
             supportSheet = .contact
         } else if let url = aetherMailtoURL(
-            recipient: SupportDiagnostics.supportEmail,
+            recipient: SupportDiagnostics.creatorEmail,
             subject: "Aether — Hello",
             body: "\n\n\(SupportDiagnostics.featureRequestFooter())"
         ) {

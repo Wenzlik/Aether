@@ -47,6 +47,11 @@ final class MacSession {
     /// treatment (`\.watchedDisplay`) and hide-watched-in-discovery.
     let playbackPrefs = PlaybackPreferencesStore()
 
+    /// Colour-scheme preference (System / Dark / Light), same store the iOS app
+    /// uses — drives `.preferredColorScheme` at the window root so the Appearance
+    /// setting actually switches the theme instead of being forced dark.
+    let appearance = AppearancePreferenceStore()
+
     /// UI language: `"system"`, `"en"`, or `"cs"`. Drives `\.locale` so the user
     /// can switch in-app (Settings), matching iOS. Persisted in UserDefaults.
     var appLanguage: String = UserDefaults.standard.string(forKey: "ui.language") ?? "system" {
@@ -184,6 +189,7 @@ final class MacSession {
         guard !didRestore else { return }
         didRestore = true
         await resumeStore.loadFromDisk()
+        await resumeStore.observeICloudChanges()   // live cross-device resume (#18)
         rebuildLocalSource()    // build the local library from persisted folders
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
@@ -264,9 +270,11 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
-    /// Disk-backed resume store (Documents) — the Mac player records playhead
-    /// positions here and `homeRails` reads them back as Continue Watching.
-    let resumeStore = ResumeStore()
+    /// Resume store — documents-directory JSON as the local source of truth plus
+    /// **iCloud Key-Value Store** for cross-device sync (#18). The Mac shares the
+    /// iOS app's KVS (see the `ubiquity-kvstore-identifier` entitlement), so a
+    /// film started on iPhone/Apple TV shows as in-progress here and vice-versa.
+    let resumeStore = ResumeStore(diskURL: ResumeStore.defaultDiskURL(), icloud: .default)
 
     /// Maps a resolved playback URL → the item it came from, so the player
     /// window (which only carries a URL) can record resume keyed by `MediaID`.
@@ -281,8 +289,16 @@ final class MacSession {
     /// rather than spawning a separate window.
     var playbackURL: URL?
 
-    /// Resolve a server item and start playing it inline.
-    func play(_ item: MediaItem) async {
+    /// When set, the next playback seeks here on open instead of the saved resume
+    /// point — drives "Play from Beginning" (`startAt: 0`). Consumed once by
+    /// `startSeconds(for:)` when the player loads.
+    private var startOverride: Double?
+
+    /// Resolve a server item and start playing it inline. `startAt` overrides the
+    /// saved resume point for this playback (e.g. `0` = play from the beginning);
+    /// `nil` resumes from where the user left off.
+    func play(_ item: MediaItem, startAt: Double? = nil) async {
+        startOverride = startAt
         if let url = await beginPlayback(for: item) { playbackURL = url }
     }
 
@@ -296,26 +312,60 @@ final class MacSession {
     func stopPlayback() { playbackURL = nil }
 
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
-    func homeRails() async -> UnifiedRails {
-        await makeLibrary().homeRails(resumeStore: resumeStore)
+    /// Served from the shared cache/snapshot instantly; pass `forceRefresh` to
+    /// re-hit the servers for a background revalidate (#197 parity).
+    func homeRails(forceRefresh: Bool = false) async -> UnifiedRails {
+        await makeLibrary().homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
+    }
+
+    /// Whether the persisted library snapshot is past its freshness window — used
+    /// to decide whether to kick a background refresh after serving the cache.
+    func isLibraryStale() async -> Bool {
+        let library = makeLibrary()
+        let staleMovies = await library.isStale(kind: .movie)
+        let staleShows = await library.isStale(kind: .show)
+        return staleMovies || staleShows
     }
 
     /// The item behind a player window's URL (set by `beginPlayback`).
     func item(forPlaybackURL url: URL) -> MediaItem? { playbackContext[url] }
 
-    /// Saved playhead (seconds) for an item, for resume-on-open.
-    func resumeSeconds(for item: MediaItem) async -> Double? {
+    /// Where the player should seek on open: an explicit per-playback override
+    /// (e.g. Play From Beginning = `0`), else the saved resume point. The override
+    /// is consumed once so a later auto-resume isn't affected.
+    func startSeconds(for item: MediaItem) async -> Double? {
+        if let override = startOverride {
+            startOverride = nil
+            return override
+        }
+        return await savedResumeSeconds(for: item)
+    }
+
+    /// Saved playhead (seconds) for an item, independent of any play override —
+    /// drives the Detail "Resume" affordance + Continue Watching.
+    func savedResumeSeconds(for item: MediaItem) async -> Double? {
         guard let point = await resumeStore.point(for: item.id) else { return nil }
         return DetailFormatting.seconds(point.position)
     }
 
-    /// Mark an item watched on **its own source** (the server it streamed from).
-    /// Plex (`/:/scrobble`) and Jellyfin (`PlayedItems`) sync this to their other
-    /// clients — but the two servers are independent, so watching a title that
-    /// exists on both marks it only on the one you played from, not the other.
-    func markWatched(_ item: MediaItem) async {
-        await makeLibrary().markWatchedEverywhere(item)
+    /// Mark an item watched/unwatched across **every** connected source that has
+    /// it (Plex `/:/scrobble`, Jellyfin `PlayedItems`), matched by shared external
+    /// id — so a title on two servers stays in sync (parity with iOS).
+    func markWatched(_ item: MediaItem, watched: Bool = true) async {
+        await makeLibrary().markWatchedEverywhere(item, watched: watched)
         libraryToken &+= 1   // refresh watched badges
+    }
+
+    /// Whether the item's source supports favorites (Plex/Jellyfin do; local no).
+    func canFavorite(_ item: MediaItem) -> Bool {
+        source(for: item)?.supportsFavorites ?? false
+    }
+
+    /// Toggle the favorite flag on the item's own source.
+    func setFavorite(_ item: MediaItem, to value: Bool) async {
+        guard let source = source(for: item), source.supportsFavorites else { return }
+        await source.setFavorite(item.id, to: value)
+        libraryToken &+= 1
     }
 
     /// Record a playhead position for an item. `committing` (pause/close) also
@@ -364,6 +414,38 @@ final class MacSession {
     func children(of item: MediaItem) async -> [MediaItem] {
         guard let source = source(for: item) else { return [] }
         return (try? await source.children(of: item.id)) ?? []
+    }
+
+    /// Resolve an episode's parent **season** and **show** (via `parentID`
+    /// chaining: episode → season → show), so the episode Detail can link back up
+    /// the hierarchy — e.g. opened from Continue Watching, you can still reach the
+    /// season and the whole series. Either may be `nil` if not resolvable.
+    func parents(of episode: MediaItem) async -> (season: MediaItem?, show: MediaItem?) {
+        guard let source = source(for: episode), let seasonID = episode.parentID else { return (nil, nil) }
+        let season = try? await source.item(for: seasonID)
+        var show: MediaItem?
+        if let showID = season?.parentID { show = try? await source.item(for: showID) }
+        return (season, show)
+    }
+
+    /// The show's **On Deck** episode (parity with iOS): the in-progress episode
+    /// if any, else the one after the last watched (or the first) — so the show
+    /// Detail can offer "Continue Watching / Next Up". Walks seasons → episodes
+    /// and intersects local resume points. `nil` when the show is fully watched
+    /// or has no episodes.
+    func onDeckEpisode(forShow show: MediaItem) async -> MediaItem? {
+        let seasons = await children(of: show)
+        var episodes: [MediaItem] = []
+        for season in seasons {
+            episodes.append(contentsOf: await children(of: season))
+        }
+        guard !episodes.isEmpty else { return nil }
+        let points = await resumeStore.allPoints()
+        let byID = Dictionary(points.map { ($0.mediaID, $0) }, uniquingKeysWith: { first, _ in first })
+        return OnDeck.next(episodes: episodes) { episode in
+            guard let point = byID[episode.id], !episode.isFullyWatched else { return nil }
+            return point.updatedAt
+        }
     }
 
     // MARK: Helpers

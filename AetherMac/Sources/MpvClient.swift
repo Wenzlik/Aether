@@ -156,47 +156,58 @@ final class MpvClient {
 
     // MARK: Render context (owned here for deterministic teardown ordering)
 
-    /// The OpenGL render context, created by `MpvVideoView` once its GL context
-    /// is current. Owned by the client so `destroy()` can free it **before**
+    /// The mpv **software** render context, created by `MpvVideoView` (#19 —
+    /// replaced the OpenGL path so the player no longer uses the deprecated
+    /// `NSOpenGLView`). Owned by the client so `destroy()` can free it **before**
     /// terminating the handle — freeing it after would crash (it references the
     /// core), and splitting ownership across the view made the order racy.
     @ObservationIgnored private(set) var renderContext: OpaquePointer?
 
-    /// Create the OpenGL render context on the **current** GL context.
-    /// `updateCtx` is passed to the (non-isolated) update callback — the view,
-    /// which it asks to redraw.
+    /// The `passRetained` coordinator pointer handed to the update callback —
+    /// released in `destroy()` once the callback is cleared, balancing the retain
+    /// taken in `MpvVideoView`'s `attach`. Keeps the coordinator alive exactly as
+    /// long as mpv can call back into it.
+    @ObservationIgnored private var renderUpdateCtx: UnsafeMutableRawPointer?
+
+    /// Create the software render context (`MPV_RENDER_API_TYPE_SW`). No GL/Metal
+    /// init params — mpv renders into a CPU buffer we hand it per frame. `updateCtx`
+    /// is passed to the (non-isolated) update callback — the Metal coordinator it
+    /// asks to redraw.
     func createRenderContext(updateCtx: UnsafeMutableRawPointer) {
         guard let handle, renderContext == nil else { return }
-        var glInit = mpv_opengl_init_params(get_proc_address: mpvGetProcAddress, get_proc_address_ctx: nil)
-        withUnsafeMutablePointer(to: &glInit) { initPtr in
-            MPV_RENDER_API_TYPE_OPENGL.withCString { apiType in
-                var params = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiType)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initPtr)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-                mpv_render_context_create(&renderContext, handle, &params)
-            }
+        MPV_RENDER_API_TYPE_SW.withCString { apiType in
+            var params = [
+                mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiType)),
+                mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+            ]
+            mpv_render_context_create(&renderContext, handle, &params)
         }
         if let renderContext {
+            renderUpdateCtx = updateCtx
             mpv_render_context_set_update_callback(renderContext, mpvRenderUpdate, updateCtx)
         }
     }
 
-    /// Render the current frame into the default framebuffer (call with the GL
-    /// context current, on the main thread).
-    func render(width: Int32, height: Int32) {
+    /// Render the current frame into a CPU pixel buffer (BGRA bytes, ignored
+    /// alpha → `"bgr0"`, matching Metal's `.bgra8Unorm`). The Metal coordinator
+    /// then uploads it to a texture and blits it to the drawable. Call on the
+    /// main thread (SW rendering has no thread-affinity requirement like GL did).
+    func renderSW(into pointer: UnsafeMutableRawPointer, width: Int, height: Int, stride: Int) {
         guard let renderContext else { return }
-        var fbo = mpv_opengl_fbo(fbo: 0, w: width, h: height, internal_format: 0)
-        var flip: CInt = 1
-        withUnsafeMutablePointer(to: &fbo) { fboPtr in
-            withUnsafeMutablePointer(to: &flip) { flipPtr in
-                var params = [
-                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: UnsafeMutableRawPointer(fboPtr)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: UnsafeMutableRawPointer(flipPtr)),
-                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
-                ]
-                mpv_render_context_render(renderContext, &params)
+        var size: [CInt] = [CInt(width), CInt(height)]
+        var swStride = stride                       // bridges to size_t
+        "bgr0".withCString { fmt in
+            size.withUnsafeMutableBufferPointer { sizeBuf in
+                withUnsafeMutablePointer(to: &swStride) { stridePtr in
+                    var params = [
+                        mpv_render_param(type: MPV_RENDER_PARAM_SW_SIZE, data: UnsafeMutableRawPointer(sizeBuf.baseAddress)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_SW_FORMAT, data: UnsafeMutableRawPointer(mutating: fmt)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_SW_STRIDE, data: UnsafeMutableRawPointer(stridePtr)),
+                        mpv_render_param(type: MPV_RENDER_PARAM_SW_POINTER, data: pointer),
+                        mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                    ]
+                    mpv_render_context_render(renderContext, &params)
+                }
             }
         }
     }
@@ -216,6 +227,12 @@ final class MpvClient {
             mpv_render_context_set_update_callback(renderContext, nil, nil)
             mpv_render_context_free(renderContext)
             self.renderContext = nil
+            // Balance the `passRetained` coordinator from createRenderContext —
+            // now that mpv can no longer call the update callback, drop the retain.
+            if let renderUpdateCtx {
+                Unmanaged<AnyObject>.fromOpaque(renderUpdateCtx).release()
+                self.renderUpdateCtx = nil
+            }
         }
         if let handle {
             mpv_set_wakeup_callback(handle, nil, nil)
@@ -232,11 +249,4 @@ final class MpvClient {
     }
 
     deinit { destroy() }
-}
-
-/// libmpv GL symbol resolver — file-scope, non-isolated (called from mpv).
-/// RTLD_DEFAULT (= -2 on Darwin) resolves from the linked OpenGL.framework.
-private func mpvGetProcAddress(_ ctx: UnsafeMutableRawPointer?, _ name: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
-    guard let name else { return nil }
-    return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
 }

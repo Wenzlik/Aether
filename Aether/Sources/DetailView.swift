@@ -134,6 +134,10 @@ struct DetailView: View {
     /// First-use discoverability for the bare compact icon row: captions show
     /// beneath the icons until the user taps one, then never again (persisted).
     @AppStorage("aether.detail.iconHintSeen") private var iconHintSeen = false
+    /// The app session — used to mark watched/unwatched on **every** connected
+    /// source that has the title (not just the one Detail is acting on), so a
+    /// movie on both Plex and Jellyfin stays in sync (#232 follow-up).
+    @Environment(AppSession.self) private var appSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
@@ -2347,14 +2351,11 @@ struct DetailView: View {
     private var isWatched: Bool { watchedOverride ?? current.isWatched }
 
     private func toggleWatched() async {
-        guard let source else { return }
         let next = !isWatched
         watchedOverride = next   // optimistic
-        if next {
-            await source.markWatched(activeItem.id)
-        } else {
-            await source.markUnwatched(activeItem.id)
-        }
+        // Sync across every source that has this title, not just `source` —
+        // e.g. a movie on both Plex and Jellyfin flips on both.
+        await appSession.markWatchedEverywhere(activeItem, watched: next)
     }
 
     /// Favorite state — the optimistic override wins over the source's value so

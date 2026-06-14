@@ -18,9 +18,11 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 # Avoid Homebrew's auto-update (ghcr.io portable-ruby flakiness on CI; see
-# ci_post_clone.sh for the same guards).
+# ci_post_clone.sh). We deliberately do NOT set HOMEBREW_NO_INSTALL_FROM_API:
+# on a clean Xcode Cloud VM there's no homebrew-core git tap, so forcing the
+# git path makes `brew install` clone the whole tap (slow) or fail outright.
+# The JSON API path is the CI-friendly default; only auto-update is the flake.
 export HOMEBREW_NO_AUTO_UPDATE=1
-export HOMEBREW_NO_INSTALL_FROM_API=1
 
 for formula in mpv dylibbundler; do
   if brew list "$formula" >/dev/null 2>&1; then

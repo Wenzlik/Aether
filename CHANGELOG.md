@@ -4,6 +4,35 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Discover revamp** (#350, all platforms) — dropped the genre rails in favour of
+  curated rails: **New Releases** and **Top Rated** (plus Picked for You). Discover
+  now also hides **in-progress** titles, not just fully-watched ones — they live in
+  Continue Watching.
+- **Library** (#351, all platforms) — **multi-select Year** filter and a compact
+  **community-rating number** on poster cells.
+
+### Changed — macOS parity & polish
+
+- Detail now offers **Resume / Play from Beginning**, **Mark as Watched**, and
+  **Favorite**; after playback you return to the **title's Detail**, not Home.
+- Series: episodes open their **own Detail**; show Detail gains **Continue Watching
+  / Next Up** (On Deck); episode/season **watched state** shows and refreshes.
+- Detail **backdrop** fills the screen (crisp) like the other platforms.
+- Settings: **TMDb key** is editable again, **Dark/Light** appearance switch wired,
+  Library **Sort** opens in one click.
+- Sidebar toggle returned to the leading edge beside a crisper brand logo.
+- Build: **macOS 26** minimum (fixes the libmpv dylib version warning); the
+  Xcode Cloud post-clone only fetches libmpv for the macOS workflow, so the
+  iOS/tvOS/visionOS archives no longer fail on a missing `project.pbxproj`.
+
+### Fixed
+
+- Watched marking now also wires up on iOS/iPadOS/tvOS/visionOS via
+  `markWatchedEverywhere` (macOS already did) — finishing or toggling a title syncs
+  it across every connected source.
+
 ## [0.7.3] — 2026-06-14
 
 ### Added
@@ -33,6 +62,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
     Czech localization, and a dark cinematic / glass look matching iOS.
   - **Self-contained distribution** — a Release build bundles libmpv + its ffmpeg
     dependency tree into the `.app`, so it runs without Homebrew.
+
+### Changed
+
+- **Watched marking now syncs across every source on all platforms** (#232) —
+  iOS, iPadOS, tvOS, and visionOS adopt `markWatchedEverywhere`: finishing
+  playback (incl. auto-play-next hand-off) or toggling watched on Detail now
+  scrobbles the title on **every** connected source that has it — matched by
+  shared external id — not just the one it streamed from. macOS already did this.
 
 ## [0.7.2] — 2026-06-13 · "Draco"
 

@@ -9,7 +9,7 @@ import AetherCore
 /// - **Hero pick** — one big artwork, randomly drawn across the whole
 ///   deduplicated catalog on each build.
 /// - **Random Picks** — a shuffled rail; rediscover titles you own but forgot.
-/// - **Recently Added** — newest titles interleaved across movies and shows.
+/// - **New Releases** — newest titles interleaved across movies and shows.
 ///
 /// Data comes from `UnifiedLibrary` (the same aggregator Home / Search use), so
 /// a title on both Plex and Jellyfin appears once and each card navigates a
@@ -35,9 +35,8 @@ struct DiscoverView: View {
 
     @State private var hero: UnifiedMediaItem?
     @State private var randomPicks: [UnifiedMediaItem] = []
-    @State private var recentlyAdded: [UnifiedMediaItem] = []
+    @State private var newReleases: [UnifiedMediaItem] = []
     @State private var topRated: [UnifiedMediaItem] = []
-    @State private var genreRails: [GenreRail] = []
     @State private var isLoading = false
     /// `true` once at least one `load()` has completed — so the empty state only
     /// shows after a real completed load, never during the first load / refresh.
@@ -48,13 +47,6 @@ struct DiscoverView: View {
     @State private var autoRetried = false
     /// Reload (non-destructively) when the app returns to the foreground.
     @Environment(\.scenePhase) private var scenePhase
-
-    /// One genre's rail. `id` is the genre name so SwiftUI can diff the rails.
-    private struct GenreRail: Identifiable {
-        let id: String
-        var genre: String { id }
-        let items: [UnifiedMediaItem]
-    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -86,7 +78,7 @@ struct DiscoverView: View {
     }
 
     private var isEmpty: Bool {
-        hero == nil && randomPicks.isEmpty && recentlyAdded.isEmpty
+        hero == nil && randomPicks.isEmpty && newReleases.isEmpty
     }
 
     @ViewBuilder
@@ -152,18 +144,17 @@ struct DiscoverView: View {
                 .padding(.top, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.xs)
                 // Discovery Hub order: a featured pick, then fresh arrivals, the
-                // best-rated, genre lanes, and serendipitous picks at the tail.
+                // best-rated, and serendipitous picks at the tail. Genre lanes were
+                // removed (#350) — Library already has genre browse; Discover is
+                // for "what should I watch", so it leads with curated rails.
                 if let hero {
                     heroSection(hero)
                 }
-                if !recentlyAdded.isEmpty {
-                    rail(title: "Recently Added", items: recentlyAdded)
+                if !newReleases.isEmpty {
+                    rail(title: "New Releases", items: newReleases)
                 }
                 if !topRated.isEmpty {
                     rail(title: "Top Rated", items: topRated)
-                }
-                ForEach(genreRails) { genreRail in
-                    rail(title: genreRail.genre, items: genreRail.items)
                 }
                 if !randomPicks.isEmpty {
                     rail(title: "Picked for You", items: randomPicks)
@@ -308,11 +299,22 @@ struct DiscoverView: View {
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
         let allMovies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
         let allShows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
-        // Discover recommends what's *ahead* — with the (default-on)
-        // hide-watched preference, fully-watched titles drop out of every rail.
+        // Discover recommends what's *ahead*. With the (default-on) hide-watched
+        // preference, both fully-watched **and** in-progress titles drop out of
+        // every rail (#350) — those live in Continue Watching, not Discover.
+        // In-progress = has a local resume point (the same signal Continue
+        // Watching intersects against), matched by any of the title's source ids.
         let hideWatched = playbackPreferences?.hideWatchedInDiscovery ?? true
-        let movies = hideWatched ? allMovies.filter { !$0.isFullyWatched } : allMovies
-        let shows = hideWatched ? allShows.filter { !$0.isFullyWatched } : allShows
+        let inProgressIDs = Set(await resumeStore.allPoints().map(\.mediaID))
+        func isStarted(_ item: UnifiedMediaItem) -> Bool {
+            item.sources.contains { inProgressIDs.contains($0.item.id) }
+        }
+        func surfaceable(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            guard hideWatched else { return items }
+            return items.filter { !$0.isFullyWatched && !isStarted($0) }
+        }
+        let movies = surfaceable(allMovies)
+        let shows = surfaceable(allShows)
         let all = movies + shows
 
         guard !all.isEmpty else {
@@ -339,10 +341,10 @@ struct DiscoverView: View {
         hero = pick
         randomPicks = Array(all.filter { $0.id != pick?.id }.shuffled().prefix(12))
 
-        // Recently Added: each list is already newest-first (source sort
-        // survives the merge's first-seen ordering); interleave movies + shows
-        // so neither dominates, drop the hero, cap at 12.
-        recentlyAdded = Array(
+        // New Releases: each list is already newest-first (source sort survives
+        // the merge's first-seen ordering); interleave movies + shows so neither
+        // dominates, drop the hero, cap at 12. (#350: was "Recently Added".)
+        newReleases = Array(
             interleave(movies, shows)
                 .filter { $0.id != pick?.id }
                 .prefix(12)
@@ -355,33 +357,21 @@ struct DiscoverView: View {
                 .prefix(12)
         )
 
-        // Genre rails: the catalog's most common genres, one shuffled rail each.
-        genreRails = topGenres(in: all).map { genre in
-            GenreRail(
-                id: genre,
-                items: Array(all.filter { $0.genres.contains(genre) }.shuffled().prefix(12))
-            )
-        }
-
         // Warm the artwork cache for the rails we're about to show. Built up
         // step by step with an explicit type — a single long `+` chain of
         // `[URL?]` arrays blows the Swift type-checker's time budget.
         var artworkURLs: [URL?] = [pick?.backdropURL ?? pick?.posterURL]
         artworkURLs += randomPicks.map(\.posterURL)
         artworkURLs += topRated.map(\.posterURL)
-        artworkURLs += recentlyAdded.map(\.posterURL)
-        for genreRail in genreRails {
-            artworkURLs += genreRail.items.map(\.posterURL)
-        }
+        artworkURLs += newReleases.map(\.posterURL)
         AetherImageCache.shared.prefetch(artworkURLs)
     }
 
     private func resetRails() {
         hero = nil
         randomPicks = []
-        recentlyAdded = []
+        newReleases = []
         topRated = []
-        genreRails = []
     }
 
     /// One automatic retry when a connected source returns empty (often a
@@ -395,21 +385,6 @@ struct DiscoverView: View {
             guard !Task.isCancelled, isEmpty else { return }
             await load(forceRefresh: true)
         }
-    }
-
-    /// The catalog's most common genres (most frequent first), capped to a few
-    /// so Discover doesn't turn into an endless wall of rails. Only genres with
-    /// enough titles to fill a rail are kept.
-    private func topGenres(in items: [UnifiedMediaItem]) -> [String] {
-        var counts: [String: Int] = [:]
-        for item in items {
-            for genre in item.genres { counts[genre, default: 0] += 1 }
-        }
-        return counts
-            .filter { $0.value >= 4 }
-            .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
-            .prefix(4)
-            .map(\.key)
     }
 
     /// Round-robin two lists: a, b, a, b, … until both drain.

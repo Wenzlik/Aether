@@ -17,6 +17,10 @@ public struct AetherCard: View {
     public let progress: Double?
     /// Shows a "watched" checkmark badge over the artwork when `true`.
     public let isWatched: Bool
+    /// Community rating (≈0–10). When set and > 0, a compact number badge sits in
+    /// the artwork's top-leading corner (#351) — just the figure, no label, so it
+    /// barely takes space. `nil`/0 ⇒ no badge.
+    public let rating: Double?
     /// How many lines the title may wrap to before truncating. Season cards
     /// pass `2` so longer "S2 · Asylum" labels stay legible instead of clipping
     /// to "Seaso…" (#263); most cards keep the single-line default.
@@ -31,6 +35,7 @@ public struct AetherCard: View {
         aspectRatio: CGFloat = 2.0 / 3.0,
         progress: Double? = nil,
         isWatched: Bool = false,
+        rating: Double? = nil,
         titleLineLimit: Int = 1
     ) {
         self.title = title
@@ -39,6 +44,7 @@ public struct AetherCard: View {
         self.aspectRatio = aspectRatio
         self.progress = progress
         self.isWatched = isWatched
+        self.rating = rating
         self.titleLineLimit = titleLineLimit
     }
 
@@ -46,6 +52,7 @@ public struct AetherCard: View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             artwork
                 .overlay(alignment: .bottom) { progressBar }
+                .overlay(alignment: .topLeading) { ratingBadge }
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 // Premium focus: lift + soft blue glow, no border (Apple TV+ feel).
                 // Cards earn the larger lift.
@@ -135,6 +142,32 @@ public struct AetherCard: View {
         return 8
         #else
         return 6
+        #endif
+    }
+
+    /// A minimal community-rating chip (#351): just the score (one decimal) on a
+    /// frosted capsule in the top-leading corner — deliberately tiny so it doesn't
+    /// compete with the artwork. Hidden when there's no rating.
+    @ViewBuilder
+    private var ratingBadge: some View {
+        if let rating, rating > 0 {
+            Text(String(format: "%.1f", rating))
+                .font(.system(size: ratingFontSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay { Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5) }
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                .padding(AetherDesign.Spacing.xs)
+        }
+    }
+
+    private var ratingFontSize: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 15
+        #else
+        return 11
         #endif
     }
 
@@ -249,9 +282,10 @@ extension AetherCard {
         posterURL: URL?,
         progress: Double? = nil,
         isWatched: Bool = false,
+        rating: Double? = nil,
         titleLineLimit: Int = 1
     ) -> AetherCard {
-        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, titleLineLimit: titleLineLimit)
+        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, rating: rating, titleLineLimit: titleLineLimit)
     }
 
     /// 16:9 hero card — used for the featured rail and continue-watching, where
