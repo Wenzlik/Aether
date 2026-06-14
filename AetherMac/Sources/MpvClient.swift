@@ -163,6 +163,12 @@ final class MpvClient {
     /// core), and splitting ownership across the view made the order racy.
     @ObservationIgnored private(set) var renderContext: OpaquePointer?
 
+    /// The `passRetained` coordinator pointer handed to the update callback —
+    /// released in `destroy()` once the callback is cleared, balancing the retain
+    /// taken in `MpvVideoView`'s `attach`. Keeps the coordinator alive exactly as
+    /// long as mpv can call back into it.
+    @ObservationIgnored private var renderUpdateCtx: UnsafeMutableRawPointer?
+
     /// Create the software render context (`MPV_RENDER_API_TYPE_SW`). No GL/Metal
     /// init params — mpv renders into a CPU buffer we hand it per frame. `updateCtx`
     /// is passed to the (non-isolated) update callback — the Metal coordinator it
@@ -177,6 +183,7 @@ final class MpvClient {
             mpv_render_context_create(&renderContext, handle, &params)
         }
         if let renderContext {
+            renderUpdateCtx = updateCtx
             mpv_render_context_set_update_callback(renderContext, mpvRenderUpdate, updateCtx)
         }
     }
@@ -220,6 +227,12 @@ final class MpvClient {
             mpv_render_context_set_update_callback(renderContext, nil, nil)
             mpv_render_context_free(renderContext)
             self.renderContext = nil
+            // Balance the `passRetained` coordinator from createRenderContext —
+            // now that mpv can no longer call the update callback, drop the retain.
+            if let renderUpdateCtx {
+                Unmanaged<AnyObject>.fromOpaque(renderUpdateCtx).release()
+                self.renderUpdateCtx = nil
+            }
         }
         if let handle {
             mpv_set_wakeup_callback(handle, nil, nil)

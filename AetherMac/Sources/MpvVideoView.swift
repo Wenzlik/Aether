@@ -8,11 +8,17 @@ import Cmpv
 /// invoked it). We hop to the main thread and ask the view's coordinator to
 /// redraw. Internal (not private) so `MpvClient.createRenderContext` can install it.
 func mpvRenderUpdate(_ ctx: UnsafeMutableRawPointer?) {
+    guard let ctx else { return }
+    // Retain the coordinator for the duration of the hop to main — mpv can fire
+    // this from its render thread right as the player is closing, and an
+    // *unretained* deref crashed (use-after-free) when the coordinator had
+    // already been freed. The matching release is `takeRetainedValue` below.
+    _ = Unmanaged<MpvMetalCoordinator>.fromOpaque(ctx).retain()
     let bits = UInt(bitPattern: ctx)
     DispatchQueue.main.async {
         guard let p = UnsafeMutableRawPointer(bitPattern: bits) else { return }
         MainActor.assumeIsolated {
-            Unmanaged<MpvMetalCoordinator>.fromOpaque(p).takeUnretainedValue().setNeedsRedraw()
+            Unmanaged<MpvMetalCoordinator>.fromOpaque(p).takeRetainedValue().setNeedsRedraw()
         }
     }
 }
@@ -79,7 +85,11 @@ final class MpvMetalCoordinator: NSObject, MTKViewDelegate {
         self.view = view
         // Create mpv's SW render context; its update callback (file-scope, called
         // off-thread) hops to main and pokes `setNeedsRedraw` on this coordinator.
-        client.createRenderContext(updateCtx: Unmanaged.passUnretained(self).toOpaque())
+        // `passRetained` keeps this coordinator alive for as long as the render
+        // context holds the callback pointer — `MpvClient.destroy()` balances it
+        // (release) when it clears the callback, so the callback can never
+        // dereference a freed coordinator.
+        client.createRenderContext(updateCtx: Unmanaged.passRetained(self).toOpaque())
     }
 
     func detach() {
