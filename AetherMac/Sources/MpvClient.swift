@@ -219,10 +219,10 @@ final class MpvClient {
         }
         if let handle {
             mpv_set_wakeup_callback(handle, nil, nil)
-            // Nudge mpv to abort in-flight work so the thread join is quick.
-            mpv_command_string(handle, "quit")
             self.handle = nil
-            // Pass the handle as a Sendable bit pattern across the queue hop.
+            // Everything from here joins mpv threads (incl. a demux thread blocked
+            // in a network read) — keep it entirely off the main thread. Pass the
+            // handle as a Sendable bit pattern across the queue hop.
             let bits = UInt(bitPattern: UnsafeMutableRawPointer(handle))
             DispatchQueue.global(qos: .utility).async {
                 guard let raw = UnsafeMutableRawPointer(bitPattern: bits) else { return }

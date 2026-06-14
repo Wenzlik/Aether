@@ -41,6 +41,9 @@ final class MacPlayerModel {
     private var pendingResumeSeconds: Double?
     private var didSeekResume = false
     private var lastRecordedSecond = -10
+    /// Latest playhead from time-pos events — used at teardown so we never call
+    /// the (potentially blocking) mpv_get_property on a stalled network stream.
+    private var lastKnownSeconds: Double = 0
 
     func load(_ url: URL, session: MacSession? = nil, item: MediaItem? = nil) {
         guard url != loadedURL else { return }
@@ -100,6 +103,7 @@ final class MacPlayerModel {
             applyPendingResume()
         case "time-pos":
             let seconds = mpv.doubleProperty("time-pos")
+            lastKnownSeconds = seconds          // cached for teardown (see below)
             timeText = Self.format(seconds)
             if !isScrubbing, durationSeconds > 0 {
                 position = max(0, min(1, seconds / durationSeconds))
@@ -156,12 +160,17 @@ final class MacPlayerModel {
 
     /// Persist the current playhead for Continue Watching. Skips the very start
     /// and the tail (a near-finished title shouldn't reappear as "resume").
+    ///
+    /// Uses the **cached** `lastKnownSeconds`, never `mpv_get_property` — that
+    /// call goes through mpv's dispatch lock and blocks until the core services
+    /// it, which on a stalled network stream (Plex) froze the main thread when
+    /// recording on stop. The cache is updated from time-pos events (pushed by
+    /// the core while it's responsive), so teardown touches no mpv API.
     private func recordResume(committing: Bool) {
         guard let item, let session, durationSeconds > 0 else { return }
-        let seconds = mpv.doubleProperty("time-pos")
-        let fraction = seconds / durationSeconds
+        let fraction = lastKnownSeconds / durationSeconds
         guard fraction > 0.01, fraction < 0.95 else { return }
-        Task { await session.recordResume(for: item, seconds: seconds, committing: committing) }
+        Task { await session.recordResume(for: item, seconds: lastKnownSeconds, committing: committing) }
     }
 
     // MARK: Helpers
