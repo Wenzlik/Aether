@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AetherCore
 import UniformTypeIdentifiers
 
@@ -46,14 +47,21 @@ struct HomeView: View {
         NavigationSplitView {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230)
-                // Brand lockup in the titlebar, beside the window controls.
-                .toolbar {
-                    ToolbarItem(placement: .navigation) {
-                        Image("AetherBrandMark").resizable().scaledToFit().frame(height: 16)
-                    }
-                }
         } detail: {
             detail
+        }
+        // Brand lockup in the titlebar, immediately left of the sidebar toggle.
+        // We drop the automatic toggle and re-add our own *after* the logo so the
+        // order is: traffic lights → AETHER → toggle. The logo is a plain image
+        // (no toolbar-button background).
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Image("AetherBrandMark").resizable().scaledToFit().frame(height: 16)
+            }
+            ToolbarItem(placement: .navigation) {
+                Button { toggleSidebar() } label: { Image(systemName: "sidebar.left") }
+            }
         }
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
@@ -134,6 +142,12 @@ struct HomeView: View {
     }
 
     // MARK: Open
+
+    /// Toggle the split view's sidebar (we replaced the system toggle so the
+    /// logo can sit to its left).
+    private func toggleSidebar() {
+        NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+    }
 
     private func openLocal(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
