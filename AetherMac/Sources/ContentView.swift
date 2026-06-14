@@ -11,11 +11,12 @@ struct HomeView: View {
     var recents: RecentsStore
     @Environment(\.openWindow) private var openWindow
     @State private var isImporting = false
-    @State private var sidebar: SidebarItem? = .home
+    @State private var sidebar: SidebarItem? = .discover
     @State private var signIn: SignInTarget?
 
     enum SidebarItem: Hashable, Identifiable {
-        case home
+        case discover
+        case library
         var id: Self { self }
     }
     enum SignInTarget: String, Identifiable {
@@ -66,7 +67,10 @@ struct HomeView: View {
     private var sidebarList: some View {
         List(selection: $sidebar) {
             Section("Library") {
-                Label("Home", systemImage: "house").tag(SidebarItem.home)
+                if session.hasAnySource {
+                    Label("Discover", systemImage: "sparkles").tag(SidebarItem.discover)
+                    Label("Library", systemImage: "square.grid.2x2").tag(SidebarItem.library)
+                }
                 Button { isImporting = true } label: {
                     Label("Open File…", systemImage: "folder")
                 }
@@ -115,10 +119,15 @@ struct HomeView: View {
     private var detail: some View {
         if session.hasAnySource {
             NavigationStack {
-                LibraryGridView(session: session)
-                    .navigationDestination(for: MediaItem.self) { mediaItem in
-                        MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
+                Group {
+                    switch sidebar {
+                    case .library: LibraryGridView(session: session)
+                    default:       DiscoverView(session: session)
                     }
+                }
+                .navigationDestination(for: MediaItem.self) { mediaItem in
+                    MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
+                }
             }
         } else if recents.urls.isEmpty {
             welcome

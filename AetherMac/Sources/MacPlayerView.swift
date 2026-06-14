@@ -11,16 +11,11 @@ struct MacPlayerView: View {
     let url: URL
 
     var body: some View {
-        // Native containers (mp4/mov, HLS from Plex/Jellyfin) → AVPlayer; mkv/DTS
-        // → VLCKit. The Mac target links VLCKit 3.x (Vendor/VLCKitMac), which has
-        // a working macOS video output — unlike the unified VLCKit 4 (built
-        // --disable-macosx) whose GL vout asserted on Apple Silicon (#232).
-        switch PlaybackEngine.engine(for: url) {
-        case .system:
-            AVKitPlayerScreen(url: url)
-        case .vlc:
-            VLCPlayerScreen(url: url)
-        }
+        // Everything plays in the IINA-style VLCKit player for one consistent
+        // experience — including Plex/Jellyfin (HLS) and local mp4/mov, not just
+        // mkv/DTS. Now that VLCKit 3.x renders on macOS (#232), there's no reason
+        // to split Plex off to AVPlayer's bare chrome.
+        VLCPlayerScreen(url: url)
     }
 }
 

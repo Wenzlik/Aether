@@ -37,31 +37,13 @@ struct LibraryGridView: View {
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(items) { item in
                         if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                            NavigationLink(value: base) { poster(item) }
+                            NavigationLink(value: base) { MacPoster(item: item, width: 150) }
                                 .buttonStyle(.plain)
                         } else {
-                            poster(item)
+                            MacPoster(item: item, width: 150)
                         }
                     }
                 }
-            }
-        }
-    }
-
-    private func poster(_ item: UnifiedMediaItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            CachedAsyncImage(url: item.posterURL, aspectRatio: 2.0 / 3.0)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(alignment: .topTrailing) {
-                    if item.isFullyWatched {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.white, .green)
-                            .padding(6)
-                    }
-                }
-            Text(item.title).font(.callout).lineLimit(2)
-            if let year = item.year {
-                Text(String(year)).font(.caption2).foregroundStyle(.secondary)
             }
         }
     }

@@ -136,6 +136,15 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
+    /// In-memory resume store — enough for `homeRails` (no on-device resume
+    /// tracking on Mac yet, so Continue Watching stays empty for now).
+    let resumeStore = ResumeStore()
+
+    /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
+    func homeRails() async -> UnifiedRails {
+        await makeLibrary().homeRails(resumeStore: resumeStore)
+    }
+
     /// Resolve a playable URL for an item via its source's resolver.
     func resolvedURL(for item: MediaItem) async -> URL? {
         guard let source = source(for: item) else { return nil }
