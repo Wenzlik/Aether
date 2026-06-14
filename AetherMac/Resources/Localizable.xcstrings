@@ -781,6 +781,126 @@
           }
         }
       }
+    },
+    "Add Folder…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidat složku…"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obecné"
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jazyk"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Systém"
+          }
+        }
+      }
+    },
+    "Local Library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokální knihovna"
+          }
+        }
+      }
+    },
+    "Metadata": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadata"
+          }
+        }
+      }
+    },
+    "Close player": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zavřít přehrávač"
+          }
+        }
+      }
+    },
+    "Changes the app's language immediately. Some text may still appear in English until fully translated.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Změní jazyk aplikace okamžitě. Některé texty mohou zůstat anglicky, dokud nebudou přeloženy."
+          }
+        }
+      }
+    },
+    "Pick folders on this Mac or a mounted network share. Aether scans them for movies and shows and adds them to your library.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyber složky na tomto Macu nebo na připojeném síťovém disku. Aether je prohledá na filmy a seriály a přidá je do knihovny."
+          }
+        }
+      }
+    },
+    "Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slouží ke stažení posterů a popisů pro tvou lokální knihovnu. Nech prázdné pro klíč zabudovaný v aplikaci, nebo vlož vlastní z themoviedb.org."
+          }
+        }
+      }
+    },
+    "Plays media with mpv (libmpv), FFmpeg, and libass — © their respective authors, under GPL/LGPL.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrává média pomocí mpv (libmpv), FFmpeg a libass — © příslušní autoři, pod GPL/LGPL."
+          }
+        }
+      }
+    },
+    "TMDb API Key": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb API klíč"
+          }
+        }
+      }
     }
   }
 }

@@ -252,7 +252,7 @@ private struct AboutSettings: View {
                 Link("Source on GitHub", destination: Self.repoURL)
             }
             Section {
-                Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
+                Text("Plays media with mpv (libmpv), FFmpeg, and libass — © their respective authors, under GPL/LGPL.")
                     .font(.caption).foregroundStyle(.tertiary)
             }
         }
