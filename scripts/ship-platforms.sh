@@ -10,7 +10,7 @@
 #   • iOS       — "Tag Changes" `ios/…`
 #   • tvOS      — "Tag Changes" `tvos/…`
 #   • visionOS  — "Tag Changes" `visionos/…`
-#   • macOS     — (added later, gated on `macos/…`)
+#   • macOS     — "Tag Changes" `macos/…`
 #
 # Merging staging → main means "ready"; running this script means "ship". Run it
 # right AFTER a release lands on `main` so all platforms build the same commit.
@@ -25,8 +25,8 @@
 #
 set -euo pipefail
 
-# Tag-gated platforms — all of them. Add "macos" here once its workflow exists.
-PLATFORMS=(ios tvos visionos)
+# Tag-gated platforms — all of them (macOS workflow now exists).
+PLATFORMS=(ios tvos visionos macos)
 
 REF="${1:-origin/main}"
 git fetch origin --quiet --tags

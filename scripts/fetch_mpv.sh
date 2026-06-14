@@ -27,10 +27,12 @@ export HOMEBREW_NO_AUTO_UPDATE=1
 for formula in mpv dylibbundler; do
   if brew list "$formula" >/dev/null 2>&1; then
     echo "fetch_mpv: $formula already installed"
-  else
-    echo "fetch_mpv: installing $formula…"
-    brew install "$formula"
+    continue
   fi
+  # Retry once — brew bottle downloads on CI runners are occasionally flaky, and
+  # a failed install here fails the whole macOS archive.
+  echo "fetch_mpv: installing $formula…"
+  brew install "$formula" || { echo "fetch_mpv: $formula install failed, retrying…"; sleep 5; brew install "$formula"; }
 done
 
 echo "fetch_mpv: libmpv at $(brew --prefix)/lib/libmpv.dylib"

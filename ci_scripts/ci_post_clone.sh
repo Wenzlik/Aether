@@ -54,29 +54,6 @@ echo "ci_post_clone: using $("$XCODEGEN" --version 2>/dev/null | tr '\n' ' ')"
 
 cd "$WORKSPACE"
 
-# Fetch the vendored VLCKit xcframework (a local SPM binaryTarget the app links
-# but doesn't commit — see scripts/fetch_vlckit.sh). Without it, xcodebuild
-# can't resolve the package. No cache here (fresh VM per build), so it
-# re-downloads (~522 MB) each archive — acceptable for the TestFlight cadence.
-echo "ci_post_clone: fetching VLCKit"
-bash "$WORKSPACE/scripts/fetch_vlckit.sh"
-# macOS player engine is libmpv (#232) — install it + dylibbundler so the
-# AetherMac build can link libmpv and the post-build phase can bundle its dylib
-# tree into the .app. This is ONLY for the macOS archive: a `brew install` is
-# slow and can fail on the runner, and under `set -e` that would take down the
-# whole post-clone *before* `xcodegen generate` runs — leaving a schemes-only
-# `Aether.xcodeproj` with no `project.pbxproj` and failing every non-macOS build
-# (iOS/tvOS/visionOS) too. So gate it on the platform.
-case "${CI_PRODUCT_PLATFORM:-}" in
-  macOS|macos|*[Mm]ac*)
-    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM)"
-    bash "$WORKSPACE/scripts/fetch_mpv.sh"
-    ;;
-  *)
-    echo "ci_post_clone: skipping libmpv (platform=${CI_PRODUCT_PLATFORM:-unknown}, not macOS)"
-    ;;
-esac
-
 # Inject the TMDb API key (Local Library metadata, #210) from the Xcode Cloud
 # workflow environment variable into the gitignored xcconfig the build reads.
 # Unset ⇒ matching just stays disabled (no failure). The key never lives in the
@@ -86,6 +63,12 @@ if [ -n "${TMDB_API_KEY:-}" ]; then
   printf 'TMDB_API_KEY = %s\n' "$TMDB_API_KEY" > "$WORKSPACE/Config/Secrets.xcconfig"
 fi
 
+# Generate the project FIRST — before any binary fetch. XcodeGen only needs
+# project.yml, so the `.xcodeproj` (with its `project.pbxproj`) must never depend
+# on a slow/flaky `brew install` or a large xcframework download. A fetch failing
+# afterwards then surfaces as a clear link error, instead of the misleading
+# "Aether.xcodeproj … missing its project.pbxproj file" that took down the macOS
+# archive when libmpv's brew install failed under `set -e` before xcodegen ran.
 echo "ci_post_clone: running xcodegen generate in $WORKSPACE"
 "$XCODEGEN" generate
 
@@ -105,5 +88,26 @@ echo "ci_post_clone: installing pinned Package.resolved"
 SWIFTPM_DIR="$WORKSPACE/Aether.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
 mkdir -p "$SWIFTPM_DIR"
 cp "$WORKSPACE/ci_scripts/Package.resolved.pinned" "$SWIFTPM_DIR/Package.resolved"
+
+# Binary dependencies LAST — the project already exists, so a failure here is a
+# clear link-time error, not a missing-project error.
+#
+# VLCKit xcframework (local SPM binaryTarget the app links but doesn't commit;
+# ~522 MB, re-fetched per build). Needed by iOS/iPadOS/tvOS/visionOS.
+echo "ci_post_clone: fetching VLCKit"
+bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+
+# libmpv (#232) — the macOS player engine + dylibbundler for the bundling phase.
+# ONLY on the macOS archive (a brew install is slow and macOS-specific); gated on
+# the platform so iOS/tvOS/visionOS skip it entirely.
+case "${CI_PRODUCT_PLATFORM:-}" in
+  macOS|macos|*[Mm]ac*)
+    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM)"
+    bash "$WORKSPACE/scripts/fetch_mpv.sh"
+    ;;
+  *)
+    echo "ci_post_clone: skipping libmpv (platform=${CI_PRODUCT_PLATFORM:-unknown}, not macOS)"
+    ;;
+esac
 
 echo "ci_post_clone: done"
