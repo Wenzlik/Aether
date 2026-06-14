@@ -289,7 +289,7 @@ final class MacSession {
     /// clients — but the two servers are independent, so watching a title that
     /// exists on both marks it only on the one you played from, not the other.
     func markWatched(_ item: MediaItem) async {
-        await source(for: item)?.markWatched(item.id)
+        await makeLibrary().markWatchedEverywhere(item)
         libraryToken &+= 1   // refresh watched badges
     }
 

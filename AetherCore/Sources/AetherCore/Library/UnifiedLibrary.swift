@@ -257,6 +257,84 @@ public actor UnifiedLibrary {
         return Set(await downloads.snapshot().completed.map(\.mediaID))
     }
 
+    // MARK: Cross-source watched
+
+    /// Mark a played item watched (or unwatched) on **every connected source
+    /// that has the same title**, not just the source it streamed from. The two
+    /// servers are independent, so without this watching a movie that exists on
+    /// both Plex and Jellyfin only updates one; this fans the state out across
+    /// all of them, matched by shared external id (TMDb/IMDb/TVDB). Episodes are
+    /// matched via their show plus season/episode number.
+    ///
+    /// Best-effort and fault-tolerant: a source that can't be matched is skipped.
+    public func markWatchedEverywhere(_ played: MediaItem, watched: Bool = true) async {
+        let byID = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func apply(_ id: MediaID) async {
+            guard let s = byID[id.source] else { return }
+            if watched { await s.markWatched(id) } else { await s.markUnwatched(id) }
+        }
+        // Always update the source it actually played from.
+        await apply(played.id)
+
+        switch played.kind {
+        case .movie, .show:
+            let group = await unifiedItems(kind: played.kind).first { u in
+                u.sources.contains { $0.item.id == played.id }
+                    || u.sources.contains { Self.sharesGuid($0.item.guids, played.guids) }
+            }
+            guard let group else { return }
+            for s in group.sources where s.item.id != played.id { await apply(s.item.id) }
+
+        case .episode:
+            guard let season = played.seasonNumber, let episode = played.episodeNumber else { return }
+            let show = await unifiedItems(kind: .show).first { Self.showMatches($0, episode: played) }
+            guard let show else { return }
+            for s in show.sources where s.item.id.source != played.id.source {
+                guard let src = byID[s.item.id.source],
+                      let epID = await Self.findEpisode(src, show: s.item.id, season: season, episode: episode)
+                else { continue }
+                if watched { await src.markWatched(epID) } else { await src.markUnwatched(epID) }
+            }
+        default:
+            break
+        }
+    }
+
+    private static func sharesGuid(_ a: MediaGuids, _ b: MediaGuids) -> Bool {
+        (a.tmdb != nil && a.tmdb == b.tmdb)
+            || (a.imdb != nil && a.imdb == b.imdb)
+            || (a.tvdb != nil && a.tvdb == b.tvdb)
+    }
+
+    /// A unified show matches a played episode by the episode's show external id
+    /// (when carried) or, failing that, a case-insensitive series-title match.
+    private static func showMatches(_ show: UnifiedMediaItem, episode: MediaItem) -> Bool {
+        if !episode.guids.isEmpty, show.sources.contains(where: { sharesGuid($0.item.guids, episode.guids) }) {
+            return true
+        }
+        guard let series = episode.seriesTitle else { return false }
+        return show.title.localizedCaseInsensitiveCompare(series) == .orderedSame
+            || show.sources.contains { $0.item.title.localizedCaseInsensitiveCompare(series) == .orderedSame }
+    }
+
+    /// The episode id on `source` matching season+episode under `show` — walking
+    /// show → (seasons →) episodes, tolerant of sources with or without a season tier.
+    private static func findEpisode(_ source: any MediaSource, show: MediaID, season: Int, episode: Int) async -> MediaID? {
+        guard let children = try? await source.children(of: show) else { return nil }
+        func episodeIn(_ items: [MediaItem]) -> MediaID? {
+            items.first { $0.kind == .episode && ($0.seasonNumber ?? 0) == season && ($0.episodeNumber ?? 0) == episode }?.id
+        }
+        if let direct = episodeIn(children) { return direct }
+        // Otherwise children are seasons — descend into the matching one.
+        for s in children where s.kind == .season {
+            if (s.seasonNumber ?? -1) == season || season == 0,
+               let eps = try? await source.children(of: s.id), let found = episodeIn(eps) {
+                return found
+            }
+        }
+        return nil
+    }
+
     /// Build the unified Home rails: deduplicated Movies / TV Shows, plus
     /// cross-source Continue Watching (best resume across a title's sources) and
     /// the Downloaded titles. Fault-tolerant via `unifiedItems`.

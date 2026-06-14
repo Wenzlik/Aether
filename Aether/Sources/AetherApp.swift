@@ -598,6 +598,13 @@ final class AppSession {
         UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
     }
 
+    /// Mark a played item watched/unwatched on **every connected source** that
+    /// has it (matched by shared external id), not just the one it streamed
+    /// from — so a title on both Plex and Jellyfin stays in sync.
+    func markWatchedEverywhere(_ item: MediaItem, watched: Bool = true) async {
+        await makeUnifiedLibrary().markWatchedEverywhere(item, watched: watched)
+    }
+
     /// Make `kind` the active source (persisted) and re-point `source`.
     func setActiveSource(_ kind: SourceKind) {
         activeSourceKind = kind
