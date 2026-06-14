@@ -92,8 +92,34 @@ private struct GeneralSettings: View {
                 Text("Changes the app's language immediately. Some text may still appear in English until fully translated.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Local Library") {
+                ForEach(session.localFolders, id: \.self) { url in
+                    HStack {
+                        Label(url.lastPathComponent, systemImage: "folder")
+                        Spacer()
+                        Button(role: .destructive) {
+                            session.removeLocalFolder(url)
+                        } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                Button("Add Folder…", systemImage: "plus") { addFolder() }
+                Text("Pick folders on this Mac or a mounted network share. Aether scans them for movies and shows and adds them to your library.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add"
+        if panel.runModal() == .OK {
+            for url in panel.urls { session.addLocalFolder(url) }
+        }
     }
 }
 

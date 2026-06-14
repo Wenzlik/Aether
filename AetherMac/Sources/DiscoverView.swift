@@ -50,7 +50,7 @@ struct DiscoverView: View {
         .navigationTitle(mode == .home ? "Home" : "Discover")
         // Reload when sources change AND after a player records a resume point,
         // so Continue Watching reflects what was just played.
-        .task(id: "\(session.connectedSources.count)-\(session.resumeRevision)") { await load() }
+        .task(id: "\(session.libraryToken)-\(session.resumeRevision)") { await load() }
     }
 
     /// The spotlight title for Discover — the highest-rated recently-added title

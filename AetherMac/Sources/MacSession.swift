@@ -22,6 +22,16 @@ final class MacSession {
     private(set) var plexSources: [PlexMediaSource] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
 
+    /// User-picked local/network folders scanned into a library, and the source
+    /// built from them. Folders persist as paths in UserDefaults.
+    private(set) var localFolders: [URL] = MacSession.loadLocalFolders()
+    private var localSource: LocalFolderSource?
+
+    /// Bumped whenever the set of sources or local folders changes, so the
+    /// library/discover views reload (their `.task(id:)` keys on it). Needed
+    /// because adding a 2nd folder doesn't change `connectedSources.count`.
+    private(set) var libraryToken = 0
+
     /// Server display names, mirrored as plain strings for the Settings UI —
     /// the source objects are actors, so their `displayName` can't be read from
     /// the main actor synchronously.
@@ -43,14 +53,45 @@ final class MacSession {
 
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
-    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected }
+    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || !localFolders.isEmpty }
 
     /// Every connected source — what `UnifiedLibrary` fans out over.
     var connectedSources: [any MediaSource] {
         var list: [any MediaSource] = []
         list.append(contentsOf: plexSources)
         if let jellyfinSource { list.append(jellyfinSource) }
+        if let localSource { list.append(localSource) }
         return list
+    }
+
+    // MARK: Local library (folder scan)
+
+    private static let localFoldersKey = "local.folders"
+    private static func loadLocalFolders() -> [URL] {
+        (UserDefaults.standard.stringArray(forKey: localFoldersKey) ?? []).map { URL(fileURLWithPath: $0) }
+    }
+
+    /// Add a folder to the local library and rescan.
+    func addLocalFolder(_ url: URL) {
+        guard !localFolders.contains(url) else { return }
+        _ = url.startAccessingSecurityScopedResource()
+        localFolders.append(url)
+        persistLocalFolders()
+    }
+
+    func removeLocalFolder(_ url: URL) {
+        localFolders.removeAll { $0 == url }
+        persistLocalFolders()
+    }
+
+    private func persistLocalFolders() {
+        UserDefaults.standard.set(localFolders.map(\.path), forKey: Self.localFoldersKey)
+        rebuildLocalSource()
+    }
+
+    private func rebuildLocalSource() {
+        localSource = localFolders.isEmpty ? nil : LocalFolderSource(folders: localFolders)
+        libraryToken &+= 1
     }
 
     private static let plexTokenKey = "plex.authToken"
@@ -93,6 +134,7 @@ final class MacSession {
         guard !didRestore else { return }
         didRestore = true
         await resumeStore.loadFromDisk()
+        rebuildLocalSource()    // build the local library from persisted folders
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
             plexServerNames = records.map(\.name)
@@ -115,6 +157,7 @@ final class MacSession {
         try? await plexServerStore.writeAll(records)
         plexSources = records.map(makePlexSource)
         plexServerNames = records.map(\.name)
+        libraryToken &+= 1
     }
 
     func signOutPlex() async {
@@ -122,6 +165,7 @@ final class MacSession {
         try? await plexServerStore.clear()
         plexSources = []
         plexServerNames = []
+        libraryToken &+= 1
     }
 
     private func makePlexSource(_ record: PlexServerRecord) -> PlexMediaSource {
@@ -141,12 +185,14 @@ final class MacSession {
         try? await jellyfinServerStore.write(record)
         jellyfinSource = makeJellyfinSource(record)
         jellyfinServerName = record.serverName
+        libraryToken &+= 1
     }
 
     func signOutJellyfin() async {
         try? await jellyfinServerStore.clear()
         jellyfinSource = nil
         jellyfinServerName = nil
+        libraryToken &+= 1
     }
 
     private func makeJellyfinSource(_ record: JellyfinServerRecord) -> JellyfinMediaSource? {

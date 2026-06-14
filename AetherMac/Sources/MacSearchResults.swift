@@ -45,7 +45,7 @@ struct MacSearchResults: View {
             }
         }
         .navigationTitle("Search")
-        .task(id: session.connectedSources.count) { await load() }
+        .task(id: session.libraryToken) { await load() }
     }
 
     private func load() async {
