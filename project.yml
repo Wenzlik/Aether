@@ -234,12 +234,12 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
-      # libmpv — the engine behind IINA (#232). The macOS player renders through
-      # the mpv OpenGL render API, so we link OpenGL.framework. Headers + the
-      # `Cmpv` module map are vendored in Vendor/Mpv; libmpv itself comes from
-      # Homebrew for dev builds (run scripts/fetch_mpv.sh). Bundling libmpv + its
-      # ffmpeg dependency tree into the .app for distribution comes later.
-      - sdk: OpenGL.framework
+      # libmpv — the engine behind IINA (#232). The macOS player uses mpv's
+      # **software render API** and composites via **Metal** (MTKView), so there's
+      # no OpenGL link (NSOpenGLView/OpenGL are deprecated — #19). Metal/MetalKit
+      # auto-link from the Swift `import`. Headers + the `Cmpv` module map are
+      # vendored in Vendor/Mpv; libmpv itself comes from Homebrew for dev builds
+      # (run scripts/fetch_mpv.sh).
     # Register Aether as a video viewer so Finder offers "Open With ▸ Aether"
     # and the user can set it as the default player (#232 — the killer feature).
     # mkv has no system UTI, so we declare it as an imported type conforming to
