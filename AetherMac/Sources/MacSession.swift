@@ -51,6 +51,27 @@ final class MacSession {
     /// The locale to inject, or `nil` to follow the system language.
     var appLocale: Locale { appLanguage == "system" ? .autoupdatingCurrent : Locale(identifier: appLanguage) }
 
+    /// Manual TMDb API key override (Settings). Empty = use the build-injected
+    /// key (Info.plist `TMDBAPIKey`, like iOS). Drives local-library metadata
+    /// matching (posters/overviews); changing it rescans the local library.
+    var tmdbToken: String = UserDefaults.standard.string(forKey: "tmdb.token") ?? "" {
+        didSet {
+            UserDefaults.standard.set(tmdbToken, forKey: "tmdb.token")
+            rebuildLocalSource()
+        }
+    }
+    /// Manual override if set, else the key baked in at build time.
+    private var effectiveTMDBKey: String {
+        let manual = tmdbToken.trimmingCharacters(in: .whitespaces)
+        if !manual.isEmpty { return manual }
+        return (Bundle.main.object(forInfoDictionaryKey: "TMDBAPIKey") as? String) ?? ""
+    }
+    var isTMDBConfigured: Bool { !effectiveTMDBKey.isEmpty }
+    private func makeTMDbClient() -> TMDbClient? {
+        let key = effectiveTMDBKey
+        return key.isEmpty ? nil : TMDbClient(apiKey: key, api: api)
+    }
+
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || !localFolders.isEmpty }
@@ -90,7 +111,7 @@ final class MacSession {
     }
 
     private func rebuildLocalSource() {
-        localSource = localFolders.isEmpty ? nil : LocalFolderSource(folders: localFolders)
+        localSource = localFolders.isEmpty ? nil : LocalFolderSource(folders: localFolders, tmdb: makeTMDbClient())
         libraryToken &+= 1
     }
 

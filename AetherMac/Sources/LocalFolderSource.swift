@@ -15,6 +15,7 @@ actor LocalFolderSource: MediaSource {
     nonisolated let displayName = "Local Library"
 
     private let folders: [URL]
+    private let tmdb: TMDbClient?
     private var scanned: Scan?
 
     private static let videoExtensions: Set<String> = [
@@ -24,7 +25,12 @@ actor LocalFolderSource: MediaSource {
     private nonisolated var showsLibraryID: Library.ID { .init(source: id, rawValue: "shows") }
     private static let showPrefix = "show:"
 
-    init(folders: [URL]) { self.folders = folders }
+    /// `tmdb` (when a TMDb key is configured) enriches scanned movies/shows with
+    /// posters, backdrops, and overviews — otherwise they show title-only cards.
+    init(folders: [URL], tmdb: TMDbClient? = nil) {
+        self.folders = folders
+        self.tmdb = tmdb
+    }
 
     // MARK: MediaSource
 
@@ -75,9 +81,12 @@ actor LocalFolderSource: MediaSource {
         var byID: [String: MediaItem] = [:]
     }
 
+    private struct RawMovie { let title: String; let year: Int?; let url: URL; let path: String }
+
     private func scan() async -> Scan {
         if let scanned { return scanned }
         var result = Scan()
+        var rawMovies: [RawMovie] = []
         let fm = FileManager.default
         for folder in folders {
             let e = fm.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey],
@@ -97,22 +106,74 @@ actor LocalFolderSource: MediaSource {
                     result.byID[path] = item
                 } else {
                     let movie = Self.parseMovie(stem)
-                    let item = MediaItem(
-                        id: .init(source: id, rawValue: path),
-                        title: movie.title, kind: .movie, year: movie.year, streamURL: url
-                    )
-                    result.movies.append(item)
-                    result.byID[path] = item
+                    rawMovies.append(RawMovie(title: movie.title, year: movie.year, url: url, path: path))
                 }
             }
         }
-        result.movies.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        // One show container per series.
-        result.shows = result.episodesByShow.keys.sorted().map { series in
-            MediaItem(id: .init(source: id, rawValue: Self.showPrefix + series), title: series, kind: .show)
-        }
+
+        // Enrich movies + shows with TMDb (posters/backdrops/overviews) when a
+        // key is configured, capped concurrency so a big library doesn't fire
+        // hundreds of requests at once.
+        result.movies = await matched(rawMovies.sorted {
+            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        })
+        for m in result.movies { result.byID[m.id.rawValue] = m }
+
+        let seriesNames = result.episodesByShow.keys.sorted()
+        result.shows = await matchedShows(seriesNames)
+
         scanned = result
         return result
+    }
+
+    /// Build movie `MediaItem`s, looking up TMDb metadata in batches of 8.
+    private func matched(_ raws: [RawMovie]) async -> [MediaItem] {
+        var out: [MediaItem] = []
+        for chunk in raws.chunked(8) {
+            let items = await withTaskGroup(of: MediaItem.self) { group in
+                for r in chunk {
+                    group.addTask { [tmdb, id] in
+                        let meta = await tmdb?.match(title: r.title, year: r.year, isEpisode: false)
+                        return MediaItem(
+                            id: .init(source: id, rawValue: r.path),
+                            title: r.title, kind: .movie, year: r.year,
+                            summary: meta?.overview, posterURL: meta?.posterURL,
+                            backdropURL: meta?.backdropURL, streamURL: r.url
+                        )
+                    }
+                }
+                var acc: [MediaItem] = []
+                for await item in group { acc.append(item) }
+                return acc
+            }
+            out.append(contentsOf: items)
+        }
+        return out.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    /// One show container per series, with a TMDb (TV) poster when matched.
+    private func matchedShows(_ series: [String]) async -> [MediaItem] {
+        var out: [MediaItem] = []
+        for chunk in series.chunked(8) {
+            let items = await withTaskGroup(of: MediaItem.self) { group in
+                for name in chunk {
+                    group.addTask { [tmdb, id] in
+                        let meta = await tmdb?.match(title: name, year: nil, isEpisode: true)
+                        return MediaItem(
+                            id: .init(source: id, rawValue: Self.showPrefix + name),
+                            title: name, kind: .show,
+                            summary: meta?.overview, posterURL: meta?.posterURL,
+                            backdropURL: meta?.backdropURL
+                        )
+                    }
+                }
+                var acc: [MediaItem] = []
+                for await item in group { acc.append(item) }
+                return acc
+            }
+            out.append(contentsOf: items)
+        }
+        return out.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
     // MARK: Filename parsing
@@ -148,11 +209,18 @@ actor LocalFolderSource: MediaSource {
     }
 
     /// Turn `Some.Movie_Name` separators into spaces and tidy whitespace.
-    private static func clean(_ s: String) -> String {
+    fileprivate static func clean(_ s: String) -> String {
         s.replacingOccurrences(of: ".", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
             .trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: "  ", with: " ")
+    }
+}
+
+private extension Array {
+    /// Split into sub-arrays of at most `size` — used to cap TMDb match concurrency.
+    func chunked(_ size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map { Array(self[$0..<Swift.min($0 + size, count)]) }
     }
 }

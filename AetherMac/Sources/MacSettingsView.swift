@@ -107,6 +107,12 @@ private struct GeneralSettings: View {
                 Text("Pick folders on this Mac or a mounted network share. Aether scans them for movies and shows and adds them to your library.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Metadata") {
+                SecureField("TMDb API Key", text: $session.tmdbToken)
+                LabeledContent("Status", value: session.isTMDBConfigured ? "Configured" : "Not set")
+                Text("Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
