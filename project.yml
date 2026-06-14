@@ -246,6 +246,11 @@ targets:
     info:
       path: AetherMac/SupportingFiles/Info.plist
       properties:
+        # User-facing name is "Aether" everywhere (Dock, Finder, AND the menu
+        # bar). The menu-bar title comes from CFBundleName, which defaults to the
+        # product name "AetherMac" — pin it to Aether so it matches iOS. The Xcode
+        # target stays "AetherMac" internally; only the visible name unifies.
+        CFBundleName: Aether
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
