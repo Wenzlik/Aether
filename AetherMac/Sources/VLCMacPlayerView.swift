@@ -1,58 +1,176 @@
 import SwiftUI
 import VLCKit
 
-/// Minimal native-macOS VLC surface — plays a local file (MKV/DTS/multi-track)
-/// in an `NSView` the system window frames. The rich player chrome (scrubbing,
-/// audio/subtitle track menus, keyboard shortcuts) is the next step (#232); this
-/// proves VLCKit's `macos` slice plays through a SwiftUI `NSViewControllerRepresentable`.
-struct VLCMacPlayerView: NSViewControllerRepresentable {
-    let url: URL
-
-    func makeNSViewController(context: Context) -> VLCMacPlaybackController {
-        VLCMacPlaybackController(url: url)
-    }
-
-    func updateNSViewController(_ controller: VLCMacPlaybackController, context: Context) {
-        controller.play(url: url)
-    }
-}
-
-final class VLCMacPlaybackController: NSViewController {
-    private let player = VLCMediaPlayer()
-    private var currentURL: URL?
-
-    init(url: URL) {
-        self.currentURL = url
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func loadView() {
+/// The video surface — an `NSView` VLCKit renders into, bound to the model's
+/// player. The system window frames it (resize / full-screen / ⌘W are free).
+private struct VLCVideoSurface: NSViewRepresentable {
+    let model: MacPlayerModel
+    func makeNSView(context: Context) -> NSView {
         let surface = NSView()
         surface.wantsLayer = true
         surface.layer?.backgroundColor = NSColor.black.cgColor
-        view = surface
+        model.player.drawable = surface
+        return surface
     }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        player.drawable = view
-        if let currentURL { start(currentURL) }
-    }
+/// IINA-style player: full-bleed video with an auto-hiding floating control bar
+/// (scrub, ±10s, play/pause, time, volume, audio/subtitle menus, full-screen)
+/// and keyboard shortcuts (space, ←/→). The window gives ⌘W + green-button
+/// full-screen for free.
+struct MacPlayerView: View {
+    let url: URL
+    @State private var model = MacPlayerModel()
+    @State private var controlsVisible = true
+    @State private var hideWorkItem: DispatchWorkItem?
 
-    /// Swap to a new file (the window is reused across Open… picks).
-    func play(url: URL) {
-        guard url != currentURL else { return }
-        currentURL = url
-        start(url)
-    }
+    var body: some View {
+        @Bindable var model = model
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+            VLCVideoSurface(model: model).ignoresSafeArea()
 
-    private func start(_ url: URL) {
-        if let media = VLCMedia(url: url) {
-            player.media = media
+            if controlsVisible {
+                VStack(spacing: 0) {
+                    titleBar
+                    Spacer(minLength: 0)
+                    controlBar(model)
+                }
+                .transition(.opacity)
+            }
         }
-        player.play()
+        .onAppear { model.load(url); scheduleHide() }
+        .onChange(of: url) { _, newURL in model.load(newURL) }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active: reveal()
+            case .ended:  break
+            }
+        }
+        .background(keyboardShortcuts(model))
+        .animation(.easeInOut(duration: 0.2), value: controlsVisible)
+        .navigationTitle(model.title)
+    }
+
+    // MARK: Chrome
+
+    private var titleBar: some View {
+        HStack {
+            Text(model.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .shadow(radius: 4)
+            Spacer()
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
+        )
+    }
+
+    private func controlBar(_ model: MacPlayerModel) -> some View {
+        @Bindable var model = model
+        return VStack(spacing: 10) {
+            // Scrubber + time
+            HStack(spacing: 12) {
+                Text(model.timeText).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Slider(value: $model.position, in: 0...1) { editing in
+                    model.isScrubbing = editing
+                    if !editing { model.commitSeek() }
+                }
+                Text(model.durationText).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 18) {
+                transportButton("gobackward.10") { model.skipBackward() }
+                transportButton(model.isPlaying ? "pause.fill" : "play.fill", size: 26) { model.togglePlay() }
+                transportButton("goforward.10") { model.skipForward() }
+
+                Spacer()
+
+                // Volume
+                HStack(spacing: 6) {
+                    Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                    Slider(value: $model.volume, in: 0...100).frame(width: 90)
+                }
+
+                trackMenu(systemImage: "waveform", tracks: model.audioTracks, includeOff: false) { model.selectAudio($0!) }
+                trackMenu(systemImage: "captions.bubble", tracks: model.subtitleTracks, includeOff: true) { model.selectSubtitle($0) }
+
+                transportButton("arrow.up.left.and.arrow.down.right") {
+                    NSApp.keyWindow?.toggleFullScreen(nil)
+                }
+            }
+        }
+        .padding(20)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(20)
+        .frame(maxWidth: 900)
+    }
+
+    private func transportButton(_ symbol: String, size: CGFloat = 18, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .medium))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func trackMenu(
+        systemImage: String,
+        tracks: [VLCMediaPlayer.Track],
+        includeOff: Bool,
+        select: @escaping (VLCMediaPlayer.Track?) -> Void
+    ) -> some View {
+        Menu {
+            if includeOff {
+                Button("Off") { select(nil) }
+            }
+            ForEach(tracks.indices, id: \.self) { i in
+                let track = tracks[i]
+                Button {
+                    select(track)
+                } label: {
+                    if track.isSelected {
+                        Label(MacPlayerModel.name(for: track), systemImage: "checkmark")
+                    } else {
+                        Text(MacPlayerModel.name(for: track))
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: systemImage)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(tracks.isEmpty && !includeOff)
+    }
+
+    // MARK: Keyboard
+
+    private func keyboardShortcuts(_ model: MacPlayerModel) -> some View {
+        ZStack {
+            Button("") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
+            Button("") { model.skipBackward() }.keyboardShortcut(.leftArrow, modifiers: [])
+            Button("") { model.skipForward() }.keyboardShortcut(.rightArrow, modifiers: [])
+        }
+        .opacity(0)
+    }
+
+    // MARK: Auto-hide
+
+    private func reveal() {
+        if !controlsVisible { controlsVisible = true }
+        scheduleHide()
+    }
+
+    private func scheduleHide() {
+        hideWorkItem?.cancel()
+        let work = DispatchWorkItem { controlsVisible = false }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
     }
 }
