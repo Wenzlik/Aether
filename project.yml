@@ -232,12 +232,12 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
-      # VLCKit 3.x (macOS vout works) — linked directly as an xcframework, not via
-      # SPM, so its `VLCKit` module doesn't collide with the iOS VLCKit 4 package
-      # in the IDE's package graph (#232). Fetched by scripts/fetch_vlckit_mac.sh.
-      - framework: Vendor/VLCKitMac/VLCKit.xcframework
-        embed: true
-        codeSign: true
+      # libmpv — the engine behind IINA (#232). The macOS player renders through
+      # the mpv OpenGL render API, so we link OpenGL.framework. Headers + the
+      # `Cmpv` module map are vendored in Vendor/Mpv; libmpv itself comes from
+      # Homebrew for dev builds (run scripts/fetch_mpv.sh). Bundling libmpv + its
+      # ffmpeg dependency tree into the .app for distribution comes later.
+      - sdk: OpenGL.framework
     # Register Aether as a video viewer so Finder offers "Open With ▸ Aether"
     # and the user can set it as the default player (#232 — the killer feature).
     # mkv has no system UTI, so we declare it as an imported type conforming to
@@ -275,6 +275,11 @@ targets:
         # plays without security-scoped bookmarks. App Store sandbox +
         # play-in-place bookmarks come with the player-first work (#232).
         ENABLE_APP_SANDBOX: NO
+        # libmpv: vendored headers + the `Cmpv` module map, dylib from Homebrew.
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/Mpv/include
+        LIBRARY_SEARCH_PATHS: /opt/homebrew/lib
+        OTHER_LDFLAGS: -lmpv
+        OTHER_SWIFT_FLAGS: -Xcc -fmodule-map-file=$(SRCROOT)/Vendor/Mpv/module.modulemap
 
   AetherTests:
     type: bundle.unit-test

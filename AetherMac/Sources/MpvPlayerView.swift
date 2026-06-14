@@ -1,42 +1,11 @@
 import SwiftUI
-import VLCKit
 import AetherCore
 
-/// The video surface. **Must be a `VLCVideoView`**, not a plain `NSView`:
-/// VLCKit's macOS video output renders into the `VLCVideoView`/`VLCVideoLayer`
-/// it sets up itself (correct GL pixel format + CAOpenGLLayer). Handing it a
-/// bare `NSView` made the GL vout assert (`GL_INVALID_OPERATION` in
-/// `CreateFilters`) on first frame.
-private struct VLCVideoSurface: NSViewRepresentable {
-    let model: MacPlayerModel
-    func makeNSView(context: Context) -> VLCDrawableView {
-        let surface = VLCDrawableView()
-        surface.backColor = .black
-        model.player.drawable = surface
-        // Start playback only once the view is in a window (GL framebuffer ready).
-        surface.onAttached = { [model] in model.markViewReady() }
-        return surface
-    }
-    func updateNSView(_ nsView: VLCDrawableView, context: Context) {}
-}
-
-/// `VLCVideoView` that reports when it's attached to a window — VLCKit's GL
-/// context/framebuffer only becomes valid then, so the player must not `play()`
-/// before this fires (racing it asserted GL_INVALID_FRAMEBUFFER_OPERATION).
-private final class VLCDrawableView: VLCVideoView {
-    var onAttached: (@MainActor () -> Void)?
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil { onAttached?() }
-    }
-}
-
-/// IINA-style **VLCKit** player — the fallback engine for containers/codecs
-/// AVFoundation can't open (mkv, DTS, …). Full-bleed video with an auto-hiding
-/// floating control bar (scrub, ±10s, play/pause, time, volume, audio/subtitle
-/// menus, full-screen) and keyboard shortcuts (space, ←/→). Native formats go
-/// to `AVKitPlayerScreen` instead — see `MacPlayerView`.
-struct VLCPlayerScreen: View {
+/// IINA-style **libmpv** player — the macOS engine (#232). Full-bleed video with
+/// an auto-hiding floating control bar (scrub, ±10s, play/pause, time, volume,
+/// audio/subtitle menus, full-screen) and keyboard shortcuts (space, ←/→). The
+/// video surface is `MpvVideoView` (OpenGL render context on this player).
+struct MpvPlayerScreen: View {
     let url: URL
     var session: MacSession?
     var item: MediaItem?
@@ -48,7 +17,7 @@ struct VLCPlayerScreen: View {
         @Bindable var model = model
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
-            VLCVideoSurface(model: model).ignoresSafeArea()
+            MpvVideoView(client: model.mpv).ignoresSafeArea()
 
             if controlsVisible {
                 VStack(spacing: 0) {
@@ -60,7 +29,7 @@ struct VLCPlayerScreen: View {
         }
         .onAppear { model.load(url, session: session, item: item); scheduleHide() }
         .onDisappear { model.stop() }
-        .onChange(of: url) { _, newURL in model.load(newURL) }
+        .onChange(of: url) { _, newURL in model.load(newURL, session: session, item: item) }
         .contentShape(Rectangle())
         // Double-click toggles full-screen (standard player gesture).
         .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
