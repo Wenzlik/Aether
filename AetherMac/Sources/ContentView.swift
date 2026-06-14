@@ -46,10 +46,11 @@ struct HomeView: View {
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(session.appearance.preference.colorScheme)
         .environment(\.locale, session.appLocale)
-        // While the full-bleed player is up, strip the window title, separator,
-        // and the leading logo/toggle accessory so they don't float over the
-        // video and collide with the player's own back button + title.
-        .background(WindowChrome(playing: session.playbackURL != nil))
+        // Owns the leading logo+toggle titlebar accessory and the window title:
+        // present when browsing, fully **removed** during full-bleed playback so
+        // they don't float over the video and collide with the player's own back
+        // button + title.
+        .background(TitlebarChrome(playing: session.playbackURL != nil))
     }
 
     private var library: some View {
@@ -66,9 +67,6 @@ struct HomeView: View {
         } detail: {
             detail
         }
-        // Leading titlebar accessory: the brand lockup + the sidebar toggle, right
-        // after the traffic lights, no button background. AppKit places it exactly.
-        .background(TitlebarLeadingAccessory())
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
@@ -176,57 +174,52 @@ struct HomeView: View {
 /// system's own toggle is removed (`.toolbar(removing: .sidebarToggle)`) so this
 /// is the only one, and logo + toggle stay together at the leading edge.
 ///
-/// Idempotent: one accessory per window. Visibility while the player is up is
-/// owned by `WindowChrome` (it hides this together with the window title), so
-/// here we just create it once.
-private struct TitlebarLeadingAccessory: NSViewRepresentable {
+/// Owns the leading logo + sidebar-toggle titlebar accessory and the window title,
+/// driven by the playback state. Always in the view hierarchy (on the top-level
+/// Group), so `updateNSView` fires whenever `playing` flips. While browsing the
+/// accessory is present and the title visible; during full-bleed playback both are
+/// **removed** (not just hidden — `isHidden` on a leading accessory proved
+/// unreliable) so nothing floats over the video or collides with the player's own
+/// back button + title.
+private struct TitlebarChrome: NSViewRepresentable {
+    let playing: Bool
     static let accessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
 
-    func makeNSView(context: Context) -> NSView {
-        let probe = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = probe.window else { return }
-            guard !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == Self.accessoryID }) else { return }
-            let content = HStack(spacing: 8) {
-                Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
-                    .frame(height: 20)
-                SidebarToggleButton()
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            let host = NSHostingController(rootView: content)
-            // Size to the content's natural aspect — a fixed width squished
-            // "AETHER" horizontally, which read as a broken/blurry logo.
-            host.view.frame.size = host.view.fittingSize
-            let accessory = NSTitlebarAccessoryViewController()
-            accessory.identifier = Self.accessoryID
-            accessory.layoutAttribute = .leading
-            accessory.view = host.view
-            window.addTitlebarAccessoryViewController(accessory)
-        }
-        return probe
-    }
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-/// Drives the window's titlebar chrome from the playback state: during full-bleed
-/// playback the window **title**, the titlebar **separator**, and the leading
-/// logo/toggle **accessory** are hidden (they otherwise float over the video and
-/// collide with the player's own back button + title); restored when playback
-/// ends. Always in the hierarchy, so `updateNSView` fires whenever `playing` flips.
-private struct WindowChrome: NSViewRepresentable {
-    let playing: Bool
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
     func updateNSView(_ nsView: NSView, context: Context) {
         let playing = self.playing
         DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
+            guard let window = nsView.window ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
             window.titleVisibility = playing ? .hidden : .visible
             window.titlebarSeparatorStyle = playing ? .none : .automatic
-            window.titlebarAccessoryViewControllers
-                .first { $0.identifier == TitlebarLeadingAccessory.accessoryID }?
-                .isHidden = playing
+
+            let index = window.titlebarAccessoryViewControllers.firstIndex { $0.identifier == Self.accessoryID }
+            if playing {
+                if let index { window.removeTitlebarAccessoryViewController(at: index) }
+            } else if index == nil {
+                window.addTitlebarAccessoryViewController(Self.makeAccessory())
+            }
         }
+    }
+
+    private static func makeAccessory() -> NSTitlebarAccessoryViewController {
+        let content = HStack(spacing: 8) {
+            Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
+                .frame(height: 20)
+            SidebarToggleButton()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        let host = NSHostingController(rootView: content)
+        // Size to the content's natural aspect — a fixed width squished "AETHER"
+        // horizontally, which read as a broken/blurry logo.
+        host.view.frame.size = host.view.fittingSize
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.identifier = accessoryID
+        accessory.layoutAttribute = .leading
+        accessory.view = host.view
+        return accessory
     }
 }
 

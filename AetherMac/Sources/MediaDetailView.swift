@@ -132,41 +132,36 @@ struct MediaDetailView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 24) {
-            CachedAsyncImage(url: current.posterURL, aspectRatio: 2.0 / 3.0)
-                .frame(width: 210)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
-            VStack(alignment: .leading, spacing: 10) {
-                // Title as the clearLogo wordmark when the source has one, else
-                // the title text (iOS-style "special text").
-                if let logo = current.logoURL() {
-                    CachedAsyncImage(url: logo)
-                        .frame(maxWidth: 360, maxHeight: 88, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(current.title).font(.system(size: 40, weight: .bold))
-                }
-                HStack(spacing: 10) {
-                    if let year = current.year { Text(String(year)) }
-                    if let runtime = current.runtime { Text(DetailFormatting.runtime(runtime)) }
-                    if let rating = current.contentRating { Text(rating) }
-                    if let community = current.communityRating {
-                        Label(String(format: "%.1f", community), systemImage: "star.fill")
-                    }
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                if let badge = DetailFormatting.hdrBadge(current.mediaInfo) {
-                    Text(badge)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.tint.opacity(0.2), in: Capsule())
-                }
-                Spacer(minLength: 0)
+        // No small poster — the title's artwork already fills the screen as the
+        // backdrop (#20), so the thumbnail was redundant. Just the title + meta.
+        VStack(alignment: .leading, spacing: 10) {
+            // Title as the clearLogo wordmark when the source has one, else the
+            // title text (iOS-style "special text").
+            if let logo = current.logoURL() {
+                CachedAsyncImage(url: logo)
+                    .frame(maxWidth: 420, maxHeight: 110, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(current.title).font(.system(size: 44, weight: .bold))
             }
-            Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                if let year = current.year { Text(String(year)) }
+                if let runtime = current.runtime { Text(DetailFormatting.runtime(runtime)) }
+                if let rating = current.contentRating { Text(rating) }
+                if let community = current.communityRating {
+                    Label(String(format: "%.1f", community), systemImage: "star.fill")
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            if let badge = DetailFormatting.hdrBadge(current.mediaInfo) {
+                Text(badge)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.tint.opacity(0.2), in: Capsule())
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Play + controls
