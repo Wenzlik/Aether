@@ -92,21 +92,20 @@ cp "$WORKSPACE/ci_scripts/Package.resolved.pinned" "$SWIFTPM_DIR/Package.resolve
 # Binary dependencies LAST — the project already exists, so a failure here is a
 # clear link-time error, not a missing-project error.
 #
-# VLCKit xcframework (local SPM binaryTarget the app links but doesn't commit;
-# ~522 MB, re-fetched per build). Needed by iOS/iPadOS/tvOS/visionOS.
-echo "ci_post_clone: fetching VLCKit"
-bash "$WORKSPACE/scripts/fetch_vlckit.sh"
-
-# libmpv (#232) — the macOS player engine + dylibbundler for the bundling phase.
-# ONLY on the macOS archive (a brew install is slow and macOS-specific); gated on
-# the platform so iOS/tvOS/visionOS skip it entirely.
+# Player engine per platform — they never mix:
+#   • iOS/iPadOS/tvOS/visionOS → VLCKit  (the `Aether` target links it)
+#   • macOS                    → libmpv  (the `AetherMac` target links it)
+# So fetch ONLY the engine the platform being archived actually uses. macOS
+# doesn't import VLCKit anywhere, so its ~522 MB download is pure waste there;
+# iOS et al. don't need libmpv. Gate both on CI_PRODUCT_PLATFORM.
 case "${CI_PRODUCT_PLATFORM:-}" in
   macOS|macos|*[Mm]ac*)
-    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM)"
+    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM); skipping VLCKit (macOS uses libmpv)"
     bash "$WORKSPACE/scripts/fetch_mpv.sh"
     ;;
   *)
-    echo "ci_post_clone: skipping libmpv (platform=${CI_PRODUCT_PLATFORM:-unknown}, not macOS)"
+    echo "ci_post_clone: fetching VLCKit (platform=${CI_PRODUCT_PLATFORM:-unknown}); skipping libmpv (not macOS)"
+    bash "$WORKSPACE/scripts/fetch_vlckit.sh"
     ;;
 esac
 

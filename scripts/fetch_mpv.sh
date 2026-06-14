@@ -30,9 +30,11 @@ for formula in mpv dylibbundler; do
     continue
   fi
   # Retry once — brew bottle downloads on CI runners are occasionally flaky, and
-  # a failed install here fails the whole macOS archive.
-  echo "fetch_mpv: installing $formula…"
-  brew install "$formula" || { echo "fetch_mpv: $formula install failed, retrying…"; sleep 5; brew install "$formula"; }
+  # a failed install here fails the whole macOS archive. Use ${formula} (braced)
+  # + ASCII "..." — a bare `$formula...` with a Unicode ellipsis tripped `set -u`
+  # on the CI runner (non-UTF-8 locale parsed the ellipsis bytes into the name).
+  echo "fetch_mpv: installing ${formula}..."
+  brew install "$formula" || { echo "fetch_mpv: ${formula} install failed, retrying..."; sleep 5; brew install "$formula"; }
 done
 
 echo "fetch_mpv: libmpv at $(brew --prefix)/lib/libmpv.dylib"
