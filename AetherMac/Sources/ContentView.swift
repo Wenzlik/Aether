@@ -46,6 +46,10 @@ struct HomeView: View {
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(session.appearance.preference.colorScheme)
         .environment(\.locale, session.appLocale)
+        // While the full-bleed player is up, strip the window title, separator,
+        // and the leading logo/toggle accessory so they don't float over the
+        // video and collide with the player's own back button + title.
+        .background(WindowChrome(playing: session.playbackURL != nil))
     }
 
     private var library: some View {
@@ -172,26 +176,17 @@ struct HomeView: View {
 /// system's own toggle is removed (`.toolbar(removing: .sidebarToggle)`) so this
 /// is the only one, and logo + toggle stay together at the leading edge.
 ///
-/// This rides on the **library** view, which the inline player replaces during
-/// playback. The accessory is a *window*-level object, so it would otherwise
-/// linger over the full-bleed player and overlap its own back button + title —
-/// so we hide it when this representable is torn down (playback start) and show
-/// it again when the library returns. Idempotent: one accessory per window.
+/// Idempotent: one accessory per window. Visibility while the player is up is
+/// owned by `WindowChrome` (it hides this together with the window title), so
+/// here we just create it once.
 private struct TitlebarLeadingAccessory: NSViewRepresentable {
-    private static let id = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
-
-    final class Coordinator { weak var accessory: NSTitlebarAccessoryViewController? }
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    static let accessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
 
     func makeNSView(context: Context) -> NSView {
         let probe = NSView(frame: .zero)
         DispatchQueue.main.async {
             guard let window = probe.window else { return }
-            if let existing = window.titlebarAccessoryViewControllers.first(where: { $0.identifier == Self.id }) {
-                existing.isHidden = false               // library returned after playback
-                context.coordinator.accessory = existing
-                return
-            }
+            guard !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == Self.accessoryID }) else { return }
             let content = HStack(spacing: 8) {
                 Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
                     .frame(height: 20)
@@ -204,20 +199,34 @@ private struct TitlebarLeadingAccessory: NSViewRepresentable {
             // "AETHER" horizontally, which read as a broken/blurry logo.
             host.view.frame.size = host.view.fittingSize
             let accessory = NSTitlebarAccessoryViewController()
-            accessory.identifier = Self.id
+            accessory.identifier = Self.accessoryID
             accessory.layoutAttribute = .leading
             accessory.view = host.view
             window.addTitlebarAccessoryViewController(accessory)
-            context.coordinator.accessory = accessory
         }
         return probe
     }
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
 
-    /// Hide the accessory when the library is swapped out for the player, so it
-    /// doesn't float over the full-bleed player and hide its back button/title.
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.accessory?.isHidden = true
+/// Drives the window's titlebar chrome from the playback state: during full-bleed
+/// playback the window **title**, the titlebar **separator**, and the leading
+/// logo/toggle **accessory** are hidden (they otherwise float over the video and
+/// collide with the player's own back button + title); restored when playback
+/// ends. Always in the hierarchy, so `updateNSView` fires whenever `playing` flips.
+private struct WindowChrome: NSViewRepresentable {
+    let playing: Bool
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let playing = self.playing
+        DispatchQueue.main.async {
+            guard let window = nsView.window else { return }
+            window.titleVisibility = playing ? .hidden : .visible
+            window.titlebarSeparatorStyle = playing ? .none : .automatic
+            window.titlebarAccessoryViewControllers
+                .first { $0.identifier == TitlebarLeadingAccessory.accessoryID }?
+                .isHidden = playing
+        }
     }
 }
 
