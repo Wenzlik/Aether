@@ -35,7 +35,14 @@ final class MacPlayerModel {
         guard url != loadedURL else { return }
         loadedURL = url
         title = url.deletingPathExtension().lastPathComponent
-        if let media = VLCMedia(url: url) { player.media = media }
+        if let media = VLCMedia(url: url) {
+            // Force software decode. VideoToolbox HW frames are NV12, and VLCKit's
+            // macOS OpenGL vout asserts compiling/using the NV12 conversion path
+            // (GL_INVALID_OPERATION / GL_INVALID_FRAMEBUFFER_OPERATION). Software
+            // decode yields I420, which uses VLC's well-trodden GL path.
+            media.addOption(":avcodec-hw=none")
+            player.media = media
+        }
         player.play()
         startTicker()
     }
