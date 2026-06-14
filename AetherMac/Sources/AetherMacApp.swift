@@ -7,12 +7,13 @@ import AppKit
 /// same AetherCore engines as iOS.
 @main
 struct AetherMacApp: App {
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @State private var recents = RecentsStore()
     @State private var session = MacSession()
 
     var body: some Scene {
         WindowGroup {
-            HomeView(session: session, recents: recents)
+            HomeView(session: session, recents: recents, appDelegate: appDelegate)
                 .frame(minWidth: 820, minHeight: 520)
         }
         .commands {
@@ -41,6 +42,23 @@ struct AetherMacApp: App {
     }
 
     static let localPlayerWindowID = "local-player"
+}
+
+/// Distinguishes a **launch via file open** (Finder "Open With", double-click on
+/// a video when the app is closed) from opening a file while already browsing.
+/// On a launch-open we want **only** the player window — the library window that
+/// SwiftUI auto-creates for the primary scene should not stick around. It reopens
+/// normally on the next Dock/app activation (default reopen behavior).
+final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    /// True from launch until shortly after the first scene settles. A launch
+    /// file-open is delivered within this window; a user's later Open… is not.
+    private(set) var isColdLaunch = true
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.isColdLaunch = false
+        }
+    }
 }
 
 /// A standalone window that plays one local file via the libmpv player. No
