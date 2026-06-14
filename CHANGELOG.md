@@ -34,6 +34,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   - **Self-contained distribution** — a Release build bundles libmpv + its ffmpeg
     dependency tree into the `.app`, so it runs without Homebrew.
 
+### Changed
+
+- **Watched marking now syncs across every source on all platforms** (#232) —
+  iOS, iPadOS, tvOS, and visionOS adopt `markWatchedEverywhere`: finishing
+  playback (incl. auto-play-next hand-off) or toggling watched on Detail now
+  scrobbles the title on **every** connected source that has it — matched by
+  shared external id — not just the one it streamed from. macOS already did this.
+
 ## [0.7.2] — 2026-06-13 · "Draco"
 
 ### Added
