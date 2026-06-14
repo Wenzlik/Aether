@@ -35,6 +35,12 @@ actor LocalFolderSource: MediaSource {
 
     // MARK: MediaSource
 
+    /// Movie + show counts after scanning — for the Settings status line.
+    func counts() async -> (movies: Int, shows: Int) {
+        let s = await scan()
+        return (s.movies.count, s.shows.count)
+    }
+
     func libraries() async throws -> [Library] {
         let scan = await scan()
         var libs: [Library] = []

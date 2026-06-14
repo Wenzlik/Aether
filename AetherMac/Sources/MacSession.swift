@@ -32,6 +32,10 @@ final class MacSession {
     /// because adding a 2nd folder doesn't change `connectedSources.count`.
     private(set) var libraryToken = 0
 
+    /// Human status of the local-library scan, shown in Settings: `"Scanning…"`
+    /// then e.g. `"42 movies · 8 shows"`. `nil` when no folders are configured.
+    private(set) var localScanStatus: String?
+
     /// Server display names, mirrored as plain strings for the Settings UI —
     /// the source objects are actors, so their `displayName` can't be read from
     /// the main actor synchronously.
@@ -115,8 +119,29 @@ final class MacSession {
     }
 
     private func rebuildLocalSource() {
-        localSource = localFolders.isEmpty ? nil : LocalFolderSource(folders: localFolders, tmdb: makeTMDbClient())
+        guard !localFolders.isEmpty else {
+            localSource = nil
+            localScanStatus = nil
+            libraryToken &+= 1
+            return
+        }
+        let source = LocalFolderSource(folders: localFolders, tmdb: makeTMDbClient())
+        localSource = source
         libraryToken &+= 1
+        // Scan in the background and report progress → result in Settings.
+        localScanStatus = "Scanning…"
+        Task { [weak self] in
+            let (movies, shows) = await source.counts()
+            guard self?.localSource === source else { return }   // superseded by a newer scan
+            if movies == 0 && shows == 0 {
+                self?.localScanStatus = "No movies or shows found"
+            } else {
+                var parts: [String] = []
+                if movies > 0 { parts.append("\(movies) \(movies == 1 ? "movie" : "movies")") }
+                if shows > 0 { parts.append("\(shows) \(shows == 1 ? "show" : "shows")") }
+                self?.localScanStatus = parts.joined(separator: " · ")
+            }
+        }
     }
 
     private static let plexTokenKey = "plex.authToken"

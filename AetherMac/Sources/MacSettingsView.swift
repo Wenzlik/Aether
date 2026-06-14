@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AetherCore
 
 /// The native macOS **Settings** window (⌘, / "Aether ▸ Settings…"), surfaced
@@ -123,6 +124,12 @@ private struct GeneralSettings: View {
                             .buttonStyle(.borderless)
                     }
                 }
+                if let status = session.localScanStatus {
+                    HStack(spacing: 6) {
+                        if status == "Scanning…" { ProgressView().controlSize(.small) }
+                        Text(status).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Button("Add Folder…", systemImage: "plus") { addFolder() }
                 if !session.localFolders.isEmpty {
                     Button("Rescan", systemImage: "arrow.clockwise") { session.rescanLocalLibrary() }
@@ -244,6 +251,36 @@ private struct AboutSettings: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
+    private static let supportEmail = "support@aetherplayer.com"
+
+    /// A Support row that opens the user's mail client (mailto) to the support
+    /// address — matching the iOS Support section. Bug/Diagnostics rows append a
+    /// short diagnostics block (no account details).
+    private func supportButton(_ title: String, systemImage: String, subject: String, includeDiagnostics: Bool) -> some View {
+        Button {
+            var body = ""
+            if includeDiagnostics {
+                body = "\n\n—\nAether \(shortVersion) (\(build))\n\(Self.deviceModel()) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+            }
+            var c = URLComponents()
+            c.scheme = "mailto"
+            c.path = Self.supportEmail
+            c.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
+            if let url = c.url { NSWorkspace.shared.open(url) }
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+    }
+
+    private static func deviceModel() -> String {
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        guard size > 0 else { return "Mac" }
+        var chars = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.model", &chars, &size, nil, 0)
+        return String(cString: chars)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -267,9 +304,14 @@ private struct AboutSettings: View {
                 }
             }
             Section("Support") {
-                Link("Report a Bug", destination: Self.repoURL.appendingPathComponent("issues/new"))
-                Link("Feature Request", destination: Self.repoURL.appendingPathComponent("issues/new"))
-                Link("Source on GitHub", destination: Self.repoURL)
+                supportButton("Report a Bug", systemImage: "ladybug.fill",
+                              subject: "Aether (macOS) — Bug Report", includeDiagnostics: true)
+                supportButton("Feature Request", systemImage: "lightbulb.fill",
+                              subject: "Aether (macOS) — Feature Request", includeDiagnostics: false)
+                supportButton("Send Diagnostics", systemImage: "stethoscope",
+                              subject: "Aether (macOS) — Diagnostics", includeDiagnostics: true)
+                supportButton("Contact the Creator", systemImage: "envelope.fill",
+                              subject: "Aether (macOS)", includeDiagnostics: false)
             }
             Section {
                 Text("Plays media with mpv (libmpv), FFmpeg, and libass — © their respective authors, under GPL/LGPL.")
