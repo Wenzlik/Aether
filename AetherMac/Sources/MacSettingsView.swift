@@ -101,6 +101,18 @@ private struct PlaybackSettings: View {
                 Text("Applied to every title you open. You can still change the audio, subtitles, and quality for a single title on its detail screen.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Episodes") {
+                Picker("Skip Intro", selection: $prefs.skipIntro) {
+                    ForEach(SkipMode.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Picker("Skip Credits", selection: $prefs.skipCredits) {
+                    ForEach(SkipMode.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Toggle("Auto-Play Next Episode", isOn: $prefs.autoPlayNext)
+                Picker("Next Episode Countdown", selection: $prefs.nextEpisodeCountdown) {
+                    ForEach(PlaybackPreferencesStore.countdownOptions, id: \.self) { Text("\($0)s").tag($0) }
+                }
+            }
         }
         .formStyle(.grouped)
     }

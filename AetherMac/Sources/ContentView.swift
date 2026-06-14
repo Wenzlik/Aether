@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var isImporting = false
     @State private var sidebar: SidebarItem? = .discover
     @State private var signIn: SignInTarget?
+    @State private var searchText = ""
 
     enum SidebarItem: Hashable, Identifiable {
         case discover
@@ -121,15 +122,20 @@ struct HomeView: View {
         if session.hasAnySource {
             NavigationStack {
                 Group {
-                    switch sidebar {
-                    case .library: LibraryGridView(session: session)
-                    default:       DiscoverView(session: session)
+                    if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                        MacSearchResults(session: session, query: searchText)
+                    } else {
+                        switch sidebar {
+                        case .library: LibraryGridView(session: session)
+                        default:       DiscoverView(session: session)
+                        }
                     }
                 }
                 .navigationDestination(for: MediaItem.self) { mediaItem in
                     MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
                 }
             }
+            .searchable(text: $searchText, placement: .toolbar, prompt: "Search your library")
         } else if recents.urls.isEmpty {
             welcome
         } else {
