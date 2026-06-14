@@ -12,7 +12,11 @@ import VLCKit
 @MainActor
 @Observable
 final class MacPlayerModel {
-    let player = VLCMediaPlayer()
+    // `--avcodec-hw=none` at the libvlc instance level (a media option was
+    // ignored — frames stayed NV12). Forces software decode (I420) to test
+    // whether VLCKit's macOS GL vout assert is tied to the VideoToolbox NV12
+    // path or is a vout bug regardless of format.
+    let player = VLCMediaPlayer(options: ["--avcodec-hw=none"])
 
     private(set) var isPlaying = false
     /// 0…1 playhead. Bound to the scrubber; while the user drags, `isScrubbing`
