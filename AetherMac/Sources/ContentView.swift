@@ -18,6 +18,28 @@ struct HomeView: View {
     }
 
     var body: some View {
+        // The player **replaces** the library in the same window while playing
+        // (a true swap, not an overlay/ZStack) so the navigation chrome —
+        // toolbar, sidebar toggle, back button, window title — isn't in the
+        // hierarchy at all. Overlaying left that chrome rendering in the
+        // titlebar, which duplicated the title and the back arrow.
+        Group {
+            if let url = session.playbackURL {
+                MpvPlayerScreen(
+                    url: url,
+                    session: session,
+                    item: session.item(forPlaybackURL: url),
+                    onClose: { session.stopPlayback() }
+                )
+                .id(url)                       // fresh player per title
+                .ignoresSafeArea()
+            } else {
+                library
+            }
+        }
+    }
+
+    private var library: some View {
         NavigationSplitView {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230)
@@ -34,22 +56,6 @@ struct HomeView: View {
             openLocal(url)
             return true
         }
-        // The player lives **inside** this window, presented over everything,
-        // rather than spawning a separate window.
-        .overlay {
-            if let url = session.playbackURL {
-                MpvPlayerScreen(
-                    url: url,
-                    session: session,
-                    item: session.item(forPlaybackURL: url),
-                    onClose: { session.stopPlayback() }
-                )
-                .id(url)                       // fresh player per title
-                .ignoresSafeArea()
-                .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: session.playbackURL)
     }
 
     // MARK: Sidebar

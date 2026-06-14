@@ -44,7 +44,6 @@ struct MpvPlayerScreen: View {
         }
         .background(keyboardShortcuts(model))
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
-        .navigationTitle(model.title)
     }
 
     // MARK: Chrome
@@ -68,7 +67,11 @@ struct MpvPlayerScreen: View {
                 .lineLimit(1)
             Spacer()
         }
-        .padding(16)
+        // Extra leading inset so the Close button clears the window's traffic
+        // lights, which float over the full-bleed player.
+        .padding(.leading, 80)
+        .padding(.trailing, 16)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom))
     }

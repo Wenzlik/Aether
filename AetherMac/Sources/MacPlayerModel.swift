@@ -65,14 +65,13 @@ final class MacPlayerModel {
 
     // MARK: Transport
 
-    /// Stop playback — called when the player window closes. Commits a final
-    /// resume point and halts playback (so audio stops immediately). The mpv
-    /// handle itself is torn down in `MpvClient.deinit`, which runs *after* the
-    /// video view has freed its render context — freeing a render context on an
-    /// already-destroyed handle would crash.
+    /// Stop playback — called when the inline player closes. Commits a final
+    /// resume point, then tears mpv down deterministically (render context freed
+    /// first, then the handle) on the main thread, so audio stops immediately and
+    /// nothing leaks. `destroy()` is idempotent; a late `draw` no-ops safely.
     func stop() {
         recordResume(committing: true)
-        mpv.command(["stop"])
+        mpv.destroy()
     }
 
     func togglePlay() { mpv.command(["cycle", "pause"]) }

@@ -154,14 +154,76 @@ final class MpvClient {
         }
     }
 
+    // MARK: Render context (owned here for deterministic teardown ordering)
+
+    /// The OpenGL render context, created by `MpvVideoView` once its GL context
+    /// is current. Owned by the client so `destroy()` can free it **before**
+    /// terminating the handle — freeing it after would crash (it references the
+    /// core), and splitting ownership across the view made the order racy.
+    @ObservationIgnored private(set) var renderContext: OpaquePointer?
+
+    /// Create the OpenGL render context on the **current** GL context.
+    /// `updateCtx` is passed to the (non-isolated) update callback — the view,
+    /// which it asks to redraw.
+    func createRenderContext(updateCtx: UnsafeMutableRawPointer) {
+        guard let handle, renderContext == nil else { return }
+        var glInit = mpv_opengl_init_params(get_proc_address: mpvGetProcAddress, get_proc_address_ctx: nil)
+        withUnsafeMutablePointer(to: &glInit) { initPtr in
+            MPV_RENDER_API_TYPE_OPENGL.withCString { apiType in
+                var params = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_API_TYPE, data: UnsafeMutableRawPointer(mutating: apiType)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, data: UnsafeMutableRawPointer(initPtr)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                ]
+                mpv_render_context_create(&renderContext, handle, &params)
+            }
+        }
+        if let renderContext {
+            mpv_render_context_set_update_callback(renderContext, mpvRenderUpdate, updateCtx)
+        }
+    }
+
+    /// Render the current frame into the default framebuffer (call with the GL
+    /// context current, on the main thread).
+    func render(width: Int32, height: Int32) {
+        guard let renderContext else { return }
+        var fbo = mpv_opengl_fbo(fbo: 0, w: width, h: height, internal_format: 0)
+        var flip: CInt = 1
+        withUnsafeMutablePointer(to: &fbo) { fboPtr in
+            withUnsafeMutablePointer(to: &flip) { flipPtr in
+                var params = [
+                    mpv_render_param(type: MPV_RENDER_PARAM_OPENGL_FBO, data: UnsafeMutableRawPointer(fboPtr)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_FLIP_Y, data: UnsafeMutableRawPointer(flipPtr)),
+                    mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil)
+                ]
+                mpv_render_context_render(renderContext, &params)
+            }
+        }
+    }
+
     // MARK: Teardown
 
+    /// Ordered, idempotent teardown: free the render context **first**, then
+    /// terminate the handle. Safe to call more than once (stop() + deinit).
     func destroy() {
-        guard let handle else { return }
-        mpv_set_wakeup_callback(handle, nil, nil)
-        mpv_terminate_destroy(handle)
-        self.handle = nil
+        if let renderContext {
+            mpv_render_context_set_update_callback(renderContext, nil, nil)
+            mpv_render_context_free(renderContext)
+            self.renderContext = nil
+        }
+        if let handle {
+            mpv_set_wakeup_callback(handle, nil, nil)
+            mpv_terminate_destroy(handle)
+            self.handle = nil
+        }
     }
 
     deinit { destroy() }
+}
+
+/// libmpv GL symbol resolver — file-scope, non-isolated (called from mpv).
+/// RTLD_DEFAULT (= -2 on Darwin) resolves from the linked OpenGL.framework.
+private func mpvGetProcAddress(_ ctx: UnsafeMutableRawPointer?, _ name: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
+    guard let name else { return nil }
+    return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
 }

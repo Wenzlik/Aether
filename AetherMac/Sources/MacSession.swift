@@ -77,7 +77,13 @@ final class MacSession {
 
     // MARK: Restore
 
+    private var didRestore = false
+
     func restore() async {
+        // Guard against re-running when the library view reappears after the
+        // player closes (the player replaces it, so `.task` would fire again).
+        guard !didRestore else { return }
+        didRestore = true
         await resumeStore.loadFromDisk()
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
