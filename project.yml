@@ -309,6 +309,10 @@ targets:
           fi
     settings:
       base:
+        # The Xcode target is "AetherMac" (must differ from the iOS "Aether"
+        # target), but the shipped product is "Aether" — builds Aether.app with
+        # an "Aether" executable, matching iOS. Only the scheme stays AetherMac.
+        PRODUCT_NAME: Aether
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8PW5FWH7P2
