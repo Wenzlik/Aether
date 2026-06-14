@@ -166,6 +166,25 @@ final class MacSession {
     /// Continue Watching after the user closes a player window.
     private(set) var resumeRevision = 0
 
+    /// The URL currently playing **in the main window** (inline overlay), or nil
+    /// when the player is closed. Playback is presented inside the app window
+    /// rather than spawning a separate window.
+    var playbackURL: URL?
+
+    /// Resolve a server item and start playing it inline.
+    func play(_ item: MediaItem) async {
+        if let url = await beginPlayback(for: item) { playbackURL = url }
+    }
+
+    /// Play a local file inline (no resume context).
+    func playLocal(_ url: URL) {
+        playbackContext[url] = nil
+        playbackURL = url
+    }
+
+    /// Close the inline player.
+    func stopPlayback() { playbackURL = nil }
+
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
     func homeRails() async -> UnifiedRails {
         await makeLibrary().homeRails(resumeStore: resumeStore)

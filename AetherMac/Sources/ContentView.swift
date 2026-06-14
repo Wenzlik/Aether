@@ -9,7 +9,6 @@ import UniformTypeIdentifiers
 struct HomeView: View {
     var session: MacSession
     var recents: RecentsStore
-    @Environment(\.openWindow) private var openWindow
     @State private var sidebar: SidebarItem? = .home
     @State private var searchText = ""
 
@@ -35,6 +34,22 @@ struct HomeView: View {
             openLocal(url)
             return true
         }
+        // The player lives **inside** this window, presented over everything,
+        // rather than spawning a separate window.
+        .overlay {
+            if let url = session.playbackURL {
+                MpvPlayerScreen(
+                    url: url,
+                    session: session,
+                    item: session.item(forPlaybackURL: url),
+                    onClose: { session.stopPlayback() }
+                )
+                .id(url)                       // fresh player per title
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: session.playbackURL)
     }
 
     // MARK: Sidebar
@@ -95,15 +110,11 @@ struct HomeView: View {
     private func openLocal(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
-        openWindow(value: url)
+        session.playLocal(url)
     }
 
     private func playServerItem(_ item: MediaItem) {
-        Task {
-            if let url = await session.beginPlayback(for: item) {
-                openWindow(value: url)
-            }
-        }
+        Task { await session.play(item) }
     }
 
     static var videoTypes: [UTType] {

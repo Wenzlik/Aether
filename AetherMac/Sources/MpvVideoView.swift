@@ -67,12 +67,17 @@ final class MpvGLView: NSOpenGLView {
         if let renderContext {
             let ctx = Unmanaged.passUnretained(self).toOpaque()
             mpv_render_context_set_update_callback(renderContext, { raw in
-                // Fires on an arbitrary thread; hop to main and redraw. Pass the
-                // pointer as a Sendable bit pattern across the boundary.
+                // Fires on mpv's `vo` thread (a raw pthread). Bridge to main via
+                // GCD — NOT `Task { @MainActor }`, which trips a Swift-concurrency
+                // executor assertion when enqueued from a non-cooperative thread
+                // (it crashed the vo thread). Pass the pointer as a Sendable
+                // bit pattern across the boundary.
                 let bits = UInt(bitPattern: raw)
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     guard let p = UnsafeMutableRawPointer(bitPattern: bits) else { return }
-                    Unmanaged<MpvGLView>.fromOpaque(p).takeUnretainedValue().needsDisplay = true
+                    MainActor.assumeIsolated {
+                        Unmanaged<MpvGLView>.fromOpaque(p).takeUnretainedValue().needsDisplay = true
+                    }
                 }
             }, ctx)
         }

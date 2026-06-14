@@ -1,10 +1,10 @@
 import SwiftUI
 import AppKit
 
-/// Native macOS Aether (#232) — player-first. Home is an Infuse-style shell
-/// (sidebar + Recent), and opening a file spawns the right player window
-/// (AVPlayer for native formats, VLCKit for mkv/DTS). Reuses the same engines
-/// as iOS; Plex/Jellyfin browsing is the next step.
+/// Native macOS Aether (#232) — player-first. A single Infuse-style window:
+/// sidebar (Home / Discover / Library / Search / Settings) plus an inline
+/// libmpv player presented over the window when you play something. Reuses the
+/// same AetherCore engines as iOS.
 @main
 struct AetherMacApp: App {
     @State private var recents = RecentsStore()
@@ -18,17 +18,7 @@ struct AetherMacApp: App {
         .commands {
             // Real File ▸ Open… (⌘O) + Open Recent, instead of "New".
             CommandGroup(replacing: .newItem) {
-                FileCommands(recents: recents)
-            }
-        }
-
-        // One player window per opened file (⌘W closes it). `session` lets the
-        // player resolve the item behind a server URL for resume / Continue
-        // Watching; local files (no context) just play.
-        WindowGroup(for: URL.self) { $url in
-            if let url {
-                MacPlayerView(url: url, session: session)
-                    .frame(minWidth: 640, minHeight: 400)
+                FileCommands(recents: recents, session: session)
             }
         }
 
@@ -39,11 +29,11 @@ struct AetherMacApp: App {
     }
 }
 
-/// File-menu items. A `View` (not raw commands) so it can use `openWindow` +
-/// `RecentsStore` — menu-bar views still get the environment.
+/// File-menu items. A `View` (not raw commands) so it can use the shared
+/// `MacSession` + `RecentsStore` — menu-bar views still get the environment.
 private struct FileCommands: View {
     var recents: RecentsStore
-    @Environment(\.openWindow) private var openWindow
+    var session: MacSession
 
     var body: some View {
         Button("Open…") { runOpenPanel() }
@@ -67,6 +57,6 @@ private struct FileCommands: View {
     private func open(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
-        openWindow(value: url)
+        session.playLocal(url)
     }
 }

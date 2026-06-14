@@ -56,12 +56,16 @@ final class MpvClient {
         // Wakeup → drain on main.
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         mpv_set_wakeup_callback(handle, { raw in
-            // C callback (arbitrary thread): pass the pointer as a Sendable bit
-            // pattern across the hop, resolve the instance on the main actor.
+            // C callback on an mpv thread (a raw pthread). Bridge to main via GCD,
+            // NOT `Task { @MainActor }` — enqueuing a Task from a non-cooperative
+            // thread trips a Swift-concurrency executor assertion (SIGTRAP). Pass
+            // the pointer as a Sendable bit pattern across the hop.
             let bits = UInt(bitPattern: raw)
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 guard let p = UnsafeMutableRawPointer(bitPattern: bits) else { return }
-                Unmanaged<MpvClient>.fromOpaque(p).takeUnretainedValue().drainEvents()
+                MainActor.assumeIsolated {
+                    Unmanaged<MpvClient>.fromOpaque(p).takeUnretainedValue().drainEvents()
+                }
             }
         }, ctx)
     }

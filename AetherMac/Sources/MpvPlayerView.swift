@@ -9,6 +9,8 @@ struct MpvPlayerScreen: View {
     let url: URL
     var session: MacSession?
     var item: MediaItem?
+    /// Dismiss the inline player (back to the library).
+    var onClose: (() -> Void)?
     @State private var model = MacPlayerModel()
     @State private var controlsVisible = true
     @State private var hideWorkItem: DispatchWorkItem?
@@ -21,6 +23,7 @@ struct MpvPlayerScreen: View {
 
             if controlsVisible {
                 VStack(spacing: 0) {
+                    topBar
                     Spacer(minLength: 0)
                     controlBar(model)
                 }
@@ -45,6 +48,30 @@ struct MpvPlayerScreen: View {
     }
 
     // MARK: Chrome
+
+    /// Top bar with a Close (←) button + the title, over a subtle gradient.
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button { onClose?() } label: {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(8)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Close player")
+
+            Text(model.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .shadow(radius: 4)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom))
+    }
 
     private func controlBar(_ model: MacPlayerModel) -> some View {
         @Bindable var model = model
@@ -131,6 +158,7 @@ struct MpvPlayerScreen: View {
             Button("") { model.skipBackward() }.keyboardShortcut(.leftArrow, modifiers: [])
             Button("") { model.skipForward() }.keyboardShortcut(.rightArrow, modifiers: [])
             Button("") { NSApp.keyWindow?.toggleFullScreen(nil) }.keyboardShortcut("f", modifiers: [])
+            Button("") { onClose?() }.keyboardShortcut(.escape, modifiers: [])
         }
         .opacity(0)
     }
