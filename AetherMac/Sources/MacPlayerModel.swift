@@ -4,6 +4,11 @@ import VLCKit
 /// Owns the `VLCMediaPlayer` for one player window and exposes observable state
 /// the SwiftUI controls bind to (IINA-style). The view layer never touches VLC
 /// directly — it drives this model.
+///
+/// State is polled on a main-thread timer (like the iOS player) rather than via
+/// `VLCMediaPlayerDelegate`: VLCKit fires delegate callbacks off the main thread
+/// on macOS, and touching this `@MainActor` model from there trips the isolation
+/// check and crashes (it did, on network playback). Polling sidesteps that.
 @MainActor
 @Observable
 final class MacPlayerModel {
@@ -21,24 +26,18 @@ final class MacPlayerModel {
     private(set) var subtitleTracks: [VLCMediaPlayer.Track] = []
     private(set) var title = ""
 
-    private var delegateProxy: PlayerDelegate?
+    @ObservationIgnored private var tickTask: Task<Void, Never>?
     private var loadedURL: URL?
 
-    init() {
-        player.timeChangeUpdateInterval = 0.25
-    }
+    deinit { tickTask?.cancel() }
 
     func load(_ url: URL) {
         guard url != loadedURL else { return }
         loadedURL = url
         title = url.deletingPathExtension().lastPathComponent
-        if delegateProxy == nil {
-            let proxy = PlayerDelegate(model: self)
-            delegateProxy = proxy
-            player.delegate = proxy
-        }
         if let media = VLCMedia(url: url) { player.media = media }
         player.play()
+        startTicker()
     }
 
     // MARK: Transport
@@ -53,13 +52,11 @@ final class MacPlayerModel {
 
     func selectAudio(_ track: VLCMediaPlayer.Track) {
         track.isSelectedExclusively = true
-        refreshTracks()
     }
     /// Pass `nil` to turn subtitles off.
     func selectSubtitle(_ track: VLCMediaPlayer.Track?) {
         if let track { track.isSelectedExclusively = true }
         else { subtitleTracks.forEach { $0.isSelected = false } }
-        refreshTracks()
     }
     static func name(for track: VLCMediaPlayer.Track) -> String {
         if !track.trackName.isEmpty { return track.trackName }
@@ -67,37 +64,29 @@ final class MacPlayerModel {
         return "Track"
     }
 
-    // MARK: Delegate hooks (called on the main thread by VLCKit)
+    // MARK: Polling
 
-    fileprivate func handleTimeChanged() {
+    /// 0.25s poll of the player's state. The `Task` is created in a `@MainActor`
+    /// method, so it inherits MainActor isolation — `tick()` runs on the main
+    /// actor, safe to touch this model (and never off a VLC thread).
+    private func startTicker() {
+        guard tickTask == nil else { return }
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                self?.tick()
+            }
+        }
+    }
+
+    private func tick() {
+        isPlaying = player.isPlaying
         if !isScrubbing { position = player.position }
         timeText = player.time.stringValue
         durationText = player.media?.length.stringValue ?? player.time.stringValue
-    }
-
-    fileprivate func handleStateChanged() {
-        isPlaying = player.isPlaying
-        refreshTracks()
-    }
-
-    private func refreshTracks() {
-        audioTracks = player.audioTracks
-        subtitleTracks = player.textTracks
-    }
-}
-
-/// Bridges VLCKit's `NSObject` delegate to the `@Observable` model. VLCKit calls
-/// these on the main thread, so `@preconcurrency` lets the MainActor-isolated
-/// proxy conform safely.
-@MainActor
-private final class PlayerDelegate: NSObject, @preconcurrency VLCMediaPlayerDelegate {
-    weak var model: MacPlayerModel?
-    init(model: MacPlayerModel) { self.model = model }
-
-    func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
-        model?.handleStateChanged()
-    }
-    func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        model?.handleTimeChanged()
+        let audio = player.audioTracks
+        if audio.count != audioTracks.count { audioTracks = audio }
+        let text = player.textTracks
+        if text.count != subtitleTracks.count { subtitleTracks = text }
     }
 }

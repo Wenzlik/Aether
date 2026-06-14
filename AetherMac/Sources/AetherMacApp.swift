@@ -29,6 +29,11 @@ struct AetherMacApp: App {
                     .frame(minWidth: 640, minHeight: 400)
             }
         }
+
+        // Native Settings window — "Aether ▸ Settings…" (⌘,).
+        Settings {
+            MacSettingsView(session: session)
+        }
     }
 }
 
