@@ -631,11 +631,16 @@ public actor PlexMediaSource: MediaSource {
                 location: location
             )
         )
-        let response = try await api.decode(
-            PlexAPI.DecisionResponse.self,
-            from: request,
-            decoder: decoder
-        )
+        // Read the raw response so a non-2xx (the dreaded decision 400) surfaces
+        // Plex's own error message in the log instead of a bare status code —
+        // that body is the only reliable way to learn *why* a decision failed.
+        let (data, http) = try await api.data(for: request)
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count)B>"
+            Self.log.error("decision HTTP \(http.statusCode, privacy: .public) body=\(body, privacy: .public)")
+            throw APIClientError.unexpectedStatus(http.statusCode)
+        }
+        let response = try decoder.decode(PlexAPI.DecisionResponse.self, from: data)
         return PlexDecision(from: response)
     }
 
