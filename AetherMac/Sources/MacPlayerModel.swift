@@ -12,11 +12,7 @@ import VLCKit
 @MainActor
 @Observable
 final class MacPlayerModel {
-    // `--avcodec-hw=none` at the libvlc instance level (a media option was
-    // ignored — frames stayed NV12). Forces software decode (I420) to test
-    // whether VLCKit's macOS GL vout assert is tied to the VideoToolbox NV12
-    // path or is a vout bug regardless of format.
-    let player = VLCMediaPlayer(options: ["--avcodec-hw=none"])
+    let player = VLCMediaPlayer()
 
     private(set) var isPlaying = false
     /// 0…1 playhead. Bound to the scrubber; while the user drags, `isScrubbing`
@@ -32,6 +28,12 @@ final class MacPlayerModel {
 
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     private var loadedURL: URL?
+    // Playback starts only once BOTH the media is set and the video view is in a
+    // window — starting before the VLCVideoView's GL framebuffer is ready raced
+    // and intermittently asserted (GL_INVALID_FRAMEBUFFER_OPERATION).
+    private var mediaReady = false
+    private var viewReady = false
+    private var started = false
 
     deinit { tickTask?.cancel() }
 
@@ -39,14 +41,21 @@ final class MacPlayerModel {
         guard url != loadedURL else { return }
         loadedURL = url
         title = url.deletingPathExtension().lastPathComponent
-        if let media = VLCMedia(url: url) {
-            // Force software decode. VideoToolbox HW frames are NV12, and VLCKit's
-            // macOS OpenGL vout asserts compiling/using the NV12 conversion path
-            // (GL_INVALID_OPERATION / GL_INVALID_FRAMEBUFFER_OPERATION). Software
-            // decode yields I420, which uses VLC's well-trodden GL path.
-            media.addOption(":avcodec-hw=none")
-            player.media = media
-        }
+        if let media = VLCMedia(url: url) { player.media = media }
+        mediaReady = true
+        playIfReady()
+    }
+
+    /// Called by the video view once it's attached to a window (its GL context /
+    /// framebuffer is valid).
+    func markViewReady() {
+        viewReady = true
+        playIfReady()
+    }
+
+    private func playIfReady() {
+        guard mediaReady, viewReady, !started else { return }
+        started = true
         player.play()
         startTicker()
     }

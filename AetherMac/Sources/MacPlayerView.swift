@@ -11,14 +11,16 @@ struct MacPlayerView: View {
     let url: URL
 
     var body: some View {
-        // VLCKit's macOS OpenGL vout (`vout_macosx`) asserts on the first frame
-        // (GL_INVALID_OPERATION in CreateFilters) on the vendored 4.0.0a19 build —
-        // a C assert we can't catch, so routing video there crashes the app.
-        // Until that engine is fixed (a working VLCKit build / different render),
-        // everything goes to AVPlayer: Plex/Jellyfin (server-transcoded to HLS) +
-        // local mp4/mov play; a local mkv/DTS file AVPlayer can't open fails
-        // gracefully instead of crashing.
-        AVKitPlayerScreen(url: url)
+        // Native containers (mp4/mov, HLS from Plex/Jellyfin) → AVPlayer; mkv/DTS
+        // → the VLCKit player. VLC playback is gated on the video view being in a
+        // window before play() (see VLCPlayerScreen) — starting too early raced
+        // the GL framebuffer setup and intermittently asserted.
+        switch PlaybackEngine.engine(for: url) {
+        case .system:
+            AVKitPlayerScreen(url: url)
+        case .vlc:
+            VLCPlayerScreen(url: url)
+        }
     }
 }
 

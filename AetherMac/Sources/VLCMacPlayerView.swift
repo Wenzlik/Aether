@@ -8,13 +8,26 @@ import VLCKit
 /// `CreateFilters`) on first frame.
 private struct VLCVideoSurface: NSViewRepresentable {
     let model: MacPlayerModel
-    func makeNSView(context: Context) -> VLCVideoView {
-        let surface = VLCVideoView()
+    func makeNSView(context: Context) -> VLCDrawableView {
+        let surface = VLCDrawableView()
         surface.backColor = .black
         model.player.drawable = surface
+        // Start playback only once the view is in a window (GL framebuffer ready).
+        surface.onAttached = { [model] in model.markViewReady() }
         return surface
     }
-    func updateNSView(_ nsView: VLCVideoView, context: Context) {}
+    func updateNSView(_ nsView: VLCDrawableView, context: Context) {}
+}
+
+/// `VLCVideoView` that reports when it's attached to a window — VLCKit's GL
+/// context/framebuffer only becomes valid then, so the player must not `play()`
+/// before this fires (racing it asserted GL_INVALID_FRAMEBUFFER_OPERATION).
+private final class VLCDrawableView: VLCVideoView {
+    var onAttached: (@MainActor () -> Void)?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { onAttached?() }
+    }
 }
 
 /// IINA-style **VLCKit** player — the fallback engine for containers/codecs
