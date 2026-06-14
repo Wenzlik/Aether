@@ -302,7 +302,9 @@ private struct AboutSettings: View {
         guard size > 0 else { return "Mac" }
         var chars = [CChar](repeating: 0, count: size)
         sysctlbyname("hw.model", &chars, &size, nil, 0)
-        return String(cString: chars)
+        // Decode up to the NUL terminator (String(cString:) is deprecated).
+        let bytes = chars.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     var body: some View {

@@ -280,6 +280,15 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - mkv
+    # iCloud Key-Value Store for cross-device resume (#18). The identifier is set
+    # to the **iOS** bundle id (not the Mac's own cz.zmrhal.aether.mac) so the Mac
+    # joins the SAME key-value store as iPhone/Apple TV/Vision Pro — a film started
+    # on one device shows as in-progress on the Mac and vice-versa. Requires the
+    # iCloud (Key-value storage) capability on the cz.zmrhal.aether.mac App ID.
+    entitlements:
+      path: AetherMac/SupportingFiles/AetherMac.entitlements
+      properties:
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)cz.zmrhal.aether
     # TMDb key for Local Library metadata matching (#210), injected from
     # Config/App.xcconfig (gitignored Secrets) / Xcode Cloud — same as iOS.
     # Empty in clean checkouts just disables matching; users can also set a key
