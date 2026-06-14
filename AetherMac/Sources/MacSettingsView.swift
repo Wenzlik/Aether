@@ -82,7 +82,7 @@ private struct AccountsSettings: View {
             }
             Section("Other Sources") {
                 LabeledContent("SMB / NAS", value: "Coming soon")
-                LabeledContent("Local Library", value: "Coming soon")
+                LabeledContent("Local Library", value: "Set up in General")
             }
         }
         .formStyle(.grouped)
@@ -131,9 +131,10 @@ private struct GeneralSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Metadata") {
-                SecureField("TMDb API Key", text: $session.tmdbToken)
+                TextField("TMDb API Key", text: $session.tmdbToken)
+                    .onSubmit { session.rescanLocalLibrary() }   // apply on Enter
                 LabeledContent("Status", value: session.isTMDBConfigured ? "Configured" : "Not set")
-                Text("Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org.")
+                Text("Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org. Press Return to apply.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

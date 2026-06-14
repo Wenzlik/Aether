@@ -55,10 +55,10 @@ final class MacSession {
     /// key (Info.plist `TMDBAPIKey`, like iOS). Drives local-library metadata
     /// matching (posters/overviews); changing it rescans the local library.
     var tmdbToken: String = UserDefaults.standard.string(forKey: "tmdb.token") ?? "" {
-        didSet {
-            UserDefaults.standard.set(tmdbToken, forKey: "tmdb.token")
-            rebuildLocalSource()
-        }
+        // Only persist on edit — do NOT rebuild the library on every keystroke
+        // (that bumped libraryToken per character and made the field unusable).
+        // The new key is applied on the next rescan (Rescan button / field submit).
+        didSet { UserDefaults.standard.set(tmdbToken, forKey: "tmdb.token") }
     }
     /// Manual override if set, else the key baked in at build time.
     private var effectiveTMDBKey: String {
