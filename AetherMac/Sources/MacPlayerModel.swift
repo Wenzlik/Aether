@@ -44,6 +44,7 @@ final class MacPlayerModel {
     /// Latest playhead from time-pos events — used at teardown so we never call
     /// the (potentially blocking) mpv_get_property on a stalled network stream.
     private var lastKnownSeconds: Double = 0
+    private var didMarkWatched = false
 
     func load(_ url: URL, session: MacSession? = nil, item: MediaItem? = nil) {
         guard url != loadedURL else { return }
@@ -110,6 +111,7 @@ final class MacPlayerModel {
             }
             applyPendingResume()
             maybeRecord(seconds: seconds)
+            maybeMarkWatched()
         case "aid":
             currentAudioID = mpv.stringProperty("aid").flatMap(Int.init) ?? -1
         case "sid":
@@ -156,6 +158,15 @@ final class MacPlayerModel {
         guard isPlaying, nowSecond - lastRecordedSecond >= 5 else { return }
         lastRecordedSecond = nowSecond
         recordResume(committing: false)
+    }
+
+    /// Once the playhead passes ~90%, mark the title watched on its source
+    /// (Plex scrobble / Jellyfin PlayedItems) — once per session.
+    private func maybeMarkWatched() {
+        guard !didMarkWatched, let item, let session, durationSeconds > 0 else { return }
+        guard lastKnownSeconds / durationSeconds >= 0.9 else { return }
+        didMarkWatched = true
+        Task { await session.markWatched(item) }
     }
 
     /// Persist the current playhead for Continue Watching. Skips the very start

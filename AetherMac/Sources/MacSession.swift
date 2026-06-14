@@ -284,6 +284,15 @@ final class MacSession {
         return DetailFormatting.seconds(point.position)
     }
 
+    /// Mark an item watched on **its own source** (the server it streamed from).
+    /// Plex (`/:/scrobble`) and Jellyfin (`PlayedItems`) sync this to their other
+    /// clients — but the two servers are independent, so watching a title that
+    /// exists on both marks it only on the one you played from, not the other.
+    func markWatched(_ item: MediaItem) async {
+        await source(for: item)?.markWatched(item.id)
+        libraryToken &+= 1   // refresh watched badges
+    }
+
     /// Record a playhead position for an item. `committing` (pause/close) also
     /// pushes to iCloud KVS; the periodic tick passes `false`.
     func recordResume(for item: MediaItem, seconds: Double, committing: Bool) async {
