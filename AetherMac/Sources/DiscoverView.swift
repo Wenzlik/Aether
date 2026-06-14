@@ -20,12 +20,13 @@ struct DiscoverView: View {
             if isLoading && rails.isEmpty {
                 ProgressView("Loading…").padding(40)
             } else if rails.isEmpty {
-                ContentUnavailableView(
-                    "Nothing here yet",
-                    systemImage: "sparkles",
-                    description: Text("Connect Plex or Jellyfin in Settings to browse your library.")
+                AetherEmptyState(
+                    glyph: "sparkles",
+                    title: "Nothing here yet",
+                    message: "Connect Plex or Jellyfin in Settings to browse your library."
                 )
                 .padding(40)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 LazyVStack(alignment: .leading, spacing: 32) {
                     switch mode {
@@ -113,7 +114,7 @@ struct DiscoverView: View {
     private var continueWatchingRail: some View {
         if !rails.continueWatching.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Continue Watching").font(.title2.bold()).padding(.horizontal, 24)
+                AetherSectionHeader(title: "Continue Watching").padding(.horizontal, 24)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: 18) {
                         ForEach(rails.continueWatching) { entry in
@@ -166,7 +167,7 @@ struct DiscoverView: View {
     private func rail(_ title: String, _ items: [UnifiedMediaItem]) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(.title2.bold()).padding(.horizontal, 24)
+                AetherSectionHeader(title: title).padding(.horizontal, 24)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: 18) {
                         ForEach(items) { item in

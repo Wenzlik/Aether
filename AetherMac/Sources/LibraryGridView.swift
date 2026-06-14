@@ -34,7 +34,7 @@ struct LibraryGridView: View {
     private func section(_ title: String, _ items: [UnifiedMediaItem]) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(.title2.bold())
+                AetherSectionHeader(title: title)
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(items) { item in
                         if let base = item.preferredSource?.item ?? item.sources.first?.item {
