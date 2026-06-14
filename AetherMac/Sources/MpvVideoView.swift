@@ -2,6 +2,21 @@ import SwiftUI
 import Cmpv
 import OpenGL.GL
 
+/// mpv render-update callback. **File-scope and non-isolated on purpose** —
+/// mpv calls it from its `vo` thread, so it must not carry `@MainActor`
+/// isolation (a closure inside the @MainActor `MpvGLView` would, and the Swift
+/// runtime would trap on the isolation check the moment mpv invoked it). Here we
+/// just hop to the main thread and ask the view to redraw.
+private func mpvRenderUpdate(_ ctx: UnsafeMutableRawPointer?) {
+    let bits = UInt(bitPattern: ctx)
+    DispatchQueue.main.async {
+        guard let p = UnsafeMutableRawPointer(bitPattern: bits) else { return }
+        MainActor.assumeIsolated {
+            Unmanaged<MpvGLView>.fromOpaque(p).takeUnretainedValue().setNeedsRedraw()
+        }
+    }
+}
+
 /// The video surface for libmpv. An `NSOpenGLView` whose GL context backs an
 /// `mpv_render_context`; mpv renders into the view's default framebuffer. mpv's
 /// update callback (any thread) flips `needsDisplay` on main, and `draw` issues
@@ -66,22 +81,18 @@ final class MpvGLView: NSOpenGLView {
 
         if let renderContext {
             let ctx = Unmanaged.passUnretained(self).toOpaque()
-            mpv_render_context_set_update_callback(renderContext, { raw in
-                // Fires on mpv's `vo` thread (a raw pthread). Bridge to main via
-                // GCD — NOT `Task { @MainActor }`, which trips a Swift-concurrency
-                // executor assertion when enqueued from a non-cooperative thread
-                // (it crashed the vo thread). Pass the pointer as a Sendable
-                // bit pattern across the boundary.
-                let bits = UInt(bitPattern: raw)
-                DispatchQueue.main.async {
-                    guard let p = UnsafeMutableRawPointer(bitPattern: bits) else { return }
-                    MainActor.assumeIsolated {
-                        Unmanaged<MpvGLView>.fromOpaque(p).takeUnretainedValue().needsDisplay = true
-                    }
-                }
-            }, ctx)
+            // Must pass a **non-isolated** function: this fires on mpv's `vo`
+            // thread, and a closure written here would inherit `prepareOpenGL`'s
+            // `@MainActor` isolation (NSView is @MainActor), so the Swift runtime
+            // would assert "not on main actor" the instant mpv calls it and trap
+            // (dispatch_assert_queue). `mpvRenderUpdate` is a free function with
+            // no isolation, so it's safe to invoke from any thread.
+            mpv_render_context_set_update_callback(renderContext, mpvRenderUpdate, ctx)
         }
     }
+
+    /// Request a redraw on the main thread (called from the render-update hop).
+    fileprivate func setNeedsRedraw() { needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let renderContext, let openGLContext else { return }
