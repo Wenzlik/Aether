@@ -19,7 +19,7 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             if isLoading && rails.isEmpty {
-                ProgressView("Loading…").padding(40)
+                AetherLoadingState(.rails(count: 3)).padding(.vertical, 24)
             } else if rails.isEmpty {
                 AetherEmptyState(
                     glyph: "sparkles",
@@ -203,9 +203,16 @@ struct DiscoverView: View {
 
     private func load() async {
         guard session.hasAnySource else { rails = .empty; return }
-        isLoading = true
+        // Skeleton only when we have nothing — a warm cache/snapshot paints
+        // instantly (parity with iOS, #197).
+        if rails.isEmpty { isLoading = true }
         rails = await session.homeRails()
         isLoading = false
+        // Stale-while-revalidate: refresh quietly in the background if stale.
+        if await session.isLibraryStale() {
+            let fresh = await session.homeRails(forceRefresh: true)
+            if !fresh.isEmpty { rails = fresh }
+        }
     }
 }
 

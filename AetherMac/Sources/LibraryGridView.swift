@@ -24,7 +24,8 @@ struct LibraryGridView: View {
     var body: some View {
         ScrollView {
             if isLoading && movies.isEmpty && shows.isEmpty {
-                ProgressView("Loading library…").padding(40)
+                // Calm skeleton (parity with iOS) instead of a bare spinner.
+                AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     section("Movies", movies, route: .movies)
@@ -64,11 +65,23 @@ struct LibraryGridView: View {
 
     private func load() async {
         guard session.hasAnySource else { movies = []; shows = []; return }
-        isLoading = true
+        // Only show the skeleton when we have nothing yet — a warm cache/snapshot
+        // paints instantly, no full-screen loading (parity with iOS, #197).
+        if movies.isEmpty && shows.isEmpty { isLoading = true }
         let library = session.makeLibrary()
         movies = await library.unifiedItems(kind: .movie)
         shows = await library.unifiedItems(kind: .show)
         isLoading = false
+        // Stale-while-revalidate: the snapshot was served instantly above; if it's
+        // older than the freshness window, quietly refresh in the background.
+        let staleMovies = await library.isStale(kind: .movie)
+        let staleShows = await library.isStale(kind: .show)
+        if staleMovies || staleShows {
+            let freshMovies = await library.unifiedItems(kind: .movie, forceRefresh: true)
+            let freshShows = await library.unifiedItems(kind: .show, forceRefresh: true)
+            if !freshMovies.isEmpty { movies = freshMovies }
+            if !freshShows.isEmpty { shows = freshShows }
+        }
     }
 }
 
@@ -125,7 +138,7 @@ struct LibraryBrowseView: View {
     var body: some View {
         ScrollView {
             if isLoading && items.isEmpty {
-                ProgressView().padding(40)
+                AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(shown) { posterLink($0) }
@@ -193,8 +206,13 @@ struct LibraryBrowseView: View {
 
     private func load() async {
         guard session.hasAnySource else { items = []; return }
-        isLoading = true
-        items = await session.makeLibrary().unifiedItems(kind: route.kind)
+        if items.isEmpty { isLoading = true }
+        let library = session.makeLibrary()
+        items = await library.unifiedItems(kind: route.kind)
         isLoading = false
+        if await library.isStale(kind: route.kind) {
+            let fresh = await library.unifiedItems(kind: route.kind, forceRefresh: true)
+            if !fresh.isEmpty { items = fresh }
+        }
     }
 }

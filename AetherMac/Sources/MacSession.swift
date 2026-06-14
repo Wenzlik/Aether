@@ -312,8 +312,19 @@ final class MacSession {
     func stopPlayback() { playbackURL = nil }
 
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
-    func homeRails() async -> UnifiedRails {
-        await makeLibrary().homeRails(resumeStore: resumeStore)
+    /// Served from the shared cache/snapshot instantly; pass `forceRefresh` to
+    /// re-hit the servers for a background revalidate (#197 parity).
+    func homeRails(forceRefresh: Bool = false) async -> UnifiedRails {
+        await makeLibrary().homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
+    }
+
+    /// Whether the persisted library snapshot is past its freshness window — used
+    /// to decide whether to kick a background refresh after serving the cache.
+    func isLibraryStale() async -> Bool {
+        let library = makeLibrary()
+        let staleMovies = await library.isStale(kind: .movie)
+        let staleShows = await library.isStale(kind: .show)
+        return staleMovies || staleShows
     }
 
     /// The item behind a player window's URL (set by `beginPlayback`).
