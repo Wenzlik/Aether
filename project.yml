@@ -8,6 +8,12 @@ options:
     iOS: "26.0"
     tvOS: "26.0"
     visionOS: "26.0"
+    # Native macOS target (#232) — player-first Mac app. AetherCore already
+    # declares `.macOS(.v15)` and VLCKit ships a `macos` slice, so this builds
+    # on the same foundations. Separate target (not a destination on the iOS
+    # target) because the iOS UI is UIKit-family; the Mac app is its own AppKit/
+    # SwiftUI shell.
+    macOS: "15.0"
   groupSortPosition: top
   xcodeVersion: "16.0"
 
@@ -214,6 +220,33 @@ targets:
         Release:
           CODE_SIGN_IDENTITY: Apple Distribution
 
+  # Native macOS app (#232) — player-first: open a video file and play it well.
+  # Vertical slice for now (open + VLC playback); Finder file-association,
+  # play-in-place bookmarks, and the rich player window follow as local-file
+  # playback matures. Reuses AetherCore + VLCKit (macos slice); no UIKit.
+  AetherMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: AetherMac/Sources
+    dependencies:
+      - package: AetherCore
+        product: AetherCore
+      - package: VLCKit
+        product: VLCKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 8PW5FWH7P2
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Aether
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        # Dev slice: not sandboxed yet, so a user-picked file plays without
+        # security-scoped bookmarks. App Store sandbox + play-in-place bookmarks
+        # come with the player-first work (#232).
+        ENABLE_APP_SANDBOX: NO
+
   AetherTests:
     type: bundle.unit-test
     platform: iOS
@@ -239,5 +272,13 @@ schemes:
       config: Debug
       targets:
         - AetherTests
+    archive:
+      config: Release
+  AetherMac:
+    build:
+      targets:
+        AetherMac: all
+    run:
+      config: Debug
     archive:
       config: Release
