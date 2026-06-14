@@ -18,6 +18,9 @@ struct MacPoster: View {
             CachedAsyncImage(url: item.posterURL, aspectRatio: 2.0 / 3.0)
                 .frame(maxWidth: width ?? .infinity)
                 .watchedArtwork(item.isFullyWatched, display: watchedDisplay)
+                // Compact community-rating chip in the top-leading corner (#351)
+                // — just the score, so it barely takes space. Hidden when absent.
+                .overlay(alignment: .topLeading) { ratingBadge }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             Text(item.title)
                 .font(.callout)
@@ -29,5 +32,20 @@ struct MacPoster: View {
             }
         }
         .frame(width: width)
+    }
+
+    @ViewBuilder
+    private var ratingBadge: some View {
+        if let rating = item.communityRating, rating > 0 {
+            Text(String(format: "%.1f", rating))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay { Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5) }
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                .padding(6)
+        }
     }
 }

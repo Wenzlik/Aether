@@ -120,7 +120,7 @@ struct FacetGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(items) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
                             }
                             .buttonStyle(.plain)
                         }

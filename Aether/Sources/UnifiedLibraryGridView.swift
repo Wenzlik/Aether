@@ -44,6 +44,9 @@ struct UnifiedLibraryGridView: View {
     /// Minimum community rating filter (#342) — `nil` = any. Buckets, applied
     /// client-side over `communityRating`.
     @State private var selectedMinRating: Double?
+    /// Selected release years (#351) — **multi-select**, empty = all years.
+    /// Applied client-side; a title matches if its year is in the set.
+    @State private var selectedYears: Set<Int> = []
     /// Drives the Filter sheet that now holds Genre / Audio / Rating (#342),
     /// instead of permanent chip rows above the grid.
     @State private var isFilterSheetPresented = false
@@ -130,7 +133,7 @@ struct UnifiedLibraryGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(sortedItems) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
                             }
                             .buttonStyle(.plain)
                         }
@@ -164,19 +167,23 @@ struct UnifiedLibraryGridView: View {
         if let selectedMinRating {
             result = result.filter { ($0.communityRating ?? 0) >= selectedMinRating }
         }
+        if !selectedYears.isEmpty {
+            result = result.filter { $0.year.map { selectedYears.contains($0) } ?? false }
+        }
         return result
     }
 
     /// Any filter narrowing the grid — drives the Filter button's active dot and
     /// the "Clear" affordance.
     private var hasActiveFilter: Bool {
-        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil
+        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil || !selectedYears.isEmpty
     }
 
     private func clearFilters() {
         selectedGenre = nil
         selectedAudioLanguage = nil
         selectedMinRating = nil
+        selectedYears = []
     }
 
     private var sortedItems: [UnifiedMediaItem] {
@@ -195,6 +202,12 @@ struct UnifiedLibraryGridView: View {
         return counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }
             .prefix(12)
             .map(\.key)
+    }
+
+    /// Distinct release years across the loaded items, newest first. Empty when
+    /// nothing carries a year → no Year filter group (#351).
+    private var availableYears: [Int] {
+        Array(Set(items.compactMap(\.year))).sorted(by: >)
     }
 
     private var columns: [GridItem] {
@@ -333,7 +346,31 @@ struct UnifiedLibraryGridView: View {
         #endif
     }
 
-    /// Filter sheet — Genre / Audio / Rating (#342), reusing the existing chip
+    /// Year filter chips (#351): "All" + each release year, **multi-select** so
+    /// the grid can span several years at once. Tapping toggles a year in/out;
+    /// "All" clears the whole selection.
+    private var yearFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                genreChip(label: "All", isSelected: selectedYears.isEmpty) { selectedYears = [] }
+                ForEach(availableYears, id: \.self) { year in
+                    genreChip(label: String(year), isSelected: selectedYears.contains(year)) {
+                        if selectedYears.contains(year) {
+                            selectedYears.remove(year)
+                        } else {
+                            selectedYears.insert(year)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    /// Filter sheet — Genre / Audio / Rating / Year (#342/#351), reusing the chip
     /// rows (so the audio lazy-load behaviour is unchanged), plus Clear.
     private var filterSheet: some View {
         let sheetBody = ScrollView {
@@ -348,6 +385,9 @@ struct UnifiedLibraryGridView: View {
                     filterGroup("Audio Language") { audioLanguageFilterRow }
                 }
                 filterGroup("Rating") { ratingFilterRow }
+                if !availableYears.isEmpty {
+                    filterGroup("Year") { yearFilterRow }
+                }
                 if hasActiveFilter {
                     Button("Clear Filters", role: .destructive) { clearFilters() }
                         .padding(.top, AetherDesign.Spacing.s)

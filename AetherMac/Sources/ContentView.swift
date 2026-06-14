@@ -12,6 +12,11 @@ struct HomeView: View {
     var recents: RecentsStore
     @State private var sidebar: SidebarItem? = .home
     @State private var searchText = ""
+    /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
+    /// player swap** — playback replaces the whole library subtree, so a path
+    /// owned by the `NavigationStack` would reset to root on close. Keeping it
+    /// here returns the user to the title's Detail after playback (#8).
+    @State private var path = NavigationPath()
 
     enum SidebarItem: Hashable, Identifiable {
         case home, discover, library, search, settings
@@ -39,7 +44,7 @@ struct HomeView: View {
             }
         }
         .tint(AetherMacTheme.accent)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(session.appearance.preference.colorScheme)
         .environment(\.locale, session.appLocale)
     }
 
@@ -47,14 +52,19 @@ struct HomeView: View {
         NavigationSplitView {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230)
+                // Drop the system's automatic sidebar toggle — it drifted to the
+                // far top-right of the unified toolbar once a leading titlebar
+                // accessory was present (#14). We render our own toggle inside the
+                // leading accessory instead, so logo + toggle sit together by the
+                // traffic lights. (A SwiftUI custom toggle here previously caused a
+                // *duplicate*; placing it in the AppKit accessory avoids that.)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
         }
-        // Brand lockup as a leading titlebar accessory — sits right after the
-        // traffic lights and before the sidebar toggle, with no button
-        // background (a SwiftUI toolbar item gave a glass capsule + a duplicate
-        // toggle). AppKit places accessories exactly where we want.
-        .background(TitlebarLogo())
+        // Leading titlebar accessory: the brand lockup + the sidebar toggle, right
+        // after the traffic lights, no button background. AppKit places it exactly.
+        .background(TitlebarLeadingAccessory())
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
@@ -84,7 +94,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private var detail: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 switch sidebar {
                 case .library:  LibraryGridView(session: session)
@@ -157,20 +167,29 @@ struct HomeView: View {
     }
 }
 
-/// Places the AETHER brand mark as a **leading titlebar accessory** — after the
-/// traffic lights and before the sidebar toggle, with no button background.
+/// The AETHER brand mark **plus** a sidebar toggle as a single **leading
+/// titlebar accessory** — after the traffic lights, no button background. The
+/// system's own toggle is removed (`.toolbar(removing: .sidebarToggle)`) so this
+/// is the only one, and logo + toggle stay together at the leading edge.
 /// Idempotent: added once per window.
-private struct TitlebarLogo: NSViewRepresentable {
+private struct TitlebarLeadingAccessory: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let probe = NSView(frame: .zero)
         DispatchQueue.main.async {
             guard let window = probe.window else { return }
-            let id = NSUserInterfaceItemIdentifier("AetherTitlebarLogo")
+            let id = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
             guard !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == id }) else { return }
-            let logo = Image("AetherBrandMark").resizable().scaledToFit()
-                .frame(height: 16).padding(.horizontal, 8).padding(.vertical, 4)
-            let host = NSHostingController(rootView: logo)
-            host.view.frame = NSRect(x: 0, y: 0, width: 96, height: 28)
+            let content = HStack(spacing: 8) {
+                Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
+                    .frame(height: 20)
+                SidebarToggleButton()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            let host = NSHostingController(rootView: content)
+            // Size to the content's natural aspect — a fixed width squished
+            // "AETHER" horizontally, which read as a broken/blurry logo.
+            host.view.frame.size = host.view.fittingSize
             let accessory = NSTitlebarAccessoryViewController()
             accessory.identifier = id
             accessory.layoutAttribute = .leading
@@ -180,4 +199,24 @@ private struct TitlebarLogo: NSViewRepresentable {
         return probe
     }
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// A borderless sidebar toggle that drives AppKit's standard `toggleSidebar(_:)`
+/// up the responder chain (the NavigationSplitView is bridged to an
+/// `NSSplitViewController`, which implements it) — so collapsing the sidebar
+/// works without re-adding the system toggle we removed.
+private struct SidebarToggleButton: View {
+    var body: some View {
+        Button {
+            NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+        } label: {
+            Image(systemName: "sidebar.leading")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Toggle Sidebar")
+    }
 }

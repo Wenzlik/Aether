@@ -74,7 +74,7 @@ struct LibraryGridView: View {
 
 /// A poster that navigates to its base item's detail (shared by the library +
 /// browse grids).
-@ViewBuilder
+@MainActor @ViewBuilder
 func posterLink(_ item: UnifiedMediaItem) -> some View {
     if let base = item.preferredSource?.item ?? item.sources.first?.item {
         NavigationLink(value: base) { MacPoster(item: item) }
@@ -93,15 +93,32 @@ struct LibraryBrowseView: View {
     @State private var items: [UnifiedMediaItem] = []
     @State private var sort: LibrarySort = .titleAZ
     @State private var genre: String? = nil
+    /// Multi-select release years (#351) — empty = all years.
+    @State private var selectedYears: Set<Int> = []
+    /// Minimum community rating (#342 parity) — `nil` = any.
+    @State private var minRating: Double? = nil
     @State private var isLoading = false
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
+    private let ratingBuckets: [Double] = [9, 8, 7, 6]
 
     private var genres: [String] {
         Array(Set(items.flatMap(\.genres))).sorted()
     }
+    /// Distinct release years, newest first (#351).
+    private var years: [Int] {
+        Array(Set(items.compactMap(\.year))).sorted(by: >)
+    }
+    private var hasActiveFilter: Bool {
+        genre != nil || !selectedYears.isEmpty || minRating != nil
+    }
     private var shown: [UnifiedMediaItem] {
-        let filtered = genre.map { g in items.filter { $0.genres.contains(g) } } ?? items
+        var filtered = items
+        if let genre { filtered = filtered.filter { $0.genres.contains(genre) } }
+        if !selectedYears.isEmpty {
+            filtered = filtered.filter { $0.year.map { selectedYears.contains($0) } ?? false }
+        }
+        if let minRating { filtered = filtered.filter { ($0.communityRating ?? 0) >= minRating } }
         return sort.sorted(filtered)
     }
 
@@ -121,21 +138,53 @@ struct LibraryBrowseView: View {
         .toolbar {
             ToolbarItem {
                 Menu {
+                    // Inline so the options show on the first click — a plain
+                    // Picker nests them behind a "Sort >" submenu (extra click).
                     Picker("Sort", selection: $sort) {
                         ForEach(LibrarySort.allCases, id: \.self) { s in
                             Label(s.displayName, systemImage: s.systemImage).tag(s)
                         }
                     }
+                    .pickerStyle(.inline)
                 } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
             }
-            if !genres.isEmpty {
-                ToolbarItem {
-                    Menu {
+            // One Filter menu: Genre + Rating + Year (multi-select) (#342/#351).
+            ToolbarItem {
+                Menu {
+                    if !genres.isEmpty {
                         Picker("Genre", selection: $genre) {
                             Text("All Genres").tag(String?.none)
                             ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
                         }
-                    } label: { Label("Filter", systemImage: "line.3.horizontal.decrease.circle") }
+                    }
+                    Picker("Minimum Rating", selection: $minRating) {
+                        Text("Any Rating").tag(Double?.none)
+                        ForEach(ratingBuckets, id: \.self) { Text("\(Int($0))+").tag(Optional($0)) }
+                    }
+                    if !years.isEmpty {
+                        Menu("Year") {
+                            ForEach(years, id: \.self) { y in
+                                Toggle(String(y), isOn: Binding(
+                                    get: { selectedYears.contains(y) },
+                                    set: { on in
+                                        if on { selectedYears.insert(y) } else { selectedYears.remove(y) }
+                                    }
+                                ))
+                            }
+                            if !selectedYears.isEmpty {
+                                Divider()
+                                Button("Clear Years") { selectedYears = [] }
+                            }
+                        }
+                    }
+                    if hasActiveFilter {
+                        Divider()
+                        Button("Clear Filters") { genre = nil; selectedYears = []; minRating = nil }
+                    }
+                } label: {
+                    Label("Filter", systemImage: hasActiveFilter
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
                 }
             }
         }

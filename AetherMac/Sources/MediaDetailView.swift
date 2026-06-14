@@ -13,28 +13,35 @@ struct MediaDetailView: View {
     let item: MediaItem
     /// Resolve + open a player window for a playable (non-container) item.
     let onPlay: (MediaItem) -> Void
+    @Environment(\.watchedDisplay) private var watchedDisplay
 
     /// Hydrated, track-selectable working copy of `item` (movies / episodes).
     /// `nil` until the per-item fetch lands; falls back to the thin `item`.
     @State private var working: MediaItem?
     @State private var children: [MediaItem] = []
+    /// The show's On Deck episode (continue/next-up), for show containers only.
+    @State private var nextUp: MediaItem?
     @State private var isLoading = false
     @State private var showTechnical = false
+    /// Saved resume position (seconds) for a playable item — drives Resume.
+    @State private var resumeAt: Double?
+    /// Optimistic watched/favorite overrides so the buttons flip instantly.
+    @State private var watchedOverride: Bool?
+    @State private var favoriteOverride: Bool?
 
     /// The item the screen renders + plays: the hydrated copy once loaded.
     private var current: MediaItem { working ?? item }
+
+    private var isWatched: Bool { watchedOverride ?? current.isFullyWatched }
+    private var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 if !item.kind.isContainer {
-                    Button { onPlay(current) } label: {
-                        Label("Play", systemImage: "play.fill").frame(maxWidth: 220)
-                    }
-                    .controlSize(.large)
-                    .buttonStyle(.borderedProminent)
-
+                    playButtons
+                    controlsRow
                     playbackOptions
                 }
                 if let overview = current.summary, !overview.isEmpty {
@@ -52,6 +59,9 @@ struct MediaDetailView: View {
                 if !current.cast.isEmpty {
                     castSection
                 }
+                if item.kind == .show {
+                    nextUpSection
+                }
                 if item.kind.isContainer {
                     childrenSection
                 }
@@ -62,16 +72,31 @@ struct MediaDetailView: View {
         }
         .scrollContentBackground(.hidden)
         .background {
-            // iOS-style cinematic hero: the title's backdrop, blurred, behind
-            // the content (with the component's own readability scrim).
+            // iOS-style cinematic background: the title's **backdrop** fills the
+            // whole screen, crisp (aspect-fill) with the component's readability
+            // scrim — matching the other platforms. Only a poster fallback (no
+            // backdrop) gets blurred into atmosphere, exactly like iOS. Was
+            // hardcoded to blur 40, which washed even real backdrops into a faint,
+            // near-black wash (#20).
+            let backdrop = current.backdropURL
             CinematicArtworkBackground(
-                url: current.backdropURL ?? current.posterURL,
-                blurRadius: 40
+                url: backdrop ?? current.posterURL,
+                blurRadius: backdrop != nil ? 0 : 40
             )
             .ignoresSafeArea()
         }
         .navigationTitle(item.title)
-        .task(id: item.id) { await load() }
+        // Reload on watched changes too (libraryToken bumps on mark watched), so
+        // a season's episode rows + the show's Next Up reflect freshly-marked
+        // state instead of a stale fetch.
+        .task(id: "\(item.id.rawValue)-\(session.libraryToken)") { await load() }
+        // Refresh the Resume position after the player closes (it bumps
+        // resumeRevision on every write), so the button reflects where you
+        // stopped — and the screen we return to after playback (#8) stays current.
+        .task(id: session.resumeRevision) {
+            guard !item.kind.isContainer else { return }
+            resumeAt = await session.savedResumeSeconds(for: item)
+        }
     }
 
     // MARK: Header
@@ -112,6 +137,69 @@ struct MediaDetailView: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    // MARK: Play + controls
+
+    /// Resume (when a saved position exists) + Play From Beginning, mirroring iOS.
+    /// With no resume point it collapses to a single Play button.
+    @ViewBuilder
+    private var playButtons: some View {
+        HStack(spacing: 12) {
+            if let resumeAt, resumeAt > 1 {
+                Button { Task { await session.play(current) } } label: {
+                    Label("Resume · \(timecode(resumeAt))", systemImage: "play.fill")
+                        .frame(maxWidth: 220)
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+                Button { Task { await session.play(current, startAt: 0) } } label: {
+                    Label("Play from Beginning", systemImage: "gobackward")
+                }
+                .controlSize(.large)
+                .buttonStyle(.bordered)
+            } else {
+                Button { onPlay(current) } label: {
+                    Label("Play", systemImage: "play.fill").frame(maxWidth: 220)
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    /// Secondary controls from the other platforms: Mark Watched/Unwatched and
+    /// (where the source supports it) Favorite. Optimistic so they flip on tap.
+    private var controlsRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                let next = !isWatched
+                watchedOverride = next
+                Task { await session.markWatched(current, watched: next) }
+            } label: {
+                Label(isWatched ? "Watched" : "Mark as Watched",
+                      systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
+            }
+            .buttonStyle(.bordered)
+
+            if session.canFavorite(current) {
+                Button {
+                    let next = !isFavorite
+                    favoriteOverride = next
+                    Task { await session.setFavorite(current, to: next) }
+                } label: {
+                    Label(isFavorite ? "Favorited" : "Favorite",
+                          systemImage: isFavorite ? "heart.fill" : "heart")
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .controlSize(.large)
+    }
+
+    private func timecode(_ seconds: Double) -> String {
+        let t = Int(seconds), h = t / 3600, m = (t % 3600) / 60, s = t % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 
     // MARK: Playback options (Audio / Subtitles / Quality)
@@ -265,10 +353,13 @@ struct MediaDetailView: View {
                     }
                 }
             } else {
-                // Episodes stay a list — they carry stills + descriptions.
+                // Episodes stay a list — they carry stills + descriptions. The
+                // row opens the episode's own Detail (#10); a trailing button is
+                // the quick-play shortcut.
                 ForEach(children, id: \.id) { child in
                     HStack {
-                        childRow(child)
+                        NavigationLink(value: child) { childRow(child) }
+                            .buttonStyle(.plain)
                         Spacer()
                         Button { playChild(child) } label: { Image(systemName: "play.fill") }
                             .buttonStyle(.borderless)
@@ -279,11 +370,46 @@ struct MediaDetailView: View {
         }
     }
 
+    /// Show-level "Continue Watching / Next Up" (parity with iOS): the On Deck
+    /// episode (in-progress, else the next after the last watched) as a landscape
+    /// card with Play and a tap-through to its Detail.
+    @ViewBuilder
+    private var nextUpSection: some View {
+        if let episode = nextUp {
+            VStack(alignment: .leading, spacing: 12) {
+                AetherSectionHeader(title: "Continue Watching")
+                HStack(alignment: .top, spacing: 16) {
+                    NavigationLink(value: episode) {
+                        CachedAsyncImage(url: episode.backdropURL ?? episode.posterURL, aspectRatio: 16.0 / 9.0)
+                            .frame(width: 220)
+                            .watchedArtwork(episode.isFullyWatched, display: watchedDisplay, compact: true)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(DetailFormatting.episodeLabel(episode)).font(.headline)
+                        if let summary = episode.summary, !summary.isEmpty {
+                            Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        }
+                        Button { playChild(episode) } label: {
+                            Label("Play", systemImage: "play.fill").frame(maxWidth: 160)
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
     private func seasonCard(_ season: MediaItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CachedAsyncImage(url: season.posterURL ?? current.posterURL, aspectRatio: 2.0 / 3.0)
+                .watchedArtwork(season.isFullyWatched, display: watchedDisplay)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             Text(season.title).font(.callout).lineLimit(1)
+                .foregroundStyle(season.isFullyWatched ? .secondary : .primary)
         }
     }
 
@@ -291,13 +417,23 @@ struct MediaDetailView: View {
         HStack(spacing: 12) {
             CachedAsyncImage(url: child.posterURL, aspectRatio: child.kind == .episode ? 16.0 / 9.0 : 2.0 / 3.0)
                 .frame(width: child.kind == .episode ? 120 : 54)
+                // Reflect server watched state (synced cross-platform) with the
+                // shared dim + checkmark treatment, so episodes already seen on
+                // another device read as watched here too.
+                .watchedArtwork(child.isFullyWatched, display: watchedDisplay, compact: true)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(child.kind == .episode ? DetailFormatting.episodeLabel(child) : child.title)
                     .font(.body)
+                    .foregroundStyle(child.isFullyWatched ? .secondary : .primary)
                 if let summary = child.summary, child.kind == .episode, !summary.isEmpty {
                     Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
+            }
+            if child.isFullyWatched {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Watched")
             }
         }
         .padding(.vertical, 4)
@@ -310,8 +446,12 @@ struct MediaDetailView: View {
         defer { isLoading = false }
         if item.kind.isContainer {
             children = await session.children(of: item)
+            if item.kind == .show {
+                nextUp = await session.onDeckEpisode(forShow: item)
+            }
         } else {
             working = await session.hydratedItem(for: item)
+            resumeAt = await session.savedResumeSeconds(for: item)
         }
     }
 

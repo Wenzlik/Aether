@@ -4,7 +4,8 @@ import AetherCore
 /// Horizontal rails across all connected sources. Two modes share the same
 /// loaded `UnifiedRails`:
 /// - `.home` — Continue Watching, Recently Added/Released, Top Rated.
-/// - `.discover` — browse by genre, plus the full Movies / TV Shows rails.
+/// - `.discover` — a featured pick + curated rails (New Releases, Top Rated,
+///   Picked for You); watched + in-progress titles are filtered out (#350).
 /// Each poster is a `MacPoster` wrapped in a `NavigationLink` to the base
 /// `MediaItem` (the shared Detail destination).
 struct DiscoverView: View {
@@ -36,12 +37,15 @@ struct DiscoverView: View {
                         rail("Recently Released", filtered(rails.recentlyReleased))
                         rail("Top Rated", filtered(topRated))
                     case .discover:
+                        // Curated "what should I watch" rails (#350): genre lanes
+                        // and the full Movies / TV Shows catalog dumps were removed
+                        // (Library already browses those + by genre). Discover now
+                        // mirrors mobile: a featured pick, New Releases, Top Rated,
+                        // and a serendipitous Picked for You.
                         if let featured { featuredHero(featured) }
-                        ForEach(genreRails, id: \.name) { genre in
-                            rail(genre.name, genre.items)
-                        }
-                        rail("Movies", filtered(rails.movies))
-                        rail("TV Shows", filtered(rails.shows))
+                        rail("New Releases", newReleases)
+                        rail("Top Rated", filtered(topRated))
+                        rail("Picked for You", pickedForYou)
                     }
                 }
                 .padding(.vertical, 24)
@@ -130,12 +134,40 @@ struct DiscoverView: View {
         }
     }
 
-    /// Drop fully-watched titles when the user hides them on discovery surfaces
-    /// (#280 / mobile parity) — Discover shows what's still ahead. The Library
-    /// grid stays the complete catalog and is never filtered.
+    /// Drop fully-watched **and** in-progress titles when the user hides them on
+    /// discovery surfaces (#280/#350, mobile parity) — Discover shows what's still
+    /// ahead; started titles live in Continue Watching. In-progress is matched by
+    /// the already-loaded Continue Watching entries' source ids. The Library grid
+    /// stays the complete catalog and is never filtered.
     private func filtered(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
         guard session.playbackPrefs.hideWatchedInDiscovery else { return items }
-        return items.filter { !$0.isFullyWatched }
+        let started = inProgressIDs
+        return items.filter { item in
+            guard !item.isFullyWatched else { return false }
+            return !item.sources.contains { started.contains($0.item.id) }
+        }
+    }
+
+    /// MediaIDs that are in progress (have a resume point) — taken from the
+    /// loaded Continue Watching rail, so Discover never double-surfaces a title
+    /// the user is mid-way through (movies match exactly; show containers can't,
+    /// since Continue Watching keys on the episode).
+    private var inProgressIDs: Set<MediaID> {
+        Set(rails.continueWatching.map { $0.item.id })
+    }
+
+    /// New Releases ("Novinky"): newest by release date, falling back to recently
+    /// added when the sources don't carry release dates. Watched/in-progress are
+    /// filtered out like every Discover rail.
+    private var newReleases: [UnifiedMediaItem] {
+        let released = filtered(rails.recentlyReleased)
+        return released.isEmpty ? filtered(rails.recentlyAdded) : released
+    }
+
+    /// A shuffled grab-bag across the (filtered) catalog — rediscover something
+    /// you own but forgot, mirroring mobile's "Picked for You".
+    private var pickedForYou: [UnifiedMediaItem] {
+        Array(filtered(rails.movies + rails.shows).shuffled().prefix(20))
     }
 
     /// Highest-rated titles across movies + shows (mobile's "Top Rated" rail).
@@ -145,22 +177,6 @@ struct DiscoverView: View {
             .sorted { ($0.communityRating ?? 0) > ($1.communityRating ?? 0) }
             .prefix(20)
             .map { $0 }
-    }
-
-    /// One rail per popular genre across the catalog (mobile parity) — the genres
-    /// with the most titles, each rail the (filtered) titles carrying that genre.
-    private var genreRails: [(name: String, items: [UnifiedMediaItem])] {
-        let pool = filtered(rails.movies + rails.shows)
-        var counts: [String: Int] = [:]
-        for item in pool { for g in item.genres { counts[g, default: 0] += 1 } }
-        let topGenres = counts
-            .filter { $0.value >= 3 }                       // skip near-empty rails
-            .sorted { $0.value > $1.value }
-            .prefix(6)
-            .map(\.key)
-        return topGenres.map { genre in
-            (genre, pool.filter { $0.genres.contains(genre) })
-        }
     }
 
     @ViewBuilder

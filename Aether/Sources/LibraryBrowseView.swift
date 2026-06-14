@@ -504,7 +504,7 @@ struct LibraryBrowseView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items.prefix(12)) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)

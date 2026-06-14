@@ -8,12 +8,13 @@ options:
     iOS: "26.0"
     tvOS: "26.0"
     visionOS: "26.0"
-    # Native macOS target (#232) — player-first Mac app. AetherCore already
-    # declares `.macOS(.v15)` and VLCKit ships a `macos` slice, so this builds
-    # on the same foundations. Separate target (not a destination on the iOS
+    # Native macOS target (#232) — player-first Mac app. macOS 26 minimum: the
+    # Homebrew/Xcode-Cloud libmpv dylib is built for the 26 SDK (linking it at a
+    # lower target warns), and the app uses the modern SwiftUI stack the other
+    # platforms target at 26. Separate target (not a destination on the iOS
     # target) because the iOS UI is UIKit-family; the Mac app is its own AppKit/
     # SwiftUI shell.
-    macOS: "15.0"
+    macOS: "26.0"
   groupSortPosition: top
   xcodeVersion: "16.0"
 

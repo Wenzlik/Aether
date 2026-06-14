@@ -61,7 +61,7 @@ final class MacPlayerModel {
 
         if let item, let session {
             Task { [weak self] in
-                let seconds = await session.resumeSeconds(for: item)
+                let seconds = await session.startSeconds(for: item)
                 self?.pendingResumeSeconds = seconds
             }
         }

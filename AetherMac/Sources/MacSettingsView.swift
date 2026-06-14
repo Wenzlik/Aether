@@ -22,12 +22,13 @@ struct MacSettingsView: View {
                 .tabItem { Label("Accounts", systemImage: "person.2") }
             PlaybackSettings(prefs: session.playbackPrefs)
                 .tabItem { Label("Playback", systemImage: "play.rectangle") }
-            AppearanceSettings(prefs: session.playbackPrefs)
+            AppearanceSettings(prefs: session.playbackPrefs, appearance: session.appearance)
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .modifier(SettingsChrome(embedded: embedded, locale: session.appLocale))
+        .modifier(SettingsChrome(embedded: embedded, locale: session.appLocale,
+                                 colorScheme: session.appearance.preference.colorScheme))
     }
 }
 
@@ -36,6 +37,7 @@ struct MacSettingsView: View {
 private struct SettingsChrome: ViewModifier {
     let embedded: Bool
     let locale: Locale
+    let colorScheme: ColorScheme?
     func body(content: Content) -> some View {
         if embedded {
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,7 +45,7 @@ private struct SettingsChrome: ViewModifier {
             content
                 .frame(width: 480, height: 380)
                 .tint(AetherMacTheme.accent)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(colorScheme)
                 .environment(\.locale, locale)
         }
     }
@@ -101,6 +103,12 @@ private struct AccountsSettings: View {
 /// iOS. Strings localize from the Mac String Catalog (Localizable.xcstrings).
 private struct GeneralSettings: View {
     @Bindable var session: MacSession
+    /// Local draft for the TMDb key. Editing a property on the @Observable
+    /// `session` directly re-rendered the whole app on every keystroke, which
+    /// dropped the field's focus after one character — so it was effectively
+    /// impossible to type a key. Editing a local @State and committing on
+    /// Return/blur keeps focus and only touches `session` once.
+    @State private var tmdbDraft = ""
 
     var body: some View {
         Form {
@@ -138,14 +146,22 @@ private struct GeneralSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Metadata") {
-                TextField("TMDb API Key", text: $session.tmdbToken)
-                    .onSubmit { session.rescanLocalLibrary() }   // apply on Enter
+                TextField("TMDb API Key", text: $tmdbDraft)
+                    .onSubmit { commitTMDb() }                  // apply on Enter
                 LabeledContent("Status", value: session.isTMDBConfigured ? "Configured" : "Not set")
                 Text("Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org. Press Return to apply.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear { tmdbDraft = session.tmdbToken }
+    }
+
+    private func commitTMDb() {
+        let trimmed = tmdbDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != session.tmdbToken else { return }
+        session.tmdbToken = trimmed
+        session.rescanLocalLibrary()
     }
 
     private func addFolder() {
@@ -213,9 +229,17 @@ private struct PlaybackSettings: View {
 /// straight to the shared `PlaybackPreferencesStore`, so they match the iOS app.
 private struct AppearanceSettings: View {
     @Bindable var prefs: PlaybackPreferencesStore
+    @Bindable var appearance: AppearancePreferenceStore
 
     var body: some View {
         Form {
+            Section("Theme") {
+                Picker("Appearance", selection: $appearance.preference) {
+                    ForEach(AppearancePreference.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Text("System follows your Mac's Light/Dark setting. Light mode is still being polished.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Discovery") {
                 Toggle("Hide watched titles in Discover", isOn: $prefs.hideWatchedInDiscovery)
                 Text("Recently Added, Recently Released, and Top Rated show what's still ahead. Your Library always shows everything.")
