@@ -247,16 +247,12 @@ private struct AboutSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 14) {
-                    Image(systemName: "play.rectangle.on.rectangle")
-                        .font(.system(size: 36, weight: .light))
-                        .foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Aether").font(.title2.bold())
-                        Text("Personal media, beautifully played.")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                }
+                Image("AetherBrandMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 64)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
             }
             Section("Version") {
                 LabeledContent("Version", value: shortVersion)
