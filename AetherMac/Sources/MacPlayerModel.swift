@@ -67,6 +67,14 @@ final class MacPlayerModel {
 
     // MARK: Transport
 
+    /// Stop playback + polling — called when the player window closes, so audio
+    /// doesn't keep playing after the view is gone.
+    func stop() {
+        player.stop()
+        tickTask?.cancel()
+        tickTask = nil
+    }
+
     func togglePlay() { player.isPlaying ? player.pause() : player.play() }
     func skipBackward() { player.jumpBackward(10) }
     func skipForward() { player.jumpForward(10) }

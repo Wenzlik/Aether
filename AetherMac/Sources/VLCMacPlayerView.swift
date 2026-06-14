@@ -57,6 +57,7 @@ struct VLCPlayerScreen: View {
             }
         }
         .onAppear { model.load(url); scheduleHide() }
+        .onDisappear { model.stop() }
         .onChange(of: url) { _, newURL in model.load(newURL) }
         .contentShape(Rectangle())
         // Double-click toggles full-screen (standard player gesture).
