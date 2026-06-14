@@ -22,6 +22,11 @@ final class MacSession {
     private(set) var plexSources: [PlexMediaSource] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
 
+    /// App-wide display + playback defaults, shared with the iOS app's model.
+    /// On Mac we wire the ones that affect what's on screen: the watched-poster
+    /// treatment (`\.watchedDisplay`) and hide-watched-in-discovery.
+    let playbackPrefs = PlaybackPreferencesStore()
+
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var hasAnySource: Bool { isPlexConnected || isJellyfinConnected }

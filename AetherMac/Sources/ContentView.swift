@@ -37,6 +37,7 @@ struct HomeView: View {
                     }
                 }
         }
+        .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
         .fileImporter(
             isPresented: $isImporting,

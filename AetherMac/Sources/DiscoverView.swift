@@ -24,17 +24,25 @@ struct DiscoverView: View {
                 .padding(40)
             } else {
                 LazyVStack(alignment: .leading, spacing: 32) {
-                    rail("Recently Added", rails.recentlyAdded)
-                    rail("Recently Released", rails.recentlyReleased)
-                    rail("Top Rated", topRated)
-                    rail("Movies", rails.movies)
-                    rail("TV Shows", rails.shows)
+                    rail("Recently Added", filtered(rails.recentlyAdded))
+                    rail("Recently Released", filtered(rails.recentlyReleased))
+                    rail("Top Rated", filtered(topRated))
+                    rail("Movies", filtered(rails.movies))
+                    rail("TV Shows", filtered(rails.shows))
                 }
                 .padding(.vertical, 24)
             }
         }
         .navigationTitle("Discover")
         .task(id: session.connectedSources.count) { await load() }
+    }
+
+    /// Drop fully-watched titles when the user hides them on discovery surfaces
+    /// (#280 / mobile parity) — Discover shows what's still ahead. The Library
+    /// grid stays the complete catalog and is never filtered.
+    private func filtered(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+        guard session.playbackPrefs.hideWatchedInDiscovery else { return items }
+        return items.filter { !$0.isFullyWatched }
     }
 
     /// Highest-rated titles across movies + shows (mobile's "Top Rated" rail).
