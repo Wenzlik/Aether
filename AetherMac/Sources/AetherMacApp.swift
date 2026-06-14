@@ -8,10 +8,11 @@ import AppKit
 @main
 struct AetherMacApp: App {
     @State private var recents = RecentsStore()
+    @State private var session = MacSession()
 
     var body: some Scene {
         WindowGroup {
-            HomeView(recents: recents)
+            HomeView(session: session, recents: recents)
                 .frame(minWidth: 820, minHeight: 520)
         }
         .commands {

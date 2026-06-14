@@ -1,0 +1,175 @@
+import SwiftUI
+import AetherCore
+
+/// Plex sign-in — reuses AetherCore's `PlexSignInViewModel` (the PIN/link flow),
+/// just renders its `state`.
+struct PlexSignInSheet: View {
+    let session: MacSession
+    let onDone: () -> Void
+    @State private var vm: PlexSignInViewModel
+    @Environment(\.openURL) private var openURL
+
+    init(session: MacSession, onDone: @escaping () -> Void) {
+        self.session = session
+        self.onDone = onDone
+        _vm = State(initialValue: PlexSignInViewModel(authClient: session.plexAuthClient))
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Connect Plex").font(.title2.bold())
+            content
+            Button("Cancel") { vm.cancel(); onDone() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(40)
+        .frame(width: 440)
+        .task { vm.start() }
+        .onChange(of: vm.state) { _, state in
+            if case let .success(token) = state {
+                Task { await session.completePlexSignIn(token: token); onDone() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch vm.state {
+        case .idle, .requesting:
+            ProgressView("Requesting a code…")
+        case let .awaitingUser(pin, linkURL):
+            VStack(spacing: 14) {
+                Text("Enter this code at plex.tv/link:").foregroundStyle(.secondary)
+                Text(pin.code)
+                    .font(.system(size: 34, weight: .bold, design: .monospaced))
+                    .textSelection(.enabled)
+                Button("Open plex.tv/link") { openURL(linkURL) }
+                    .controlSize(.large)
+                ProgressView().controlSize(.small)
+                Text("Waiting for you to authorize…").font(.caption).foregroundStyle(.secondary)
+            }
+        case .success:
+            ProgressView("Connecting…")
+        case let .failure(reason):
+            VStack(spacing: 12) {
+                Label("Couldn't connect", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(String(describing: reason)).font(.caption).foregroundStyle(.secondary)
+                Button("Try Again") { vm.retry() }
+            }
+        }
+    }
+}
+
+/// Jellyfin sign-in via **Quick Connect** — enter the server URL, then approve
+/// the shown code in Jellyfin (Dashboard ▸ Quick Connect / on another signed-in
+/// client). Mirrors the iOS flow, driven directly off `JellyfinAuthClient`.
+struct JellyfinSignInSheet: View {
+    let session: MacSession
+    let onDone: () -> Void
+    @State private var model: JellyfinQuickConnectModel
+
+    init(session: MacSession, onDone: @escaping () -> Void) {
+        self.session = session
+        self.onDone = onDone
+        _model = State(initialValue: JellyfinQuickConnectModel(auth: session.jellyfinAuthClient))
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Connect Jellyfin").font(.title2.bold())
+            content
+            Button("Cancel") { onDone() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(40)
+        .frame(width: 440)
+        .onChange(of: model.record) { _, record in
+            if let record {
+                Task { await session.completeJellyfinSignIn(record); onDone() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.step {
+        case .enterURL:
+            VStack(spacing: 12) {
+                TextField("https://jellyfin.example.com", text: $model.urlString)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 320)
+                Button("Connect") { model.connect() }
+                    .controlSize(.large)
+                    .disabled(model.urlString.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        case .connecting:
+            ProgressView("Contacting server…")
+        case let .awaiting(code):
+            VStack(spacing: 14) {
+                Text("Approve this code in Jellyfin\n(Dashboard ▸ Quick Connect, or a signed-in client):")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                Text(code)
+                    .font(.system(size: 34, weight: .bold, design: .monospaced))
+                    .textSelection(.enabled)
+                ProgressView().controlSize(.small)
+            }
+        case let .failed(message):
+            VStack(spacing: 12) {
+                Label("Couldn't connect", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(message).font(.caption).foregroundStyle(.secondary)
+                Button("Try Again") { model.step = .enterURL }
+            }
+        }
+    }
+}
+
+/// Drives the Jellyfin Quick Connect handshake against `JellyfinAuthClient`.
+@MainActor
+@Observable
+final class JellyfinQuickConnectModel {
+    enum Step: Equatable {
+        case enterURL
+        case connecting
+        case awaiting(code: String)
+        case failed(String)
+    }
+
+    var urlString = ""
+    var step: Step = .enterURL
+    /// Set once authenticated — the view watches it to finish + persist.
+    var record: JellyfinServerRecord?
+
+    private let auth: JellyfinAuthClient
+
+    init(auth: JellyfinAuthClient) { self.auth = auth }
+
+    func connect() {
+        let raw = urlString.trimmingCharacters(in: .whitespaces)
+        let normalized = raw.contains("://") ? raw : "http://\(raw)"
+        guard let baseURL = URL(string: normalized) else { step = .failed("Invalid URL"); return }
+        step = .connecting
+        Task {
+            do {
+                let info = try await auth.publicInfo(baseURL: baseURL)
+                guard try await auth.quickConnectEnabled(baseURL: baseURL) else {
+                    step = .failed("Quick Connect isn't enabled on this server. Enable it in Jellyfin ▸ Dashboard ▸ Quick Connect.")
+                    return
+                }
+                let qc = try await auth.initiateQuickConnect(baseURL: baseURL)
+                step = .awaiting(code: qc.code)
+                let result = try await auth.pollForAuthentication(baseURL: baseURL, secret: qc.secret)
+                record = JellyfinServerRecord(
+                    baseURLString: baseURL.absoluteString,
+                    accessToken: result.accessToken,
+                    userID: result.user.id,
+                    serverName: info.serverName ?? baseURL.host ?? "Jellyfin"
+                )
+            } catch {
+                step = .failed(error.localizedDescription)
+            }
+        }
+    }
+}
