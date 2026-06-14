@@ -1,12 +1,16 @@
 import SwiftUI
 import AetherCore
 
-/// Discover — horizontal rails across all connected sources, mirroring the
-/// mobile app's Discover tab: Recently Added, Recently Released, Top Rated,
-/// plus full Movies / TV Shows rails. Each poster is a `MacPoster` wrapped in a
-/// `NavigationLink` to the base `MediaItem` (the shared Detail destination).
+/// Horizontal rails across all connected sources. Two modes share the same
+/// loaded `UnifiedRails`:
+/// - `.home` — Continue Watching, Recently Added/Released, Top Rated.
+/// - `.discover` — browse by genre, plus the full Movies / TV Shows rails.
+/// Each poster is a `MacPoster` wrapped in a `NavigationLink` to the base
+/// `MediaItem` (the shared Detail destination).
 struct DiscoverView: View {
+    enum Mode { case home, discover }
     let session: MacSession
+    var mode: Mode = .discover
 
     @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
@@ -17,27 +21,31 @@ struct DiscoverView: View {
                 ProgressView("Loading…").padding(40)
             } else if rails.isEmpty {
                 ContentUnavailableView(
-                    "Nothing to discover yet",
+                    "Nothing here yet",
                     systemImage: "sparkles",
-                    description: Text("Connect Plex or Jellyfin to browse your library here.")
+                    description: Text("Connect Plex or Jellyfin in Settings to browse your library.")
                 )
                 .padding(40)
             } else {
                 LazyVStack(alignment: .leading, spacing: 32) {
-                    continueWatchingRail
-                    rail("Recently Added", filtered(rails.recentlyAdded))
-                    rail("Recently Released", filtered(rails.recentlyReleased))
-                    rail("Top Rated", filtered(topRated))
-                    rail("Movies", filtered(rails.movies))
-                    rail("TV Shows", filtered(rails.shows))
-                    ForEach(genreRails, id: \.name) { genre in
-                        rail(genre.name, genre.items)
+                    switch mode {
+                    case .home:
+                        continueWatchingRail
+                        rail("Recently Added", filtered(rails.recentlyAdded))
+                        rail("Recently Released", filtered(rails.recentlyReleased))
+                        rail("Top Rated", filtered(topRated))
+                    case .discover:
+                        ForEach(genreRails, id: \.name) { genre in
+                            rail(genre.name, genre.items)
+                        }
+                        rail("Movies", filtered(rails.movies))
+                        rail("TV Shows", filtered(rails.shows))
                     }
                 }
                 .padding(.vertical, 24)
             }
         }
-        .navigationTitle("Discover")
+        .navigationTitle(mode == .home ? "Home" : "Discover")
         // Reload when sources change AND after a player records a resume point,
         // so Continue Watching reflects what was just played.
         .task(id: "\(session.connectedSources.count)-\(session.resumeRevision)") { await load() }
