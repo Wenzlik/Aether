@@ -10,6 +10,8 @@ struct MacSettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralSettings(session: session)
+                .tabItem { Label("General", systemImage: "gearshape") }
             AccountsSettings(session: session)
                 .tabItem { Label("Accounts", systemImage: "person.2") }
             PlaybackSettings(prefs: session.playbackPrefs)
@@ -22,6 +24,7 @@ struct MacSettingsView: View {
         .frame(width: 480, height: 380)
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(.dark)
+        .environment(\.locale, session.appLocale)
     }
 }
 
@@ -69,6 +72,28 @@ private struct AccountsSettings: View {
             case .jellyfin: JellyfinSignInSheet(session: session) { signIn = nil }
             }
         }
+    }
+}
+
+/// General app settings — currently the UI language (System / English / Čeština),
+/// applied live via `\.locale` so the app switches without a restart, matching
+/// iOS. Strings localize from the Mac String Catalog (Localizable.xcstrings).
+private struct GeneralSettings: View {
+    @Bindable var session: MacSession
+
+    var body: some View {
+        Form {
+            Section("Language") {
+                Picker("Language", selection: $session.appLanguage) {
+                    Text("System").tag("system")
+                    Text("English").tag("en")
+                    Text("Čeština").tag("cs")
+                }
+                Text("Changes the app's language immediately. Some text may still appear in English until fully translated.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

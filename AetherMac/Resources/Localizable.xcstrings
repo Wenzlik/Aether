@@ -1,0 +1,786 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "Home": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domů"
+          }
+        }
+      }
+    },
+    "Discover": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objevovat"
+          }
+        }
+      }
+    },
+    "Library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knihovna"
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hledat"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nastavení"
+          }
+        }
+      }
+    },
+    "Accounts": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Účty"
+          }
+        }
+      }
+    },
+    "Playback": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrávání"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vzhled"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O aplikaci"
+          }
+        }
+      }
+    },
+    "Play": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrát"
+          }
+        }
+      }
+    },
+    "More Info": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Více informací"
+          }
+        }
+      }
+    },
+    "Open…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otevřít…"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zrušit"
+          }
+        }
+      }
+    },
+    "Continue Watching": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pokračovat v přehrávání"
+          }
+        }
+      }
+    },
+    "Recently Added": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno přidané"
+          }
+        }
+      }
+    },
+    "Recently Released": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno vydané"
+          }
+        }
+      }
+    },
+    "Top Rated": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nejlépe hodnocené"
+          }
+        }
+      }
+    },
+    "Movies": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filmy"
+          }
+        }
+      }
+    },
+    "TV Shows": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seriály"
+          }
+        }
+      }
+    },
+    "Cast": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsazení"
+          }
+        }
+      }
+    },
+    "Seasons": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Série"
+          }
+        }
+      }
+    },
+    "Episodes": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Epizody"
+          }
+        }
+      }
+    },
+    "Technical Details": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technické detaily"
+          }
+        }
+      }
+    },
+    "Audio": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zvuk"
+          }
+        }
+      }
+    },
+    "Subtitles": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titulky"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kvalita"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vypnuto"
+          }
+        }
+      }
+    },
+    "Source default": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí ze zdroje"
+          }
+        }
+      }
+    },
+    "Audio Language": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jazyk zvuku"
+          }
+        }
+      }
+    },
+    "Subtitle Language": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jazyk titulků"
+          }
+        }
+      }
+    },
+    "Defaults": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Výchozí nastavení"
+          }
+        }
+      }
+    },
+    "Skip Intro": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přeskočit úvod"
+          }
+        }
+      }
+    },
+    "Skip Credits": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přeskočit titulky"
+          }
+        }
+      }
+    },
+    "Auto-Play Next Episode": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automaticky přehrát další epizodu"
+          }
+        }
+      }
+    },
+    "Next Episode Countdown": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odpočet do další epizody"
+          }
+        }
+      }
+    },
+    "Discovery": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objevování"
+          }
+        }
+      }
+    },
+    "Hide watched titles in Discover": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrýt zhlédnuté v Objevování"
+          }
+        }
+      }
+    },
+    "Watched Titles": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zhlédnuté tituly"
+          }
+        }
+      }
+    },
+    "Dimming": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ztlumení"
+          }
+        }
+      }
+    },
+    "Show “WATCHED” label": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit nápis „ZHLÉDNUTO“"
+          }
+        }
+      }
+    },
+    "Label opacity": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Průhlednost nápisu"
+          }
+        }
+      }
+    },
+    "Plex": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex"
+          }
+        }
+      }
+    },
+    "Jellyfin": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stav"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepřipojeno"
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojeno"
+          }
+        }
+      }
+    },
+    "Connect": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojit"
+          }
+        }
+      }
+    },
+    "Connect Plex": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojit Plex"
+          }
+        }
+      }
+    },
+    "Connect Plex…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojit Plex…"
+          }
+        }
+      }
+    },
+    "Connect Jellyfin": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojit Jellyfin"
+          }
+        }
+      }
+    },
+    "Connect Jellyfin…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojit Jellyfin…"
+          }
+        }
+      }
+    },
+    "Sign Out of Plex": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odhlásit z Plexu"
+          }
+        }
+      }
+    },
+    "Sign Out of Jellyfin": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odhlásit z Jellyfinu"
+          }
+        }
+      }
+    },
+    "Other Sources": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Další zdroje"
+          }
+        }
+      }
+    },
+    "Coming soon": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Již brzy"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verze"
+          }
+        }
+      }
+    },
+    "Build": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build"
+          }
+        }
+      }
+    },
+    "Platform": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platforma"
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Úložiště"
+          }
+        }
+      }
+    },
+    "Image Cache": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mezipaměť obrázků"
+          }
+        }
+      }
+    },
+    "Clear Image Cache": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vymazat mezipaměť obrázků"
+          }
+        }
+      }
+    },
+    "Support": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podpora"
+          }
+        }
+      }
+    },
+    "Report a Bug": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nahlásit chybu"
+          }
+        }
+      }
+    },
+    "Feature Request": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Návrh funkce"
+          }
+        }
+      }
+    },
+    "Source on GitHub": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zdrojový kód na GitHubu"
+          }
+        }
+      }
+    },
+    "Search your library": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hledat v knihovně"
+          }
+        }
+      }
+    },
+    "Nothing here yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím tu nic není"
+          }
+        }
+      }
+    },
+    "Connect Plex or Jellyfin in Settings to browse your library.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připoj Plex nebo Jellyfin v Nastavení a procházej svou knihovnu."
+          }
+        }
+      }
+    },
+    "Applied to every title you open. You can still change the audio, subtitles, and quality for a single title on its detail screen.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Použije se na každý titul, který otevřeš. Zvuk, titulky a kvalitu můžeš pořád změnit u konkrétního titulu na jeho detailu."
+          }
+        }
+      }
+    },
+    "Recently Added, Recently Released, and Top Rated show what's still ahead. Your Library always shows everything.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nedávno přidané, Nedávno vydané a Nejlépe hodnocené ukazují, co tě teprve čeká. Knihovna vždy ukáže všechno."
+          }
+        }
+      }
+    },
+    "Couldn't connect": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojení se nezdařilo"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zkusit znovu"
+          }
+        }
+      }
+    },
+    "Waiting for you to authorize…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čekání na autorizaci…"
+          }
+        }
+      }
+    },
+    "Enter this code at plex.tv/link:": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zadej tento kód na plex.tv/link:"
+          }
+        }
+      }
+    },
+    "Open plex.tv/link": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otevřít plex.tv/link"
+          }
+        }
+      }
+    },
+    "Approve this code in Jellyfin\n(Dashboard ▸ Quick Connect, or a signed-in client):": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schval tento kód v Jellyfinu\n(Dashboard ▸ Quick Connect, nebo přihlášený klient):"
+          }
+        }
+      }
+    },
+    "Personal media, beautifully played.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Osobní média, krásně přehraná."
+          }
+        }
+      }
+    }
+  }
+}

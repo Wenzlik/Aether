@@ -39,6 +39,7 @@ struct HomeView: View {
         }
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(.dark)
+        .environment(\.locale, session.appLocale)
     }
 
     private var library: some View {

@@ -254,6 +254,11 @@ targets:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Supported UI languages — Czech + English (in-app switcher in Settings,
+        # backed by Localizable.xcstrings). Lets the app run localized in cs.
+        CFBundleLocalizations:
+          - en
+          - cs
         LSApplicationCategoryType: public.app-category.video
         CFBundleDocumentTypes:
           - CFBundleTypeName: Video

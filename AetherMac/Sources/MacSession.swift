@@ -33,6 +33,14 @@ final class MacSession {
     /// treatment (`\.watchedDisplay`) and hide-watched-in-discovery.
     let playbackPrefs = PlaybackPreferencesStore()
 
+    /// UI language: `"system"`, `"en"`, or `"cs"`. Drives `\.locale` so the user
+    /// can switch in-app (Settings), matching iOS. Persisted in UserDefaults.
+    var appLanguage: String = UserDefaults.standard.string(forKey: "ui.language") ?? "system" {
+        didSet { UserDefaults.standard.set(appLanguage, forKey: "ui.language") }
+    }
+    /// The locale to inject, or `nil` to follow the system language.
+    var appLocale: Locale { appLanguage == "system" ? .autoupdatingCurrent : Locale(identifier: appLanguage) }
+
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var hasAnySource: Bool { isPlexConnected || isJellyfinConnected }
