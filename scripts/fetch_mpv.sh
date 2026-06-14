@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Ensure libmpv (the engine behind IINA) is available for the macOS target.
+# Provide libmpv (the engine behind IINA) for the macOS target, plus the tool
+# used to bundle it into a self-contained .app.
 #
 # The AetherMac player uses libmpv via the C module `Cmpv` (headers vendored in
-# Vendor/Mpv/include, module.modulemap committed). The dynamic library itself is
-# NOT vendored — for dev builds we link Homebrew's libmpv, which also brings its
-# ffmpeg/etc. dependency tree. This script just guarantees it's installed.
+# Vendor/Mpv/include, module.modulemap committed). libmpv itself + its ffmpeg/
+# libass/etc. dependency tree are NOT vendored — we link Homebrew's libmpv at
+# build time and a post-build phase (dylibbundler) copies the whole tree into
+# AetherMac.app/Contents/Frameworks with @rpath install names, so the shipped
+# app is self-contained and runs on Macs without Homebrew (Xcode Cloud, users).
 #
-# Distribution (bundling libmpv + deps into the .app, fixing rpaths) comes later;
-# this is the dev/local-build path. Apple Silicon Homebrew lives at /opt/homebrew.
+# Apple Silicon Homebrew lives at /opt/homebrew.
 set -euo pipefail
 
 if ! command -v brew >/dev/null 2>&1; then
@@ -15,12 +17,19 @@ if ! command -v brew >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -f "$(brew --prefix)/lib/libmpv.dylib" ]; then
-  echo "Installing mpv (provides libmpv)…"
-  brew install mpv
-else
-  echo "libmpv already present at $(brew --prefix)/lib/libmpv.dylib"
-fi
+# Avoid Homebrew's auto-update (ghcr.io portable-ruby flakiness on CI; see
+# ci_post_clone.sh for the same guards).
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_INSTALL_FROM_API=1
 
-echo "libmpv: $(brew --prefix)/lib/libmpv.dylib"
-echo "headers: vendored in Vendor/Mpv/include/mpv"
+for formula in mpv dylibbundler; do
+  if brew list "$formula" >/dev/null 2>&1; then
+    echo "fetch_mpv: $formula already installed"
+  else
+    echo "fetch_mpv: installing $formula…"
+    brew install "$formula"
+  fi
+done
+
+echo "fetch_mpv: libmpv at $(brew --prefix)/lib/libmpv.dylib"
+echo "fetch_mpv: dylibbundler at $(command -v dylibbundler)"

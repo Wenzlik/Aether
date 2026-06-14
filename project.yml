@@ -277,6 +277,36 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - mkv
+    # Make the .app self-contained: copy libmpv + its whole dependency tree
+    # (ffmpeg/libass/…) into Contents/Frameworks and rewrite install names to
+    # @executable_path/../Frameworks, so it runs on Macs without Homebrew (Xcode
+    # Cloud archives, end users). dylibbundler comes from scripts/fetch_mpv.sh.
+    postBuildScripts:
+      - name: Bundle libmpv into app
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          # Release/archive only — the Debug build's separate `.debug.dylib`
+          # indirection breaks dylibbundler's load-command rewrite, and local
+          # Debug runs fine against Homebrew's libmpv directly. Archives (Xcode
+          # Cloud) are Release, where the bundle must be self-contained.
+          if [ "${PLATFORM_NAME}" != "macosx" ] || [ "${CONFIGURATION}" != "Release" ]; then exit 0; fi
+          if ! command -v dylibbundler >/dev/null 2>&1; then
+            echo "error: dylibbundler not found — run scripts/fetch_mpv.sh"; exit 1
+          fi
+          BIN="${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"
+          FW="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          mkdir -p "$FW"
+          dylibbundler -of -cd -b -x "$BIN" -d "$FW" \
+            -p "@executable_path/../Frameworks/" -i /usr/lib -i /System/Library
+          # dylibbundler ad-hoc-signs the main binary; re-sign the bundled dylibs
+          # with the real identity (Xcode signs the app bundle, not these). Dev
+          # builds (signing off) just skip it and run unsigned locally.
+          if [ "${CODE_SIGNING_ALLOWED}" != "NO" ] && [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            find "$FW" -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
+              codesign --force --timestamp --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY}" "$lib"
+            done
+          fi
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
@@ -288,9 +318,15 @@ targets:
         # play-in-place bookmarks come with the player-first work (#232).
         ENABLE_APP_SANDBOX: NO
         # libmpv: vendored headers + the `Cmpv` module map, dylib from Homebrew.
+        # Apple Silicon only — Homebrew's libmpv (the player engine) ships arm64
+        # only, so a universal/x86_64 slice can't link. The Mac app is arm64.
+        ARCHS: arm64
         HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/Mpv/include
         LIBRARY_SEARCH_PATHS: /opt/homebrew/lib
-        OTHER_LDFLAGS: -lmpv
+        # -headerpad_max_install_names: leave room in the load commands so the
+        # post-build dylibbundler phase can rewrite libmpv + deps to
+        # @executable_path/../Frameworks (longer paths) without "doesn't fit".
+        OTHER_LDFLAGS: -lmpv -Wl,-headerpad_max_install_names
         OTHER_SWIFT_FLAGS: -Xcc -fmodule-map-file=$(SRCROOT)/Vendor/Mpv/module.modulemap
 
   AetherTests:
