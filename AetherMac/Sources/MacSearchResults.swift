@@ -12,7 +12,7 @@ struct MacSearchResults: View {
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
 
     private var results: [UnifiedMediaItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)

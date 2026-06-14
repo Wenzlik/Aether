@@ -18,7 +18,7 @@ struct LibraryGridView: View {
     @State private var shows: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
     private let previewCap = 18
 
     var body: some View {
@@ -95,7 +95,7 @@ struct LibraryBrowseView: View {
     @State private var genre: String? = nil
     @State private var isLoading = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
 
     private var genres: [String] {
         Array(Set(items.flatMap(\.genres))).sorted()
