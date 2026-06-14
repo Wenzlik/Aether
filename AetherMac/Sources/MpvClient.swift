@@ -21,13 +21,18 @@ final class MpvClient {
     /// Called on the main actor when playback reaches end-of-file.
     var onEndFile: (@MainActor () -> Void)?
 
+    /// Create **and fully initialize** mpv up front. Initialization must finish
+    /// before `MpvVideoView` creates its render context (`mpv_render_context_create`
+    /// requires an initialized handle) — and in SwiftUI the view's `prepareOpenGL`
+    /// can fire before `.onAppear`, so we can't defer this to a later `start()`.
     init() {
         handle = mpv_create()
+        configure()
     }
 
     /// Configure options and initialize. `vo=libmpv` selects the embeddable
     /// render API (the video surface is driven by `MpvVideoView`).
-    func start() {
+    private func configure() {
         guard let handle else { return }
         // Use the render API for video output; hardware-decode via VideoToolbox.
         mpv_set_option_string(handle, "vo", "libmpv")

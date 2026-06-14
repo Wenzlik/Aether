@@ -51,7 +51,8 @@ final class MacPlayerModel {
 
         mpv.onPropertyChange = { [weak self] name in self?.handleProperty(name) }
         mpv.onEndFile = { [weak self] in self?.isPlaying = false }
-        mpv.start()
+        // mpv is already created + initialized in MpvClient.init (so the render
+        // context can attach); here we just point it at the file.
         mpv.loadFile(url)
 
         if let item, let session {
@@ -65,10 +66,13 @@ final class MacPlayerModel {
     // MARK: Transport
 
     /// Stop playback — called when the player window closes. Commits a final
-    /// resume point, then tears the player down so audio doesn't keep playing.
+    /// resume point and halts playback (so audio stops immediately). The mpv
+    /// handle itself is torn down in `MpvClient.deinit`, which runs *after* the
+    /// video view has freed its render context — freeing a render context on an
+    /// already-destroyed handle would crash.
     func stop() {
         recordResume(committing: true)
-        mpv.destroy()
+        mpv.command(["stop"])
     }
 
     func togglePlay() { mpv.command(["cycle", "pause"]) }
