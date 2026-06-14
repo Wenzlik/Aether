@@ -22,10 +22,12 @@ struct AetherMacApp: App {
             }
         }
 
-        // One player window per opened file (⌘W closes it).
+        // One player window per opened file (⌘W closes it). `session` lets the
+        // player resolve the item behind a server URL for resume / Continue
+        // Watching; local files (no context) just play.
         WindowGroup(for: URL.self) { $url in
             if let url {
-                MacPlayerView(url: url)
+                MacPlayerView(url: url, session: session)
                     .frame(minWidth: 640, minHeight: 400)
             }
         }

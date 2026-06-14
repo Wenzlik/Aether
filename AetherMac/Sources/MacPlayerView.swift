@@ -9,13 +9,14 @@ import AetherCore
 /// routing reuses the shared `PlaybackEngine` so it matches the iOS rules.
 struct MacPlayerView: View {
     let url: URL
+    var session: MacSession?
 
     var body: some View {
         // Everything plays in the IINA-style VLCKit player for one consistent
         // experience — including Plex/Jellyfin (HLS) and local mp4/mov, not just
         // mkv/DTS. Now that VLCKit 3.x renders on macOS (#232), there's no reason
         // to split Plex off to AVPlayer's bare chrome.
-        VLCPlayerScreen(url: url)
+        VLCPlayerScreen(url: url, session: session, item: session?.item(forPlaybackURL: url))
     }
 }
 

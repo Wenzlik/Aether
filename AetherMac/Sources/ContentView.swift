@@ -196,7 +196,7 @@ struct HomeView: View {
 
     private func playServerItem(_ item: MediaItem) {
         Task {
-            if let url = await session.resolvedURL(for: item) {
+            if let url = await session.beginPlayback(for: item) {
                 openWindow(value: url)
             }
         }

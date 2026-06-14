@@ -24,6 +24,7 @@ struct DiscoverView: View {
                 .padding(40)
             } else {
                 LazyVStack(alignment: .leading, spacing: 32) {
+                    continueWatchingRail
                     rail("Recently Added", filtered(rails.recentlyAdded))
                     rail("Recently Released", filtered(rails.recentlyReleased))
                     rail("Top Rated", filtered(topRated))
@@ -37,7 +38,31 @@ struct DiscoverView: View {
             }
         }
         .navigationTitle("Discover")
-        .task(id: session.connectedSources.count) { await load() }
+        // Reload when sources change AND after a player records a resume point,
+        // so Continue Watching reflects what was just played.
+        .task(id: "\(session.connectedSources.count)-\(session.resumeRevision)") { await load() }
+    }
+
+    /// In-progress titles (movies + episodes) as landscape cards with a progress
+    /// bar — the "pick up where you left off" rail, like the mobile Home.
+    @ViewBuilder
+    private var continueWatchingRail: some View {
+        if !rails.continueWatching.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Continue Watching").font(.title2.bold()).padding(.horizontal, 24)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 18) {
+                        ForEach(rails.continueWatching) { entry in
+                            NavigationLink(value: entry.item) {
+                                ContinueWatchingCard(entry: entry)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+        }
     }
 
     /// Drop fully-watched titles when the user hides them on discovery surfaces
@@ -100,5 +125,46 @@ struct DiscoverView: View {
         isLoading = true
         rails = await session.homeRails()
         isLoading = false
+    }
+}
+
+/// A landscape Continue Watching card: backdrop still, a resume progress bar,
+/// and a title line that names the episode (`Show · S1E2 · …`) when relevant.
+private struct ContinueWatchingCard: View {
+    let entry: HomeFeed.ContinueWatchingEntry
+    private let width: CGFloat = 240
+
+    private var progress: Double {
+        guard let runtime = entry.item.runtime else { return 0 }
+        let total = DetailFormatting.seconds(runtime)
+        guard total > 0 else { return 0 }
+        return min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CachedAsyncImage(url: entry.item.backdropURL ?? entry.item.posterURL, aspectRatio: 16.0 / 9.0)
+                .frame(width: width)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(alignment: .bottom) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(.white.opacity(0.25))
+                            Rectangle().fill(.tint).frame(width: geo.size.width * progress)
+                        }
+                        .frame(height: 4)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                }
+                .overlay(alignment: .center) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 34))
+                        .foregroundStyle(.white, .black.opacity(0.35))
+                        .shadow(radius: 3)
+                }
+            Text(DetailFormatting.continueWatchingLabel(entry.item))
+                .font(.callout).lineLimit(1)
+                .frame(width: width, alignment: .leading)
+        }
     }
 }

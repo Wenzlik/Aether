@@ -78,6 +78,7 @@ final class MacSession {
     // MARK: Restore
 
     func restore() async {
+        await resumeStore.loadFromDisk()
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
             plexServerNames = records.map(\.name)
@@ -153,13 +154,40 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
-    /// In-memory resume store — enough for `homeRails` (no on-device resume
-    /// tracking on Mac yet, so Continue Watching stays empty for now).
+    /// Disk-backed resume store (Documents) — the Mac player records playhead
+    /// positions here and `homeRails` reads them back as Continue Watching.
     let resumeStore = ResumeStore()
+
+    /// Maps a resolved playback URL → the item it came from, so the player
+    /// window (which only carries a URL) can record resume keyed by `MediaID`.
+    private var playbackContext: [URL: MediaItem] = [:]
+
+    /// Bumped whenever a resume point is written, so Discover can re-pull
+    /// Continue Watching after the user closes a player window.
+    private(set) var resumeRevision = 0
 
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
     func homeRails() async -> UnifiedRails {
         await makeLibrary().homeRails(resumeStore: resumeStore)
+    }
+
+    /// The item behind a player window's URL (set by `beginPlayback`).
+    func item(forPlaybackURL url: URL) -> MediaItem? { playbackContext[url] }
+
+    /// Saved playhead (seconds) for an item, for resume-on-open.
+    func resumeSeconds(for item: MediaItem) async -> Double? {
+        guard let point = await resumeStore.point(for: item.id) else { return nil }
+        return DetailFormatting.seconds(point.position)
+    }
+
+    /// Record a playhead position for an item. `committing` (pause/close) also
+    /// pushes to iCloud KVS; the periodic tick passes `false`.
+    func recordResume(for item: MediaItem, seconds: Double, committing: Bool) async {
+        await resumeStore.record(
+            ResumePoint(mediaID: item.id, position: .seconds(seconds)),
+            committing: committing
+        )
+        resumeRevision &+= 1
     }
 
     /// Fully hydrate a browse item — Plex/Jellyfin list items carry no track or
@@ -178,6 +206,14 @@ final class MacSession {
         guard let source = source(for: item) else { return nil }
         let request = PlaybackRequest(item: item, startTime: nil)
         return try? await source.resolvePlayback(request).url
+    }
+
+    /// Resolve a server item to a playback URL **and** remember the item behind
+    /// that URL, so the player window can record resume / Continue Watching.
+    func beginPlayback(for item: MediaItem) async -> URL? {
+        guard let url = await resolvedURL(for: item) else { return nil }
+        playbackContext[url] = item
+        return url
     }
 
     /// The connected source an item belongs to.

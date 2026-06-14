@@ -1,5 +1,6 @@
 import SwiftUI
 import VLCKit
+import AetherCore
 
 /// The video surface. **Must be a `VLCVideoView`**, not a plain `NSView`:
 /// VLCKit's macOS video output renders into the `VLCVideoView`/`VLCVideoLayer`
@@ -37,6 +38,8 @@ private final class VLCDrawableView: VLCVideoView {
 /// to `AVKitPlayerScreen` instead — see `MacPlayerView`.
 struct VLCPlayerScreen: View {
     let url: URL
+    var session: MacSession?
+    var item: MediaItem?
     @State private var model = MacPlayerModel()
     @State private var controlsVisible = true
     @State private var hideWorkItem: DispatchWorkItem?
@@ -55,7 +58,7 @@ struct VLCPlayerScreen: View {
                 .transition(.opacity)
             }
         }
-        .onAppear { model.load(url); scheduleHide() }
+        .onAppear { model.load(url, session: session, item: item); scheduleHide() }
         .onDisappear { model.stop() }
         .onChange(of: url) { _, newURL in model.load(newURL) }
         .contentShape(Rectangle())

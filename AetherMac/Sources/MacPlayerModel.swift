@@ -1,5 +1,6 @@
 import SwiftUI
 import VLCKit
+import AetherCore
 
 /// One audio / subtitle track choice. `id` is VLCKit's track *index* (the value
 /// `currentAudioTrackIndex` / `currentVideoSubTitleIndex` take); `-1` is Disable.
@@ -41,14 +42,29 @@ final class MacPlayerModel {
     private var viewReady = false
     private var started = false
 
+    // Resume tracking (server items only — local files carry no `item`).
+    @ObservationIgnored private var session: MacSession?
+    @ObservationIgnored private var item: MediaItem?
+    private var pendingResumeSeconds: Double?
+    private var didSeekResume = false
+    private var lastRecordedSecond = -10
+
     deinit { tickTask?.cancel() }
 
-    func load(_ url: URL) {
+    func load(_ url: URL, session: MacSession? = nil, item: MediaItem? = nil) {
         guard url != loadedURL else { return }
         loadedURL = url
-        title = Self.displayTitle(for: url)
+        self.session = session
+        self.item = item
+        title = item?.displayTitle ?? Self.displayTitle(for: url)
         player.media = VLCMedia(url: url)   // VLCKit 3: non-optional
         mediaReady = true
+        if let item, let session {
+            Task { [weak self] in
+                let seconds = await session.resumeSeconds(for: item)
+                self?.pendingResumeSeconds = seconds
+            }
+        }
         playIfReady()
     }
 
@@ -80,11 +96,25 @@ final class MacPlayerModel {
     // MARK: Transport
 
     /// Stop playback + polling — called when the player window closes, so audio
-    /// doesn't keep playing after the view is gone.
+    /// doesn't keep playing after the view is gone. Commits a final resume point.
     func stop() {
+        recordResume(committing: true)
         player.stop()
         tickTask?.cancel()
         tickTask = nil
+    }
+
+    /// Persist the current playhead for Continue Watching. Skips the very start
+    /// and the tail (a near-finished title shouldn't reappear as "resume").
+    private func recordResume(committing: Bool) {
+        guard let item, let session else { return }
+        let totalMs = player.media?.length.intValue ?? 0
+        let currentMs = player.time.intValue
+        guard totalMs > 0 else { return }
+        let fraction = Double(currentMs) / Double(totalMs)
+        guard fraction > 0.01, fraction < 0.95 else { return }
+        let seconds = Double(currentMs) / 1000
+        Task { await session.recordResume(for: item, seconds: seconds, committing: committing) }
     }
 
     func togglePlay() { player.isPlaying ? player.pause() : player.play() }
@@ -111,6 +141,19 @@ final class MacPlayerModel {
 
     private func tick() {
         isPlaying = player.isPlaying
+        // Seek to the saved resume position once the media has a known length
+        // (its timeline is valid only after playback actually starts).
+        if !didSeekResume, let resume = pendingResumeSeconds, (player.media?.length.intValue ?? 0) > 0 {
+            didSeekResume = true
+            pendingResumeSeconds = nil
+            if resume > 1 { player.time = VLCTime(int: Int32(resume * 1000)) }
+        }
+        // Record the playhead roughly every 5s while playing.
+        let nowSecond = Int(player.time.intValue) / 1000
+        if isPlaying, nowSecond - lastRecordedSecond >= 5 {
+            lastRecordedSecond = nowSecond
+            recordResume(committing: false)
+        }
         if !isScrubbing { position = Double(player.position) }
         timeText = player.time.stringValue
         durationText = player.media?.length.stringValue ?? player.time.stringValue
