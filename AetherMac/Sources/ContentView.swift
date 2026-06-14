@@ -39,6 +39,9 @@ struct HomeView: View {
                 )
                 .id(url)                       // fresh player per title
                 .ignoresSafeArea()
+                // Player is in the window now → strip the title + leading
+                // accessory so they don't float over the full-bleed video.
+                .background(PlayerTitlebar())
             } else {
                 library
             }
@@ -46,11 +49,6 @@ struct HomeView: View {
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(session.appearance.preference.colorScheme)
         .environment(\.locale, session.appLocale)
-        // Owns the leading logo+toggle titlebar accessory and the window title:
-        // present when browsing, fully **removed** during full-bleed playback so
-        // they don't float over the video and collide with the player's own back
-        // button + title.
-        .background(TitlebarChrome(playing: session.playbackURL != nil))
     }
 
     private var library: some View {
@@ -67,6 +65,10 @@ struct HomeView: View {
         } detail: {
             detail
         }
+        // Library is in the window → ensure the leading logo+toggle accessory is
+        // present and the title visible. (Reliably attaches, unlike a Group-level
+        // probe; the player strips them again via PlayerTitlebar.)
+        .background(LibraryTitlebar())
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
@@ -174,53 +176,66 @@ struct HomeView: View {
 /// system's own toggle is removed (`.toolbar(removing: .sidebarToggle)`) so this
 /// is the only one, and logo + toggle stay together at the leading edge.
 ///
-/// Owns the leading logo + sidebar-toggle titlebar accessory and the window title,
-/// driven by the playback state. Always in the view hierarchy (on the top-level
-/// Group), so `updateNSView` fires whenever `playing` flips. While browsing the
-/// accessory is present and the title visible; during full-bleed playback both are
-/// **removed** (not just hidden — `isHidden` on a leading accessory proved
-/// unreliable) so nothing floats over the video or collides with the player's own
-/// back button + title.
-private struct TitlebarChrome: NSViewRepresentable {
-    let playing: Bool
-    static let accessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
+private let aetherTitlebarAccessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
 
-    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+/// Builds the leading logo + sidebar-toggle titlebar accessory (no button
+/// background). Sized to the wordmark's natural aspect — a fixed width squished
+/// "AETHER" horizontally, which read as a broken/blurry logo.
+private func makeAetherTitlebarAccessory() -> NSTitlebarAccessoryViewController {
+    let content = HStack(spacing: 8) {
+        Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
+            .frame(height: 20)
+        SidebarToggleButton()
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    let host = NSHostingController(rootView: content)
+    host.view.frame.size = host.view.fittingSize
+    let accessory = NSTitlebarAccessoryViewController()
+    accessory.identifier = aetherTitlebarAccessoryID
+    accessory.layoutAttribute = .leading
+    accessory.view = host.view
+    return accessory
+}
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        let playing = self.playing
+/// Rides on the **library** view (which reliably attaches to the window): ensures
+/// the leading logo+toggle accessory is present and the window title is visible.
+/// Idempotent — re-runs when the library reappears after playback, restoring the
+/// chrome the player stripped.
+private struct LibraryTitlebar: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let probe = NSView(frame: .zero)
         DispatchQueue.main.async {
-            guard let window = nsView.window ?? NSApp.mainWindow ?? NSApp.windows.first else { return }
-            window.titleVisibility = playing ? .hidden : .visible
-            window.titlebarSeparatorStyle = playing ? .none : .automatic
-
-            let index = window.titlebarAccessoryViewControllers.firstIndex { $0.identifier == Self.accessoryID }
-            if playing {
-                if let index { window.removeTitlebarAccessoryViewController(at: index) }
-            } else if index == nil {
-                window.addTitlebarAccessoryViewController(Self.makeAccessory())
+            guard let window = probe.window else { return }
+            window.titleVisibility = .visible
+            window.titlebarSeparatorStyle = .automatic
+            if !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == aetherTitlebarAccessoryID }) {
+                window.addTitlebarAccessoryViewController(makeAetherTitlebarAccessory())
             }
         }
+        return probe
     }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
 
-    private static func makeAccessory() -> NSTitlebarAccessoryViewController {
-        let content = HStack(spacing: 8) {
-            Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
-                .frame(height: 20)
-            SidebarToggleButton()
+/// Rides on the **player** view: removes the leading accessory and hides the
+/// window title + separator, so nothing floats over the full-bleed video or
+/// collides with the player's own back button + title. `LibraryTitlebar` restores
+/// them when the library returns.
+private struct PlayerTitlebar: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let probe = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = probe.window else { return }
+            window.titleVisibility = .hidden
+            window.titlebarSeparatorStyle = .none
+            if let index = window.titlebarAccessoryViewControllers.firstIndex(where: { $0.identifier == aetherTitlebarAccessoryID }) {
+                window.removeTitlebarAccessoryViewController(at: index)
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        let host = NSHostingController(rootView: content)
-        // Size to the content's natural aspect — a fixed width squished "AETHER"
-        // horizontally, which read as a broken/blurry logo.
-        host.view.frame.size = host.view.fittingSize
-        let accessory = NSTitlebarAccessoryViewController()
-        accessory.identifier = accessoryID
-        accessory.layoutAttribute = .leading
-        accessory.view = host.view
-        return accessory
+        return probe
     }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// A borderless sidebar toggle that drives AppKit's standard `toggleSidebar(_:)`
