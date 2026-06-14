@@ -4,6 +4,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-06-14
+
 ### Added
 
 - **Aether for macOS** (#232) — a native Mac app (Apple Silicon), sharing the
