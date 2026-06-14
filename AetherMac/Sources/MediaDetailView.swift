@@ -56,9 +56,9 @@ struct MediaDetailView: View {
                     childrenSection
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 900, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(28)
+            .frame(maxWidth: 1040)
+            .frame(maxWidth: .infinity)
         }
         .scrollContentBackground(.hidden)
         .background {
@@ -77,12 +77,21 @@ struct MediaDetailView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 24) {
             CachedAsyncImage(url: current.posterURL, aspectRatio: 2.0 / 3.0)
-                .frame(width: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 8) {
-                Text(current.title).font(.largeTitle.bold())
+                .frame(width: 210)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+            VStack(alignment: .leading, spacing: 10) {
+                // Title as the clearLogo wordmark when the source has one, else
+                // the title text (iOS-style "special text").
+                if let logo = current.logoURL() {
+                    CachedAsyncImage(url: logo)
+                        .frame(maxWidth: 360, maxHeight: 88, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(current.title).font(.system(size: 40, weight: .bold))
+                }
                 HStack(spacing: 10) {
                     if let year = current.year { Text(String(year)) }
                     if let runtime = current.runtime { Text(DetailFormatting.runtime(runtime)) }
@@ -238,29 +247,43 @@ struct MediaDetailView: View {
 
     // MARK: Children (seasons / episodes)
 
+    private let seasonColumns = [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 18, alignment: .top)]
+
     @ViewBuilder
     private var childrenSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(item.kind == .show ? "Seasons" : "Episodes")
-                .font(.title2.bold())
+        VStack(alignment: .leading, spacing: 12) {
+            AetherSectionHeader(title: item.kind == .show ? "Seasons" : "Episodes")
             if isLoading && children.isEmpty {
                 ProgressView().padding(.vertical, 8)
-            } else {
-                ForEach(children, id: \.id) { child in
-                    if child.kind.isContainer {
-                        NavigationLink(value: child) { childRow(child) }
+            } else if item.kind == .show {
+                // Seasons as a poster grid (wraps to multiple rows) — uses the
+                // width instead of a tall scrolling list.
+                LazyVGrid(columns: seasonColumns, spacing: 18) {
+                    ForEach(children, id: \.id) { season in
+                        NavigationLink(value: season) { seasonCard(season) }
                             .buttonStyle(.plain)
-                    } else {
-                        HStack {
-                            childRow(child)
-                            Spacer()
-                            Button { playChild(child) } label: { Image(systemName: "play.fill") }
-                                .buttonStyle(.borderless)
-                        }
+                    }
+                }
+            } else {
+                // Episodes stay a list — they carry stills + descriptions.
+                ForEach(children, id: \.id) { child in
+                    HStack {
+                        childRow(child)
+                        Spacer()
+                        Button { playChild(child) } label: { Image(systemName: "play.fill") }
+                            .buttonStyle(.borderless)
                     }
                     Divider()
                 }
             }
+        }
+    }
+
+    private func seasonCard(_ season: MediaItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CachedAsyncImage(url: season.posterURL ?? current.posterURL, aspectRatio: 2.0 / 3.0)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Text(season.title).font(.callout).lineLimit(1)
         }
     }
 
