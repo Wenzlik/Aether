@@ -234,17 +234,42 @@ targets:
         product: AetherCore
       - package: VLCKit
         product: VLCKit
+    # Register Aether as a video viewer so Finder offers "Open With ▸ Aether"
+    # and the user can set it as the default player (#232 — the killer feature).
+    # mkv has no system UTI, so we declare it as an imported type conforming to
+    # public.movie; the standard movie/AV types cover mp4/mov/m4v/etc.
+    info:
+      path: AetherMac/SupportingFiles/Info.plist
+      properties:
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSApplicationCategoryType: public.app-category.video
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Video
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.movie
+              - public.video
+              - public.audiovisual-content
+              - org.matroska.mkv
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.matroska.mkv
+            UTTypeDescription: Matroska Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - mkv
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8PW5FWH7P2
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Aether
-        INFOPLIST_KEY_NSHumanReadableCopyright: ""
-        # Dev slice: not sandboxed yet, so a user-picked file plays without
-        # security-scoped bookmarks. App Store sandbox + play-in-place bookmarks
-        # come with the player-first work (#232).
+        # Dev slice: not sandboxed yet, so a user-picked / Finder-opened file
+        # plays without security-scoped bookmarks. App Store sandbox +
+        # play-in-place bookmarks come with the player-first work (#232).
         ENABLE_APP_SANDBOX: NO
 
   AetherTests:

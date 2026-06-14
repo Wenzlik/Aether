@@ -8,6 +8,8 @@ DerivedData/
 # Tracking them causes drift commits whenever project.yml changes.
 Aether/SupportingFiles/*.plist
 Aether/SupportingFiles/*.entitlements
+AetherMac/SupportingFiles/*.plist
+AetherMac/SupportingFiles/*.entitlements
 xcuserdata/
 *.xcuserstate
 *.xcscmblueprint

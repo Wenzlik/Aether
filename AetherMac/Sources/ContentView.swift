@@ -53,6 +53,9 @@ struct HomeView: View {
             guard case let .success(urls) = result, let url = urls.first else { return }
             open(url)
         }
+        // Finder "Open With ▸ Aether" / double-click on a registered video type
+        // (#232) → straight to a player window.
+        .onOpenURL { url in open(url) }
     }
 
     // MARK: Content
