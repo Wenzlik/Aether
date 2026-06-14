@@ -71,8 +71,8 @@ final class MacPlayerModel {
 
     fileprivate func handleTimeChanged() {
         if !isScrubbing { position = player.position }
-        timeText = player.time.stringValue ?? "0:00"
-        durationText = player.media?.length.stringValue ?? player.time.stringValue ?? "0:00"
+        timeText = player.time.stringValue
+        durationText = player.media?.length.stringValue ?? player.time.stringValue
     }
 
     fileprivate func handleStateChanged() {
