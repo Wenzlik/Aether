@@ -1,18 +1,20 @@
 import SwiftUI
 import VLCKit
 
-/// The video surface — an `NSView` VLCKit renders into, bound to the model's
-/// player. The system window frames it (resize / full-screen / ⌘W are free).
+/// The video surface. **Must be a `VLCVideoView`**, not a plain `NSView`:
+/// VLCKit's macOS video output renders into the `VLCVideoView`/`VLCVideoLayer`
+/// it sets up itself (correct GL pixel format + CAOpenGLLayer). Handing it a
+/// bare `NSView` made the GL vout assert (`GL_INVALID_OPERATION` in
+/// `CreateFilters`) on first frame.
 private struct VLCVideoSurface: NSViewRepresentable {
     let model: MacPlayerModel
-    func makeNSView(context: Context) -> NSView {
-        let surface = NSView()
-        surface.wantsLayer = true
-        surface.layer?.backgroundColor = NSColor.black.cgColor
+    func makeNSView(context: Context) -> VLCVideoView {
+        let surface = VLCVideoView()
+        surface.backColor = .black
         model.player.drawable = surface
         return surface
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: VLCVideoView, context: Context) {}
 }
 
 /// IINA-style **VLCKit** player — the fallback engine for containers/codecs
