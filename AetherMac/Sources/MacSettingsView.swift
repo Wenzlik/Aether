@@ -12,6 +12,8 @@ struct MacSettingsView: View {
         TabView {
             AccountsSettings(session: session)
                 .tabItem { Label("Accounts", systemImage: "person.2") }
+            PlaybackSettings(prefs: session.playbackPrefs)
+                .tabItem { Label("Playback", systemImage: "play.rectangle") }
             AppearanceSettings(prefs: session.playbackPrefs)
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             AboutSettings()
@@ -59,6 +61,42 @@ private struct AccountsSettings: View {
             case .jellyfin: JellyfinSignInSheet(session: session) { signIn = nil }
             }
         }
+    }
+}
+
+/// Default audio / subtitle language + quality, seeded onto every title the
+/// Detail screen opens (`PlaybackPreferencesStore.applied(to:)`). The user can
+/// still override per-title in Detail — these are the starting point. Same store
+/// the iOS app uses, so a preference set on either platform carries over.
+private struct PlaybackSettings: View {
+    @Bindable var prefs: PlaybackPreferencesStore
+
+    var body: some View {
+        Form {
+            Section("Defaults") {
+                Picker("Quality", selection: $prefs.defaultQuality) {
+                    ForEach(PlaybackQuality.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Picker("Audio Language", selection: $prefs.defaultAudioLanguage) {
+                    Text("Source default").tag(String?.none)
+                    ForEach(PlaybackLanguage.common, id: \.code) { lang in
+                        Text(lang.displayName).tag(Optional(lang.code))
+                    }
+                }
+                Picker("Subtitle Language", selection: $prefs.defaultSubtitleLanguage) {
+                    Text("Source default").tag(String?.none)
+                    Text("Off").tag(Optional("off"))
+                    ForEach(PlaybackLanguage.common, id: \.code) { lang in
+                        Text(lang.displayName).tag(Optional(lang.code))
+                    }
+                }
+            }
+            Section {
+                Text("Applied to every title you open. You can still change the audio, subtitles, and quality for a single title on its detail screen.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

@@ -150,6 +150,17 @@ final class MacSession {
         await makeLibrary().homeRails(resumeStore: resumeStore)
     }
 
+    /// Fully hydrate a browse item — Plex/Jellyfin list items carry no track or
+    /// rich metadata until fetched per-item, so the Detail screen needs this to
+    /// offer Audio / Subtitle / Quality pickers. The user's playback defaults
+    /// (preferred audio/subtitle language, quality) are seeded on top, matching
+    /// the iOS app. Falls back to the thin item when the source can't hydrate.
+    func hydratedItem(for item: MediaItem) async -> MediaItem {
+        guard let source = source(for: item) else { return item }
+        let full = (try? await source.item(for: item.id)) ?? item
+        return playbackPrefs.applied(to: full)
+    }
+
     /// Resolve a playable URL for an item via its source's resolver.
     func resolvedURL(for item: MediaItem) async -> URL? {
         guard let source = source(for: item) else { return nil }
