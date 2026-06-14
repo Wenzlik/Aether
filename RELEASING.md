@@ -27,7 +27,7 @@ Connect rejecting two simultaneous deliveries — the workflows have different
 | **iOS**  | Tag Changes → `ios/…`    | an `ios/…` tag is pushed |
 | **tvOS** | Tag Changes → `tvos/…`   | a `tvos/…` tag is pushed |
 | **visionOS** | Tag Changes → `visionos/…` | a `visionos/…` tag is pushed |
-| **macOS** | _(not set up yet — will be `macos/…`)_ | later (see issue #232) |
+| **macOS** | Tag Changes → `macos/…` | a `macos/…` tag is pushed _(workflow must be created first — see below)_ |
 
 **Every platform is tag-gated** — nothing auto-builds on a plain push to `main`.
 Merging `staging → main` means "ready"; pushing the tags means "ship". This
@@ -48,6 +48,33 @@ rejecting simultaneous deliveries.
    `origin/main`, and pushes one tag per platform.
 
 That's it — all platforms build the same commit from the tags.
+
+### Shipping one platform first (e.g. iOS, then the rest)
+
+To validate one platform before the others, push its tag by hand, then run the
+script for the remainder (it skips tags that already exist):
+
+```sh
+SHA=$(git rev-parse --short origin/main)
+VER=$(git show origin/main:project.yml | grep -m1 MARKETING_VERSION: | sed -E 's/.*"([^"]+)".*/\1/')
+git tag "ios/$VER-$SHA" origin/main && git push origin "ios/$VER-$SHA"   # iOS first
+# …verify iOS on TestFlight, then ship the rest:
+scripts/ship-platforms.sh                                               # tvOS, visionOS, (macOS)
+```
+
+### macOS shipping setup (one-time)
+
+macOS is a **separate App Store Connect record** (bundle id `cz.zmrhal.aether.mac`),
+so it never collides with the iOS delivery. Before the first Mac release:
+
+1. Create a macOS **Xcode Cloud workflow** — Archive action = macOS (scheme
+   `AetherMac`), start condition **Tag Changes → `macos/…`**.
+2. Add `macos` to the `PLATFORMS` array in `scripts/ship-platforms.sh`.
+3. The macOS archive is **Release** config, which runs the post-build phase that
+   bundles libmpv + its ffmpeg deps into the `.app` (self-contained, arm64-only).
+   `ci_post_clone.sh` installs libmpv + `dylibbundler` via `scripts/fetch_mpv.sh`.
+   The bundled dylibs are re-signed in the build phase; verify codesign/notarization
+   on the first archive. See [docs/architecture/PLAYER_ENGINES.md](docs/architecture/PLAYER_ENGINES.md).
 
 ### Tag format
 
@@ -80,6 +107,8 @@ deliberate call).
 - **Nothing builds on a plain push/merge to `main`** — every platform is
   tag-gated, so docs/CI-only changes never spend a build. Builds happen only
   when you push the `ios/…` `tvos/…` `visionos/…` tags (i.e. run the script).
-- `ci_scripts/ci_post_clone.sh` runs for **every** workflow (fetches VLCKit,
-  writes secrets from the `TMDB_API_KEY` env var). It can branch on
+- `ci_scripts/ci_post_clone.sh` runs for **every** workflow (fetches VLCKit +
+  libmpv, writes secrets from the `TMDB_API_KEY` env var). It can branch on
   `CI_PRODUCT_PLATFORM` / `CI_WORKFLOW` if a platform ever needs different setup.
+- **macOS is Apple Silicon only** (`ARCHS = arm64`) — Homebrew's libmpv has no
+  x86_64 slice. An Intel Mac build would need a separately-built libmpv.
