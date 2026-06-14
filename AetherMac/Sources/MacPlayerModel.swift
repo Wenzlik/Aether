@@ -1,14 +1,21 @@
 import SwiftUI
 import VLCKit
 
+/// One audio / subtitle track choice. `id` is VLCKit's track *index* (the value
+/// `currentAudioTrackIndex` / `currentVideoSubTitleIndex` take); `-1` is Disable.
+struct TrackOption: Identifiable, Hashable {
+    let id: Int
+    let name: String
+}
+
 /// Owns the `VLCMediaPlayer` for one player window and exposes observable state
-/// the SwiftUI controls bind to (IINA-style). The view layer never touches VLC
-/// directly — it drives this model.
+/// the SwiftUI controls bind to (IINA-style). Uses VLCKit **3.x** (the macOS
+/// build with a working video output) — its track API is index-based, unlike
+/// VLCKit 4's `audioTracks`/`textTracks`.
 ///
-/// State is polled on a main-thread timer (like the iOS player) rather than via
-/// `VLCMediaPlayerDelegate`: VLCKit fires delegate callbacks off the main thread
-/// on macOS, and touching this `@MainActor` model from there trips the isolation
-/// check and crashes (it did, on network playback). Polling sidesteps that.
+/// State is polled on a main-actor timer rather than via `VLCMediaPlayerDelegate`
+/// (VLCKit fires those off the main thread). Playback starts only once the media
+/// is set AND the video view is in a window (its GL surface is ready).
 @MainActor
 @Observable
 final class MacPlayerModel {
@@ -16,21 +23,20 @@ final class MacPlayerModel {
 
     private(set) var isPlaying = false
     /// 0…1 playhead. Bound to the scrubber; while the user drags, `isScrubbing`
-    /// suspends time-driven updates so the thumb doesn't fight the input.
+    /// suspends time-driven updates.
     var position: Double = 0
     var isScrubbing = false
     private(set) var timeText = "0:00"
     private(set) var durationText = "0:00"
     var volume: Double = 100 { didSet { player.audio?.volume = Int32(volume) } }
-    private(set) var audioTracks: [VLCMediaPlayer.Track] = []
-    private(set) var subtitleTracks: [VLCMediaPlayer.Track] = []
+    private(set) var audioTracks: [TrackOption] = []
+    private(set) var subtitleTracks: [TrackOption] = []
+    private(set) var currentAudioID = -1
+    private(set) var currentSubtitleID = -1
     private(set) var title = ""
 
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     private var loadedURL: URL?
-    // Playback starts only once BOTH the media is set and the video view is in a
-    // window — starting before the VLCVideoView's GL framebuffer is ready raced
-    // and intermittently asserted (GL_INVALID_FRAMEBUFFER_OPERATION).
     private var mediaReady = false
     private var viewReady = false
     private var started = false
@@ -41,13 +47,12 @@ final class MacPlayerModel {
         guard url != loadedURL else { return }
         loadedURL = url
         title = url.deletingPathExtension().lastPathComponent
-        if let media = VLCMedia(url: url) { player.media = media }
+        player.media = VLCMedia(url: url)   // VLCKit 3: non-optional
         mediaReady = true
         playIfReady()
     }
 
-    /// Called by the video view once it's attached to a window (its GL context /
-    /// framebuffer is valid).
+    /// Called by the video view once attached to a window (GL surface ready).
     func markViewReady() {
         viewReady = true
         playIfReady()
@@ -65,32 +70,15 @@ final class MacPlayerModel {
     func togglePlay() { player.isPlaying ? player.pause() : player.play() }
     func skipBackward() { player.jumpBackward(10) }
     func skipForward() { player.jumpForward(10) }
-    /// Commit a scrub to the engine (0…1).
-    func commitSeek() { player.position = max(0, min(1, position)) }
+    func commitSeek() { player.position = Float(max(0, min(1, position))) }
 
-    // MARK: Tracks
+    // MARK: Tracks (VLCKit 3 — index based)
 
-    func selectAudio(_ track: VLCMediaPlayer.Track) {
-        track.isSelectedExclusively = true
-    }
-    /// Pass `nil` to turn subtitles off. Uses VLCKit 4's dedicated text-track
-    /// API — `isSelectedExclusively` (fine for audio) doesn't reliably enable the
-    /// SPU, so subtitle selection appeared to do nothing.
-    func selectSubtitle(_ track: VLCMediaPlayer.Track?) {
-        if let track { player.selectTextTracks([track]) }
-        else { player.deselectAllTextTracks() }
-    }
-    static func name(for track: VLCMediaPlayer.Track) -> String {
-        if !track.trackName.isEmpty { return track.trackName }
-        if let language = track.language, !language.isEmpty { return language }
-        return "Track"
-    }
+    func selectAudio(id: Int) { player.currentAudioTrackIndex = Int32(id) }
+    func selectSubtitle(id: Int) { player.currentVideoSubTitleIndex = Int32(id) }
 
     // MARK: Polling
 
-    /// 0.25s poll of the player's state. The `Task` is created in a `@MainActor`
-    /// method, so it inherits MainActor isolation — `tick()` runs on the main
-    /// actor, safe to touch this model (and never off a VLC thread).
     private func startTicker() {
         guard tickTask == nil else { return }
         tickTask = Task { [weak self] in
@@ -103,12 +91,22 @@ final class MacPlayerModel {
 
     private func tick() {
         isPlaying = player.isPlaying
-        if !isScrubbing { position = player.position }
-        timeText = player.time.stringValue
-        durationText = player.media?.length.stringValue ?? player.time.stringValue
-        let audio = player.audioTracks
-        if audio.count != audioTracks.count { audioTracks = audio }
-        let text = player.textTracks
-        if text.count != subtitleTracks.count { subtitleTracks = text }
+        if !isScrubbing { position = Double(player.position) }
+        timeText = player.time.stringValue ?? "0:00"
+        durationText = player.media?.length.stringValue ?? player.time.stringValue ?? "0:00"
+        currentAudioID = Int(player.currentAudioTrackIndex)
+        currentSubtitleID = Int(player.currentVideoSubTitleIndex)
+        let audio = Self.options(player.audioTrackIndexes, player.audioTrackNames)
+        if audio != audioTracks { audioTracks = audio }
+        let subs = Self.options(player.videoSubTitlesIndexes, player.videoSubTitlesNames)
+        if subs != subtitleTracks { subtitleTracks = subs }
+    }
+
+    /// Zip VLCKit's parallel `…Indexes` / `…Names` arrays into `TrackOption`s.
+    private static func options(_ indexes: [Any]?, _ names: [Any]?) -> [TrackOption] {
+        guard let indexes, let names, indexes.count == names.count else { return [] }
+        return zip(indexes, names).map { idx, name in
+            TrackOption(id: (idx as? NSNumber)?.intValue ?? -1, name: name as? String ?? "Track")
+        }
     }
 }

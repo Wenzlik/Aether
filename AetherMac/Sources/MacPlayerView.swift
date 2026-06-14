@@ -11,15 +11,16 @@ struct MacPlayerView: View {
     let url: URL
 
     var body: some View {
-        // Everything goes through AVPlayer on macOS. The vendored VLCKit was
-        // built with `--disable-macosx` (no native macOS video output), so on a
-        // Mac it falls back to a generic OpenGL vout that asserts on Apple
-        // Silicon's legacy GL 2.1 context (GL_INVALID_OPERATION in CreateFilters)
-        // — an unrecoverable C assert. Until VLCKit is vendored with the macOS
-        // vout enabled, video can't render through it here. AVPlayer covers
-        // Plex/Jellyfin (HLS) + local mp4/mov; a local mkv/DTS file shows a clear
-        // message instead of crashing. VLCPlayerScreen is kept for that fix.
-        AVKitPlayerScreen(url: url)
+        // Native containers (mp4/mov, HLS from Plex/Jellyfin) → AVPlayer; mkv/DTS
+        // → VLCKit. The Mac target links VLCKit 3.x (Vendor/VLCKitMac), which has
+        // a working macOS video output — unlike the unified VLCKit 4 (built
+        // --disable-macosx) whose GL vout asserted on Apple Silicon (#232).
+        switch PlaybackEngine.engine(for: url) {
+        case .system:
+            AVKitPlayerScreen(url: url)
+        case .vlc:
+            VLCPlayerScreen(url: url)
+        }
     }
 }
 

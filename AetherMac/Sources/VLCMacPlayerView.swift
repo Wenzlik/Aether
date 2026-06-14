@@ -115,8 +115,8 @@ struct VLCPlayerScreen: View {
                     Slider(value: $model.volume, in: 0...100).frame(width: 90)
                 }
 
-                trackMenu(systemImage: "waveform", tracks: model.audioTracks, includeOff: false) { model.selectAudio($0!) }
-                trackMenu(systemImage: "captions.bubble", tracks: model.subtitleTracks, includeOff: true) { model.selectSubtitle($0) }
+                trackMenu(systemImage: "waveform", tracks: model.audioTracks, currentID: model.currentAudioID) { model.selectAudio(id: $0) }
+                trackMenu(systemImage: "captions.bubble", tracks: model.subtitleTracks, currentID: model.currentSubtitleID) { model.selectSubtitle(id: $0) }
 
                 transportButton("arrow.up.left.and.arrow.down.right") {
                     NSApp.keyWindow?.toggleFullScreen(nil)
@@ -140,23 +140,21 @@ struct VLCPlayerScreen: View {
     @ViewBuilder
     private func trackMenu(
         systemImage: String,
-        tracks: [VLCMediaPlayer.Track],
-        includeOff: Bool,
-        select: @escaping (VLCMediaPlayer.Track?) -> Void
+        tracks: [TrackOption],
+        currentID: Int,
+        select: @escaping (Int) -> Void
     ) -> some View {
         Menu {
-            if includeOff {
-                Button("Off") { select(nil) }
-            }
-            ForEach(tracks.indices, id: \.self) { i in
-                let track = tracks[i]
+            // VLCKit 3 already includes a "Disable" entry (id -1) in the list, so
+            // no separate Off button is needed.
+            ForEach(tracks) { track in
                 Button {
-                    select(track)
+                    select(track.id)
                 } label: {
-                    if track.isSelected {
-                        Label(MacPlayerModel.name(for: track), systemImage: "checkmark")
+                    if track.id == currentID {
+                        Label(track.name, systemImage: "checkmark")
                     } else {
-                        Text(MacPlayerModel.name(for: track))
+                        Text(track.name)
                     }
                 }
             }
@@ -165,7 +163,7 @@ struct VLCPlayerScreen: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .disabled(tracks.isEmpty && !includeOff)
+        .disabled(tracks.isEmpty)
     }
 
     // MARK: Keyboard

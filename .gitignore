@@ -59,6 +59,9 @@ coverage/
 # Vendored VLCKit binary — fetched via scripts/fetch_vlckit.sh, not committed (~2.4 GB)
 Vendor/VLCKit/VLCKit.xcframework/
 Vendor/VLCKit/*.tar.xz
+# macOS-only VLCKit 3.x — fetched via scripts/fetch_vlckit_mac.sh (#232)
+Vendor/VLCKitMac/VLCKit.xcframework/
+Vendor/VLCKitMac/*.tar.xz
 
 # TMDb API key — local secret, set per developer / via Xcode Cloud
 Config/Secrets.xcconfig
