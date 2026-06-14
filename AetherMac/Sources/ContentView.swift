@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 struct HomeView: View {
     var session: MacSession
     var recents: RecentsStore
+    @Environment(\.openWindow) private var openWindow
     @State private var sidebar: SidebarItem? = .home
     @State private var searchText = ""
     /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
@@ -155,7 +156,9 @@ struct HomeView: View {
     private func openLocal(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
-        session.playLocal(url)
+        // Ad-hoc disk files play in their own window (not inline over the
+        // library) — see AetherMacApp's local-player WindowGroup (#232 follow-up).
+        openWindow(id: AetherMacApp.localPlayerWindowID, value: url)
     }
 
     private func playServerItem(_ item: MediaItem) {
