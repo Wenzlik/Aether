@@ -2,7 +2,7 @@
 
 > Personal media, beautifully played.
 
-Aether is a premium, native cinematic media player for **iPhone**, **iPad**, and **Apple TV**.
+Aether is a premium, native cinematic media player for **iPhone**, **iPad**, **Apple TV**, **Vision Pro**, and **Mac**.
 
 It plays your own media from your own infrastructure — a Synology NAS on the local network, a Plex server at home or on the road, or files you've downloaded for offline travel — wrapped in a calm, typography-forward interface that feels at home on every Apple platform.
 
@@ -16,8 +16,11 @@ It plays your own media from your own infrastructure — a Synology NAS on the l
 | iPadOS     | 26      | primary |
 | tvOS       | 26      | primary |
 | visionOS   | 26      | early base — runs in a window, shares all UI; spatial-native experience TBD |
+| macOS      | 15      | native app (Apple Silicon) — sidebar + inline player; plays through libmpv |
 
 Aether is built top-to-bottom on the modern Apple stack. SwiftUI for every surface, Swift 6 with full concurrency, AVKit for playback, and a shared `AetherCore` package for everything that isn't view code.
+
+**Playback engine differs by platform:** iOS/iPadOS/tvOS/visionOS use **VLCKit 4** (with an AVPlayer fast path for natively-decodable files); macOS uses **libmpv** (the engine behind IINA). The shared `AetherCore` is engine-agnostic — see [`docs/architecture/PLAYER_ENGINES.md`](docs/architecture/PLAYER_ENGINES.md).
 
 ---
 
@@ -117,6 +120,7 @@ The repository is intentionally checked in **without** `Aether.xcodeproj` — th
 |-------|------|
 | [docs/product/PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md) | Audience, scope, MVP, non-goals |
 | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Module layout, data flow, actors, caching |
+| [docs/architecture/PLAYER_ENGINES.md](docs/architecture/PLAYER_ENGINES.md) | Playback engines: VLCKit 4 (iOS/tvOS/visionOS) vs libmpv (macOS), bundling |
 | [docs/ux/DESIGN_PRINCIPLES.md](docs/ux/DESIGN_PRINCIPLES.md) | Visual language, motion, focus behavior |
 | [docs/next-steps/0.1-foundation.md](docs/next-steps/0.1-foundation.md) | Implementation plan for the current milestone |
 | [docs/next-steps/0.2-media-sources.md](docs/next-steps/0.2-media-sources.md) | Plex/Synology source plan and remaining connector work |

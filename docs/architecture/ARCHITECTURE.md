@@ -136,6 +136,14 @@ public protocol APIClient: Sendable {
 
 ## Playback architecture
 
+> **Engine split by platform.** This section describes the **iOS/tvOS/visionOS**
+> path (VLCKit 4 + AVPlayer, driven by `PlaybackSession`). The **macOS** app
+> (`AetherMac`) instead plays through **libmpv** (the engine behind IINA) with its
+> own `MpvClient` / `MacPlayerModel`. `AetherCore` is engine-agnostic
+> (`resolvePlayback` returns a URL); each app target owns its player. Full
+> details, integration gotchas, and the bundling/distribution story:
+> [`PLAYER_ENGINES.md`](PLAYER_ENGINES.md).
+
 ```
 SwiftUI Player view
         │
