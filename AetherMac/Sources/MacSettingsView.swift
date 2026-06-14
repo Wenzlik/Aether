@@ -19,7 +19,9 @@ struct MacSettingsView: View {
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 480, height: 360)
+        .frame(width: 480, height: 380)
+        .tint(AetherMacTheme.accent)
+        .preferredColorScheme(.dark)
     }
 }
 

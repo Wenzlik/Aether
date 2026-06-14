@@ -37,6 +37,8 @@ struct HomeView: View {
                 library
             }
         }
+        .tint(AetherMacTheme.accent)
+        .preferredColorScheme(.dark)
     }
 
     private var library: some View {
@@ -108,6 +110,7 @@ struct HomeView: View {
             .padding(20)
             MacSearchResults(session: session, query: searchText)
         }
+        .cinematicBackground()
         .navigationTitle("Search")
     }
 

@@ -45,6 +45,7 @@ struct DiscoverView: View {
                 .padding(.vertical, 24)
             }
         }
+        .cinematicBackground()
         .navigationTitle(mode == .home ? "Home" : "Discover")
         // Reload when sources change AND after a player records a resume point,
         // so Continue Watching reflects what was just played.

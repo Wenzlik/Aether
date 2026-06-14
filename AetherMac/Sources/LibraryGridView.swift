@@ -25,6 +25,7 @@ struct LibraryGridView: View {
                 .padding(24)
             }
         }
+        .cinematicBackground()
         .navigationTitle("Library")
         .task(id: session.connectedSources.count) { await load() }
     }

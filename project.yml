@@ -229,6 +229,7 @@ targets:
     platform: macOS
     sources:
       - path: AetherMac/Sources
+      - path: AetherMac/Resources
     dependencies:
       - package: AetherCore
         product: AetherCore
@@ -271,6 +272,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8PW5FWH7P2
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Dev slice: not sandboxed yet, so a user-picked / Finder-opened file
         # plays without security-scoped bookmarks. App Store sandbox +
         # play-in-place bookmarks come with the player-first work (#232).

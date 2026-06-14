@@ -60,6 +60,16 @@ struct MediaDetailView: View {
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollContentBackground(.hidden)
+        .background {
+            // iOS-style cinematic hero: the title's backdrop, blurred, behind
+            // the content (with the component's own readability scrim).
+            CinematicArtworkBackground(
+                url: current.backdropURL ?? current.posterURL,
+                blurRadius: 40
+            )
+            .ignoresSafeArea()
+        }
         .navigationTitle(item.title)
         .task(id: item.id) { await load() }
     }
