@@ -13,7 +13,7 @@ struct HomeView: View {
     @State private var searchText = ""
 
     enum SidebarItem: Hashable, Identifiable {
-        case home, discover, library, search
+        case home, discover, library, search, settings
         var id: Self { self }
     }
 
@@ -46,6 +46,12 @@ struct HomeView: View {
         NavigationSplitView {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230)
+                // Brand lockup in the titlebar, beside the window controls.
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Image("AetherBrandMark").resizable().scaledToFit().frame(height: 16)
+                    }
+                }
         } detail: {
             detail
         }
@@ -65,23 +71,12 @@ struct HomeView: View {
 
     private var sidebarList: some View {
         List(selection: $sidebar) {
-            // Brand lockup at the top — the app's identity inside its own UI.
-            Image("AetherBrandMark")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 26)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 8)
-                .listRowSeparator(.hidden)
-                .selectionDisabled()
             Label("Home", systemImage: "house").tag(SidebarItem.home)
             Label("Discover", systemImage: "sparkles").tag(SidebarItem.discover)
             Label("Library", systemImage: "square.grid.2x2").tag(SidebarItem.library)
             Label("Search", systemImage: "magnifyingglass").tag(SidebarItem.search)
-            // Settings opens the native Settings window (⌘,), not an in-pane view —
-            // connecting / managing Plex & Jellyfin lives there.
-            SettingsLink { Label("Settings", systemImage: "gearshape") }
-                .buttonStyle(.plain)
+            // Settings opens inside this window (detail pane), not a separate window.
+            Label("Settings", systemImage: "gearshape").tag(SidebarItem.settings)
         }
     }
 
@@ -95,6 +90,7 @@ struct HomeView: View {
                 case .library:  LibraryGridView(session: session)
                 case .discover: DiscoverView(session: session, mode: .discover)
                 case .search:   searchPane
+                case .settings: MacSettingsView(session: session, embedded: true)
                 default:        DiscoverView(session: session, mode: .home)
                 }
             }
@@ -106,20 +102,33 @@ struct HomeView: View {
 
     private var searchPane: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search your library", text: $searchText)
                     .textFieldStyle(.plain)
+                    .font(.title3)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
-            .padding(10)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .padding(20)
-            MacSearchResults(session: session, query: searchText)
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+
+            if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                AetherEmptyState(
+                    glyph: "magnifyingglass",
+                    title: "Search your library",
+                    message: "Find movies and shows across your connected sources."
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                MacSearchResults(session: session, query: searchText)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .cinematicBackground()
         .navigationTitle("Search")
     }

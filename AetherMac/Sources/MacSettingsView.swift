@@ -7,6 +7,11 @@ import AetherCore
 /// preference set on either platform carries over.
 struct MacSettingsView: View {
     var session: MacSession
+    /// `true` when shown inside the main window's detail pane (sidebar → Settings)
+    /// rather than the standalone Settings scene — then it fills the pane and the
+    /// app-level dark/tint/locale already apply, so we don't re-set them or pin a
+    /// window-sized frame.
+    var embedded = false
 
     var body: some View {
         TabView {
@@ -21,10 +26,25 @@ struct MacSettingsView: View {
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 480, height: 380)
-        .tint(AetherMacTheme.accent)
-        .preferredColorScheme(.dark)
-        .environment(\.locale, session.appLocale)
+        .modifier(SettingsChrome(embedded: embedded, locale: session.appLocale))
+    }
+}
+
+/// Window-only chrome for the standalone Settings scene; in-pane it inherits the
+/// app's appearance and fills.
+private struct SettingsChrome: ViewModifier {
+    let embedded: Bool
+    let locale: Locale
+    func body(content: Content) -> some View {
+        if embedded {
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            content
+                .frame(width: 480, height: 380)
+                .tint(AetherMacTheme.accent)
+                .preferredColorScheme(.dark)
+                .environment(\.locale, locale)
+        }
     }
 }
 
