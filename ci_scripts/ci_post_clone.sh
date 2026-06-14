@@ -60,6 +60,8 @@ cd "$WORKSPACE"
 # re-downloads (~522 MB) each archive — acceptable for the TestFlight cadence.
 echo "ci_post_clone: fetching VLCKit"
 bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+# macOS-only VLCKit 3.x for the AetherMac target (#232).
+bash "$WORKSPACE/scripts/fetch_vlckit_mac.sh"
 
 # Inject the TMDb API key (Local Library metadata, #210) from the Xcode Cloud
 # workflow environment variable into the gitignored xcconfig the build reads.
