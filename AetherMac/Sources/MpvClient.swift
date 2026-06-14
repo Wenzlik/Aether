@@ -203,8 +203,14 @@ final class MpvClient {
 
     // MARK: Teardown
 
-    /// Ordered, idempotent teardown: free the render context **first**, then
-    /// terminate the handle. Safe to call more than once (stop() + deinit).
+    /// Ordered, idempotent teardown: free the render context **first** (on the
+    /// caller's thread — main, where the GL context lives), then terminate the
+    /// handle. Safe to call more than once (stop() + deinit).
+    ///
+    /// `mpv_terminate_destroy` joins every mpv thread, including a demux thread
+    /// that may be blocked in a network read (Plex HLS over HTTPS) — so calling
+    /// it on the main thread froze the UI on close/quit. We hand the handle to a
+    /// background queue to terminate there; main never blocks.
     func destroy() {
         if let renderContext {
             mpv_render_context_set_update_callback(renderContext, nil, nil)
@@ -213,8 +219,15 @@ final class MpvClient {
         }
         if let handle {
             mpv_set_wakeup_callback(handle, nil, nil)
-            mpv_terminate_destroy(handle)
+            // Nudge mpv to abort in-flight work so the thread join is quick.
+            mpv_command_string(handle, "quit")
             self.handle = nil
+            // Pass the handle as a Sendable bit pattern across the queue hop.
+            let bits = UInt(bitPattern: UnsafeMutableRawPointer(handle))
+            DispatchQueue.global(qos: .utility).async {
+                guard let raw = UnsafeMutableRawPointer(bitPattern: bits) else { return }
+                mpv_terminate_destroy(OpaquePointer(raw))
+            }
         }
     }
 
