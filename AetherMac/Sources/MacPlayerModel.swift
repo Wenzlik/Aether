@@ -53,10 +53,12 @@ final class MacPlayerModel {
     func selectAudio(_ track: VLCMediaPlayer.Track) {
         track.isSelectedExclusively = true
     }
-    /// Pass `nil` to turn subtitles off.
+    /// Pass `nil` to turn subtitles off. Uses VLCKit 4's dedicated text-track
+    /// API — `isSelectedExclusively` (fine for audio) doesn't reliably enable the
+    /// SPU, so subtitle selection appeared to do nothing.
     func selectSubtitle(_ track: VLCMediaPlayer.Track?) {
-        if let track { track.isSelectedExclusively = true }
-        else { subtitleTracks.forEach { $0.isSelected = false } }
+        if let track { player.selectTextTracks([track]) }
+        else { player.deselectAllTextTracks() }
     }
     static func name(for track: VLCMediaPlayer.Track) -> String {
         if !track.trackName.isEmpty { return track.trackName }

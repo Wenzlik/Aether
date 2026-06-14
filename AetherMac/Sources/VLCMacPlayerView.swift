@@ -45,6 +45,9 @@ struct VLCPlayerScreen: View {
         }
         .onAppear { model.load(url); scheduleHide() }
         .onChange(of: url) { _, newURL in model.load(newURL) }
+        .contentShape(Rectangle())
+        // Double-click toggles full-screen (standard player gesture).
+        .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
         .onContinuousHover { phase in
             switch phase {
             case .active: reveal()

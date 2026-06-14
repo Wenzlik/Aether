@@ -44,9 +44,15 @@ final class MacSession {
         let host = Host.current().localizedName ?? "Mac"
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 
+        // Identify to Plex as **iOS**, not macOS: Plex's universal transcoder
+        // picks a profile from `X-Plex-Platform`, and "macOS" makes its decision
+        // endpoint reject the transcode with HTTP 400. The Mac's Plex playback is
+        // functionally iOS (AVKit/HLS via AVPlayer), so the iOS profile fits —
+        // the same workaround the iOS app uses for visionOS. `deviceName` stays
+        // the real Mac name, so Plex's device list still shows the hardware.
         plexConfiguration = PlexConfiguration(
             product: "Aether", version: "0.7.2", clientIdentifier: clientID,
-            deviceName: host, platform: "macOS", platformVersion: osVersion
+            deviceName: host, platform: "iOS", platformVersion: osVersion
         )
         jellyfinConfiguration = JellyfinConfiguration(
             client: "Aether", version: "0.7.2", deviceName: host, deviceID: deviceID
