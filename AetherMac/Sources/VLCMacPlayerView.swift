@@ -15,11 +15,12 @@ private struct VLCVideoSurface: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// IINA-style player: full-bleed video with an auto-hiding floating control bar
-/// (scrub, ±10s, play/pause, time, volume, audio/subtitle menus, full-screen)
-/// and keyboard shortcuts (space, ←/→). The window gives ⌘W + green-button
-/// full-screen for free.
-struct MacPlayerView: View {
+/// IINA-style **VLCKit** player — the fallback engine for containers/codecs
+/// AVFoundation can't open (mkv, DTS, …). Full-bleed video with an auto-hiding
+/// floating control bar (scrub, ±10s, play/pause, time, volume, audio/subtitle
+/// menus, full-screen) and keyboard shortcuts (space, ←/→). Native formats go
+/// to `AVKitPlayerScreen` instead — see `MacPlayerView`.
+struct VLCPlayerScreen: View {
     let url: URL
     @State private var model = MacPlayerModel()
     @State private var controlsVisible = true
