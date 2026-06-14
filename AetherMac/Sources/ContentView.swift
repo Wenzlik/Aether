@@ -114,7 +114,12 @@ struct HomeView: View {
     @ViewBuilder
     private var detail: some View {
         if session.hasAnySource {
-            LibraryGridView(session: session, onPlay: playServerItem)
+            NavigationStack {
+                LibraryGridView(session: session)
+                    .navigationDestination(for: MediaItem.self) { mediaItem in
+                        MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
+                    }
+            }
         } else if recents.urls.isEmpty {
             welcome
         } else {

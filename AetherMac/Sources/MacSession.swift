@@ -130,11 +130,23 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
-    /// Resolve a playable URL for a unified item via its source's resolver.
+    /// Resolve a playable URL for an item via its source's resolver.
     func resolvedURL(for item: MediaItem) async -> URL? {
-        guard let source = connectedSources.first(where: { $0.id == item.id.source }) else { return nil }
+        guard let source = source(for: item) else { return nil }
         let request = PlaybackRequest(item: item, startTime: nil)
         return try? await source.resolvePlayback(request).url
+    }
+
+    /// The connected source an item belongs to.
+    func source(for item: MediaItem) -> (any MediaSource)? {
+        connectedSources.first { $0.id == item.id.source }
+    }
+
+    /// A container's children — a show's seasons, a season's episodes — for the
+    /// Detail drill-down. `[]` on failure / no source.
+    func children(of item: MediaItem) async -> [MediaItem] {
+        guard let source = source(for: item) else { return [] }
+        return (try? await source.children(of: item.id)) ?? []
     }
 
     // MARK: Helpers

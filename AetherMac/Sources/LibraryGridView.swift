@@ -6,8 +6,6 @@ import AetherCore
 /// URL and opens a player window.
 struct LibraryGridView: View {
     let session: MacSession
-    /// Called with the unified item's base `MediaItem` to play it.
-    let onPlay: (MediaItem) -> Void
 
     @State private var movies: [UnifiedMediaItem] = []
     @State private var shows: [UnifiedMediaItem] = []
@@ -38,8 +36,12 @@ struct LibraryGridView: View {
                 Text(title).font(.title2.bold())
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(items) { item in
-                        Button { play(item) } label: { poster(item) }
-                            .buttonStyle(.plain)
+                        if let base = item.preferredSource?.item ?? item.sources.first?.item {
+                            NavigationLink(value: base) { poster(item) }
+                                .buttonStyle(.plain)
+                        } else {
+                            poster(item)
+                        }
                     }
                 }
             }
@@ -62,11 +64,6 @@ struct LibraryGridView: View {
                 Text(String(year)).font(.caption2).foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func play(_ item: UnifiedMediaItem) {
-        guard let mediaItem = item.preferredSource?.item ?? item.sources.first?.item else { return }
-        onPlay(mediaItem)
     }
 
     private func load() async {
