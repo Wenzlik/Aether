@@ -132,6 +132,39 @@ Anything that draws a pixel must respect [`docs/ux/DESIGN_PRINCIPLES.md`](docs/u
 
 ---
 
+## Localization
+
+Aether ships English + Čeština (+ Ukrainian), via the String Catalog at
+[`Aether/Resources/Localizable.xcstrings`](Aether/Resources/Localizable.xcstrings).
+The default language follows the device, overridable in Settings ▸ Appearance.
+
+**Hard rule: any user-facing text you add must be a catalog entry, with a `cs`
+translation, in the same PR.** No English-only strings reach the UI. If you add
+a `Text("…")`, a label, a button title, a placeholder, an empty/error/loading
+message, an accessibility label — it goes in the catalog. (Developer logs and
+diagnostics stay English; server-provided data like Plex/Jellyfin titles is not
+ours to translate — see #344.)
+
+Three ways a string silently *fails* to localize — avoid all three:
+
+- **(a) Not in the catalog.** A literal `Text("More")` is extractable, but you
+  still must add the `cs` value. Dynamic keys (`Text(LocalizedStringKey(someVar))`,
+  e.g. genre names) are *not* auto-extracted — add them manually with
+  `extractionState: "manual"` so they aren't pruned.
+- **(b) Passed as `String`, not `LocalizedStringKey`.** `Text(aStringVariable)`,
+  `Button(aStringTernary)`, `TextField(aString, …)`, and any `Aether*` component
+  whose label param is typed `String` use the *verbatim* initializer and never
+  localize. Type label params `LocalizedStringKey`, render via
+  `Text(LocalizedStringKey(x))`, and split ternaries into two literal branches.
+- **(c) `Locale.current` instead of the app locale.** `Locale.current` is the
+  *device* locale, not Aether's chosen language. Format dates / language names /
+  numbers against the view's `@Environment(\.locale)` (thread it into AetherCore
+  helpers; they have no SwiftUI environment).
+
+Full inventory + rationale for the current tail: #320.
+
+---
+
 ## tvOS rules
 
 tvOS is the platform Aether is judged on. It must feel like an Apple app, not a port.
@@ -194,7 +227,7 @@ The `AetherTests` target in `project.yml` carries `GENERATE_INFOPLIST_FILE: YES`
 
 ## Documentation workflow
 
-- **Every meaningful change updates docs.** New surface → `PRODUCT_SPEC.md`. New module → `ARCHITECTURE.md`. New visual pattern → `DESIGN_PRINCIPLES.md`. New milestone → `ROADMAP.md` and `docs/next-steps/`.
+- **Every meaningful change updates docs.** New surface → `PRODUCT_SPEC.md`. New module → `ARCHITECTURE.md`. New visual pattern → `DESIGN_PRINCIPLES.md`. New milestone → `ROADMAP.md` and `docs/next-steps/`. **New user-facing string → `Localizable.xcstrings` with a `cs` value** (see *Localization*).
 - **`CHANGELOG.md` is updated in every PR**, under `## [Unreleased]`, before release.
 - **`docs/next-steps/<milestone>.md`** is a living plan. Edit it as scope shifts.
 - **Doc-only PRs are encouraged** when an architectural decision deserves debate before code.

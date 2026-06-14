@@ -60,6 +60,11 @@ cd "$WORKSPACE"
 # re-downloads (~522 MB) each archive — acceptable for the TestFlight cadence.
 echo "ci_post_clone: fetching VLCKit"
 bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+# macOS player engine is libmpv (#232) — install it + dylibbundler so the
+# AetherMac build can link libmpv and the post-build phase can bundle its dylib
+# tree into the .app. Harmless for iOS-only builds.
+echo "ci_post_clone: fetching libmpv (macOS)"
+bash "$WORKSPACE/scripts/fetch_mpv.sh"
 
 # Inject the TMDb API key (Local Library metadata, #210) from the Xcode Cloud
 # workflow environment variable into the gitignored xcconfig the build reads.

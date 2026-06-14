@@ -53,9 +53,11 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
     /// network buffer *before the first frame shows*, so it's the dominant
     /// startup-latency lever for SMB. 1500 ms was a debugging-era safety margin;
     /// SMB is LAN, so a smaller buffer starts noticeably faster while still
-    /// absorbing Wi-Fi jitter. (The real cure for SMB latency is the local
+    /// absorbing Wi-Fi jitter. Lowered 800 → 500 as a measurable starting point
+    /// (#347); the `PlaybackTiming` logs let us A/B 300/500/1000/2000 by changing
+    /// this one constant. (The real cure for SMB latency is the local
     /// range-proxy — letting VLC read over fast localhost HTTP — see #213.)
-    static let networkCachingMilliseconds = 800
+    static let networkCachingMilliseconds = 500
 
     /// VLCKit media options carrying the credentials — applied to the player's
     /// media before `play()` (browsing is native now). Guest shares → no auth

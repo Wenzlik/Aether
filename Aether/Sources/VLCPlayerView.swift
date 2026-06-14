@@ -1,6 +1,7 @@
 import SwiftUI
 import AetherCore
 import VLCKit
+import os
 
 /// VLCKit-backed player for files AVFoundation can't open (mkv, avi, …) and for
 /// SMB streaming (#173/#214). On iOS / visionOS it now has a full control layer
@@ -43,6 +44,33 @@ final class VLCPlaybackController: UIViewController {
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
     private var ticker: Timer?
+
+    // MARK: - Startup timing instrumentation (#347)
+    /// Read in Console.app, subsystem `cz.zmrhal.aether`, category `PlaybackTiming`.
+    /// Isolates where SMB/MKV time-to-first-frame goes — SMB connect vs VLC parse
+    /// vs decode init — so optimisation isn't guesswork.
+    private static let perfLog = Logger(subsystem: "cz.zmrhal.aether", category: "PlaybackTiming")
+    /// Wall-clock when `play()` was issued; all phase timings are deltas from it.
+    private var playRequestedAt: Date?
+    /// VLC states already logged, so each transition is recorded once.
+    private var loggedStates = Set<Int>()
+    /// Guards the one-shot "first frame" log (first `timeChanged`).
+    private var firstFrameLogged = false
+
+    /// Milliseconds since `play()` was issued, for log lines.
+    private func elapsedMS() -> Int {
+        guard let playRequestedAt else { return 0 }
+        return Int(Date().timeIntervalSince(playRequestedAt) * 1000)
+    }
+
+    /// The configured `:network-caching=` value (ms), parsed from the media
+    /// options — logged so a run is self-documenting when A/B-testing cache.
+    private func cachingOptionMS() -> String {
+        for opt in options where opt.hasPrefix(":network-caching=") {
+            return String(opt.dropFirst(":network-caching=".count))
+        }
+        return "default"
+    }
 
     // Shared controls
     private let playPauseButton = UIButton(type: .system)
@@ -126,6 +154,7 @@ final class VLCPlaybackController: UIViewController {
         spinner.startAnimating()
 
         player.drawable = videoView
+        player.delegate = self
         // Build the libsmb2 request (SMB → smb:// with creds folded into the URL;
         // password stays an option). No-op for non-SMB URLs.
         let request = smb2VLCRequest(url: url, options: options)
@@ -133,6 +162,9 @@ final class VLCPlaybackController: UIViewController {
             for option in request.options { media.addOption(option) }
             player.media = media
         }
+        let scheme = url.scheme ?? "?"
+        Self.perfLog.log("▶︎ play requested — scheme=\(scheme, privacy: .public) caching=\(self.cachingOptionMS(), privacy: .public)ms")
+        playRequestedAt = Date()
         player.play()
         // VLC owns `videoView`'s rendering surface; make sure our controls stay
         // above it (the chrome was unreachable when the video layer sat on top).
@@ -491,6 +523,31 @@ final class VLCPlaybackController: UIViewController {
         hideWorkItem = nil
     }
     #endif
+}
+
+// MARK: - Startup timing (#347)
+
+// `@preconcurrency`: VLCKit dispatches delegate callbacks on the main thread, so
+// the MainActor-isolated controller can safely conform (Swift 6 can't see that
+// guarantee through the ObjC protocol).
+extension VLCPlaybackController: @preconcurrency VLCMediaPlayerDelegate {
+    /// Logs each VLC state transition once, with ms since `play()`. The sequence
+    /// for SMB is typically opening → buffering → playing; a long gap before
+    /// `buffering` points at SMB connect/parse, a long gap before the first
+    /// frame at decode/parse.
+    func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
+        guard loggedStates.insert(newState.rawValue).inserted else { return }
+        let name = VLCMediaPlayerStateToString(newState)
+        Self.perfLog.log("• state=\(name, privacy: .public) @ \(self.elapsedMS(), privacy: .public)ms")
+    }
+
+    /// First time-change ≈ first decoded/presented frame — the number that
+    /// matters for "time to first frame".
+    func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        guard !firstFrameLogged else { return }
+        firstFrameLogged = true
+        Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
+    }
 }
 
 #if !os(tvOS)

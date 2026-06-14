@@ -16,7 +16,11 @@ import SwiftUI
 /// screens' "is the user searching" computed property keeps working.
 public struct AetherSearchField: View {
     @Binding public var text: String
-    public let prompt: String
+    /// `LocalizedStringKey` (not `String`) so the placeholder actually localizes
+    /// — `TextField(_ titleKey:…)` localizes a key; the `String` overload would
+    /// render verbatim (#320). Call sites pass literals ("Search your library",
+    /// "Filter \(title)"), which become catalog keys.
+    public let prompt: LocalizedStringKey
     /// Optional focus binding owned by the host (`@FocusState`). When provided,
     /// the field becomes programmatically focus-controllable so the host can
     /// dismiss the keyboard (tap-outside / scroll / select-result), and pressing
@@ -25,7 +29,7 @@ public struct AetherSearchField: View {
 
     public init(
         text: Binding<String>,
-        prompt: String,
+        prompt: LocalizedStringKey,
         focus: FocusState<Bool>.Binding? = nil
     ) {
         self._text = text

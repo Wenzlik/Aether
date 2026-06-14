@@ -293,6 +293,14 @@ private struct MediaNavigationDestinations: ViewModifier {
                     libraryPreferences: libraryPreferences
                 )
             }
+            // A person's filmography, reachable from a tapped Cast & Crew member
+            // on any Detail screen (#341) — registered here so it works in every
+            // tab's stack, not just Library's. Mirrors LibraryBrowseRoute.person.
+            .navigationDestination(for: PersonEntry.self) { entry in
+                SourceFacetGridView(title: entry.name, downloadStore: nil) { [connectedSources] in
+                    await personItems(for: entry, sources: connectedSources)
+                }
+            }
     }
 }
 

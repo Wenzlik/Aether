@@ -339,10 +339,14 @@ public enum PlexAPI {
         /// One cast member: `tag` = actor name, `role` = character, `thumb` =
         /// a Plex-proxied (or external) headshot path.
         public struct Role: Decodable, Sendable, Equatable {
+            /// Plex tag id for this person — the value `items(withPerson:)` filters
+            /// on (`?actor=<id>`). Lets the Detail cast become tappable (#341).
+            public let id: Int?
             public let tag: String?
             public let role: String?
             public let thumb: String?
-            public init(tag: String? = nil, role: String? = nil, thumb: String? = nil) {
+            public init(id: Int? = nil, tag: String? = nil, role: String? = nil, thumb: String? = nil) {
+                self.id = id
                 self.tag = tag
                 self.role = role
                 self.thumb = thumb

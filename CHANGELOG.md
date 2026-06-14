@@ -4,6 +4,36 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-06-14
+
+### Added
+
+- **Aether for macOS** (#232) — a native Mac app (Apple Silicon), sharing the
+  whole `AetherCore` stack with iOS/tvOS/visionOS. A single Infuse-style window:
+  sidebar (Home · Discover · Library · Search · Settings) and an inline player.
+  - **Plays through libmpv** — the engine behind IINA — for best-in-class
+    VideoToolbox HW decode, HDR/Dolby Vision, and libass subtitles. iOS/tvOS/
+    visionOS keep VLCKit 4; the engines never mix. See
+    `docs/architecture/PLAYER_ENGINES.md`.
+  - **Plex & Jellyfin** sign-in, browse, Detail, playback; audio/subtitle/quality
+    chosen on Detail (Plex bakes the selected track into the transcode).
+  - **Local Library** — point at folders on the Mac or a mounted network share;
+    Aether scans them for movies and shows (filename parsing → S01E02), matches
+    posters/overviews via TMDb, and folds them into the unified library. Live
+    scan status + Rescan in Settings.
+  - **Continue Watching + resume** (disk-backed), library **search**, **Discover**
+    with a Featured hero + genre rails, **Library** split into Movies / TV Shows
+    with See All + sort & genre filters, and show → season → episode drill-down.
+  - **Watched marking syncs across every connected source** — finishing a title
+    scrobbles it on each source that has it (Plex `/:/scrobble`, Jellyfin
+    `PlayedItems`), matched by shared external id. Shared in `AetherCore`, so all
+    platforms can adopt it.
+  - Finder "Open With ▸ Aether" / drag-and-drop for local files, full Settings
+    (Playback defaults, Appearance/watched display, Accounts, TMDb key, Language),
+    Czech localization, and a dark cinematic / glass look matching iOS.
+  - **Self-contained distribution** — a Release build bundles libmpv + its ffmpeg
+    dependency tree into the `.app`, so it runs without Homebrew.
+
 ## [0.7.2] — 2026-06-13 · "Draco"
 
 ### Added

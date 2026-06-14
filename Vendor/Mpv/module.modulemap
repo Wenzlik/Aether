@@ -1,0 +1,11 @@
+// C module exposing libmpv's client + OpenGL render API to Swift as `Cmpv`.
+// Wired into the AetherMac target via OTHER_SWIFT_FLAGS (-fmodule-map-file) +
+// HEADER_SEARCH_PATHS; see project.yml. Headers are vendored in-repo; the dylib
+// comes from Homebrew (scripts/fetch_mpv.sh) for dev builds.
+module Cmpv {
+    header "include/mpv/client.h"
+    header "include/mpv/render.h"
+    header "include/mpv/render_gl.h"
+    header "include/mpv/stream_cb.h"
+    export *
+}

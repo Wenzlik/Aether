@@ -22,6 +22,9 @@ struct UnifiedLibraryGridView: View {
 
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
+    /// App language (#320) — audio-language option names format in this locale,
+    /// not the device's `Locale.current`.
+    @Environment(\.locale) private var locale
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
@@ -38,6 +41,16 @@ struct UnifiedLibraryGridView: View {
     /// The language code whose membership is being fetched right now (drives a
     /// small spinner on the chip row); `nil` when nothing's loading.
     @State private var loadingLanguage: String?
+    /// Minimum community rating filter (#342) — `nil` = any. Buckets, applied
+    /// client-side over `communityRating`.
+    @State private var selectedMinRating: Double?
+    /// Drives the Filter sheet that now holds Genre / Audio / Rating (#342),
+    /// instead of permanent chip rows above the grid.
+    @State private var isFilterSheetPresented = false
+    /// Rating buckets offered in the filter (label + minimum score).
+    private let ratingBuckets: [(label: String, min: Double)] = [
+        ("9+", 9), ("8+", 8), ("7+", 7), ("6+", 6)
+    ]
     #if os(tvOS)
     @State private var isSortSheetPresented = false
     #endif
@@ -75,10 +88,11 @@ struct UnifiedLibraryGridView: View {
         .navigationBarTitleDisplayMode(.large)
         #endif
         #if !os(tvOS)
-        .toolbar { sortToolbarItem }
+        .toolbar { sortToolbarItem; filterToolbarItem }
         #else
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
+        .sheet(isPresented: $isFilterSheetPresented) { filterSheet }
         // The grid loads the *full* catalog once per source set — audio + genre
         // are both client-side filters now, so a chip tap never reloads (#319).
         .task(id: sourcesKey) { await load() }
@@ -96,17 +110,15 @@ struct UnifiedLibraryGridView: View {
                 .padding(.top, AetherDesign.Spacing.l)
         } else {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                // Filters (genre / audio / rating) now live behind the Filter
+                // button (toolbar on iOS, inline trigger on tvOS) instead of
+                // permanent chip rows, freeing vertical space (#342).
                 #if os(tvOS)
-                tvOSSortTrigger
+                HStack(spacing: AetherDesign.Spacing.m) {
+                    tvOSSortTrigger
+                    tvOSFilterTrigger
+                }
                 #endif
-                if !availableGenres.isEmpty {
-                    genreFilterRow
-                }
-                // Audio filter stays visible whenever the catalog has languages —
-                // even with zero results — so a too-narrow filter can be cleared.
-                if !audioLanguageOptions.isEmpty {
-                    audioLanguageFilterRow
-                }
                 if sortedItems.isEmpty {
                     AetherEmptyState(
                         glyph: "tray",
@@ -130,7 +142,7 @@ struct UnifiedLibraryGridView: View {
 
     /// Empty-state copy reflects whether a filter is narrowing the result.
     private var emptyMessage: String {
-        if selectedAudioLanguage != nil || selectedGenre != nil {
+        if hasActiveFilter {
             return "No \(title.lowercased()) match the current filters."
         }
         return "No \(title.lowercased()) found across your connected sources."
@@ -149,7 +161,22 @@ struct UnifiedLibraryGridView: View {
         if let selectedGenre {
             result = result.filter { $0.genres.contains(selectedGenre) }
         }
+        if let selectedMinRating {
+            result = result.filter { ($0.communityRating ?? 0) >= selectedMinRating }
+        }
         return result
+    }
+
+    /// Any filter narrowing the grid — drives the Filter button's active dot and
+    /// the "Clear" affordance.
+    private var hasActiveFilter: Bool {
+        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil
+    }
+
+    private func clearFilters() {
+        selectedGenre = nil
+        selectedAudioLanguage = nil
+        selectedMinRating = nil
     }
 
     private var sortedItems: [UnifiedMediaItem] {
@@ -236,7 +263,10 @@ struct UnifiedLibraryGridView: View {
 
     private func genreChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label)
+            // LocalizedStringKey (not the verbatim `Text(String)` overload) so
+            // "All" and genre names translate via the catalog (#343/#320); the
+            // filter still keys off the raw `selectedGenre`, not this label.
+            Text(LocalizedStringKey(label))
                 .font(AetherDesign.Typography.metadata)
                 .padding(.horizontal, AetherDesign.Spacing.m)
                 .padding(.vertical, AetherDesign.Spacing.xs)
@@ -247,6 +277,103 @@ struct UnifiedLibraryGridView: View {
                 .foregroundStyle(isSelected ? Color.white : AetherDesign.Palette.textSecondary)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Filters (#342)
+
+    #if !os(tvOS)
+    /// iOS Filter button (next to Sort) — opens the filter sheet; a filled icon
+    /// marks active filters.
+    private var filterToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button { isFilterSheetPresented = true } label: {
+                Image(systemName: hasActiveFilter
+                      ? "line.3.horizontal.decrease.circle.fill"
+                      : "line.3.horizontal.decrease.circle")
+            }
+            .accessibilityLabel("Filter")
+        }
+    }
+    #else
+    /// tvOS inline Filter trigger (toolbar menus don't render on tvOS).
+    private var tvOSFilterTrigger: some View {
+        Button { isFilterSheetPresented = true } label: {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                Text(hasActiveFilter ? "Filters · On" : "Filters")
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+            }
+            .font(AetherDesign.Typography.cardTitle)
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Filters")
+    }
+    #endif
+
+    /// Rating filter chips: Any + score buckets (9+/8+/7+/6+) over `communityRating`.
+    private var ratingFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                genreChip(label: "Any", isSelected: selectedMinRating == nil) { selectedMinRating = nil }
+                ForEach(ratingBuckets, id: \.min) { bucket in
+                    genreChip(label: bucket.label, isSelected: selectedMinRating == bucket.min) {
+                        selectedMinRating = (selectedMinRating == bucket.min) ? nil : bucket.min
+                    }
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    /// Filter sheet — Genre / Audio / Rating (#342), reusing the existing chip
+    /// rows (so the audio lazy-load behaviour is unchanged), plus Clear.
+    private var filterSheet: some View {
+        let sheetBody = ScrollView {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                Text("Filter")
+                    .font(AetherDesign.Typography.sectionTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                if !availableGenres.isEmpty {
+                    filterGroup("Genre") { genreFilterRow }
+                }
+                if !audioLanguageOptions.isEmpty {
+                    filterGroup("Audio Language") { audioLanguageFilterRow }
+                }
+                filterGroup("Rating") { ratingFilterRow }
+                if hasActiveFilter {
+                    Button("Clear Filters", role: .destructive) { clearFilters() }
+                        .padding(.top, AetherDesign.Spacing.s)
+                }
+            }
+            .padding(AetherDesign.Spacing.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .aetherScreenBackground()
+        #if os(tvOS)
+        return NavigationStack { sheetBody }
+        #else
+        return sheetBody
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        #endif
+    }
+
+    @ViewBuilder
+    private func filterGroup<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+            Text(title)
+                .font(AetherDesign.Typography.metadata)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+            content()
+        }
     }
 
     // MARK: - Sort UI
@@ -345,7 +472,7 @@ struct UnifiedLibraryGridView: View {
         }
         let key = sourcesKey
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let options = await library.audioLanguageOptions(kind: kind)
+        let options = await library.audioLanguageOptions(kind: kind, locale: locale)
         guard key == sourcesKey else { return }
         audioLanguageOptions = options
     }

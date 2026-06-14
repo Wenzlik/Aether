@@ -5365,6 +5365,474 @@
           }
         }
       }
+    },
+    "More": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Více"
+          }
+        }
+      }
+    },
+    "Less": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Méně"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připojení"
+          }
+        }
+      }
+    },
+    "Sign Out": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odhlásit se"
+          }
+        }
+      }
+    },
+    "Restart": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrát od začátku"
+          }
+        }
+      }
+    },
+    "Preparing…": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Připravuji…"
+          }
+        }
+      }
+    },
+    "Season %lld": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sezóna %lld"
+          }
+        }
+      }
+    },
+    "Shows": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seriály"
+          }
+        }
+      }
+    },
+    "Filter": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtr"
+          }
+        }
+      }
+    },
+    "Genre": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Žánr"
+          }
+        }
+      }
+    },
+    "Clear Filters": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zrušit filtry"
+          }
+        }
+      }
+    },
+    "Any": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vše"
+          }
+        }
+      }
+    },
+    "Filters": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtry"
+          }
+        }
+      }
+    },
+    "Filters · On": {
+      "extractionState": "manual",
+      "comment": "UI label (cs localization, #320).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtry · zapnuto"
+          }
+        }
+      }
+    },
+    "Action": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akční"
+          }
+        }
+      }
+    },
+    "Adventure": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dobrodružný"
+          }
+        }
+      }
+    },
+    "Animation": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animovaný"
+          }
+        }
+      }
+    },
+    "Comedy": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Komedie"
+          }
+        }
+      }
+    },
+    "Crime": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Krimi"
+          }
+        }
+      }
+    },
+    "Documentary": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumentární"
+          }
+        }
+      }
+    },
+    "Drama": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drama"
+          }
+        }
+      }
+    },
+    "Family": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rodinný"
+          }
+        }
+      }
+    },
+    "Fantasy": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fantasy"
+          }
+        }
+      }
+    },
+    "History": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Historický"
+          }
+        }
+      }
+    },
+    "Horror": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horor"
+          }
+        }
+      }
+    },
+    "Music": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hudební"
+          }
+        }
+      }
+    },
+    "Mystery": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mysteriózní"
+          }
+        }
+      }
+    },
+    "Romance": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Romantický"
+          }
+        }
+      }
+    },
+    "Science Fiction": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sci-fi"
+          }
+        }
+      }
+    },
+    "Sci-Fi & Fantasy": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sci-fi a fantasy"
+          }
+        }
+      }
+    },
+    "Thriller": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thriller"
+          }
+        }
+      }
+    },
+    "War": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Válečný"
+          }
+        }
+      }
+    },
+    "Western": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Western"
+          }
+        }
+      }
+    },
+    "Kids": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dětský"
+          }
+        }
+      }
+    },
+    "Reality": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reality"
+          }
+        }
+      }
+    },
+    "War & Politics": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Válka a politika"
+          }
+        }
+      }
+    },
+    "Soap": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telenovela"
+          }
+        }
+      }
+    },
+    "Talk": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk show"
+          }
+        }
+      }
+    },
+    "News": {
+      "extractionState": "manual",
+      "comment": "Genre name shown in Library/Discover; localized for display (#343).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zprávy"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

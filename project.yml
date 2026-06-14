@@ -8,6 +8,12 @@ options:
     iOS: "26.0"
     tvOS: "26.0"
     visionOS: "26.0"
+    # Native macOS target (#232) — player-first Mac app. AetherCore already
+    # declares `.macOS(.v15)` and VLCKit ships a `macos` slice, so this builds
+    # on the same foundations. Separate target (not a destination on the iOS
+    # target) because the iOS UI is UIKit-family; the Mac app is its own AppKit/
+    # SwiftUI shell.
+    macOS: "15.0"
   groupSortPosition: top
   xcodeVersion: "16.0"
 
@@ -38,7 +44,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.7.2"
+    MARKETING_VERSION: "0.7.3"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -214,6 +220,128 @@ targets:
         Release:
           CODE_SIGN_IDENTITY: Apple Distribution
 
+  # Native macOS app (#232) — player-first: open a video file and play it well.
+  # Vertical slice for now (open + VLC playback); Finder file-association,
+  # play-in-place bookmarks, and the rich player window follow as local-file
+  # playback matures. Reuses AetherCore + VLCKit (macos slice); no UIKit.
+  AetherMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: AetherMac/Sources
+      - path: AetherMac/Resources
+    dependencies:
+      - package: AetherCore
+        product: AetherCore
+      # libmpv — the engine behind IINA (#232). The macOS player renders through
+      # the mpv OpenGL render API, so we link OpenGL.framework. Headers + the
+      # `Cmpv` module map are vendored in Vendor/Mpv; libmpv itself comes from
+      # Homebrew for dev builds (run scripts/fetch_mpv.sh). Bundling libmpv + its
+      # ffmpeg dependency tree into the .app for distribution comes later.
+      - sdk: OpenGL.framework
+    # Register Aether as a video viewer so Finder offers "Open With ▸ Aether"
+    # and the user can set it as the default player (#232 — the killer feature).
+    # mkv has no system UTI, so we declare it as an imported type conforming to
+    # public.movie; the standard movie/AV types cover mp4/mov/m4v/etc.
+    info:
+      path: AetherMac/SupportingFiles/Info.plist
+      properties:
+        # User-facing name is "Aether" everywhere (Dock, Finder, AND the menu
+        # bar). The menu-bar title comes from CFBundleName, which defaults to the
+        # product name "AetherMac" — pin it to Aether so it matches iOS. The Xcode
+        # target stays "AetherMac" internally; only the visible name unifies.
+        CFBundleName: Aether
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # TMDb key baked in at build (from Config/App.xcconfig / Xcode Cloud).
+        TMDBAPIKey: "$(TMDB_API_KEY)"
+        # Supported UI languages — Czech + English (in-app switcher in Settings,
+        # backed by Localizable.xcstrings). Lets the app run localized in cs.
+        CFBundleLocalizations:
+          - en
+          - cs
+        LSApplicationCategoryType: public.app-category.video
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Video
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.movie
+              - public.video
+              - public.audiovisual-content
+              - org.matroska.mkv
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.matroska.mkv
+            UTTypeDescription: Matroska Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - mkv
+    # TMDb key for Local Library metadata matching (#210), injected from
+    # Config/App.xcconfig (gitignored Secrets) / Xcode Cloud — same as iOS.
+    # Empty in clean checkouts just disables matching; users can also set a key
+    # manually in Settings.
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+    # Make the .app self-contained: copy libmpv + its whole dependency tree
+    # (ffmpeg/libass/…) into Contents/Frameworks and rewrite install names to
+    # @executable_path/../Frameworks, so it runs on Macs without Homebrew (Xcode
+    # Cloud archives, end users). dylibbundler comes from scripts/fetch_mpv.sh.
+    postBuildScripts:
+      - name: Bundle libmpv into app
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          # Release/archive only — the Debug build's separate `.debug.dylib`
+          # indirection breaks dylibbundler's load-command rewrite, and local
+          # Debug runs fine against Homebrew's libmpv directly. Archives (Xcode
+          # Cloud) are Release, where the bundle must be self-contained.
+          if [ "${PLATFORM_NAME}" != "macosx" ] || [ "${CONFIGURATION}" != "Release" ]; then exit 0; fi
+          if ! command -v dylibbundler >/dev/null 2>&1; then
+            echo "error: dylibbundler not found — run scripts/fetch_mpv.sh"; exit 1
+          fi
+          BIN="${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"
+          FW="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          mkdir -p "$FW"
+          dylibbundler -of -cd -b -x "$BIN" -d "$FW" \
+            -p "@executable_path/../Frameworks/" -i /usr/lib -i /System/Library
+          # dylibbundler ad-hoc-signs the main binary; re-sign the bundled dylibs
+          # with the real identity (Xcode signs the app bundle, not these). Dev
+          # builds (signing off) just skip it and run unsigned locally.
+          if [ "${CODE_SIGNING_ALLOWED}" != "NO" ] && [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            find "$FW" -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
+              codesign --force --timestamp --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY}" "$lib"
+            done
+          fi
+    settings:
+      base:
+        # The Xcode target is "AetherMac" (must differ from the iOS "Aether"
+        # target), but the shipped product is "Aether" — builds Aether.app with
+        # an "Aether" executable, matching iOS. Only the scheme stays AetherMac.
+        PRODUCT_NAME: Aether
+        PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 8PW5FWH7P2
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Dev slice: not sandboxed yet, so a user-picked / Finder-opened file
+        # plays without security-scoped bookmarks. App Store sandbox +
+        # play-in-place bookmarks come with the player-first work (#232).
+        ENABLE_APP_SANDBOX: NO
+        # libmpv: vendored headers + the `Cmpv` module map, dylib from Homebrew.
+        # Apple Silicon only — Homebrew's libmpv (the player engine) ships arm64
+        # only, so a universal/x86_64 slice can't link. The Mac app is arm64.
+        ARCHS: arm64
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/Mpv/include
+        LIBRARY_SEARCH_PATHS: /opt/homebrew/lib
+        # -headerpad_max_install_names: leave room in the load commands so the
+        # post-build dylibbundler phase can rewrite libmpv + deps to
+        # @executable_path/../Frameworks (longer paths) without "doesn't fit".
+        OTHER_LDFLAGS: -lmpv -Wl,-headerpad_max_install_names
+        OTHER_SWIFT_FLAGS: -Xcc -fmodule-map-file=$(SRCROOT)/Vendor/Mpv/module.modulemap
+
   AetherTests:
     type: bundle.unit-test
     platform: iOS
@@ -239,5 +367,13 @@ schemes:
       config: Debug
       targets:
         - AetherTests
+    archive:
+      config: Release
+  AetherMac:
+    build:
+      targets:
+        AetherMac: all
+    run:
+      config: Debug
     archive:
       config: Release
