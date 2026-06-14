@@ -54,10 +54,6 @@ packages:
   # fallback player for containers AVFoundation can't open (mkv). See #173.
   VLCKit:
     path: Vendor/VLCKit
-  # macOS-only VLCKit 3.x — the unified VLCKit 4 above is built --disable-macosx
-  # (can't render on a Mac), so AetherMac links this instead (#232).
-  VLCKitMac:
-    path: Vendor/VLCKitMac
   # Pure-Swift SMB2/3 client for browse + auth — replaces the VLCKit-based SMB
   # bridge, which was an undebuggable black box that failed on-device. Pure
   # Swift (no libsmb2 / no unsafe build flags → clean SPM, and Network-framework
@@ -236,9 +232,12 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
-      # VLCKit 3.x (macOS vout works) — not the unified VLCKit 4 (#232).
-      - package: VLCKitMac
-        product: VLCKitMac
+      # VLCKit 3.x (macOS vout works) — linked directly as an xcframework, not via
+      # SPM, so its `VLCKit` module doesn't collide with the iOS VLCKit 4 package
+      # in the IDE's package graph (#232). Fetched by scripts/fetch_vlckit_mac.sh.
+      - framework: Vendor/VLCKitMac/VLCKit.xcframework
+        embed: true
+        codeSign: true
     # Register Aether as a video viewer so Finder offers "Open With ▸ Aether"
     # and the user can set it as the default player (#232 — the killer feature).
     # mkv has no system UTI, so we declare it as an imported type conforming to
