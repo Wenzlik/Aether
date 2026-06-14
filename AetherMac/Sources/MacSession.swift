@@ -105,6 +105,10 @@ final class MacSession {
         persistLocalFolders()
     }
 
+    /// Re-scan the local folders (picks up files added/removed on disk and a
+    /// changed TMDb key) by rebuilding the source with a fresh cache.
+    func rescanLocalLibrary() { rebuildLocalSource() }
+
     private func persistLocalFolders() {
         UserDefaults.standard.set(localFolders.map(\.path), forKey: Self.localFoldersKey)
         rebuildLocalSource()

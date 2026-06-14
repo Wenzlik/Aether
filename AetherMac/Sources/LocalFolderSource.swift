@@ -24,6 +24,7 @@ actor LocalFolderSource: MediaSource {
     private nonisolated var moviesLibraryID: Library.ID { .init(source: id, rawValue: "movies") }
     private nonisolated var showsLibraryID: Library.ID { .init(source: id, rawValue: "shows") }
     private static let showPrefix = "show:"
+    private static let seasonPrefix = "season:"
 
     /// `tmdb` (when a TMDb key is configured) enriches scanned movies/shows with
     /// posters, backdrops, and overviews — otherwise they show title-only cards.
@@ -50,21 +51,46 @@ actor LocalFolderSource: MediaSource {
     }
 
     func children(of id: MediaID) async throws -> [MediaItem] {
-        guard id.rawValue.hasPrefix(Self.showPrefix) else { return [] }
-        let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
         let scan = await scan()
-        return (scan.episodesByShow[series] ?? []).sorted {
-            ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
+        // Show → season containers (one per distinct season number).
+        if id.rawValue.hasPrefix(Self.showPrefix) {
+            let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
+            let episodes = scan.episodesByShow[series] ?? []
+            let seasons = Set(episodes.map { $0.seasonNumber ?? 0 }).sorted()
+            return seasons.map { season in seasonItem(series: series, season: season) }
         }
+        // Season → its episodes.
+        if let (series, season) = Self.parseSeasonID(id.rawValue) {
+            return (scan.episodesByShow[series] ?? [])
+                .filter { ($0.seasonNumber ?? 0) == season }
+                .sorted { ($0.episodeNumber ?? 0) < ($1.episodeNumber ?? 0) }
+        }
+        return []
     }
 
     func item(for id: MediaID) async throws -> MediaItem? {
         let scan = await scan()
         if let m = scan.byID[id.rawValue] { return m }
-        if id.rawValue.hasPrefix(Self.showPrefix) {
-            return scan.shows.first { $0.id == id }
-        }
+        if id.rawValue.hasPrefix(Self.showPrefix) { return scan.shows.first { $0.id == id } }
+        if let (series, season) = Self.parseSeasonID(id.rawValue) { return seasonItem(series: series, season: season) }
         return nil
+    }
+
+    private nonisolated func seasonItem(series: String, season: Int) -> MediaItem {
+        MediaItem(
+            id: .init(source: id, rawValue: "\(Self.seasonPrefix)\(season):\(series)"),
+            title: season == 0 ? "Specials" : "Season \(season)",
+            kind: .season, seasonNumber: season,
+            parentID: .init(source: id, rawValue: Self.showPrefix + series)
+        )
+    }
+
+    /// `season:2:Breaking Bad` → ("Breaking Bad", 2).
+    private static func parseSeasonID(_ raw: String) -> (series: String, season: Int)? {
+        guard raw.hasPrefix(seasonPrefix) else { return nil }
+        let rest = raw.dropFirst(seasonPrefix.count)
+        guard let colon = rest.firstIndex(of: ":"), let season = Int(rest[..<colon]) else { return nil }
+        return (String(rest[rest.index(after: colon)...]), season)
     }
 
     func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {

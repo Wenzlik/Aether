@@ -104,6 +104,9 @@ private struct GeneralSettings: View {
                     }
                 }
                 Button("Add Folder…", systemImage: "plus") { addFolder() }
+                if !session.localFolders.isEmpty {
+                    Button("Rescan", systemImage: "arrow.clockwise") { session.rescanLocalLibrary() }
+                }
                 Text("Pick folders on this Mac or a mounted network share. Aether scans them for movies and shows and adds them to your library.")
                     .font(.caption).foregroundStyle(.secondary)
             }
