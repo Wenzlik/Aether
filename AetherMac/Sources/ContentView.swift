@@ -50,19 +50,11 @@ struct HomeView: View {
         } detail: {
             detail
         }
-        // Brand lockup in the titlebar, immediately left of the sidebar toggle.
-        // We drop the automatic toggle and re-add our own *after* the logo so the
-        // order is: traffic lights → AETHER → toggle. The logo is a plain image
-        // (no toolbar-button background).
-        .toolbar(removing: .sidebarToggle)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Image("AetherBrandMark").resizable().scaledToFit().frame(height: 16)
-            }
-            ToolbarItem(placement: .navigation) {
-                Button { toggleSidebar() } label: { Image(systemName: "sidebar.left") }
-            }
-        }
+        // Brand lockup as a leading titlebar accessory — sits right after the
+        // traffic lights and before the sidebar toggle, with no button
+        // background (a SwiftUI toolbar item gave a glass capsule + a duplicate
+        // toggle). AppKit places accessories exactly where we want.
+        .background(TitlebarLogo())
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
@@ -146,12 +138,6 @@ struct HomeView: View {
 
     // MARK: Open
 
-    /// Toggle the split view's sidebar (we replaced the system toggle so the
-    /// logo can sit to its left).
-    private func toggleSidebar() {
-        NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
-    }
-
     private func openLocal(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
@@ -169,4 +155,29 @@ struct HomeView: View {
         }
         return types
     }
+}
+
+/// Places the AETHER brand mark as a **leading titlebar accessory** — after the
+/// traffic lights and before the sidebar toggle, with no button background.
+/// Idempotent: added once per window.
+private struct TitlebarLogo: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let probe = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = probe.window else { return }
+            let id = NSUserInterfaceItemIdentifier("AetherTitlebarLogo")
+            guard !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == id }) else { return }
+            let logo = Image("AetherBrandMark").resizable().scaledToFit()
+                .frame(height: 16).padding(.horizontal, 8).padding(.vertical, 4)
+            let host = NSHostingController(rootView: logo)
+            host.view.frame = NSRect(x: 0, y: 0, width: 96, height: 28)
+            let accessory = NSTitlebarAccessoryViewController()
+            accessory.identifier = id
+            accessory.layoutAttribute = .leading
+            accessory.view = host.view
+            window.addTitlebarAccessoryViewController(accessory)
+        }
+        return probe
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
