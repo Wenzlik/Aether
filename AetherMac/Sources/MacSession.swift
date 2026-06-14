@@ -405,6 +405,18 @@ final class MacSession {
         return (try? await source.children(of: item.id)) ?? []
     }
 
+    /// Resolve an episode's parent **season** and **show** (via `parentID`
+    /// chaining: episode → season → show), so the episode Detail can link back up
+    /// the hierarchy — e.g. opened from Continue Watching, you can still reach the
+    /// season and the whole series. Either may be `nil` if not resolvable.
+    func parents(of episode: MediaItem) async -> (season: MediaItem?, show: MediaItem?) {
+        guard let source = source(for: episode), let seasonID = episode.parentID else { return (nil, nil) }
+        let season = try? await source.item(for: seasonID)
+        var show: MediaItem?
+        if let showID = season?.parentID { show = try? await source.item(for: showID) }
+        return (season, show)
+    }
+
     /// The show's **On Deck** episode (parity with iOS): the in-progress episode
     /// if any, else the one after the last watched (or the first) — so the show
     /// Detail can offer "Continue Watching / Next Up". Walks seasons → episodes

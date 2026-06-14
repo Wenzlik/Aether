@@ -21,6 +21,10 @@ struct MediaDetailView: View {
     @State private var children: [MediaItem] = []
     /// The show's On Deck episode (continue/next-up), for show containers only.
     @State private var nextUp: MediaItem?
+    /// For an episode: its parent season + show, so you can navigate back up the
+    /// hierarchy even when the episode was opened directly (e.g. Continue Watching).
+    @State private var parentSeason: MediaItem?
+    @State private var parentShow: MediaItem?
     @State private var isLoading = false
     @State private var showTechnical = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
@@ -38,6 +42,7 @@ struct MediaDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                parentLinks
                 header
                 if !item.kind.isContainer {
                     playButtons
@@ -96,6 +101,31 @@ struct MediaDetailView: View {
         .task(id: session.resumeRevision) {
             guard !item.kind.isContainer else { return }
             resumeAt = await session.savedResumeSeconds(for: item)
+        }
+    }
+
+    // MARK: Breadcrumb (episode → season → show)
+
+    /// Up-navigation for an episode: tappable Series and Season, so an episode
+    /// opened directly (Continue Watching) can still reach the season + show.
+    @ViewBuilder
+    private var parentLinks: some View {
+        if item.kind == .episode, parentShow != nil || parentSeason != nil {
+            HStack(spacing: 8) {
+                if let show = parentShow {
+                    NavigationLink(value: show) {
+                        Label(show.title, systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.link)
+                }
+                if let season = parentSeason {
+                    Text("·").foregroundStyle(.tertiary)
+                    NavigationLink(value: season) { Text(season.title) }
+                        .buttonStyle(.link)
+                }
+            }
+            .font(.callout)
+            .lineLimit(1)
         }
     }
 
@@ -452,6 +482,11 @@ struct MediaDetailView: View {
         } else {
             working = await session.hydratedItem(for: item)
             resumeAt = await session.savedResumeSeconds(for: item)
+            if item.kind == .episode {
+                let parents = await session.parents(of: item)
+                parentSeason = parents.season
+                parentShow = parents.show
+            }
         }
     }
 

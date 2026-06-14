@@ -171,14 +171,27 @@ struct HomeView: View {
 /// titlebar accessory** — after the traffic lights, no button background. The
 /// system's own toggle is removed (`.toolbar(removing: .sidebarToggle)`) so this
 /// is the only one, and logo + toggle stay together at the leading edge.
-/// Idempotent: added once per window.
+///
+/// This rides on the **library** view, which the inline player replaces during
+/// playback. The accessory is a *window*-level object, so it would otherwise
+/// linger over the full-bleed player and overlap its own back button + title —
+/// so we hide it when this representable is torn down (playback start) and show
+/// it again when the library returns. Idempotent: one accessory per window.
 private struct TitlebarLeadingAccessory: NSViewRepresentable {
+    private static let id = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
+
+    final class Coordinator { weak var accessory: NSTitlebarAccessoryViewController? }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
         let probe = NSView(frame: .zero)
         DispatchQueue.main.async {
             guard let window = probe.window else { return }
-            let id = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
-            guard !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == id }) else { return }
+            if let existing = window.titlebarAccessoryViewControllers.first(where: { $0.identifier == Self.id }) {
+                existing.isHidden = false               // library returned after playback
+                context.coordinator.accessory = existing
+                return
+            }
             let content = HStack(spacing: 8) {
                 Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
                     .frame(height: 20)
@@ -191,14 +204,21 @@ private struct TitlebarLeadingAccessory: NSViewRepresentable {
             // "AETHER" horizontally, which read as a broken/blurry logo.
             host.view.frame.size = host.view.fittingSize
             let accessory = NSTitlebarAccessoryViewController()
-            accessory.identifier = id
+            accessory.identifier = Self.id
             accessory.layoutAttribute = .leading
             accessory.view = host.view
             window.addTitlebarAccessoryViewController(accessory)
+            context.coordinator.accessory = accessory
         }
         return probe
     }
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// Hide the accessory when the library is swapped out for the player, so it
+    /// doesn't float over the full-bleed player and hide its back button/title.
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.accessory?.isHidden = true
+    }
 }
 
 /// A borderless sidebar toggle that drives AppKit's standard `toggleSidebar(_:)`
