@@ -13,6 +13,8 @@ import UIKit
 enum SupportDiagnostics {
     /// Where bug reports, feature requests, and diagnostics are sent.
     static let supportEmail = "support@aetherplayer.com"
+    /// Personal address for "Contact the Creator" — reaches the developer directly.
+    static let creatorEmail = "vasek@aetherplayer.com"
 
     // MARK: - Identity
 

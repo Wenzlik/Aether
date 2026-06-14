@@ -267,6 +267,7 @@ private struct AboutSettings: View {
     @State private var cacheBytes: Int = AetherImageCache.shared.diskUsageBytes()
 
     private static let repoURL = URL(string: "https://github.com/Wenzlik/Aether")!
+    private static let websiteURL = URL(string: "https://aetherplayer.com")!
 
     private var shortVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -276,11 +277,13 @@ private struct AboutSettings: View {
     }
 
     private static let supportEmail = "support@aetherplayer.com"
+    /// Personal address for "Contact the Creator" — reaches the developer directly.
+    private static let creatorEmail = "vasek@aetherplayer.com"
 
-    /// A Support row that opens the user's mail client (mailto) to the support
-    /// address — matching the iOS Support section. Bug/Diagnostics rows append a
-    /// short diagnostics block (no account details).
-    private func supportButton(_ title: String, systemImage: String, subject: String, includeDiagnostics: Bool) -> some View {
+    /// A Support row that opens the user's mail client (mailto). `recipient`
+    /// defaults to support@ but "Contact the Creator" passes the creator address.
+    /// Bug/Diagnostics rows append a short diagnostics block (no account details).
+    private func supportButton(_ title: String, systemImage: String, subject: String, includeDiagnostics: Bool, recipient: String = supportEmail) -> some View {
         Button {
             var body = ""
             if includeDiagnostics {
@@ -288,7 +291,7 @@ private struct AboutSettings: View {
             }
             var c = URLComponents()
             c.scheme = "mailto"
-            c.path = Self.supportEmail
+            c.path = recipient
             c.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
             if let url = c.url { NSWorkspace.shared.open(url) }
         } label: {
@@ -337,7 +340,12 @@ private struct AboutSettings: View {
                 supportButton("Send Diagnostics", systemImage: "stethoscope",
                               subject: "Aether (macOS) — Diagnostics", includeDiagnostics: true)
                 supportButton("Contact the Creator", systemImage: "envelope.fill",
-                              subject: "Aether (macOS)", includeDiagnostics: false)
+                              subject: "Aether (macOS)", includeDiagnostics: false,
+                              recipient: Self.creatorEmail)
+            }
+            Section("Links") {
+                Link(destination: Self.websiteURL) { Label("Website", systemImage: "globe") }
+                Link(destination: Self.repoURL) { Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right") }
             }
             Section {
                 Text("Plays media with mpv (libmpv), FFmpeg, and libass — © their respective authors, under GPL/LGPL.")
