@@ -38,10 +38,10 @@ struct LibraryGridView: View {
                 LazyVGrid(columns: columns, spacing: 20) {
                     ForEach(items) { item in
                         if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                            NavigationLink(value: base) { MacPoster(item: item, width: 150) }
+                            NavigationLink(value: base) { MacPoster(item: item) }
                                 .buttonStyle(.plain)
                         } else {
-                            MacPoster(item: item, width: 150)
+                            MacPoster(item: item)
                         }
                     }
                 }

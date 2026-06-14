@@ -35,6 +35,7 @@ struct DiscoverView: View {
                         rail("Recently Released", filtered(rails.recentlyReleased))
                         rail("Top Rated", filtered(topRated))
                     case .discover:
+                        if let featured { featuredHero(featured) }
                         ForEach(genreRails, id: \.name) { genre in
                             rail(genre.name, genre.items)
                         }
@@ -50,6 +51,60 @@ struct DiscoverView: View {
         // Reload when sources change AND after a player records a resume point,
         // so Continue Watching reflects what was just played.
         .task(id: "\(session.connectedSources.count)-\(session.resumeRevision)") { await load() }
+    }
+
+    /// The spotlight title for Discover — the highest-rated recently-added title
+    /// that has a backdrop to show.
+    private var featured: UnifiedMediaItem? {
+        let pool = filtered(rails.recentlyAdded.isEmpty ? rails.movies : rails.recentlyAdded)
+            .filter { $0.backdropURL != nil }
+        return pool.max { ($0.communityRating ?? 0) < ($1.communityRating ?? 0) } ?? pool.first
+    }
+
+    /// A large cinematic banner: backdrop + gradient scrim, title, metadata, and
+    /// Play / More Info — the iOS-style Featured hero.
+    @ViewBuilder
+    private func featuredHero(_ item: UnifiedMediaItem) -> some View {
+        let base = item.preferredSource?.item ?? item.sources.first?.item
+        ZStack(alignment: .bottomLeading) {
+            CachedAsyncImage(url: item.backdropURL ?? item.posterURL, aspectRatio: 16.0 / 9.0)
+                .overlay(
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.25), .black.opacity(0.85)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+            VStack(alignment: .leading, spacing: 10) {
+                Text(item.title).font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                HStack(spacing: 10) {
+                    if let year = item.year { Text(String(year)) }
+                    if !item.genres.isEmpty { Text(item.genres.prefix(3).joined(separator: " · ")) }
+                    if let r = item.communityRating, r > 0 {
+                        Label(String(format: "%.1f", r), systemImage: "star.fill")
+                    }
+                }
+                .font(.callout).foregroundStyle(.white.opacity(0.85))
+                HStack(spacing: 12) {
+                    if let base {
+                        Button { Task { await session.play(base) } } label: {
+                            Label("Play", systemImage: "play.fill").frame(width: 110)
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        NavigationLink(value: base) {
+                            Label("More Info", systemImage: "info.circle")
+                        }
+                        .buttonStyle(.bordered).controlSize(.large)
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding(28)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: 1100)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
     }
 
     /// In-progress titles (movies + episodes) as landscape cards with a progress
@@ -116,10 +171,10 @@ struct DiscoverView: View {
                     LazyHStack(alignment: .top, spacing: 18) {
                         ForEach(items) { item in
                             if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                                NavigationLink(value: base) { MacPoster(item: item) }
+                                NavigationLink(value: base) { MacPoster(item: item, width: 150) }
                                     .buttonStyle(.plain)
                             } else {
-                                MacPoster(item: item)
+                                MacPoster(item: item, width: 150)
                             }
                         }
                     }

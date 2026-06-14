@@ -64,6 +64,15 @@ struct HomeView: View {
 
     private var sidebarList: some View {
         List(selection: $sidebar) {
+            // Brand lockup at the top — the app's identity inside its own UI.
+            Image("AetherBrandMark")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 26)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
             Label("Home", systemImage: "house").tag(SidebarItem.home)
             Label("Discover", systemImage: "sparkles").tag(SidebarItem.discover)
             Label("Library", systemImage: "square.grid.2x2").tag(SidebarItem.library)
