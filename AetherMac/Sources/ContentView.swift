@@ -105,6 +105,9 @@ struct HomeView: View {
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
+            .navigationDestination(for: LibraryRoute.self) { route in
+                LibraryBrowseView(session: session, route: route)
+            }
         }
     }
 
