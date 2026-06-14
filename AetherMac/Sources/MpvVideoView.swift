@@ -63,13 +63,13 @@ struct MpvVideoView: NSViewRepresentable {
 /// renders into, a matching `MTLTexture`, and a blit into the drawable each frame.
 @MainActor
 final class MpvMetalCoordinator: NSObject, MTKViewDelegate {
-    let device: MTLDevice?
+    let device: (any MTLDevice)?
     private let client: MpvClient
-    private let commandQueue: MTLCommandQueue?
+    private let commandQueue: (any MTLCommandQueue)?
     private weak var view: MTKView?
 
     private var buffer: UnsafeMutableRawPointer?
-    private var texture: MTLTexture?
+    private var texture: (any MTLTexture)?
     private var texW = 0
     private var texH = 0
 
@@ -144,7 +144,7 @@ final class MpvMetalCoordinator: NSObject, MTKViewDelegate {
     }
 
     /// (Re)allocate the CPU buffer + texture when the drawable size changes.
-    private func ensureResources(device: MTLDevice, width: Int, height: Int) {
+    private func ensureResources(device: any MTLDevice, width: Int, height: Int) {
         guard width != texW || height != texH || buffer == nil || texture == nil else { return }
         if let buffer { free(buffer) }
         buffer = malloc(width * height * 4)
