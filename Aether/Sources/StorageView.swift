@@ -513,6 +513,7 @@ struct StorageView: View {
         case .dlna:     return "DLNA"
         case .mock:     return "Mock"
         case .local:    return "Local"
+        case .external: return "Netflix"
         }
     }
 
@@ -524,6 +525,7 @@ struct StorageView: View {
         case .dlna:     return "sparkles.tv.fill"
         case .mock:     return "questionmark.circle.fill"
         case .local:    return "folder.fill"
+        case .external: return "play.tv"
         }
     }
 

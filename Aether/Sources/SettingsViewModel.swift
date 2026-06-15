@@ -281,6 +281,7 @@ final class SettingsViewModel {
             case .dlna:     kind = "dlna"
             case .mock:     kind = "mock"
             case .local:    kind = "local"
+            case .external: kind = "external"
             }
             return DiagnosticsSnapshot.SourceLine(id: "\(kind)-\(index)", name: source.displayName, status: "Signed in")
         }
