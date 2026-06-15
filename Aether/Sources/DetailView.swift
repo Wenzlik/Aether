@@ -2196,13 +2196,16 @@ struct DetailView: View {
 
     /// Labels for whichever compact icons are currently visible, left-to-right.
     private var compactActionHintItems: [String] {
+        // Localized so the joined caption reads in the user's language (the items
+        // are interpolated into a String, so they must be resolved here rather
+        // than relying on SwiftUI's literal auto-localization).
         var items: [String] = []
-        if shouldShowDownloadControl { items.append("Download") }
-        if source != nil { items.append("Watch status") }
-        if source?.supportsFavorites == true { items.append("Favorite") }
+        if shouldShowDownloadControl { items.append(String(localized: "Download")) }
+        if source != nil { items.append(String(localized: "Watch status")) }
+        if source?.supportsFavorites == true { items.append(String(localized: "Favorite")) }
         // "Source" intentionally absent — switching now lives only in the
         // "Available Sources" section, not the icon row (#356).
-        if current.mediaInfo != nil { items.append("Details") }
+        if current.mediaInfo != nil { items.append(String(localized: "Details")) }
         return items
     }
 

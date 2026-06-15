@@ -5833,6 +5833,57 @@
           }
         }
       }
+    },
+    "Watch status": {
+      "comment": "A first-use hint label naming the watched-status (eye) icon in the Detail action row.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stav zhlédnutí"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус перегляду"
+          }
+        }
+      }
+    },
+    "Favorite": {
+      "comment": "A first-use hint label naming the favorite (heart) icon in the Detail action row.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oblíbené"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Улюблене"
+          }
+        }
+      }
+    },
+    "Tap an icon below — %@.": {
+      "comment": "A first-use hint for the Detail action icon row. The argument is a comma-separated list of the icon names.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klepněte na ikonu níže — %@."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Торкніться значка нижче — %@."
+          }
+        }
+      }
     }
   },
   "version": "1.1"
