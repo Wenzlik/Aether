@@ -344,6 +344,18 @@ targets:
           mkdir -p "$FW"
           dylibbundler -of -cd -b -x "$BIN" -d "$FW" \
             -p "@executable_path/../Frameworks/" -i /usr/lib -i /System/Library
+          # Collapse duplicate LC_RPATH entries. Across incremental (non-clean)
+          # builds dylibbundler can re-add @executable_path/../Frameworks to an
+          # already-bundled dylib (libmpv ends up with it twice), and macOS 15+/26
+          # dyld REJECTS loading a dylib with a duplicate LC_RPATH ("Library not
+          # loaded … duplicate LC_RPATH") — the app then can't launch. Strip the
+          # extras so exactly one remains, before signing.
+          RP="@executable_path/../Frameworks/"
+          find "$FW" -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
+            while [ "$(otool -l "$lib" | grep -Fc "path ${RP} ")" -gt 1 ]; do
+              install_name_tool -delete_rpath "$RP" "$lib"
+            done
+          done
           # dylibbundler ad-hoc-signs the main binary; re-sign the bundled dylibs
           # with the real identity (Xcode signs the app bundle, not these). Dev
           # builds (signing off) just skip it and run unsigned locally.
