@@ -181,7 +181,14 @@ final class MacPlayerModel {
         guard let item, let session, durationSeconds > 0 else { return }
         let fraction = lastKnownSeconds / durationSeconds
         guard fraction > 0.01, fraction < 0.95 else { return }
-        Task { await session.recordResume(for: item, seconds: lastKnownSeconds, committing: committing) }
+        let duration = durationSeconds
+        let paused = !isPlaying
+        Task {
+            await session.recordResume(
+                for: item, seconds: lastKnownSeconds, committing: committing,
+                durationSeconds: duration, paused: paused
+            )
+        }
     }
 
     // MARK: Helpers

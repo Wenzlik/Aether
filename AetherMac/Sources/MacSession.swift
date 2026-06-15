@@ -374,13 +374,23 @@ final class MacSession {
     }
 
     /// Record a playhead position for an item. `committing` (pause/close) also
-    /// pushes to iCloud KVS; the periodic tick passes `false`.
-    func recordResume(for item: MediaItem, seconds: Double, committing: Bool) async {
+    /// pushes to iCloud KVS; the periodic tick passes `false`. Also reports the
+    /// playhead to the item's server (Plex timeline / Jellyfin Sessions) so
+    /// resume syncs cross-device — there's no iCloud on the Developer ID Mac
+    /// build, so the server is the only cross-device path here. Best-effort.
+    func recordResume(
+        for item: MediaItem, seconds: Double, committing: Bool,
+        durationSeconds: Double? = nil, paused: Bool = false
+    ) async {
         await resumeStore.record(
             ResumePoint(mediaID: item.id, position: .seconds(seconds)),
             committing: committing
         )
         resumeRevision &+= 1
+        let duration = durationSeconds.map { Duration.seconds($0) }
+        await source(for: item)?.recordProgress(
+            item.id, position: .seconds(seconds), duration: duration, paused: paused
+        )
     }
 
     /// Fully hydrate a browse item — Plex/Jellyfin list items carry no track or

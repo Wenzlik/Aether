@@ -132,6 +132,26 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Report the playhead to Jellyfin via `POST /Sessions/Playing/Progress`,
+    /// so resume progress (`UserData.PlaybackPositionTicks`) syncs across
+    /// clients and devices. `PositionTicks` are 100-ns units (seconds × 10⁷).
+    /// Best-effort — a failure is swallowed so it never disrupts teardown.
+    public func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async {
+        guard id.source == self.id else { return }
+        let ticks = Int64((Self.seconds(position) * 10_000_000).rounded())
+        let body: [String: Any] = [
+            "ItemId": id.rawValue,
+            "PositionTicks": ticks,
+            "IsPaused": paused
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+        var request = makeRequest(path: "/Sessions/Playing/Progress")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        _ = try? await api.data(for: request)
+    }
+
     /// Jellyfin has a per-user favorite (`UserData.IsFavorite`).
     public nonisolated var supportsFavorites: Bool { true }
 

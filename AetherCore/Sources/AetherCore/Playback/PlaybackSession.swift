@@ -510,6 +510,16 @@ public actor PlaybackSession {
         let position = Duration.seconds(seconds)
         state.position = position
         await resumeStore.record(.init(mediaID: item.id, position: position))
+        // Report the playhead to the server too (Plex timeline / Jellyfin
+        // Sessions), so resume syncs across clients and devices — not just the
+        // local store. Best-effort + non-throwing (no-op for sources without
+        // server play state). Rides the same ~5s cadence as the local write.
+        let serverDuration = durationSeconds.isFinite && durationSeconds > 0
+            ? Duration.seconds(durationSeconds) : nil
+        await source?.recordProgress(
+            item.id, position: position, duration: serverDuration,
+            paused: state.status != .playing
+        )
     }
 
     /// Return the local file URL for `item` **only if AVPlayer can decode

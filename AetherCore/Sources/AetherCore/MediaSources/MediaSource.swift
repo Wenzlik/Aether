@@ -90,6 +90,15 @@ public protocol MediaSource: Sendable {
     /// Default: no-op.
     func markUnwatched(_ id: MediaID) async
 
+    /// Report the current playhead **to the server** so resume progress syncs
+    /// across clients and devices — not just inside Aether's local store. Called
+    /// on the periodic resume tick and on pause / stop. `paused` lets the server
+    /// distinguish an active session from a paused one (Plex `state`, Jellyfin
+    /// `IsPaused`). Best-effort + non-throwing: a failed report must never
+    /// disrupt playback or its teardown. Default: no-op for sources with no
+    /// server-side play state (Mock, local, SMB, DLNA).
+    func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async
+
     /// **Source-provided** skip segments (intro / recap / credits / commercial)
     /// for an item — Plex markers, Jellyfin MediaSegments. Drives Skip Intro /
     /// Skip Credits / Auto-Play-Next. Best-effort + non-throwing: returns `[]`
@@ -188,6 +197,9 @@ public extension MediaSource {
 
     /// Default: no server-side watch state to update. Plex / Jellyfin override.
     func markUnwatched(_ id: MediaID) async {}
+
+    /// Default: no server-side progress to report. Plex / Jellyfin override.
+    func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async {}
 
     /// Default: no segment data. Plex / Jellyfin override.
     func segments(for id: MediaID) async -> [PlaybackSegment] { [] }
