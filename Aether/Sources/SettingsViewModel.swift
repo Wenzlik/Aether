@@ -36,10 +36,6 @@ final class SettingsViewModel {
     /// cache so badges re-evaluate immediately.
     var streamingPreferences: StreamingPreferencesStore { session.streamingPreferences }
 
-    /// Whether availability can work at all — needs a TMDb key. When false the
-    /// section explains the toggle does nothing until a key is set.
-    var isTMDbConfigured: Bool { session.isTMDbConfigured }
-
     func setNetflixAvailabilityEnabled(_ on: Bool) {
         session.streamingPreferences.netflixAvailabilityEnabled = on
         session.watchAvailability.invalidate()
