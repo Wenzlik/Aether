@@ -345,8 +345,16 @@ public actor UnifiedLibrary {
         // call, so resume state stays fresh even on a cache hit.
         async let moviesTask = unifiedItems(kind: .movie, forceRefresh: forceRefresh)
         async let showsTask = unifiedItems(kind: .show, forceRefresh: forceRefresh)
+        // Seed the resume store from each source's server-side "Continue
+        // Watching" list (Plex On Deck, Jellyfin Resume) so progress made on
+        // other devices surfaces here even with no local history — the
+        // cross-device read path, the only one macOS has (no iCloud). Merge is
+        // latest-`updatedAt`-wins, so a server point never clobbers a fresher
+        // local one. Best-effort, runs concurrently with the catalog fetch.
+        async let seedTask: Void = seedServerResume(into: resumeStore)
         let movies = await moviesTask
         let shows = await showsTask
+        await seedTask
 
         var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
         for unified in movies + shows {
@@ -406,6 +414,22 @@ public actor UnifiedLibrary {
             movieCount: movies.count,
             showCount: shows.count
         )
+    }
+
+    /// Pull each source's server-side resume list and merge it into the local
+    /// store (latest-`updatedAt`-wins). Fans out across sources; a slow or
+    /// failing source can't block the others. Best-effort throughout.
+    private func seedServerResume(into resumeStore: ResumeStore) async {
+        await withTaskGroup(of: [ResumePoint].self) { group in
+            for source in sources {
+                group.addTask { await source.serverResumePoints() }
+            }
+            for await points in group {
+                for point in points {
+                    await resumeStore.record(point, committing: false)
+                }
+            }
+        }
     }
 
     /// The most-recently-watched in-progress **episode per show**, resolved from

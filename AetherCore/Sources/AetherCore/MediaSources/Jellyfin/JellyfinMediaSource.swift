@@ -152,6 +152,35 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Jellyfin's own Resume list (`GET /Users/{id}/Items/Resume`) as resume
+    /// points — the server's "Continue Watching", so a fresh device surfaces
+    /// in-progress titles/episodes without local history. `PlaybackPositionTicks`
+    /// is the playhead; `LastPlayedDate` the merge timestamp. Best-effort.
+    public func serverResumePoints() async -> [ResumePoint] {
+        let request = makeRequest(
+            path: "/Users/\(userID)/Items/Resume",
+            queryItems: [
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "MediaTypes", value: "Video"),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Episode"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+                URLQueryItem(name: "Limit", value: "60")
+            ]
+        )
+        guard let response = try? await api.decode(
+            JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return response.items.compactMap { dto in
+            guard let ticks = dto.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+            let updatedAt = JellyfinAPI.BaseItemDto.parseDate(dto.userData?.lastPlayedDate) ?? Date()
+            return ResumePoint(
+                mediaID: MediaID(source: id, rawValue: dto.id),
+                position: .seconds(Double(ticks) / 10_000_000),
+                updatedAt: updatedAt
+            )
+        }
+    }
+
     /// Jellyfin has a per-user favorite (`UserData.IsFavorite`).
     public nonisolated var supportsFavorites: Bool { true }
 

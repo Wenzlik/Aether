@@ -1067,6 +1067,27 @@ public actor PlexMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Plex's own On Deck list (`GET /library/onDeck`) as resume points — the
+    /// server's curated "Continue Watching", so a fresh device surfaces
+    /// in-progress titles/episodes without local history. `viewOffset` is the
+    /// playhead (ms); `lastViewedAt` the merge timestamp. Best-effort.
+    public func serverResumePoints() async -> [ResumePoint] {
+        guard let base = try? await resolveBaseURL() else { return [] }
+        let request = request(base: base, path: "/library/onDeck")
+        guard let response = try? await api.decode(
+            PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return (response.mediaContainer.metadata ?? []).compactMap { dto in
+            guard let offsetMs = dto.viewOffset, offsetMs > 0 else { return nil }
+            let updatedAt = dto.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) } ?? Date()
+            return ResumePoint(
+                mediaID: MediaID(source: id, rawValue: dto.ratingKey),
+                position: .milliseconds(offsetMs),
+                updatedAt: updatedAt
+            )
+        }
+    }
+
     // MARK: - Stream URL resolution (direct play vs transcode)
 
     /// Containers AVPlayer opens natively. Anything outside this set goes

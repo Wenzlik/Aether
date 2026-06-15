@@ -99,6 +99,14 @@ public protocol MediaSource: Sendable {
     /// server-side play state (Mock, local, SMB, DLNA).
     func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async
 
+    /// The server's own "Continue Watching" list as resume points — Plex On
+    /// Deck, Jellyfin Resume. Lets a fresh device (or one with no local history)
+    /// surface in-progress titles and episodes straight from the server; the
+    /// read half of cross-device resume. Each point carries the server playhead
+    /// and last-played timestamp, merged into the local store latest-wins.
+    /// Best-effort + non-throwing. Default: none.
+    func serverResumePoints() async -> [ResumePoint]
+
     /// **Source-provided** skip segments (intro / recap / credits / commercial)
     /// for an item — Plex markers, Jellyfin MediaSegments. Drives Skip Intro /
     /// Skip Credits / Auto-Play-Next. Best-effort + non-throwing: returns `[]`
@@ -200,6 +208,9 @@ public extension MediaSource {
 
     /// Default: no server-side progress to report. Plex / Jellyfin override.
     func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async {}
+
+    /// Default: no server-side resume list. Plex / Jellyfin override.
+    func serverResumePoints() async -> [ResumePoint] { [] }
 
     /// Default: no segment data. Plex / Jellyfin override.
     func segments(for id: MediaID) async -> [PlaybackSegment] { [] }
