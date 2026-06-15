@@ -851,6 +851,14 @@ struct DetailView: View {
             .frame(maxWidth: movieHeroContentWidth, alignment: .leading)
         }
         .frame(width: size.width, height: movieHeroHeight(size), alignment: .bottomLeading)
+        // tvOS: the hero is a full-width focus section so Up from the first
+        // below-hero rail (More Like This) reaches the action row at ANY scroll
+        // offset — section-to-section focus uses the section *frame* (full width
+        // here), not the actions' capped geometry. This covers the single-source
+        // movie with no Available Sources, where the hero is the rail's nearest
+        // focusable neighbour (#359). No-op off tvOS → the visionOS hero (and its
+        // first-use hint, #355) is untouched.
+        .aetherDetailFocusSection()
     }
 
     /// Bottom-anchored dark gradient — keeps the embedded content readable in
