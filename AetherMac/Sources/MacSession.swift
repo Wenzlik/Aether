@@ -189,7 +189,6 @@ final class MacSession {
         guard !didRestore else { return }
         didRestore = true
         await resumeStore.loadFromDisk()
-        await resumeStore.observeICloudChanges()   // live cross-device resume (#18)
         rebuildLocalSource()    // build the local library from persisted folders
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
             plexSources = records.map(makePlexSource)
@@ -270,11 +269,11 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
-    /// Resume store — documents-directory JSON as the local source of truth plus
-    /// **iCloud Key-Value Store** for cross-device sync (#18). The Mac shares the
-    /// iOS app's KVS (see the `ubiquity-kvstore-identifier` entitlement), so a
-    /// film started on iPhone/Apple TV shows as in-progress here and vice-versa.
-    let resumeStore = ResumeStore(diskURL: ResumeStore.defaultDiskURL(), icloud: .default)
+    /// Resume store — documents-directory JSON (same-device resume + Continue
+    /// Watching). No iCloud KVS: iCloud is App-Store/TestFlight-only and can't be
+    /// used by the Developer-ID Mac build, so cross-device resume will come via
+    /// server-side progress instead (#18).
+    let resumeStore = ResumeStore(diskURL: ResumeStore.defaultDiskURL())
 
     /// Maps a resolved playback URL → the item it came from, so the player
     /// window (which only carries a URL) can record resume keyed by `MediaID`.

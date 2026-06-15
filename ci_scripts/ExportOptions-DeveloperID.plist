@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Export options for a Developer ID (notarized, outside-the-App-Store) macOS
+  build of Aether — used by scripts/package-mac.sh's `xcodebuild -exportArchive`.
+  macOS ships via Developer ID + notarization (not the App Store) because the
+  bundled mpv/FFmpeg stack is GPL, which the Mac App Store can't host.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>teamID</key>
+    <string>8PW5FWH7P2</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+</dict>
+</plist>

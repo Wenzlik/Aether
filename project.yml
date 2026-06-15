@@ -280,15 +280,22 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - mkv
-    # iCloud Key-Value Store for cross-device resume (#18). The identifier is set
-    # to the **iOS** bundle id (not the Mac's own cz.zmrhal.aether.mac) so the Mac
-    # joins the SAME key-value store as iPhone/Apple TV/Vision Pro — a film started
-    # on one device shows as in-progress on the Mac and vice-versa. Requires the
-    # iCloud (Key-value storage) capability on the cz.zmrhal.aether.mac App ID.
+    # Hardened-runtime entitlements (required for notarized Developer ID
+    # distribution). The bundled mpv stack uses **LuaJIT**, which JIT-compiles, so
+    # the hardened runtime needs allow-jit + allow-unsigned-executable-memory;
+    # disable-library-validation lets the app load the bundled libmpv/ffmpeg dylibs
+    # (re-signed with our cert in the post-build phase). Same set IINA uses.
+    #
+    # NB: NO iCloud entitlement — iCloud (KVS) is App-Store/TestFlight-only and
+    # can't be used by a Developer-ID app, so macOS cross-device resume goes via
+    # server-side progress instead (#18). It also can't be ad-hoc signed, which
+    # was blocking the archive.
     entitlements:
       path: AetherMac/SupportingFiles/AetherMac.entitlements
       properties:
-        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)cz.zmrhal.aether
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.cs.allow-unsigned-executable-memory: true
+        com.apple.security.cs.disable-library-validation: true
     # TMDb key for Local Library metadata matching (#210), injected from
     # Config/App.xcconfig (gitignored Secrets) / Xcode Cloud — same as iOS.
     # Empty in clean checkouts just disables matching; users can also set a key
@@ -335,6 +342,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8PW5FWH7P2
+        # Hardened runtime — required for Apple notarization of the Developer ID
+        # build. The app + bundled dylibs are signed with --options runtime.
+        ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Dev slice: not sandboxed yet, so a user-picked / Finder-opened file
         # plays without security-scoped bookmarks. App Store sandbox +
