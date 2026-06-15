@@ -179,6 +179,23 @@ struct DiscoverView: View {
                                 ContinueWatchingCard(entry: entry)
                             }
                             .buttonStyle(.plain)
+                            // Right-click parity with the mobile long-press menu
+                            // (#368): act on a Continue Watching title in place.
+                            .contextMenu {
+                                Button {
+                                    Task {
+                                        await session.markWatched(entry.item, watched: true)
+                                        await session.clearResume(for: entry.item)
+                                    }
+                                } label: {
+                                    Label("Mark as Watched", systemImage: "checkmark.circle")
+                                }
+                                Button(role: .destructive) {
+                                    Task { await session.removeFromContinueWatching(entry.item) }
+                                } label: {
+                                    Label("Remove from Continue Watching", systemImage: "minus.circle")
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 24)

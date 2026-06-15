@@ -5471,6 +5471,12 @@
             "state": "translated",
             "value": "Filtr"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фільтр"
+          }
         }
       }
     },
@@ -6169,6 +6175,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сервери Plex"
+          }
+        }
+      }
+    },
+    "Clear all": {
+      "comment": "Library: clears every active filter facet (#367 active-filter row).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vymazat vše"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистити все"
+          }
+        }
+      }
+    },
+    "Mark as Watched": {
+      "comment": "Home: Continue Watching card context menu — marks the title watched (#368).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Označit jako zhlédnuté"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позначити як переглянуте"
+          }
+        }
+      }
+    },
+    "Remove from Continue Watching": {
+      "comment": "Home: Continue Watching card context menu — drops the title from the rail without marking it watched (#368).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odebrat z Pokračovat ve sledování"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прибрати з «Продовжити перегляд»"
+          }
+        }
+      }
+    },
+    "Remove %@ filter": {
+      "comment": "Library: accessibility label for a removable active-filter chip; %@ is the facet value (#367).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odebrat filtr %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прибрати фільтр %@"
           }
         }
       }

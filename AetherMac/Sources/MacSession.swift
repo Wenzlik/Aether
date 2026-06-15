@@ -493,6 +493,17 @@ final class MacSession {
         resumeRevision &+= 1
     }
 
+    /// Remove a title from Continue Watching across **every** connected source
+    /// *without* marking it watched (#368) — zero the server playhead so it
+    /// drops from Plex On Deck / Jellyfin Resume and can't re-seed, then drop the
+    /// local resume point and refresh the rail. The durable counterpart to
+    /// `clearResume` (which is local-only) for the user-initiated "Remove".
+    func removeFromContinueWatching(_ item: MediaItem) async {
+        await makeLibrary().clearContinueWatchingEverywhere(item)
+        await resumeStore.clear(for: item.id)
+        resumeRevision &+= 1
+    }
+
     /// Whether the item's source supports favorites (Plex/Jellyfin do; local no).
     func canFavorite(_ item: MediaItem) -> Bool {
         source(for: item)?.supportsFavorites ?? false

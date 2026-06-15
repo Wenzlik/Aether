@@ -26,6 +26,14 @@ struct UnifiedLibraryGridView: View {
     /// not the device's `Locale.current`.
     @Environment(\.locale) private var locale
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    #if os(iOS)
+    /// Regular (iPad) shows the Filter control's text label; compact (iPhone)
+    /// falls back to icon-only (#369).
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+    /// Client-side title search within the category grid (#369). Filters
+    /// `filteredItems` alongside the facet filters — no reload, like #319.
+    @State private var searchText = ""
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
@@ -97,6 +105,12 @@ struct UnifiedLibraryGridView: View {
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
         .sheet(isPresented: $isFilterSheetPresented) { filterSheet }
+        // Search *within* the category (#369) — client-side title match over the
+        // loaded catalog, the same no-reload model as the facet filters (#319).
+        // iOS/iPadOS only; tvOS keeps its existing inline controls unchanged.
+        #if os(iOS)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text("Search your library"))
+        #endif
         // The grid loads the *full* catalog once per source set — audio + genre
         // are both client-side filters now, so a chip tap never reloads (#319).
         .task(id: sourcesKey) { await load() }
@@ -123,6 +137,13 @@ struct UnifiedLibraryGridView: View {
                     tvOSFilterTrigger
                 }
                 #endif
+                // Active-filter summary (#367): removable token per facet + Clear
+                // all, so a narrowed grid reads as narrowed without reopening the
+                // sheet. Shown even when the result is empty, so the user can
+                // always undo a filter (and, on tvOS, never lands focus-trapped).
+                if hasActiveFilter {
+                    activeFiltersRow
+                }
                 if sortedItems.isEmpty {
                     AetherEmptyState(
                         glyph: "tray",
@@ -144,8 +165,13 @@ struct UnifiedLibraryGridView: View {
         }
     }
 
-    /// Empty-state copy reflects whether a filter is narrowing the result.
+    /// Empty-state copy reflects whether a search query or a filter is narrowing
+    /// the result.
     private var emptyMessage: String {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            return "No \(title.lowercased()) match “\(query)”."
+        }
         if hasActiveFilter {
             return "No \(title.lowercased()) match the current filters."
         }
@@ -171,6 +197,12 @@ struct UnifiedLibraryGridView: View {
         if !selectedYears.isEmpty {
             result = result.filter { $0.year.map { selectedYears.contains($0) } ?? false }
         }
+        // Title search (#369) — client-side, case/diacritic-insensitive, applied
+        // last so it narrows the already-faceted set.
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            result = result.filter { $0.title.localizedStandardContains(query) }
+        }
         return result
     }
 
@@ -185,6 +217,86 @@ struct UnifiedLibraryGridView: View {
         selectedAudioLanguage = nil
         selectedMinRating = nil
         selectedYears = []
+    }
+
+    // MARK: - Active-filter summary (#367)
+
+    /// One removable active facet: a human-readable value + the action that
+    /// clears just that facet. Years expand to one token each (matching the
+    /// multi-select `yearFilterRow`).
+    private struct FilterToken: Identifiable {
+        let id: String
+        /// The displayed value (genre name, rating bucket, year, audio language)
+        /// — rendered via `LocalizedStringKey` so catalog-backed values (genre /
+        /// "All") translate; numbers / already-localized audio names pass through.
+        let label: String
+        let clear: () -> Void
+    }
+
+    /// The active facets as removable tokens, in the same order the filter sheet
+    /// lists its groups (Genre · Audio · Rating · Year).
+    private var activeFilterTokens: [FilterToken] {
+        var tokens: [FilterToken] = []
+        if let selectedGenre {
+            tokens.append(.init(id: "genre", label: selectedGenre) { self.selectedGenre = nil })
+        }
+        if let selectedAudioLanguage {
+            let name = audioLanguageOptions.first { $0.code == selectedAudioLanguage }?.displayName ?? selectedAudioLanguage
+            tokens.append(.init(id: "audio", label: name) { self.selectedAudioLanguage = nil })
+        }
+        if let selectedMinRating {
+            let label = ratingBuckets.first { $0.min == selectedMinRating }?.label ?? String(format: "%.0f+", selectedMinRating)
+            tokens.append(.init(id: "rating", label: label) { self.selectedMinRating = nil })
+        }
+        for year in selectedYears.sorted(by: >) {
+            tokens.append(.init(id: "year-\(year)", label: String(year)) { self.selectedYears.remove(year) })
+        }
+        return tokens
+    }
+
+    /// Horizontal row of removable chips (one per active facet) + a trailing
+    /// "Clear all". Mirrors `genreFilterRow`'s scroll/HStack so it reads as part
+    /// of the same filter language; the chips carry a trailing ✕ to signal
+    /// removal. Focusable on tvOS.
+    private var activeFiltersRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                ForEach(activeFilterTokens) { token in
+                    removableChip(label: token.label, onRemove: token.clear)
+                }
+                Button(action: clearFilters) {
+                    Text("Clear all")
+                        .font(AetherDesign.Typography.metadata)
+                        .foregroundStyle(AetherDesign.Palette.accent)
+                        .padding(.horizontal, AetherDesign.Spacing.s)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    /// A selected-facet chip with a trailing ✕ — the removable sibling of
+    /// `genreChip`, same capsule language. Tapping anywhere on it removes the
+    /// facet.
+    private func removableChip(label: String, onRemove: @escaping () -> Void) -> some View {
+        Button(action: onRemove) {
+            HStack(spacing: AetherDesign.Spacing.xxs) {
+                Text(LocalizedStringKey(label))
+                    .font(AetherDesign.Typography.metadata)
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+            }
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .padding(.vertical, AetherDesign.Spacing.xs)
+            .background(AetherDesign.Palette.accent, in: Capsule())
+            .foregroundStyle(Color.white)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Remove \(label) filter"))
     }
 
     private var sortedItems: [UnifiedMediaItem] {
@@ -296,17 +408,34 @@ struct UnifiedLibraryGridView: View {
     // MARK: - Filters (#342)
 
     #if !os(tvOS)
-    /// iOS Filter button (next to Sort) — opens the filter sheet; a filled icon
-    /// marks active filters.
+    /// iOS Filter control (next to Sort + Search) — opens the filter sheet. Now
+    /// **labeled** so it reads as "Filter", not a bare glyph (#369): the text
+    /// shows on regular width (iPad), icon-only on compact (iPhone). A filled
+    /// icon still marks active filters (ties to the #367 summary row).
     private var filterToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Button { isFilterSheetPresented = true } label: {
-                Image(systemName: hasActiveFilter
-                      ? "line.3.horizontal.decrease.circle.fill"
-                      : "line.3.horizontal.decrease.circle")
-            }
-            .accessibilityLabel("Filter")
+            Button { isFilterSheetPresented = true } label: { filterLabel }
+                .accessibilityLabel("Filter")
         }
+    }
+
+    private var filterIcon: String {
+        hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
+    }
+
+    /// iPad shows "Filter" beside the glyph; iPhone (compact) stays icon-only so
+    /// the bar isn't crowded next to Search + Sort (#369).
+    @ViewBuilder
+    private var filterLabel: some View {
+        #if os(iOS)
+        if horizontalSizeClass == .regular {
+            Label("Filter", systemImage: filterIcon).labelStyle(.titleAndIcon)
+        } else {
+            Label("Filter", systemImage: filterIcon).labelStyle(.iconOnly)
+        }
+        #else
+        Label("Filter", systemImage: filterIcon).labelStyle(.iconOnly)
+        #endif
     }
     #else
     /// tvOS inline Filter trigger (toolbar menus don't render on tvOS).

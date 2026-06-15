@@ -130,6 +130,9 @@ struct LibraryBrowseView: View {
     @State private var selectedYears: Set<Int> = []
     /// Minimum community rating (#342 parity) — `nil` = any.
     @State private var minRating: Double? = nil
+    /// Client-side title search within the category grid (#369) — no reload,
+    /// like the facet filters.
+    @State private var query = ""
     @State private var isLoading = false
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
@@ -152,7 +155,67 @@ struct LibraryBrowseView: View {
             filtered = filtered.filter { $0.year.map { selectedYears.contains($0) } ?? false }
         }
         if let minRating { filtered = filtered.filter { ($0.communityRating ?? 0) >= minRating } }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty { filtered = filtered.filter { $0.title.localizedStandardContains(q) } }
         return sort.sorted(filtered)
+    }
+
+    // MARK: - Active-filter summary (#367)
+
+    /// One removable active facet: a value to show + the action clearing just it.
+    private struct FilterToken: Identifiable {
+        let id: String
+        let label: String
+        let clear: () -> Void
+    }
+
+    /// Active facets as removable tokens, in the filter menu's order (Genre ·
+    /// Rating · Year). Years expand to one token each (multi-select).
+    private var activeFilterTokens: [FilterToken] {
+        var tokens: [FilterToken] = []
+        if let genre {
+            tokens.append(.init(id: "genre", label: genre) { self.genre = nil })
+        }
+        if let minRating {
+            tokens.append(.init(id: "rating", label: "\(Int(minRating))+") { self.minRating = nil })
+        }
+        for year in selectedYears.sorted(by: >) {
+            tokens.append(.init(id: "year-\(year)", label: String(year)) { self.selectedYears.remove(year) })
+        }
+        return tokens
+    }
+
+    /// Removable-chip row above the grid + Clear all (#367 macOS parity), so a
+    /// narrowed grid reads as narrowed without opening the Filter menu.
+    private var activeFiltersRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(activeFilterTokens) { token in
+                    Button(action: token.clear) {
+                        HStack(spacing: 4) {
+                            Text(LocalizedStringKey(token.label))
+                            Image(systemName: "xmark").font(.caption2.weight(.semibold))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(MacTheme.accent, in: Capsule())
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove \(token.label) filter")
+                }
+                Button("Clear all") { genre = nil; selectedYears = []; minRating = nil }
+                    .buttonStyle(.link)
+            }
+            .font(.callout)
+        }
+    }
+
+    /// Empty-state copy reflecting a search query / active filter (#367/#369).
+    private var emptyMessage: String {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty { return "No \(route.title.lowercased()) match “\(q)”." }
+        if hasActiveFilter { return "No \(route.title.lowercased()) match the current filters." }
+        return "No \(route.title.lowercased()) found across your connected sources."
     }
 
     var body: some View {
@@ -160,14 +223,25 @@ struct LibraryBrowseView: View {
             if isLoading && items.isEmpty {
                 AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
-                LazyVGrid(columns: columns, spacing: 20) {
-                    ForEach(shown) { posterLink($0) }
+                VStack(alignment: .leading, spacing: 16) {
+                    // Active-filter summary (#367 macOS parity).
+                    if hasActiveFilter { activeFiltersRow }
+                    if shown.isEmpty {
+                        AetherEmptyState(glyph: "tray", title: "Nothing here", message: emptyMessage)
+                            .frame(maxWidth: .infinity).padding(.top, 24)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 20) {
+                            ForEach(shown) { posterLink($0) }
+                        }
+                    }
                 }
                 .padding(24)
             }
         }
         .cinematicBackground()
         .navigationTitle(route.title)
+        // Search within the category (#369) — client-side title match, no reload.
+        .searchable(text: $query, prompt: Text("Search your library"))
         .toolbar {
             ToolbarItem {
                 Menu {
