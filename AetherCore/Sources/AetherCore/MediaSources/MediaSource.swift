@@ -90,6 +90,23 @@ public protocol MediaSource: Sendable {
     /// Default: no-op.
     func markUnwatched(_ id: MediaID) async
 
+    /// Report the current playhead **to the server** so resume progress syncs
+    /// across clients and devices — not just inside Aether's local store. Called
+    /// on the periodic resume tick and on pause / stop. `paused` lets the server
+    /// distinguish an active session from a paused one (Plex `state`, Jellyfin
+    /// `IsPaused`). Best-effort + non-throwing: a failed report must never
+    /// disrupt playback or its teardown. Default: no-op for sources with no
+    /// server-side play state (Mock, local, SMB, DLNA).
+    func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async
+
+    /// The server's own "Continue Watching" list as resume points — Plex On
+    /// Deck, Jellyfin Resume. Lets a fresh device (or one with no local history)
+    /// surface in-progress titles and episodes straight from the server; the
+    /// read half of cross-device resume. Each point carries the server playhead
+    /// and last-played timestamp, merged into the local store latest-wins.
+    /// Best-effort + non-throwing. Default: none.
+    func serverResumePoints() async -> [ResumePoint]
+
     /// **Source-provided** skip segments (intro / recap / credits / commercial)
     /// for an item — Plex markers, Jellyfin MediaSegments. Drives Skip Intro /
     /// Skip Credits / Auto-Play-Next. Best-effort + non-throwing: returns `[]`
@@ -188,6 +205,12 @@ public extension MediaSource {
 
     /// Default: no server-side watch state to update. Plex / Jellyfin override.
     func markUnwatched(_ id: MediaID) async {}
+
+    /// Default: no server-side progress to report. Plex / Jellyfin override.
+    func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async {}
+
+    /// Default: no server-side resume list. Plex / Jellyfin override.
+    func serverResumePoints() async -> [ResumePoint] { [] }
 
     /// Default: no segment data. Plex / Jellyfin override.
     func segments(for id: MediaID) async -> [PlaybackSegment] { [] }

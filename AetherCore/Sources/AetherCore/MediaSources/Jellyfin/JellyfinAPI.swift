@@ -193,15 +193,28 @@ public enum JellyfinAPI {
             public let unplayedItemCount: Int?
             /// Whether the item is favorited (`IsFavorite`).
             public let isFavorite: Bool?
-            public init(played: Bool? = nil, unplayedItemCount: Int? = nil, isFavorite: Bool? = nil) {
+            /// Resume playhead in **ticks** (100-ns units; seconds × 10⁷).
+            /// `0` / absent ⇒ not in progress. JSON `PlaybackPositionTicks`.
+            public let playbackPositionTicks: Int64?
+            /// ISO-8601 timestamp the item was last played — the resume merge
+            /// timestamp (latest wins). JSON `LastPlayedDate`.
+            public let lastPlayedDate: String?
+            public init(
+                played: Bool? = nil, unplayedItemCount: Int? = nil, isFavorite: Bool? = nil,
+                playbackPositionTicks: Int64? = nil, lastPlayedDate: String? = nil
+            ) {
                 self.played = played
                 self.unplayedItemCount = unplayedItemCount
                 self.isFavorite = isFavorite
+                self.playbackPositionTicks = playbackPositionTicks
+                self.lastPlayedDate = lastPlayedDate
             }
             enum CodingKeys: String, CodingKey {
                 case played = "Played"
                 case unplayedItemCount = "UnplayedItemCount"
                 case isFavorite = "IsFavorite"
+                case playbackPositionTicks = "PlaybackPositionTicks"
+                case lastPlayedDate = "LastPlayedDate"
             }
         }
 

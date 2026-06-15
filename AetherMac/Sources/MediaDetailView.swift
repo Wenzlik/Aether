@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AetherCore
 
 /// Detail screen for a library item. Movies (and episodes) hydrate to expose
@@ -26,7 +27,8 @@ struct MediaDetailView: View {
     @State private var parentSeason: MediaItem?
     @State private var parentShow: MediaItem?
     @State private var isLoading = false
-    @State private var showTechnical = false
+    /// Cast rail collapses to the top billing until "Show All" (point 5).
+    @State private var showAllCast = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
     @State private var resumeAt: Double?
     /// Optimistic watched/favorite overrides so the buttons flip instantly.
@@ -41,53 +43,56 @@ struct MediaDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 26) {
                 parentLinks
                 header
                 if !item.kind.isContainer {
-                    playButtons
+                    primaryActions
                     controlsRow
-                    playbackOptions
+                    // Desktop two-column: the description takes the width, with a
+                    // right rail for Technical Details + the (collapsed) Playback
+                    // Options — using the horizontal space rather than a narrow
+                    // centre strip, and keeping the technical pickers out of the
+                    // primary flow.
+                    infoColumns
+                } else {
+                    descriptionBlock
                 }
-                if let overview = current.summary, !overview.isEmpty {
-                    Text(overview)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 720, alignment: .leading)
-                }
-                if !current.genres.isEmpty {
-                    Text(current.genres.joined(separator: " · "))
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                if !item.kind.isContainer {
-                    technicalSection
-                }
-                if !current.cast.isEmpty {
-                    castSection
-                }
-                if item.kind == .show {
-                    nextUpSection
-                }
-                if item.kind.isContainer {
-                    childrenSection
-                }
+                if !current.cast.isEmpty { castSection }
+                if item.kind == .show { nextUpSection }
+                if item.kind.isContainer { childrenSection }
             }
-            .padding(28)
-            .frame(maxWidth: 1040)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 56)
+            .padding(.vertical, 52)
+            // Left-anchored over the backdrop (Apple TV / Infuse hero), so the
+            // content sits where the scrim is darkest and the artwork breathes on
+            // the right — rather than a centred strip with empty margins.
+            .frame(maxWidth: 1360, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollContentBackground(.hidden)
         .background {
-            // iOS-style cinematic background: the title's **backdrop** fills the
-            // whole screen, crisp (aspect-fill) with the component's readability
-            // scrim — matching the other platforms. Only a poster fallback (no
-            // backdrop) gets blurred into atmosphere, exactly like iOS. Was
-            // hardcoded to blur 40, which washed even real backdrops into a faint,
-            // near-black wash (#20).
+            // The title's **backdrop** fills the screen (crisp; a poster fallback
+            // is blurred into atmosphere). Two scrims keep the content readable
+            // over bright/detailed artwork (Apple TV / Infuse are aggressive
+            // here): a strong LEFT→right fade darkens the whole content column,
+            // plus a top+bottom vertical fade for the title and description.
             let backdrop = current.backdropURL
-            CinematicArtworkBackground(
-                url: backdrop ?? current.posterURL,
-                blurRadius: backdrop != nil ? 0 : 40
-            )
+            ZStack {
+                CinematicArtworkBackground(
+                    url: backdrop ?? current.posterURL,
+                    blurRadius: backdrop != nil ? 0 : 40
+                )
+                LinearGradient(
+                    colors: [.black.opacity(0.92), .black.opacity(0.7),
+                             .black.opacity(0.3), .clear],
+                    startPoint: .leading, endPoint: .trailing
+                )
+                LinearGradient(
+                    colors: [.black.opacity(0.5), .clear, .black.opacity(0.55)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            }
             .ignoresSafeArea()
         }
         .navigationTitle(item.title)
@@ -134,17 +139,20 @@ struct MediaDetailView: View {
     private var header: some View {
         // No small poster — the title's artwork already fills the screen as the
         // backdrop (#20), so the thumbnail was redundant. Just the title + meta.
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
             // Title as the clearLogo wordmark when the source has one, else the
-            // title text (iOS-style "special text").
+            // title text (iOS-style "special text"). `.fit` so a wide logo scales
+            // within its box instead of overflowing onto the metadata below.
             if let logo = current.logoURL() {
-                CachedAsyncImage(url: logo)
-                    .frame(maxWidth: 420, maxHeight: 110, alignment: .leading)
+                CachedAsyncImage(url: logo, contentMode: .fit)
+                    .frame(maxWidth: 640, maxHeight: 200, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text(current.title).font(.system(size: 44, weight: .bold))
+                Text(current.title)
+                    .font(.system(size: 64, weight: .bold))
+                    .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 14) {
                 if let year = current.year { Text(String(year)) }
                 if let runtime = current.runtime { Text(DetailFormatting.runtime(runtime)) }
                 if let rating = current.contentRating { Text(rating) }
@@ -152,8 +160,9 @@ struct MediaDetailView: View {
                     Label(String(format: "%.1f", community), systemImage: "star.fill")
                 }
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            .font(.title2)
+            .foregroundStyle(.white.opacity(0.85))
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
             if let badge = DetailFormatting.hdrBadge(current.mediaInfo) {
                 Text(badge)
                     .font(.caption.bold())
@@ -166,30 +175,69 @@ struct MediaDetailView: View {
 
     // MARK: Play + controls
 
-    /// Resume (when a saved position exists) + Play From Beginning, mirroring iOS.
-    /// With no resume point it collapses to a single Play button.
+    /// The dominant action on the page. When partially watched, **Resume** leads
+    /// (primary) with **Restart** secondary; otherwise a single big **Play**.
     @ViewBuilder
-    private var playButtons: some View {
-        HStack(spacing: 12) {
-            if let resumeAt, resumeAt > 1 {
-                Button { Task { await session.play(current) } } label: {
-                    Label("Resume · \(timecode(resumeAt))", systemImage: "play.fill")
-                        .frame(maxWidth: 220)
+    private var primaryActions: some View {
+        HStack(spacing: 14) {
+            if isNetflixOnly {
+                // Netflix-only title — link out, no in-app playback (#360).
+                bigButton("Play on Netflix", systemImage: "play.fill", prominent: true) { playOnNetflix() }
+            } else if let resumeAt, resumeAt > 1 {
+                bigButton("Resume · \(timecode(resumeAt))", systemImage: "play.fill", prominent: true) {
+                    Task { await session.play(current) }
                 }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
-                Button { Task { await session.play(current, startAt: 0) } } label: {
-                    Label("Play from Beginning", systemImage: "gobackward")
+                bigButton("Restart", systemImage: "gobackward", prominent: false) {
+                    Task { await session.play(current, startAt: 0) }
                 }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
+                if ownedNetflixProvider != nil {
+                    bigButton("Play on Netflix", systemImage: "play.tv", prominent: false) { playOnNetflix() }
+                }
             } else {
-                Button { onPlay(current) } label: {
-                    Label("Play", systemImage: "play.fill").frame(maxWidth: 220)
+                bigButton("Play", systemImage: "play.fill", prominent: true) { onPlay(current) }
+                if ownedNetflixProvider != nil {
+                    bigButton("Play on Netflix", systemImage: "play.tv", prominent: false) { playOnNetflix() }
                 }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
             }
+        }
+    }
+
+    /// `true` when this is a Netflix-only title (no library source backs it).
+    private var isNetflixOnly: Bool {
+        if case .external = item.id.source { return true }
+        return false
+    }
+
+    /// The Netflix provider for an owned title (secondary action), or nil.
+    private var ownedNetflixProvider: ExternalProvider? {
+        guard !isNetflixOnly else { return nil }
+        return session.watchAvailability.netflix(forTMDb: current.guids.tmdb, isShow: current.kind == .show)
+    }
+
+    /// Open the title on Netflix (app or web) via the system browser (#360).
+    private func playOnNetflix() {
+        guard let url = NetflixLauncher.searchURL(title: current.title) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// An oversized action button — Play/Resume should immediately draw the eye
+    /// (Apple TV / Infuse presentation), so it's taller, wider, and bolder than a
+    /// standard control.
+    @ViewBuilder
+    private func bigButton(_ title: String, systemImage: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+        let label = Label(title, systemImage: systemImage)
+            .font(prominent ? .title2.weight(.bold) : .title3.weight(.semibold))
+            .frame(minWidth: prominent ? 340 : 170)
+            .padding(.vertical, prominent ? 14 : 10)
+        if prominent {
+            Button(action: action) { label }
+                .controlSize(.extraLarge)
+                .buttonStyle(.borderedProminent)
+                .tint(AetherMacTheme.accent)
+        } else {
+            Button(action: action) { label }
+                .controlSize(.extraLarge)
+                .buttonStyle(.bordered)
         }
     }
 
@@ -227,14 +275,59 @@ struct MediaDetailView: View {
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 
-    // MARK: Playback options (Audio / Subtitles / Quality)
+    // MARK: Description + two-column desktop layout
+
+    /// Overview + genres — allowed to run wide for easy reading (point 4).
+    @ViewBuilder
+    private var descriptionBlock: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let overview = current.summary, !overview.isEmpty {
+                Text(overview)
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineSpacing(5)
+                    .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
+            }
+            if !current.genres.isEmpty {
+                Text(current.genres.joined(separator: " · "))
+                    .font(.body).foregroundStyle(.white.opacity(0.7))
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+            }
+        }
+    }
+
+    /// Description on the left (wide), a Technical Details + Playback Options rail
+    /// on the right — collapses to a single column on narrow windows.
+    private var infoColumns: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 40) {
+                descriptionBlock.frame(maxWidth: 820, alignment: .leading)
+                infoSidebar.frame(width: 360)
+            }
+            VStack(alignment: .leading, spacing: 24) {
+                descriptionBlock
+                infoSidebar
+            }
+        }
+    }
+
+    /// Right rail: Technical Details (always shown — uses the desktop space) and
+    /// the collapsible, advanced Playback Options.
+    private var infoSidebar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            technicalCard
+            playbackOptionsSection
+        }
+    }
+
+    // MARK: Playback options (Audio / Subtitles / Quality) — advanced, collapsed
 
     @ViewBuilder
-    private var playbackOptions: some View {
+    private var playbackOptionsSection: some View {
         if working == nil && !item.kind.isContainer && isLoading {
             ProgressView().controlSize(.small)
         } else if let work = working {
-            GroupBox {
+            DisclosureGroup("Playback Options") {
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
                     if !work.audioTracks.isEmpty {
                         optionRow("Audio", systemImage: "waveform") {
@@ -267,8 +360,9 @@ struct MediaDetailView: View {
                         .labelsHidden()
                     }
                 }
+                .padding(.top, 6)
             }
-            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -313,7 +407,7 @@ struct MediaDetailView: View {
     // MARK: Technical details
 
     @ViewBuilder
-    private var technicalSection: some View {
+    private var technicalCard: some View {
         let lines = [
             DetailFormatting.videoLine(current.mediaInfo),
             DetailFormatting.audioLine(current.mediaInfo),
@@ -321,39 +415,67 @@ struct MediaDetailView: View {
             current.mediaInfo?.fileSizeBytes.map { "Size: \(DetailFormatting.fileSize($0))" }
         ].compactMap { $0 }
         if !lines.isEmpty {
-            DisclosureGroup("Technical Details", isExpanded: $showTechnical) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(lines, id: \.self) { Text($0) }
+            // Always shown in the right rail (the desktop has the space). A solid
+            // dark panel — not a faint material — so it reads as an intentional
+            // information panel rather than debug text bleeding into the backdrop.
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Technical Details")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                Divider().overlay(.white.opacity(0.15))
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(lines, id: \.self) { line in
+                        Text(line).font(.callout)
+                    }
                 }
-                .font(.callout.monospaced())
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(.white.opacity(0.82))
             }
-            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.black.opacity(0.45))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.white.opacity(0.12))
+            )
         }
     }
 
     // MARK: Cast
 
+    private static let castCap = 10
+
     private var castSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Cast").font(.title2.bold())
+        let cast = showAllCast ? current.cast : Array(current.cast.prefix(Self.castCap))
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Text("Cast").font(.title.bold())
+                if current.cast.count > Self.castCap {
+                    Button(showAllCast ? "Show Less" : "Show All Cast (\(current.cast.count))") {
+                        withAnimation(.easeInOut(duration: 0.2)) { showAllCast.toggle() }
+                    }
+                    .buttonStyle(.link)
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 16) {
-                    ForEach(current.cast) { member in
-                        VStack(spacing: 6) {
+                LazyHStack(alignment: .top, spacing: 18) {
+                    ForEach(cast) { member in
+                        VStack(spacing: 8) {
                             CachedAsyncImage(url: member.photoURL, aspectRatio: 1)
-                                .frame(width: 72, height: 72)
+                                .frame(width: 88, height: 88)
                                 .clipShape(Circle())
-                            Text(member.name).font(.caption).lineLimit(1)
+                            Text(member.name).font(.callout).lineLimit(1)
                             if let role = member.role {
-                                Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                Text(role).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
-                        .frame(width: 84)
+                        .frame(width: 104)
                     }
                 }
+                .padding(.vertical, 2)
             }
         }
     }

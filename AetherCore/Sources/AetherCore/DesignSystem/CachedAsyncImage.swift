@@ -18,6 +18,10 @@ import SwiftUI
 public struct CachedAsyncImage: View {
     public let url: URL?
     public let aspectRatio: CGFloat?
+    /// How the loaded image fills its frame when no `aspectRatio` is given.
+    /// `.fill` (default) preserves the cards/posters behaviour; `.fit` shows the
+    /// whole image (e.g. a clearLogo wordmark) so it can't overflow its frame.
+    public let contentMode: ContentMode
     /// Longest-edge ceiling for the local downsample. Pair with the server tier
     /// the `url` was minted at (e.g. `ArtworkTier.backdropLarge.maxPixel`) so a
     /// large hero isn't shrunk back below what was requested. Defaults to the
@@ -30,10 +34,12 @@ public struct CachedAsyncImage: View {
     public init(
         url: URL?,
         aspectRatio: CGFloat? = nil,
+        contentMode: ContentMode = .fill,
         maxPixel: CGFloat = AetherImageCache.defaultMaxPixel
     ) {
         self.url = url
         self.aspectRatio = aspectRatio
+        self.contentMode = contentMode
         self.maxPixel = maxPixel
     }
 
@@ -61,7 +67,7 @@ public struct CachedAsyncImage: View {
         if let image {
             Image(aetherImage: image)
                 .resizable()
-                .scaledToFill()
+                .aspectRatio(contentMode: contentMode)
         } else {
             skeleton
         }

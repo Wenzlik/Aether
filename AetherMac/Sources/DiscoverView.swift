@@ -13,14 +13,34 @@ struct DiscoverView: View {
     let session: MacSession
     var mode: Mode = .discover
 
-    @State private var rails: UnifiedRails = .empty
-    @State private var isLoading = false
+    /// Rails are cached on the session (survive sidebar tab switches, which
+    /// recreate this view), so a tab click repaints instantly instead of
+    /// reloading.
+    private var rails: UnifiedRails { session.homeRailsCache }
+
+    /// Netflix-only discovery rails (#360) — opt-in, loaded on demand.
+    @State private var netflixNew: [UnifiedMediaItem] = []
+    @State private var netflixTop: [UnifiedMediaItem] = []
+
+    /// Re-key the Netflix load when the toggle / region / show-only change.
+    private var netflixKey: String {
+        let p = session.streamingPreferences
+        return "\(p.netflixAvailabilityEnabled)-\(p.showNetflixOnlyTitles)-\(p.region ?? "auto")-\(session.libraryToken)"
+    }
 
     var body: some View {
         ScrollView {
-            if isLoading && rails.isEmpty {
-                AetherLoadingState(.rails(count: 3)).padding(.vertical, 24)
-            } else if rails.isEmpty {
+            if !rails.isEmpty {
+                content
+            } else if session.isLoadingRails || !session.didRestore {
+                // Starting up (sources still restoring) or actively loading —
+                // show the branded animated loader (iOS parity) rather than a
+                // static skeleton or a premature "connect a source" empty state,
+                // so a slow first load never reads as a frozen window.
+                AetherLoadingDots(caption: "Loading your library…")
+                    .frame(maxWidth: .infinity, minHeight: 320)
+                    .padding(.vertical, 60)
+            } else {
                 AetherEmptyState(
                     glyph: "sparkles",
                     title: "Nothing here yet",
@@ -28,34 +48,67 @@ struct DiscoverView: View {
                 )
                 .padding(40)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                LazyVStack(alignment: .leading, spacing: 32) {
-                    switch mode {
-                    case .home:
-                        continueWatchingRail
-                        rail("Recently Added", filtered(rails.recentlyAdded))
-                        rail("Recently Released", filtered(rails.recentlyReleased))
-                        rail("Top Rated", filtered(topRated))
-                    case .discover:
-                        // Curated "what should I watch" rails (#350): genre lanes
-                        // and the full Movies / TV Shows catalog dumps were removed
-                        // (Library already browses those + by genre). Discover now
-                        // mirrors mobile: a featured pick, New Releases, Top Rated,
-                        // and a serendipitous Picked for You.
-                        if let featured { featuredHero(featured) }
-                        rail("New Releases", newReleases)
-                        rail("Top Rated", filtered(topRated))
-                        rail("Picked for You", pickedForYou)
-                    }
-                }
-                .padding(.vertical, 24)
             }
         }
         .cinematicBackground()
         .navigationTitle(mode == .home ? "Home" : "Discover")
+        .toolbar {
+            // A spinner while a load/refresh is in flight gives feedback even
+            // when content is already on screen (the loader only shows over an
+            // empty view) — so a background revalidate never looks like a hang.
+            ToolbarItem {
+                if session.isLoadingRails { ProgressView().controlSize(.small) }
+            }
+        }
         // Reload when sources change AND after a player records a resume point,
-        // so Continue Watching reflects what was just played.
-        .task(id: "\(session.libraryToken)-\(session.resumeRevision)") { await load() }
+        // so Continue Watching reflects what was just played. The session cache
+        // makes this a no-op when nothing changed (instant on tab switch).
+        .task(id: "\(session.libraryToken)-\(session.resumeRevision)") {
+            await session.loadHomeRailsIfNeeded()
+        }
+        .task(id: netflixKey) { await loadNetflixRails() }
+    }
+
+    /// "New on Netflix" / "Top on Netflix" (movies), deduped against owned. No-op
+    /// unless the feature + "show Netflix-only" are on, or there's no TMDb key.
+    private func loadNetflixRails() async {
+        guard mode == .discover, session.watchAvailability.showsNetflixOnly else {
+            netflixNew = []; netflixTop = []
+            return
+        }
+        let owned = Set((rails.movies + rails.shows).compactMap(\.tmdbID))
+        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            Array(items.filter { $0.tmdbID.map { !owned.contains($0) } ?? true }.prefix(12))
+        }
+        netflixNew = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .newest))
+        netflixTop = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .topRated))
+    }
+
+    /// The loaded rails — the real content body.
+    @ViewBuilder
+    private var content: some View {
+        LazyVStack(alignment: .leading, spacing: 32) {
+            switch mode {
+            case .home:
+                continueWatchingRail
+                rail("Recently Added", filtered(rails.recentlyAdded))
+                rail("Recently Released", filtered(rails.recentlyReleased))
+                rail("Top Rated", filtered(topRated))
+            case .discover:
+                // Curated "what should I watch" rails (#350): genre lanes
+                // and the full Movies / TV Shows catalog dumps were removed
+                // (Library already browses those + by genre). Discover now
+                // mirrors mobile: a featured pick, New Releases, Top Rated,
+                // and a serendipitous Picked for You.
+                if let featured { featuredHero(featured) }
+                rail("New Releases", newReleases)
+                rail("Top Rated", filtered(topRated))
+                rail("Picked for You", pickedForYou)
+                if !netflixNew.isEmpty { rail("New on Netflix", netflixNew) }
+                if !netflixTop.isEmpty { rail("Top on Netflix", netflixTop) }
+            }
+        }
+        .padding(.vertical, 24)
     }
 
     /// The spotlight title for Discover — the highest-rated recently-added title
@@ -201,19 +254,6 @@ struct DiscoverView: View {
         }
     }
 
-    private func load() async {
-        guard session.hasAnySource else { rails = .empty; return }
-        // Skeleton only when we have nothing — a warm cache/snapshot paints
-        // instantly (parity with iOS, #197).
-        if rails.isEmpty { isLoading = true }
-        rails = await session.homeRails()
-        isLoading = false
-        // Stale-while-revalidate: refresh quietly in the background if stale.
-        if await session.isLibraryStale() {
-            let fresh = await session.homeRails(forceRefresh: true)
-            if !fresh.isEmpty { rails = fresh }
-        }
-    }
 }
 
 /// A landscape Continue Watching card: backdrop still, a resume progress bar,

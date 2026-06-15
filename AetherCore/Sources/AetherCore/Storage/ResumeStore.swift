@@ -92,6 +92,15 @@ public actor ResumeStore {
         }
     }
 
+    /// Drop the resume point for an item — used when it finishes (played to the
+    /// end / marked watched), so it stops appearing in Continue Watching and the
+    /// "Resume a second before the end" never happens. Persists to disk + iCloud.
+    public func clear(for id: MediaID) async {
+        guard points.removeValue(forKey: id) != nil else { return }
+        writeDiskIfPossible()
+        writeICloudIfPossible()
+    }
+
     // MARK: - Lifecycle
 
     /// Hydrate the in-memory store from disk + a one-shot iCloud read.
@@ -233,6 +242,9 @@ private struct WirePoint: Codable {
             param = udn
         case .local:
             kind = "local"
+        case .external(let id):
+            kind = "external"
+            param = id
         }
         self.sourceKind = kind
         self.sourceParam = param
@@ -264,6 +276,9 @@ private struct WirePoint: Codable {
             source = .dlna(udn: param)
         case "local":
             source = .local
+        case "external":
+            guard let param = sourceParam else { return nil }
+            source = .external(id: param)
         default:
             return nil
         }

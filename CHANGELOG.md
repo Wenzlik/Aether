@@ -4,14 +4,37 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-06-15 · "Draco"
+
 ### Added
 
+- **Primary Plex server** (#325 follow-up, all platforms incl. Apple TV) — with
+  more than one Plex server connected, choose which one **streams first** when a
+  title lives on several. Apple TV now also surfaces the full multi-server
+  manager (it previously showed only one server), and macOS gains a server
+  picker it didn't have. Settings ▸ Account ▸ Plex Servers.
+- **Netflix availability** (#360, opt-in, all platforms) — see where titles you
+  own are **also on Netflix** (a small "on Netflix" badge on posters + Detail),
+  and discover **Netflix-only** titles as posters in **Discover** ("New on
+  Netflix" / "Top on Netflix") and **Search**, with **Play on Netflix** linking
+  out to the app/web. Off by default; enabled in **Settings ▸ Streaming
+  Services** with a **Region** and a "show Netflix-only titles" switch (turn it
+  off to keep Discover/Search to what you own — owned titles still get the
+  badge). Powered by **TMDb Watch Providers** (data by JustWatch) — no new key.
+  Aether never streams Netflix; it only links out. On **tvOS** it's badge +
+  discovery only (no launch).
 - **Discover revamp** (#350, all platforms) — dropped the genre rails in favour of
   curated rails: **New Releases** and **Top Rated** (plus Picked for You). Discover
   now also hides **in-progress** titles, not just fully-watched ones — they live in
   Continue Watching.
 - **Library** (#351, all platforms) — **multi-select Year** filter and a compact
   **community-rating number** on poster cells.
+- **Cross-device resume via the media server** (#352, all platforms) — playback
+  progress now syncs through Plex/Jellyfin themselves, not just iCloud. The app
+  reports the playhead while playing (Plex timeline / Jellyfin Sessions, #353) and
+  seeds **Continue Watching** from the server's own resume list on load (Plex On
+  Deck / Jellyfin Resume, #354). This gives macOS cross-device resume despite
+  having no iCloud (Developer ID build), and works across non-Apple clients too.
 
 ### Changed — macOS parity & polish
 

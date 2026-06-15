@@ -5833,6 +5833,345 @@
           }
         }
       }
+    },
+    "Watch status": {
+      "comment": "A first-use hint label naming the watched-status (eye) icon in the Detail action row.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stav zhlédnutí"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус перегляду"
+          }
+        }
+      }
+    },
+    "Favorite": {
+      "comment": "A first-use hint label naming the favorite (heart) icon in the Detail action row.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oblíbené"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Улюблене"
+          }
+        }
+      }
+    },
+    "Tap an icon below — %@.": {
+      "comment": "A first-use hint for the Detail action icon row. The argument is a comma-separated list of the icon names.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klepněte na ikonu níže — %@."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Торкніться значка нижче — %@."
+          }
+        }
+      }
+    },
+    "Streaming Services": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streamovací služby"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стрімінгові сервіси"
+          }
+        }
+      }
+    },
+    "Show Netflix availability": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit dostupnost na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показувати доступність на Netflix"
+          }
+        }
+      }
+    },
+    "Mark titles you own that are also on Netflix, and surface Netflix-only titles in Discover and Search. Aether links out — it never streams Netflix.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Označí tituly z vaší knihovny, které jsou také na Netflixu, a zobrazí tituly dostupné jen na Netflixu v Objevování a Hledání. Aether jen odkáže ven — sám Netflix nepřehrává."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позначає наявні у вас тайтли, які також є на Netflix, і показує тайтли лише з Netflix у Огляді та Пошуку. Aether лише веде назовні — він ніколи не відтворює Netflix."
+          }
+        }
+      }
+    },
+    "Show Netflix-only titles": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit tituly jen z Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показувати тайтли лише з Netflix"
+          }
+        }
+      }
+    },
+    "Surface titles that aren't in your library but are on Netflix as posters in Discover and Search. Turn off to keep those screens to what you own — owned titles still get the badge.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazí tituly, které nemáte v knihovně, ale jsou na Netflixu, jako plakáty v Objevování a Hledání. Vypnutím ponecháte tyto obrazovky jen na tom, co vlastníte — vlastněné tituly si odznak ponechají."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показує тайтли, яких немає у вашій бібліотеці, але які є на Netflix, як постери в Огляді та Пошуку. Вимкніть, щоб залишити на цих екранах лише те, чим ви володієте — наявні тайтли все одно матимуть значок."
+          }
+        }
+      }
+    },
+    "Region": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Region"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Регіон"
+          }
+        }
+      }
+    },
+    "Add a TMDb token above to enable availability lookups.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro vyhledávání dostupnosti přidejte výše token TMDb."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додайте токен TMDb вище, щоб увімкнути пошук доступності."
+          }
+        }
+      }
+    },
+    "Availability data by JustWatch.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data o dostupnosti poskytuje JustWatch."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дані про доступність надає JustWatch."
+          }
+        }
+      }
+    },
+    "Follow device": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podle zařízení"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За пристроєм"
+          }
+        }
+      }
+    },
+    "New on Netflix": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nově na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новинки на Netflix"
+          }
+        }
+      }
+    },
+    "Top on Netflix": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nejlepší na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Топ на Netflix"
+          }
+        }
+      }
+    },
+    "Play on Netflix": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehrát na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дивитися на Netflix"
+          }
+        }
+      }
+    },
+    "On Netflix": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На Netflix"
+          }
+        }
+      }
+    },
+    "Available on Netflix": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dostupné na Netflixu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступно на Netflix"
+          }
+        }
+      }
+    },
+    "Aether links out to Netflix — it doesn't stream it here.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aether odkazuje na Netflix — nepřehrává ho zde."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aether веде на Netflix — він не відтворює його тут."
+          }
+        }
+      }
+    },
+    "Primary Server": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hlavní server"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основний сервер"
+          }
+        }
+      }
+    },
+    "The primary server streams first when a title is on more than one of your servers.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hlavní server se přehrává jako první, když je titul na více vašich serverech."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основний сервер відтворюється першим, коли тайтл є на кількох ваших серверах."
+          }
+        }
+      }
+    },
+    "Plex Servers": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servery Plex"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервери Plex"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

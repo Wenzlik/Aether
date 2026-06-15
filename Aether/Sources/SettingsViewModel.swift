@@ -31,6 +31,28 @@ final class SettingsViewModel {
     var appearance: AppearancePreferenceStore { session.appearance }
     var language: LanguagePreferenceStore { session.language }
 
+    /// Netflix-availability opt-in + region (#360). Exposed for direct binding;
+    /// the toggle / region setters below also drop the resolved-availability
+    /// cache so badges re-evaluate immediately.
+    var streamingPreferences: StreamingPreferencesStore { session.streamingPreferences }
+
+    func setNetflixAvailabilityEnabled(_ on: Bool) {
+        session.streamingPreferences.netflixAvailabilityEnabled = on
+        session.watchAvailability.invalidate()
+    }
+
+    func setNetflixRegion(_ region: String?) {
+        session.streamingPreferences.region = region
+        session.watchAvailability.invalidate()
+    }
+
+    /// The region used right now (the explicit choice, else the device region) —
+    /// for the disclosure row's trailing value.
+    var resolvedNetflixRegion: String {
+        let fallback = Locale.current.region?.identifier ?? "US"
+        return session.streamingPreferences.resolvedRegion(default: fallback)
+    }
+
     // MARK: - Account
 
     var isPlexSignedIn: Bool { session.isPlexSignedIn }
@@ -74,6 +96,18 @@ final class SettingsViewModel {
     /// can't be turned off — Sign Out disconnects Plex entirely.
     func setPlexServerEnabled(_ record: PlexServerRecord, enabled: Bool) async {
         await session.setPlexServerEnabled(record, enabled: enabled)
+    }
+
+    /// The currently-enabled Plex servers, primary first.
+    var plexServers: [PlexServerRecord] { session.plexServers }
+
+    /// The primary (first) enabled Plex server's id — what streams first when a
+    /// title is on several servers (#325 follow-up).
+    var primaryPlexServerID: String? { session.plexServers.first?.clientIdentifier }
+
+    /// Make a server the primary streaming source.
+    func setPrimaryPlexServer(_ record: PlexServerRecord) async {
+        await session.setPrimaryPlexServer(record)
     }
 
     // MARK: - Sources
@@ -183,16 +217,19 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Čeština! Aether now follows your device language, with an in-app Language switcher in Settings (more languages to come)",
-        "SMB goes quiet when you're off your home network — no errors, no empty rows — and reconnects automatically",
-        "Edit which SMB folders are scanned any time, not just at sign-in; posters match more reliably",
-        "Apple TV fixes — escape any empty screen with Back, tidier Settings toggles, and Collections hide when a source has none",
-        "Fixed a crash when dragging the WATCHED label-opacity slider"
+        "See where your titles are also on Netflix — plus Netflix-only picks in Discover & Search — with an opt-in toggle and Region in Settings (Aether links out; it never streams Netflix)",
+        "Resume across all your devices through Plex/Jellyfin themselves — Continue Watching now seeds from the server, so you pick up where you left off even on a new device",
+        "Discover, refreshed — New Releases and Top Rated rails, with in-progress titles kept in Continue Watching instead of cluttering Discover",
+        "Library: filter by year, with a quick community rating on each poster",
+        "macOS polish — Resume / Play from Beginning, Mark Watched, Favorite, episode navigation, and a sharper full-screen backdrop",
+        "Multiple Plex servers? Pick which one streams first in Settings ▸ Account ▸ Plex Servers — now on Apple TV and Mac too"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.7.3", codename: "Draco",
+                    summary: "Aether for macOS — a native Mac app (Apple Silicon) sharing the whole AetherCore stack, playing through libmpv, distributed as a notarized DMG. Watched marking now syncs across every connected source."),
         ReleaseNote(version: "0.7.0", codename: "Draco",
                     summary: "Native SMB (browse, downloads, a real player with track selection), audio-language Library filter, search by actor, rating sort, and a unified Settings."),
         ReleaseNote(version: "0.6.8", codename: "Cassiopeia",
@@ -257,6 +294,7 @@ final class SettingsViewModel {
             case .dlna:     kind = "dlna"
             case .mock:     kind = "mock"
             case .local:    kind = "local"
+            case .external: kind = "external"
             }
             return DiagnosticsSnapshot.SourceLine(id: "\(kind)-\(index)", name: source.displayName, status: "Signed in")
         }

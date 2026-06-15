@@ -249,6 +249,14 @@ extension MediaSourceID: Codable {
             self = .dlna(udn: parameter)
         case "local":
             self = .local
+        case "external":
+            guard let parameter else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .parameter, in: container,
+                    debugDescription: "external source missing id"
+                )
+            }
+            self = .external(id: parameter)
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind, in: container,
@@ -276,6 +284,9 @@ extension MediaSourceID: Codable {
             try container.encode(udn, forKey: .parameter)
         case .local:
             try container.encode("local", forKey: .kind)
+        case .external(let id):
+            try container.encode("external", forKey: .kind)
+            try container.encode(id, forKey: .parameter)
         }
     }
 }

@@ -61,8 +61,27 @@ private struct AccountsSettings: View {
         Form {
             Section("Plex") {
                 if session.isPlexConnected {
-                    ForEach(session.plexServerNames, id: \.self) { name in
-                        LabeledContent("Server", value: name)
+                    if session.plexServerRecords.count > 1 {
+                        // Multiple servers (#325) — choose which streams first when
+                        // a title is on more than one.
+                        Picker("Primary Server", selection: Binding(
+                            get: { session.primaryPlexServerID ?? "" },
+                            set: { id in
+                                if let record = session.plexServerRecords.first(where: { $0.clientIdentifier == id }) {
+                                    Task { await session.setPrimaryPlexServer(record) }
+                                }
+                            }
+                        )) {
+                            ForEach(session.plexServerRecords, id: \.clientIdentifier) { record in
+                                Text(record.name).tag(record.clientIdentifier)
+                            }
+                        }
+                        Text("The primary server streams first when a title is on more than one of your servers.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(session.plexServerNames, id: \.self) { name in
+                            LabeledContent("Server", value: name)
+                        }
                     }
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }
@@ -109,6 +128,11 @@ private struct GeneralSettings: View {
     /// impossible to type a key. Editing a local @State and committing on
     /// Return/blur keeps focus and only touches `session` once.
     @State private var tmdbDraft = ""
+    /// TMDb key editor state: the key is entered in a SecureField, verified
+    /// against TMDb before saving, then hidden (only "Configured" shows).
+    @State private var isEditingKey = false
+    @State private var keyCheck: KeyCheck = .idle
+    private enum KeyCheck { case idle, checking, valid, invalid, network }
 
     var body: some View {
         Form {
@@ -146,22 +170,118 @@ private struct GeneralSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Metadata") {
-                TextField("TMDb API Key", text: $tmdbDraft)
-                    .onSubmit { commitTMDb() }                  // apply on Enter
-                LabeledContent("Status", value: session.isTMDBConfigured ? "Configured" : "Not set")
-                Text("Used to fetch posters and descriptions for your local library. Leave blank to use the key built into the app, or paste your own from themoviedb.org. Press Return to apply.")
+                if session.isTMDBConfigured && !isEditingKey {
+                    // Configured → never show the key, just its state.
+                    LabeledContent("TMDb API Key") {
+                        Label("Configured", systemImage: "checkmark.seal.fill")
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.green)
+                    }
+                    Button("Change Key") { tmdbDraft = ""; keyCheck = .idle; isEditingKey = true }
+                    if !session.tmdbToken.isEmpty {
+                        Button("Remove Custom Key", role: .destructive) {
+                            session.tmdbToken = ""
+                            session.rescanLocalLibrary()
+                            keyCheck = .idle
+                        }
+                    }
+                } else {
+                    SecureField("TMDb API Key", text: $tmdbDraft)
+                        .onSubmit { Task { await verifyAndSave() } }
+                        .onChange(of: tmdbDraft) { _, _ in if keyCheck != .checking { keyCheck = .idle } }
+                    switch keyCheck {
+                    case .checking:
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Verifying with TMDb…").font(.caption).foregroundStyle(.secondary)
+                        }
+                    case .invalid:
+                        Label("Invalid key — TMDb rejected it.", systemImage: "xmark.octagon.fill")
+                            .font(.caption).foregroundStyle(.red)
+                    case .network:
+                        Label("Couldn't reach TMDb — check your connection.", systemImage: "wifi.exclamationmark")
+                            .font(.caption).foregroundStyle(.orange)
+                    case .valid, .idle:
+                        EmptyView()
+                    }
+                    HStack {
+                        Button(keyCheck == .checking ? "Verifying…" : "Verify & Save") {
+                            Task { await verifyAndSave() }
+                        }
+                        .disabled(tmdbDraft.trimmingCharacters(in: .whitespaces).isEmpty || keyCheck == .checking)
+                        if keyCheck == .network {
+                            Button("Save Anyway") { saveKey(tmdbDraft) }
+                        }
+                        if session.isTMDBConfigured {
+                            Button("Cancel") { isEditingKey = false; keyCheck = .idle; tmdbDraft = "" }
+                        }
+                    }
+                }
+                Text("Used to fetch posters and descriptions for your local library. Leave the built-in key, or paste your own from themoviedb.org — it's verified against TMDb before saving, then hidden.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+
+            // Netflix availability (#360) — opt-in, mirrors iOS Settings.
+            Section("Streaming Services") {
+                Toggle("Show Netflix availability", isOn: Binding(
+                    get: { session.streamingPreferences.netflixAvailabilityEnabled },
+                    set: { session.streamingPreferences.netflixAvailabilityEnabled = $0; session.watchAvailability.invalidate() }
+                ))
+                if session.streamingPreferences.netflixAvailabilityEnabled {
+                    Toggle("Show Netflix-only titles", isOn: Binding(
+                        get: { session.streamingPreferences.showNetflixOnlyTitles },
+                        set: { session.streamingPreferences.showNetflixOnlyTitles = $0 }
+                    ))
+                    Picker("Region", selection: Binding(
+                        get: { session.streamingPreferences.region ?? "" },
+                        set: { session.streamingPreferences.region = $0.isEmpty ? nil : $0; session.watchAvailability.invalidate() }
+                    )) {
+                        Text("Follow device").tag("")
+                        ForEach(Self.regions, id: \.self) { code in
+                            Text(regionName(code)).tag(code)
+                        }
+                    }
+                    if !session.isTMDBConfigured {
+                        Label("Add a TMDb key above to enable availability lookups.", systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                    Text("Mark titles you own that are also on Netflix, and surface Netflix-only titles in Discover and Search. Aether links out — it never streams Netflix. Availability data by JustWatch.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
-        .onAppear { tmdbDraft = session.tmdbToken }
     }
 
-    private func commitTMDb() {
-        let trimmed = tmdbDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != session.tmdbToken else { return }
-        session.tmdbToken = trimmed
+    /// Region codes Netflix availability can be checked against (mirrors iOS).
+    private static let regions = [
+        "US", "GB", "CA", "AU", "IE",
+        "CZ", "SK", "DE", "AT", "CH", "FR", "ES", "IT", "NL", "BE", "PL",
+        "SE", "NO", "DK", "FI", "PT", "BR", "MX", "JP", "KR", "IN"
+    ]
+    private func regionName(_ code: String) -> String {
+        session.appLocale.localizedString(forRegionCode: code) ?? code
+    }
+
+    /// Verify the entered key against TMDb, then save + hide it. Invalid keys are
+    /// rejected; a network error offers "Save Anyway".
+    private func verifyAndSave() async {
+        let key = tmdbDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        keyCheck = .checking
+        switch await session.validateTMDbKey(key) {
+        case .valid:        saveKey(key)
+        case .invalid:      keyCheck = .invalid
+        case .networkError, .empty: keyCheck = .network
+        }
+    }
+
+    private func saveKey(_ raw: String) {
+        session.tmdbToken = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         session.rescanLocalLibrary()
+        tmdbDraft = ""
+        isEditingKey = false
+        keyCheck = .idle
     }
 
     private func addFolder() {
@@ -275,6 +395,15 @@ private struct AboutSettings: View {
     private var build: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
+    /// Short git commit stamped into the build (AetherGitCommit) — the cross-
+    /// platform build identifier shown in About, like iOS. `nil` if unstamped.
+    private var commit: String? {
+        guard let c = Bundle.main.infoDictionary?["AetherGitCommit"] as? String,
+              !c.isEmpty, !c.hasPrefix("dev") else { return nil }
+        return c
+    }
+    /// Prefer the commit (stamped every build) over the local-only CFBundleVersion.
+    private var buildIdentifier: String { commit ?? build }
 
     private static let supportEmail = "support@aetherplayer.com"
     /// Personal address for "Contact the Creator" — reaches the developer directly.
@@ -287,7 +416,7 @@ private struct AboutSettings: View {
         Button {
             var body = ""
             if includeDiagnostics {
-                body = "\n\n—\nAether \(shortVersion) (\(build))\n\(Self.deviceModel()) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+                body = "\n\n—\nAether \(shortVersion) (\(buildIdentifier))\n\(Self.deviceModel()) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
             }
             var c = URLComponents()
             c.scheme = "mailto"
@@ -322,7 +451,7 @@ private struct AboutSettings: View {
             }
             Section("Version") {
                 LabeledContent("Version", value: shortVersion)
-                LabeledContent("Build", value: build)
+                LabeledContent("Build", value: buildIdentifier)
                 LabeledContent("Platform", value: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
             }
             Section("Storage") {

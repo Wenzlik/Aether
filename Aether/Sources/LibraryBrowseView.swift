@@ -38,6 +38,8 @@ struct LibraryBrowseView: View {
     /// from the user's Settings defaults.
     let playbackPreferences: PlaybackPreferencesStore?
 
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
     /// `true` once at least one `load()` has completed. Distinguishes "empty
@@ -474,7 +476,7 @@ struct LibraryBrowseView: View {
         )
 
         return NavigationLink(value: item) {
-            AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+            AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL, isWatched: item.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: item))
                 .frame(width: posterWidth)
         }
         .buttonStyle(.plain)
@@ -504,7 +506,7 @@ struct LibraryBrowseView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items.prefix(12)) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating, netflixLogoURL: availability?.netflixLogoURL(for: item))
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)

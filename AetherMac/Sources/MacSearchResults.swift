@@ -10,6 +10,8 @@ struct MacSearchResults: View {
     let query: String
 
     @State private var items: [UnifiedMediaItem] = []
+    /// Netflix-only matches for the query (#360), deduped against owned results.
+    @State private var netflixResults: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
@@ -17,9 +19,17 @@ struct MacSearchResults: View {
     private var results: [UnifiedMediaItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return items.filter {
+        let owned = items.filter {
             $0.title.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
         }
+        // Netflix-only last, deduped against owned by unified id + TMDb id.
+        let ownedTMDb = Set(owned.compactMap(\.tmdbID))
+        var seen = Set(owned.map(\.id))
+        let netflixOnly = netflixResults.filter {
+            guard seen.insert($0.id).inserted else { return false }
+            return $0.tmdbID.map { !ownedTMDb.contains($0) } ?? true
+        }
+        return owned + netflixOnly
     }
 
     var body: some View {
@@ -46,6 +56,22 @@ struct MacSearchResults: View {
         }
         .navigationTitle("Search")
         .task(id: session.libraryToken) { await load() }
+        .task(id: netflixSearchKey) { await loadNetflixMatches() }
+    }
+
+    /// Re-key the Netflix search on query + toggle/region changes.
+    private var netflixSearchKey: String {
+        let p = session.streamingPreferences
+        return "\(query)-\(p.netflixAvailabilityEnabled)-\(p.showNetflixOnlyTitles)-\(p.region ?? "auto")"
+    }
+
+    private func loadNetflixMatches() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard session.watchAvailability.showsNetflixOnly, trimmed.count >= 2 else {
+            netflixResults = []
+            return
+        }
+        netflixResults = await session.watchAvailability.netflixOnlySearch(trimmed)
     }
 
     private func load() async {

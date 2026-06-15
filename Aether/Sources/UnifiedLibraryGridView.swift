@@ -25,6 +25,7 @@ struct UnifiedLibraryGridView: View {
     /// App language (#320) — audio-language option names format in this locale,
     /// not the device's `Locale.current`.
     @Environment(\.locale) private var locale
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
     @State private var sort: LibrarySort = .titleAZ
     /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
     @State private var selectedGenre: String?
@@ -133,7 +134,7 @@ struct UnifiedLibraryGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(sortedItems) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating, netflixLogoURL: availability?.netflixLogoURL(for: item))
                             }
                             .buttonStyle(.plain)
                         }

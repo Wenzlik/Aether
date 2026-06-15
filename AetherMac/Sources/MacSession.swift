@@ -20,6 +20,9 @@ final class MacSession {
     private let jellyfinServerStore: JellyfinServerStore
 
     private(set) var plexSources: [PlexMediaSource] = []
+    /// The enabled Plex servers, primary first — kept so the Settings server
+    /// picker can reorder them (#325). Mirrors `plexSources`.
+    private(set) var plexServerRecords: [PlexServerRecord] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
 
     /// User-picked local/network folders scanned into a library, and the source
@@ -80,6 +83,38 @@ final class MacSession {
         let key = effectiveTMDBKey
         return key.isEmpty ? nil : TMDbClient(apiKey: key, api: api)
     }
+
+    /// Verify a TMDb key against the API (`/authentication`) before saving it, so
+    /// Settings can confirm it's valid and only then store + hide it.
+    func validateTMDbKey(_ key: String) async -> TMDbClient.ValidationResult {
+        await TMDbClient(apiKey: key.trimmingCharacters(in: .whitespacesAndNewlines), api: api).validate()
+    }
+
+    // MARK: - Netflix availability (#360)
+
+    /// Opt-in Netflix-availability prefs (toggle + region), shared store with iOS.
+    let streamingPreferences = StreamingPreferencesStore()
+
+    /// Shared 24h cache so the badge store + every Discover/Search lookup hit the
+    /// same warm entries.
+    private let watchProvidersCache = WatchProvidersService.Cache()
+
+    /// A service over the current TMDb key + resolved region, or nil with no key.
+    /// Region is the user's Settings choice, else the device region (availability
+    /// is about where you physically are, not the UI language).
+    func makeWatchProvidersService() -> WatchProvidersService? {
+        guard isTMDBConfigured else { return nil }
+        let fallback = Locale.current.region?.identifier ?? "US"
+        let region = streamingPreferences.resolvedRegion(default: fallback)
+        return WatchProvidersService(apiKey: effectiveTMDBKey, api: api, region: region, cache: watchProvidersCache)
+    }
+
+    /// `@MainActor`-bound badge store views read synchronously (see iOS).
+    @ObservationIgnored
+    private(set) lazy var watchAvailability = WatchAvailabilityStore(
+        preferences: streamingPreferences,
+        makeService: { [weak self] in self?.makeWatchProvidersService() }
+    )
 
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
@@ -181,7 +216,10 @@ final class MacSession {
 
     // MARK: Restore
 
-    private var didRestore = false
+    /// Whether `restore()` has finished wiring up persisted sources. Views use
+    /// it to keep showing a loading state during startup instead of flashing the
+    /// "connect a source" empty state before the keychain/store reads complete.
+    private(set) var didRestore = false
 
     func restore() async {
         // Guard against re-running when the library view reappears after the
@@ -189,9 +227,9 @@ final class MacSession {
         guard !didRestore else { return }
         didRestore = true
         await resumeStore.loadFromDisk()
-        await resumeStore.observeICloudChanges()   // live cross-device resume (#18)
         rebuildLocalSource()    // build the local library from persisted folders
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
+            plexServerRecords = records
             plexSources = records.map(makePlexSource)
             plexServerNames = records.map(\.name)
         }
@@ -199,6 +237,10 @@ final class MacSession {
             jellyfinSource = source
             jellyfinServerName = record.serverName
         }
+        // Sources are wired up now — bump the token so any view that ran its
+        // initial load before restore finished (Home/Discover race the library
+        // window's `.task`) reloads against the freshly restored sources.
+        libraryToken &+= 1
     }
 
     // MARK: Plex
@@ -211,6 +253,7 @@ final class MacSession {
         let records = PlexServerSelector().rankedSelections(from: resources).map { $0.makeRecord() }
         guard !records.isEmpty else { return }
         try? await plexServerStore.writeAll(records)
+        plexServerRecords = records
         plexSources = records.map(makePlexSource)
         plexServerNames = records.map(\.name)
         libraryToken &+= 1
@@ -219,8 +262,29 @@ final class MacSession {
     func signOutPlex() async {
         try? await keychain.removeValue(for: Self.plexTokenKey)
         try? await plexServerStore.clear()
+        plexServerRecords = []
         plexSources = []
         plexServerNames = []
+        libraryToken &+= 1
+    }
+
+    /// The primary (first) Plex server's id — streams first when a title is on
+    /// several servers (#325).
+    var primaryPlexServerID: String? { plexServerRecords.first?.clientIdentifier }
+
+    /// Make `record` the primary streaming server: move it to the front, persist,
+    /// and rebuild the live sources so the Unified Library prefers it. No-op when
+    /// it isn't enabled or is already primary.
+    func setPrimaryPlexServer(_ record: PlexServerRecord) async {
+        var records = plexServerRecords
+        guard let index = records.firstIndex(where: { $0.clientIdentifier == record.clientIdentifier }),
+              index != 0 else { return }
+        let chosen = records.remove(at: index)
+        records.insert(chosen, at: 0)
+        try? await plexServerStore.writeAll(records)
+        plexServerRecords = records
+        plexSources = records.map(makePlexSource)
+        plexServerNames = records.map(\.name)
         libraryToken &+= 1
     }
 
@@ -270,11 +334,11 @@ final class MacSession {
         UnifiedLibrary(sources: connectedSources)
     }
 
-    /// Resume store — documents-directory JSON as the local source of truth plus
-    /// **iCloud Key-Value Store** for cross-device sync (#18). The Mac shares the
-    /// iOS app's KVS (see the `ubiquity-kvstore-identifier` entitlement), so a
-    /// film started on iPhone/Apple TV shows as in-progress here and vice-versa.
-    let resumeStore = ResumeStore(diskURL: ResumeStore.defaultDiskURL(), icloud: .default)
+    /// Resume store — documents-directory JSON (same-device resume + Continue
+    /// Watching). No iCloud KVS: iCloud is App-Store/TestFlight-only and can't be
+    /// used by the Developer-ID Mac build, so cross-device resume will come via
+    /// server-side progress instead (#18).
+    let resumeStore = ResumeStore(diskURL: ResumeStore.defaultDiskURL())
 
     /// Maps a resolved playback URL → the item it came from, so the player
     /// window (which only carries a URL) can record resume keyed by `MediaID`.
@@ -310,6 +374,61 @@ final class MacSession {
 
     /// Close the inline player.
     func stopPlayback() { playbackURL = nil }
+
+    /// Shared Home/Discover rails, cached on the session. The sidebar's detail
+    /// pane recreates its view on every tab switch (NavigationSplitView), so a
+    /// per-view `@State` reloaded the rails on every click. Holding them here —
+    /// keyed by the library + resume generation — lets a tab switch repaint
+    /// instantly and only triggers a real load when something actually changed.
+    private(set) var homeRailsCache: UnifiedRails = .empty
+    /// True while the first rails load (empty cache) is in flight — drives the
+    /// loading animation. A background revalidate over existing rails doesn't set
+    /// it (content stays on screen).
+    private(set) var isLoadingRails = false
+    /// The `libraryToken-resumeRevision` the cache was built for; a mismatch means
+    /// sources or resume state changed and the cache is stale.
+    private var railsCacheKey = ""
+    /// Guards against overlapping loads (Home + Discover both fire `.task` on the
+    /// same generation) — a wasted concurrent fan-out, not a correctness issue.
+    private var railsLoadInFlight = false
+
+    private var currentRailsKey: String { "\(libraryToken)-\(resumeRevision)" }
+
+    /// Load the Home/Discover rails into `homeRailsCache` if they aren't already
+    /// current. A no-op (instant) when the cache matches the live generation, so
+    /// switching tabs doesn't reload. `force` always re-hits the servers.
+    func loadHomeRailsIfNeeded(force: Bool = false) async {
+        if !force, railsCacheKey == currentRailsKey, !homeRailsCache.isEmpty { return }
+        if railsLoadInFlight { return }
+        railsLoadInFlight = true
+        defer { railsLoadInFlight = false }
+        guard hasAnySource else {
+            homeRailsCache = .empty
+            railsCacheKey = currentRailsKey
+            return
+        }
+        if homeRailsCache.isEmpty { isLoadingRails = true }
+        defer { isLoadingRails = false }
+        let library = makeLibrary()
+        let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: force)
+        // Don't blank existing rails on a transient empty result.
+        if !built.isEmpty || homeRailsCache.isEmpty { homeRailsCache = built }
+        railsCacheKey = currentRailsKey
+        AetherImageCache.shared.prefetch(
+            built.recentlyAdded.map(\.posterURL)
+                + built.recentlyReleased.map(\.posterURL)
+                + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+        )
+        // Stale-while-revalidate: refresh quietly in the background if the
+        // snapshot is past its window (also seeds cross-device server resume,
+        // which is kept off the cold path for speed).
+        guard !force, await isLibraryStale() else { return }
+        let fresh = await library.homeRails(resumeStore: resumeStore, forceRefresh: true)
+        if !fresh.isEmpty {
+            homeRailsCache = fresh
+            railsCacheKey = currentRailsKey
+        }
+    }
 
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
     /// Served from the shared cache/snapshot instantly; pass `forceRefresh` to
@@ -356,6 +475,24 @@ final class MacSession {
         libraryToken &+= 1   // refresh watched badges
     }
 
+    /// Source skip segments (intro / recap / credits) for the player's Skip
+    /// Intro / Skip Credits + Auto-Play-Next. Empty when the source has none.
+    func segments(for item: MediaItem) async -> [PlaybackSegment] {
+        await source(for: item)?.segments(for: item.id) ?? []
+    }
+
+    /// The next episode after `item` in its season/show, for Auto-Play-Next.
+    func nextEpisode(after item: MediaItem) async -> MediaItem? {
+        await source(for: item)?.nextEpisode(after: item.id)
+    }
+
+    /// Forget an item's resume point — called when it finishes so it leaves
+    /// Continue Watching and never offers "resume" a second before the end.
+    func clearResume(for item: MediaItem) async {
+        await resumeStore.clear(for: item.id)
+        resumeRevision &+= 1
+    }
+
     /// Whether the item's source supports favorites (Plex/Jellyfin do; local no).
     func canFavorite(_ item: MediaItem) -> Bool {
         source(for: item)?.supportsFavorites ?? false
@@ -369,13 +506,23 @@ final class MacSession {
     }
 
     /// Record a playhead position for an item. `committing` (pause/close) also
-    /// pushes to iCloud KVS; the periodic tick passes `false`.
-    func recordResume(for item: MediaItem, seconds: Double, committing: Bool) async {
+    /// pushes to iCloud KVS; the periodic tick passes `false`. Also reports the
+    /// playhead to the item's server (Plex timeline / Jellyfin Sessions) so
+    /// resume syncs cross-device — there's no iCloud on the Developer ID Mac
+    /// build, so the server is the only cross-device path here. Best-effort.
+    func recordResume(
+        for item: MediaItem, seconds: Double, committing: Bool,
+        durationSeconds: Double? = nil, paused: Bool = false
+    ) async {
         await resumeStore.record(
             ResumePoint(mediaID: item.id, position: .seconds(seconds)),
             committing: committing
         )
         resumeRevision &+= 1
+        let duration = durationSeconds.map { Duration.seconds($0) }
+        await source(for: item)?.recordProgress(
+            item.id, position: .seconds(seconds), duration: duration, paused: paused
+        )
     }
 
     /// Fully hydrate a browse item — Plex/Jellyfin list items carry no track or

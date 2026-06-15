@@ -302,6 +302,12 @@ public enum PlexAPI {
         /// Number of times the user has played this item. `>= 1` ⇒ watched.
         /// Plex includes it on list + detail by default. JSON key `viewCount`.
         public let viewCount: Int?
+        /// Resume offset in **milliseconds** — the server's playhead for an
+        /// in-progress item. `0` / absent ⇒ not in progress. JSON `viewOffset`.
+        public let viewOffset: Int?
+        /// Epoch seconds the item was last played — the resume timestamp, used
+        /// to merge server vs. local progress (latest wins). JSON `lastViewedAt`.
+        public let lastViewedAt: Int?
         /// Intro / credits / commercial markers — only returned on the detail
         /// endpoint with `includeMarkers=1`. JSON key capital `Marker`.
         public let markers: [MarkerEntry]?
@@ -456,6 +462,8 @@ public enum PlexAPI {
             media: [Media]? = nil,
             externalGuids: [GuidEntry]? = nil,
             viewCount: Int? = nil,
+            viewOffset: Int? = nil,
+            lastViewedAt: Int? = nil,
             markers: [MarkerEntry]? = nil,
             childCount: Int? = nil,
             leafCount: Int? = nil,
@@ -484,6 +492,8 @@ public enum PlexAPI {
             self.media = media
             self.externalGuids = externalGuids
             self.viewCount = viewCount
+            self.viewOffset = viewOffset
+            self.lastViewedAt = lastViewedAt
             self.markers = markers
             self.childCount = childCount
             self.leafCount = leafCount
@@ -617,7 +627,7 @@ public enum PlexAPI {
 
         enum CodingKeys: String, CodingKey {
             case ratingKey, type, title, summary, year, duration, thumb, art
-            case grandparentTitle, parentIndex, parentRatingKey, index, viewCount
+            case grandparentTitle, parentIndex, parentRatingKey, index, viewCount, viewOffset, lastViewedAt
             case childCount, leafCount, viewedLeafCount, addedAt, originallyAvailableAt, audienceRating, rating
             case contentRating
             case media = "Media"

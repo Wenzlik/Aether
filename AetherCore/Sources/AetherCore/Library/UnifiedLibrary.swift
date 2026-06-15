@@ -347,6 +347,21 @@ public actor UnifiedLibrary {
         async let showsTask = unifiedItems(kind: .show, forceRefresh: forceRefresh)
         let movies = await moviesTask
         let shows = await showsTask
+        // Seed the resume store from each source's server-side "Continue
+        // Watching" list (Plex On Deck, Jellyfin Resume) so progress made on
+        // other devices surfaces here even with no local history — the
+        // cross-device read path, the only one macOS has (no iCloud). Merge is
+        // latest-`updatedAt`-wins, so a server point never clobbers a fresher
+        // local one.
+        //
+        // Only on a forced refresh — i.e. the background stale-while-revalidate
+        // pass, never the cold cached paint. A network round-trip here would
+        // make the first Home/Discover render wait on the servers while the
+        // catalog is already cached (parity with iOS, which paints from cache
+        // then revalidates). The seeded points are written to the resume store
+        // (and disk), so they surface on the revalidate that re-rendered us and
+        // instantly on the next launch.
+        if forceRefresh { await seedServerResume(into: resumeStore) }
 
         var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
         for unified in movies + shows {
@@ -406,6 +421,22 @@ public actor UnifiedLibrary {
             movieCount: movies.count,
             showCount: shows.count
         )
+    }
+
+    /// Pull each source's server-side resume list and merge it into the local
+    /// store (latest-`updatedAt`-wins). Fans out across sources; a slow or
+    /// failing source can't block the others. Best-effort throughout.
+    private func seedServerResume(into resumeStore: ResumeStore) async {
+        await withTaskGroup(of: [ResumePoint].self) { group in
+            for source in sources {
+                group.addTask { await source.serverResumePoints() }
+            }
+            for await points in group {
+                for point in points {
+                    await resumeStore.record(point, committing: false)
+                }
+            }
+        }
     }
 
     /// The most-recently-watched in-progress **episode per show**, resolved from

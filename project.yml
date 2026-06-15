@@ -45,7 +45,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.7.3"
+    MARKETING_VERSION: "0.7.5"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -255,6 +255,10 @@ targets:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Short git commit, stamped into the built Info.plist by the "Stamp git
+        # commit" phase below — the build identifier shown in Settings ▸ About
+        # (CFBundleVersion is "1" on local builds). Default "dev" if git is absent.
+        AetherGitCommit: dev
         # TMDb key baked in at build (from Config/App.xcconfig / Xcode Cloud).
         TMDBAPIKey: "$(TMDB_API_KEY)"
         # Supported UI languages — Czech + English (in-app switcher in Settings,
@@ -280,15 +284,22 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - mkv
-    # iCloud Key-Value Store for cross-device resume (#18). The identifier is set
-    # to the **iOS** bundle id (not the Mac's own cz.zmrhal.aether.mac) so the Mac
-    # joins the SAME key-value store as iPhone/Apple TV/Vision Pro — a film started
-    # on one device shows as in-progress on the Mac and vice-versa. Requires the
-    # iCloud (Key-value storage) capability on the cz.zmrhal.aether.mac App ID.
+    # Hardened-runtime entitlements (required for notarized Developer ID
+    # distribution). The bundled mpv stack uses **LuaJIT**, which JIT-compiles, so
+    # the hardened runtime needs allow-jit + allow-unsigned-executable-memory;
+    # disable-library-validation lets the app load the bundled libmpv/ffmpeg dylibs
+    # (re-signed with our cert in the post-build phase). Same set IINA uses.
+    #
+    # NB: NO iCloud entitlement — iCloud (KVS) is App-Store/TestFlight-only and
+    # can't be used by a Developer-ID app, so macOS cross-device resume goes via
+    # server-side progress instead (#18). It also can't be ad-hoc signed, which
+    # was blocking the archive.
     entitlements:
       path: AetherMac/SupportingFiles/AetherMac.entitlements
       properties:
-        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)cz.zmrhal.aether
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.cs.allow-unsigned-executable-memory: true
+        com.apple.security.cs.disable-library-validation: true
     # TMDb key for Local Library metadata matching (#210), injected from
     # Config/App.xcconfig (gitignored Secrets) / Xcode Cloud — same as iOS.
     # Empty in clean checkouts just disables matching; users can also set a key
@@ -301,6 +312,21 @@ targets:
     # @executable_path/../Frameworks, so it runs on Macs without Homebrew (Xcode
     # Cloud archives, end users). dylibbundler comes from scripts/fetch_mpv.sh.
     postBuildScripts:
+      # Stamp the short git commit into the built Info.plist (AetherGitCommit) so
+      # the build carries a clear identifier even when CFBundleVersion is "1".
+      # Best-effort: "dev" if git is unavailable; never fails the build.
+      - name: Stamp git commit
+        basedOnDependencyAnalysis: false
+        script: |
+          set +e
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          [ -f "$PLIST" ] || exit 0
+          HASH=$(git -C "$SRCROOT" rev-parse --short HEAD 2>/dev/null)
+          [ -z "$HASH" ] && HASH="dev"
+          if ! git -C "$SRCROOT" diff --quiet HEAD 2>/dev/null; then HASH="${HASH}+"; fi
+          /usr/libexec/PlistBuddy -c "Set :AetherGitCommit ${HASH}" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :AetherGitCommit string ${HASH}" "$PLIST"
+          exit 0
       - name: Bundle libmpv into app
         basedOnDependencyAnalysis: false
         script: |
@@ -318,6 +344,18 @@ targets:
           mkdir -p "$FW"
           dylibbundler -of -cd -b -x "$BIN" -d "$FW" \
             -p "@executable_path/../Frameworks/" -i /usr/lib -i /System/Library
+          # Collapse duplicate LC_RPATH entries. Across incremental (non-clean)
+          # builds dylibbundler can re-add @executable_path/../Frameworks to an
+          # already-bundled dylib (libmpv ends up with it twice), and macOS 15+/26
+          # dyld REJECTS loading a dylib with a duplicate LC_RPATH ("Library not
+          # loaded … duplicate LC_RPATH") — the app then can't launch. Strip the
+          # extras so exactly one remains, before signing.
+          RP="@executable_path/../Frameworks/"
+          find "$FW" -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
+            while [ "$(otool -l "$lib" | grep -Fc "path ${RP} ")" -gt 1 ]; do
+              install_name_tool -delete_rpath "$RP" "$lib"
+            done
+          done
           # dylibbundler ad-hoc-signs the main binary; re-sign the bundled dylibs
           # with the real identity (Xcode signs the app bundle, not these). Dev
           # builds (signing off) just skip it and run unsigned locally.
@@ -335,6 +373,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cz.zmrhal.aether.mac
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8PW5FWH7P2
+        # Hardened runtime — required for Apple notarization of the Developer ID
+        # build. The app + bundled dylibs are signed with --options runtime.
+        ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Dev slice: not sandboxed yet, so a user-picked / Finder-opened file
         # plays without security-scoped bookmarks. App Store sandbox +

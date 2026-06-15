@@ -1048,6 +1048,46 @@ public actor PlexMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    /// Report the playhead to Plex via the timeline endpoint, so resume progress
+    /// syncs to Plex and every other client. `time` / `duration` are in
+    /// milliseconds; `state` is `playing` / `paused` / `stopped`. Best-effort:
+    /// a failed report is swallowed so it never disrupts playback teardown.
+    public func recordProgress(_ id: MediaID, position: Duration, duration: Duration?, paused: Bool) async {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return }
+        func ms(_ d: Duration) -> Int { Int((Self.seconds(d) * 1000).rounded()) }
+        var items = [
+            URLQueryItem(name: "ratingKey", value: id.rawValue),
+            URLQueryItem(name: "key", value: "/library/metadata/\(id.rawValue)"),
+            URLQueryItem(name: "state", value: paused ? "paused" : "playing"),
+            URLQueryItem(name: "time", value: String(ms(position))),
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
+        ]
+        if let duration { items.append(URLQueryItem(name: "duration", value: String(ms(duration)))) }
+        let request = request(base: base, path: "/:/timeline", queryItems: items)
+        _ = try? await api.data(for: request)
+    }
+
+    /// Plex's own On Deck list (`GET /library/onDeck`) as resume points — the
+    /// server's curated "Continue Watching", so a fresh device surfaces
+    /// in-progress titles/episodes without local history. `viewOffset` is the
+    /// playhead (ms); `lastViewedAt` the merge timestamp. Best-effort.
+    public func serverResumePoints() async -> [ResumePoint] {
+        guard let base = try? await resolveBaseURL() else { return [] }
+        let request = request(base: base, path: "/library/onDeck")
+        guard let response = try? await api.decode(
+            PlexAPI.LibraryItemsResponse.self, from: request, decoder: decoder
+        ) else { return [] }
+        return (response.mediaContainer.metadata ?? []).compactMap { dto in
+            guard let offsetMs = dto.viewOffset, offsetMs > 0 else { return nil }
+            let updatedAt = dto.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) } ?? Date()
+            return ResumePoint(
+                mediaID: MediaID(source: id, rawValue: dto.ratingKey),
+                position: .milliseconds(offsetMs),
+                updatedAt: updatedAt
+            )
+        }
+    }
+
     // MARK: - Stream URL resolution (direct play vs transcode)
 
     /// Containers AVPlayer opens natively. Anything outside this set goes

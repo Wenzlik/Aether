@@ -29,8 +29,23 @@ struct MpvPlayerScreen: View {
                 }
                 .transition(.opacity)
             }
+
+            // Skip Intro / Skip Credits + Up Next — shown even when the control
+            // bar is hidden (they're the primary action at those moments).
+            if let remaining = model.upNextRemaining, let next = model.nextItem {
+                upNextCard(remaining: remaining, next: next)
+            } else if let skip = model.activeSkip {
+                skipButton(skip)
+            }
         }
-        .onAppear { model.load(url, session: session, item: item); scheduleHide() }
+        .onAppear {
+            // Auto-Play-Next swaps the window's playback URL; finishing with no
+            // next (or Auto-Play-Next off) closes the player.
+            model.onAdvance = { next in Task { await session?.play(next) } }
+            model.onFinished = { onClose?() }
+            model.load(url, session: session, item: item)
+            scheduleHide()
+        }
         .onDisappear { model.stop() }
         .onChange(of: url) { _, newURL in model.load(newURL, session: session, item: item) }
         .contentShape(Rectangle())
@@ -115,6 +130,58 @@ struct MpvPlayerScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(20)
         .frame(maxWidth: 900)
+    }
+
+    // MARK: Skip + Up Next
+
+    /// Floating "Skip Intro" / "Skip Credits" pill, bottom-trailing.
+    private func skipButton(_ seg: PlaybackSegment) -> some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button { model.skipActiveSegment() } label: {
+                    Label(seg.kind == .credits ? "Skip Credits" : "Skip Intro",
+                          systemImage: "forward.end.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .padding(.horizontal, 18).padding(.vertical, 11)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.15)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.trailing, 32)
+        .padding(.bottom, 130)   // clear the floating control bar
+    }
+
+    /// Bottom-trailing "Up Next" card with a live countdown.
+    private func upNextCard(remaining: Int, next: MediaItem) -> some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Up Next").font(.caption).foregroundStyle(.secondary)
+                    Text(next.displayTitle).font(.headline).lineLimit(2).foregroundStyle(.white)
+                    Text("Starting in \(remaining)s").font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Button { Task { await model.playNext() } } label: {
+                            Label("Play Now", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Dismiss") { model.cancelCountdown() }
+                            .buttonStyle(.bordered)
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(16)
+                .frame(maxWidth: 360, alignment: .leading)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .padding(.trailing, 32)
+        .padding(.bottom, 130)
     }
 
     private func transportButton(_ symbol: String, size: CGFloat = 18, action: @escaping () -> Void) -> some View {

@@ -138,6 +138,8 @@ struct DetailView: View {
     /// source that has the title (not just the one Detail is acting on), so a
     /// movie on both Plex and Jellyfin stays in sync (#232 follow-up).
     @Environment(AppSession.self) private var appSession
+    /// For the "Play on Netflix" link-out (#360).
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
@@ -552,6 +554,13 @@ struct DetailView: View {
                     }
                     .frame(maxWidth: wideColumnWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Episodes have no rail between this column and Cast & Crew, so
+                    // make the (full-width) column a focus section → Up from any
+                    // cast card lands here at any scroll offset (#359). Containers
+                    // (seasons) opt out: their episodes rail already brackets cast,
+                    // and the nested Next-Up section (#266) must stay the rail's Up
+                    // target rather than being shadowed by an outer column section.
+                    .aetherDetailFocusSection(when: !item.kind.isContainer)
                     .padding(.horizontal, AetherDesign.Spacing.xl)
 
                     // Seasons / Episodes rail breaks out of the left column on
@@ -734,22 +743,23 @@ struct DetailView: View {
                 synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
+            // Each focusable section that neighbours the More Like This / Cast
+            // rails below is a full-width focus column, so Up/Down from any rail
+            // card lands cleanly above/below at any scroll offset (#359).
             if availableSources.count > 1 {
                 availableSourcesSection
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .aetherDetailFocusSection()
+                    .aetherDetailColumn()
             }
             #if !os(tvOS)
             if current.mediaInfo != nil {
                 technicalDetailsSection
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .aetherDetailFocusSection()
+                    .aetherDetailColumn()
             }
             #endif
             relatedRail
             if current.streamURL != nil {
                 playbackSection
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .aetherDetailColumn()
             }
             // Cast & Crew last — below Related (#247).
             castSection
@@ -843,6 +853,14 @@ struct DetailView: View {
             .frame(maxWidth: movieHeroContentWidth, alignment: .leading)
         }
         .frame(width: size.width, height: movieHeroHeight(size), alignment: .bottomLeading)
+        // tvOS: the hero is a full-width focus section so Up from the first
+        // below-hero rail (More Like This) reaches the action row at ANY scroll
+        // offset — section-to-section focus uses the section *frame* (full width
+        // here), not the actions' capped geometry. This covers the single-source
+        // movie with no Available Sources, where the hero is the rail's nearest
+        // focusable neighbour (#359). No-op off tvOS → the visionOS hero (and its
+        // first-use hint, #355) is untouched.
+        .aetherDetailFocusSection()
     }
 
     /// Bottom-anchored dark gradient — keeps the embedded content readable in
@@ -901,7 +919,8 @@ struct DetailView: View {
                                 AetherCard.poster(
                                     title: rel.title,
                                     posterURL: rel.posterURL,
-                                    isWatched: rel.isWatched
+                                    isWatched: rel.isWatched,
+                                    netflixLogoURL: appSession.watchAvailability.netflixLogoURL(for: rel)
                                 )
                                 .frame(width: relatedPosterWidth)
                             }
@@ -1319,9 +1338,12 @@ struct DetailView: View {
                 }
                 relatedRail
                 seriesDetailsSection
+                // Full-width focus column so Down from any More Like This card
+                // lands here at any scroll offset — the section above the rail is
+                // the seasons rail (already full-width); below is this (#359).
                 if availableSources.count > 1 {
                     availableSourcesSection
-                        .frame(maxWidth: 720, alignment: .leading)
+                        .aetherDetailColumn()
                 }
             }
         }
@@ -2146,10 +2168,17 @@ struct DetailView: View {
                 compactActionHint
                 #endif
             }
+        } else if isNetflixOnly {
+            netflixOnlyActions
         } else {
             unavailableState
         }
     }
+
+    /// Width cap for the first-use caption — narrower than the 720 content cap
+    /// because it's a caption, not a content block; keeps the trailing "Got it"
+    /// beside the text on the wide visionOS/iPad column (#355).
+    private var hintMaxWidth: CGFloat { 480 }
 
     /// First-use discoverability for the bare icon row (§4, "bare + first-use
     /// hint"): a one-time caption naming the icons that are actually present,
@@ -2163,7 +2192,11 @@ struct DetailView: View {
                 Image(systemName: "hand.tap")
                     .font(.caption2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
-                Text(items.joined(separator: " · "))
+                // Lead-in prose ("Tap an icon below — …") shifts the labels to the
+                // right so none sits directly under its icon — the eye used to sit
+                // above the word "Watch status" and read as a duplicate control
+                // (#355). It's a sentence, not a column of captions.
+                Text("Tap an icon below — \(items.joined(separator: ", ")).")
                     .font(AetherDesign.Typography.caption)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2174,6 +2207,12 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                     .premiumFocus()
             }
+            // Cap the caption width so on the spacious visionOS/iPad layout the
+            // trailing "Got it" no longer floats out to the centre of the wide
+            // content column (#355) — it stays beside the text. On compact iPhone
+            // (column < cap) this is a no-op, so that already-correct layout is
+            // untouched.
+            .frame(maxWidth: hintMaxWidth, alignment: .leading)
             .padding(.top, AetherDesign.Spacing.xxs)
             .transition(.opacity)
         }
@@ -2181,12 +2220,17 @@ struct DetailView: View {
 
     /// Labels for whichever compact icons are currently visible, left-to-right.
     private var compactActionHintItems: [String] {
+        // Localized so the joined caption reads in the user's language (the items
+        // are interpolated into a String, so they must be resolved here rather
+        // than relying on SwiftUI's literal auto-localization).
         var items: [String] = []
-        if shouldShowDownloadControl { items.append("Download") }
-        if source != nil { items.append("Watch status") }
-        if source?.supportsFavorites == true { items.append("Favorite") }
-        if availableSources.count > 1 { items.append("Source") }
-        if current.mediaInfo != nil { items.append("Details") }
+        if shouldShowDownloadControl { items.append(String(localized: "Download")) }
+        if source != nil { items.append(String(localized: "Watch status")) }
+        if source?.supportsFavorites == true { items.append(String(localized: "Favorite")) }
+        // "Source" intentionally absent — switching now lives only in the
+        // "Available Sources" section, not the icon row (#356).
+        if current.mediaInfo != nil { items.append(String(localized: "Details")) }
+        if ownedNetflixProvider != nil && NetflixLauncher.canLaunch { items.append(String(localized: "Play on Netflix")) }
         return items
     }
 
@@ -2223,13 +2267,22 @@ struct DetailView: View {
                     Task { await toggleFavorite() }
                 }
             }
-            if availableSources.count > 1 {
-                sourceMenuButton
-            }
+            // Source switching is not a tertiary icon here: it lived as a cryptic,
+            // width-shifting, blue-tinted glyph that collided with "blue = active"
+            // (#356). The dedicated "Available Sources" section in the body is the
+            // single, labelled home for it (always present when count > 1).
             if current.mediaInfo != nil {
                 AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                     dismissIconHint()
                     presentedSelector = .technicalDetails
+                }
+            }
+            // "Also on Netflix" (#360): a secondary link-out for an owned title
+            // that's also on Netflix. Launch-capable platforms only (not tvOS).
+            if ownedNetflixProvider != nil && NetflixLauncher.canLaunch {
+                AetherIconButton(systemImage: "play.tv", accessibilityLabel: "Play on Netflix") {
+                    dismissIconHint()
+                    playOnNetflix()
                 }
             }
             #if !os(tvOS)
@@ -2255,28 +2308,6 @@ struct DetailView: View {
         }
     }
 
-    /// Source switcher as a compact icon `Menu` (only shown when the title is on
-    /// more than one source). Mirrors the "Available Sources" section's switching.
-    private var sourceMenuButton: some View {
-        Menu {
-            ForEach(availableSources) { src in
-                Button {
-                    selectSource(src)
-                } label: {
-                    if src.item.id == activeItem.id {
-                        Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(src.serverName ?? src.kind.displayName)
-                    }
-                }
-                .disabled(!src.playable)
-            }
-        } label: {
-            AetherIconCircleLabel(systemImage: "rectangle.2.swap")
-        }
-        .accessibilityLabel("Switch source")
-    }
-
     /// Download as a compact icon `Menu`: the glyph reflects the current state,
     /// and the menu offers the state-appropriate actions (download / pause /
     /// resume / cancel / delete / retry), with the live status as a header.
@@ -2289,6 +2320,11 @@ struct DetailView: View {
                 isActive: isDownloaded
             )
         }
+        // Strip the Menu's default accent-tinted button chrome so the icon reads
+        // identically to the plain `AetherIconButton`s in the row — blue is then
+        // driven only by `isActive` (downloaded), never by the menu decoration,
+        // keeping "blue = primary/active" consistent (#356 follow-up).
+        .buttonStyle(.plain)
         .accessibilityLabel("Download")
     }
 
@@ -2467,6 +2503,48 @@ struct DetailView: View {
             message: "This title isn't streamable yet. If it's a format Plex can't direct-play, transcode support lands in a future update."
         )
         .padding(.top, -AetherDesign.Spacing.xxl)
+    }
+
+    // MARK: - Netflix availability (#360)
+
+    /// `true` when this is a Netflix-only title (no library source backs it) —
+    /// its primary action is "Play on Netflix", not in-app playback.
+    private var isNetflixOnly: Bool {
+        if case .external = item.id.source { return true }
+        return false
+    }
+
+    /// The Netflix provider for an **owned** title (badge + secondary action),
+    /// or nil. External-only titles are handled by `isNetflixOnly` instead.
+    private var ownedNetflixProvider: ExternalProvider? {
+        guard !isNetflixOnly else { return nil }
+        return appSession.watchAvailability.netflix(forTMDb: current.guids.tmdb, isShow: current.kind == .show)
+    }
+
+    /// Open the title on Netflix (app or web). No-op on tvOS (caller hides it).
+    private func playOnNetflix() {
+        guard let url = NetflixLauncher.searchURL(title: current.title) else { return }
+        openURL(url)
+    }
+
+    /// Primary actions for a Netflix-only title: "Play on Netflix" where it can
+    /// launch (iOS/iPadOS/macOS/visionOS), or an informational note on tvOS.
+    @ViewBuilder
+    private var netflixOnlyActions: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            if NetflixLauncher.canLaunch {
+                AetherButton("Play on Netflix", systemImage: "play.fill", role: .primary) {
+                    playOnNetflix()
+                }
+            } else {
+                Label("Available on Netflix", systemImage: "tv")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+            Text("Aether links out to Netflix — it doesn't stream it here.")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+        }
     }
 
     // MARK: - Playback options (compact selectors + media info)
@@ -3012,6 +3090,15 @@ struct DetailView: View {
 
 }
 
+/// Shared layout metrics for the Detail screen.
+private enum DetailLayout {
+    /// Readable content-column width for the capped body sections (synopsis,
+    /// Available Sources, Playback, Technical Details). Named so the magic number
+    /// lives in one place and the focus-column helper can pair the visual cap
+    /// with a full-width focus frame.
+    static let contentWidth: CGFloat = 720
+}
+
 private extension View {
     /// Apply `.focusSection()` on tvOS so the focus engine can move into and
     /// **out of** this region (e.g. Up from the seasons rail back to the tab
@@ -3023,6 +3110,36 @@ private extension View {
         #else
         self
         #endif
+    }
+
+    /// `aetherDetailFocusSection()` applied only when `condition` holds — so a
+    /// section can opt out of being its own focus group where that would shadow
+    /// a more specific inner section (e.g. the seasons layout's Next-Up anchor,
+    /// #266). No-op off tvOS.
+    @ViewBuilder
+    func aetherDetailFocusSection(when condition: Bool) -> some View {
+        if condition {
+            self.aetherDetailFocusSection()
+        } else {
+            self
+        }
+    }
+
+    /// A width-capped Detail body section whose **focus-section frame spans the
+    /// full width** while the content stays visually capped + leading-aligned.
+    ///
+    /// On tvOS, section-to-section (Up/Down) focus is resolved by the section
+    /// *frames*, not the focused card's geometry — so a horizontal rail's vertical
+    /// neighbour must be full-width to remain a focus target at *any* horizontal
+    /// scroll offset. A neighbour capped to `contentWidth` stops overlapping a
+    /// card once the rail scrolls past it, and focus gets trapped in the rail
+    /// (#359). This generalises the #266 seasons fix (a full-width Next-Up anchor)
+    /// to every Detail rail. Visual layout is unchanged on every platform.
+    func aetherDetailColumn(maxWidth: CGFloat = DetailLayout.contentWidth) -> some View {
+        self
+            .frame(maxWidth: maxWidth, alignment: .leading)   // readable visual cap
+            .frame(maxWidth: .infinity, alignment: .leading)  // full-width focus frame
+            .aetherDetailFocusSection()
     }
 
     /// Bolder, couch-visible focus for season cards — a brighter accent glow and
