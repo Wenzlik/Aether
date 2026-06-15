@@ -638,6 +638,15 @@ final class AppSession {
         await makeUnifiedLibrary().markWatchedEverywhere(item, watched: watched)
     }
 
+    /// Remove a title from Continue Watching on **every connected source** that
+    /// has it, *without* marking it watched — backs the Home context-menu
+    /// "Remove from Continue Watching" (#368). Reports a zero playhead so the
+    /// title drops from Plex On Deck / Jellyfin Resume durably (a local resume
+    /// clear alone reappears on the next server re-seed).
+    func clearContinueWatchingEverywhere(_ item: MediaItem) async {
+        await makeUnifiedLibrary().clearContinueWatchingEverywhere(item)
+    }
+
     /// Make `kind` the active source (persisted) and re-point `source`.
     func setActiveSource(_ kind: SourceKind) {
         activeSourceKind = kind

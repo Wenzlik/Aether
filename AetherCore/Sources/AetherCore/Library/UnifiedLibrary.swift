@@ -300,6 +300,59 @@ public actor UnifiedLibrary {
         }
     }
 
+    // MARK: Cross-source Continue Watching removal
+
+    /// Remove a title from **Continue Watching** across every connected source
+    /// that has it — *without* marking it watched. Reports a server playhead of
+    /// **zero** (`recordProgress(position: .zero)`): Plex zeroes `viewOffset` and
+    /// Jellyfin zeroes `PlaybackPositionTicks`, so the title drops out of Plex On
+    /// Deck / Jellyfin Resume — and therefore out of the server-seeded Continue
+    /// Watching read (`serverResumePoints` only surfaces points with a positive
+    /// offset). This is the durable, cross-device "remove" the local
+    /// `ResumeStore.clear` alone can't be: a local-only clear reappears on the
+    /// next server re-seed (`seedServerResume`).
+    ///
+    /// Distinct from `markWatchedEverywhere` on purpose: "Remove from Continue
+    /// Watching" must not flip the watched flag (no ✓ badge, no drop from
+    /// hide-watched Discovery, no unwatched-count change). Fans out across
+    /// sources matched the same way as the watched path; best-effort +
+    /// fault-tolerant. The caller still clears the local `ResumeStore` so the
+    /// rail updates instantly before the network round-trips land.
+    public func clearContinueWatchingEverywhere(_ played: MediaItem) async {
+        let byID = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func clear(_ id: MediaID, runtime: Duration?) async {
+            guard let s = byID[id.source] else { return }
+            await s.recordProgress(id, position: .zero, duration: runtime, paused: true)
+        }
+        // Always reset the source it actually played from.
+        await clear(played.id, runtime: played.runtime)
+
+        switch played.kind {
+        case .movie, .show:
+            let group = await unifiedItems(kind: played.kind).first { u in
+                u.sources.contains { $0.item.id == played.id }
+                    || u.sources.contains { Self.sharesGuid($0.item.guids, played.guids) }
+            }
+            guard let group else { return }
+            for s in group.sources where s.item.id != played.id {
+                await clear(s.item.id, runtime: s.item.runtime)
+            }
+
+        case .episode:
+            guard let season = played.seasonNumber, let episode = played.episodeNumber else { return }
+            let show = await unifiedItems(kind: .show).first { Self.showMatches($0, episode: played) }
+            guard let show else { return }
+            for s in show.sources where s.item.id.source != played.id.source {
+                guard let src = byID[s.item.id.source],
+                      let epID = await Self.findEpisode(src, show: s.item.id, season: season, episode: episode)
+                else { continue }
+                await src.recordProgress(epID, position: .zero, duration: played.runtime, paused: true)
+            }
+        default:
+            break
+        }
+    }
+
     private static func sharesGuid(_ a: MediaGuids, _ b: MediaGuids) -> Bool {
         (a.tmdb != nil && a.tmdb == b.tmdb)
             || (a.imdb != nil && a.imdb == b.imdb)
