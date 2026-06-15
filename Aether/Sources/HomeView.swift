@@ -39,6 +39,9 @@ struct HomeView: View {
     /// Netflix-availability badges (#360). Optional so previews without the
     /// environment store still render.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    /// Backs the Continue Watching context-menu actions (#368) — Mark as Watched
+    /// fans watched state across sources, Remove clears the server playhead.
+    @Environment(AppSession.self) private var appSession
 
     @State private var feed: HomeFeed = .empty
     @State private var rails: UnifiedRails = .empty
@@ -67,13 +70,32 @@ struct HomeView: View {
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
+    #if os(iOS)
+    /// iPad (regular) vs iPhone (compact) — drives whether the brand + search
+    /// ride the top tab-bar row (#370) or stay in the inline header.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
+                        // iPad (regular width): the wordmark + search live in the
+                        // top tab-bar row as toolbar items (#370), so the idle
+                        // header row is gone and the first rail rises. The search
+                        // *field* still needs somewhere to land once invoked — a
+                        // slim row that appears only while searching. iPhone /
+                        // visionOS / tvOS keep the inline branded header.
+                        #if os(iOS)
+                        if usesTopBarChrome {
+                            if isSearchActive { topBarSearchRow }
+                        } else {
+                            brandedHeader
+                        }
+                        #else
                         brandedHeader
+                        #endif
                         content
                             .dismissSearchKeyboardOnTap { searchFocused = false }
                     }
@@ -91,6 +113,13 @@ struct HomeView: View {
             // Reload button in the header (pull-to-refresh isn't available).
             #if !os(tvOS)
             .refreshable { await load(forceRefresh: true) }
+            #endif
+            // iPad: brand (leading) + search (trailing) flank the centered top
+            // tab-bar pill instead of eating a second row (#370). iOS-only — the
+            // top-bar accessory placements and the field row don't exist on the
+            // other platforms, which keep the inline header.
+            #if os(iOS)
+            .toolbar { if usesTopBarChrome && shouldShowBrandedChrome { homeTopBarItems } }
             #endif
             .mediaNavigationDestinations(
                 source: source,
@@ -192,6 +221,62 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search")
+    }
+    #endif
+
+    // MARK: - iPad top-bar chrome (#370)
+
+    /// iPad regular width — the only place the brand + search ride the top
+    /// tab-bar row as toolbar accessories. False on iPhone (compact), where the
+    /// inline `brandedHeader` stays, and on visionOS / tvOS (unchanged).
+    private var usesTopBarChrome: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    /// Brand (leading) + search (trailing) flanking the centered top tab-bar
+    /// pill on iPad — replaces the second header row so content rises (#370).
+    @ToolbarContentBuilder
+    private var homeTopBarItems: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            AetherWordmark(.medium)
+        }
+        // While searching, the field + Cancel own the slim row below; the
+        // trailing glyph would be redundant, so it hides until search dismisses.
+        if !isSearchActive {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isSearchActive = true
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search")
+            }
+        }
+    }
+
+    /// The search field revealed on iPad once the toolbar search button is
+    /// tapped — a slim row above the rails (no permanent search bar), dismissed
+    /// by Cancel. Mirrors the inline field used on iPhone.
+    private var topBarSearchRow: some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            Button("Cancel") {
+                searchQuery = ""
+                searchFocused = false
+                isSearchActive = false
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AetherDesign.Palette.accent)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.s)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
     #endif
 
@@ -424,6 +509,7 @@ struct HomeView: View {
                             .frame(width: episodeCardWidth)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { continueWatchingMenu(for: entry) }
                     }
                 }
                 .padding(.horizontal, AetherDesign.Spacing.l)
@@ -439,6 +525,42 @@ struct HomeView: View {
         #else
         296
         #endif
+    }
+
+    /// In-place actions on a Continue Watching card (#368), so a stale entry can
+    /// leave the top rail without a trip into Detail. Long-press on iOS/iPadOS,
+    /// the focused-card menu on tvOS, right-click on Catalyst — all native
+    /// `.contextMenu` surfaces.
+    @ViewBuilder
+    private func continueWatchingMenu(for entry: HomeFeed.ContinueWatchingEntry) -> some View {
+        Button {
+            Task { await markEntryWatched(entry) }
+        } label: {
+            Label("Mark as Watched", systemImage: "checkmark.circle")
+        }
+        Button(role: .destructive) {
+            Task { await removeFromContinueWatching(entry) }
+        } label: {
+            Label("Remove from Continue Watching", systemImage: "minus.circle")
+        }
+    }
+
+    /// Mark watched across every source that has the title, drop its resume
+    /// point, and refresh the rail in place.
+    private func markEntryWatched(_ entry: HomeFeed.ContinueWatchingEntry) async {
+        await appSession.markWatchedEverywhere(entry.item, watched: true)
+        await resumeStore.clear(for: entry.item.id)
+        await load()
+    }
+
+    /// Remove the title from Continue Watching **without** marking it watched:
+    /// zero the server playhead (so it leaves Plex On Deck / Jellyfin Resume and
+    /// won't re-seed), clear the local resume point, then refresh. A non-forced
+    /// `load()` rebuilds the rail from the now-cleared store without re-seeding.
+    private func removeFromContinueWatching(_ entry: HomeFeed.ContinueWatchingEntry) async {
+        await appSession.clearContinueWatchingEverywhere(entry.item)
+        await resumeStore.clear(for: entry.item.id)
+        await load()
     }
 
     // MARK: - Empty / welcome states
