@@ -18,9 +18,14 @@ struct DiscoverView: View {
 
     var body: some View {
         ScrollView {
-            if isLoading && rails.isEmpty {
+            if !rails.isEmpty {
+                content
+            } else if isLoading || !session.didRestore {
+                // Starting up (sources still restoring) or actively loading —
+                // show the skeleton rather than flashing "connect a source", so a
+                // slow first load never reads as a frozen window (iOS parity).
                 AetherLoadingState(.rails(count: 3)).padding(.vertical, 24)
-            } else if rails.isEmpty {
+            } else {
                 AetherEmptyState(
                     glyph: "sparkles",
                     title: "Nothing here yet",
@@ -28,34 +33,46 @@ struct DiscoverView: View {
                 )
                 .padding(40)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                LazyVStack(alignment: .leading, spacing: 32) {
-                    switch mode {
-                    case .home:
-                        continueWatchingRail
-                        rail("Recently Added", filtered(rails.recentlyAdded))
-                        rail("Recently Released", filtered(rails.recentlyReleased))
-                        rail("Top Rated", filtered(topRated))
-                    case .discover:
-                        // Curated "what should I watch" rails (#350): genre lanes
-                        // and the full Movies / TV Shows catalog dumps were removed
-                        // (Library already browses those + by genre). Discover now
-                        // mirrors mobile: a featured pick, New Releases, Top Rated,
-                        // and a serendipitous Picked for You.
-                        if let featured { featuredHero(featured) }
-                        rail("New Releases", newReleases)
-                        rail("Top Rated", filtered(topRated))
-                        rail("Picked for You", pickedForYou)
-                    }
-                }
-                .padding(.vertical, 24)
             }
         }
         .cinematicBackground()
         .navigationTitle(mode == .home ? "Home" : "Discover")
+        .toolbar {
+            // A spinner while a load/refresh is in flight gives feedback even
+            // when content is already on screen (the skeleton only shows over an
+            // empty view) — so a background revalidate never looks like a hang.
+            ToolbarItem {
+                if isLoading { ProgressView().controlSize(.small) }
+            }
+        }
         // Reload when sources change AND after a player records a resume point,
         // so Continue Watching reflects what was just played.
         .task(id: "\(session.libraryToken)-\(session.resumeRevision)") { await load() }
+    }
+
+    /// The loaded rails — the real content body.
+    @ViewBuilder
+    private var content: some View {
+        LazyVStack(alignment: .leading, spacing: 32) {
+            switch mode {
+            case .home:
+                continueWatchingRail
+                rail("Recently Added", filtered(rails.recentlyAdded))
+                rail("Recently Released", filtered(rails.recentlyReleased))
+                rail("Top Rated", filtered(topRated))
+            case .discover:
+                // Curated "what should I watch" rails (#350): genre lanes
+                // and the full Movies / TV Shows catalog dumps were removed
+                // (Library already browses those + by genre). Discover now
+                // mirrors mobile: a featured pick, New Releases, Top Rated,
+                // and a serendipitous Picked for You.
+                if let featured { featuredHero(featured) }
+                rail("New Releases", newReleases)
+                rail("Top Rated", filtered(topRated))
+                rail("Picked for You", pickedForYou)
+            }
+        }
+        .padding(.vertical, 24)
     }
 
     /// The spotlight title for Discover — the highest-rated recently-added title

@@ -187,7 +187,10 @@ final class MacSession {
 
     // MARK: Restore
 
-    private var didRestore = false
+    /// Whether `restore()` has finished wiring up persisted sources. Views use
+    /// it to keep showing a loading state during startup instead of flashing the
+    /// "connect a source" empty state before the keychain/store reads complete.
+    private(set) var didRestore = false
 
     func restore() async {
         // Guard against re-running when the library view reappears after the
@@ -204,6 +207,10 @@ final class MacSession {
             jellyfinSource = source
             jellyfinServerName = record.serverName
         }
+        // Sources are wired up now — bump the token so any view that ran its
+        // initial load before restore finished (Home/Discover race the library
+        // window's `.task`) reloads against the freshly restored sources.
+        libraryToken &+= 1
     }
 
     // MARK: Plex
