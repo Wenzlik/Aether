@@ -202,7 +202,7 @@ public struct TMDbClient: Sendable {
         let entry = response.results[region.uppercased()]
         return (entry?.flatrate ?? []).map {
             ExternalProvider(
-                id: $0.providerID,
+                id: $0.providerId,
                 name: $0.providerName,
                 logoURL: Self.imageURL($0.logoPath, size: "w92")
             )
@@ -300,7 +300,10 @@ public struct TMDbClient: Sendable {
     }
 
     private struct Provider: Decodable, Sendable {
-        let providerID: Int
+        // `.convertFromSnakeCase` maps `provider_id` → `providerId` (lowercase d),
+        // so the property must match exactly — `providerID` silently fails to
+        // decode and drops every provider.
+        let providerId: Int
         let providerName: String
         let logoPath: String?
     }
