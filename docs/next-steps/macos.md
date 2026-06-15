@@ -5,7 +5,7 @@ the iOS/iPadOS/tvOS/visionOS app. Shipped as a **Developer ID notarized DMG over
 the web** — not the Mac App Store (the bundled GPL mpv/FFmpeg stack rules it
 out, same reason VLC/IINA aren't there).
 
-- **Current version:** 0.7.3 · live at <https://aetherplayer.com/downloads/Aether-0.7.3.dmg>
+- **Current version:** 0.7.6 · live at <https://aetherplayer.com/downloads/Aether-0.7.6.dmg>
 - **Branch:** `feature/macos-app` (→ PR to `staging` → `main`)
 - **Engine:** libmpv (IINA's engine), rendered via Metal (software render → MTLTexture)
 - **Build identifier:** the short git commit (`AetherGitCommit`), shown in Settings → About
