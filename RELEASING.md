@@ -62,19 +62,21 @@ git tag "ios/$VER-$SHA" origin/main && git push origin "ios/$VER-$SHA"   # iOS f
 scripts/ship-platforms.sh                                               # tvOS, visionOS, (macOS)
 ```
 
-### macOS shipping setup (one-time)
+### macOS does NOT ship here — see [RELEASING-macos.md](RELEASING-macos.md)
 
-macOS is a **separate App Store Connect record** (bundle id `cz.zmrhal.aether.mac`),
-so it never collides with the iOS delivery. Before the first Mac release:
+macOS is **not** distributed through Xcode Cloud / the App Store. The player
+bundles **libmpv + FFmpeg (GPL)**, which the Mac App Store can't host (same reason
+VLC/IINA aren't there), and the Cloud archive signs ad-hoc (can't carry the app's
+entitlements). So macOS ships as a **Developer ID-signed, notarized DMG** built
+locally and downloaded from the website:
 
-1. Create a macOS **Xcode Cloud workflow** — Archive action = macOS (scheme
-   `AetherMac`), start condition **Tag Changes → `macos/…`**.
-2. Add `macos` to the `PLATFORMS` array in `scripts/ship-platforms.sh`.
-3. The macOS archive is **Release** config, which runs the post-build phase that
-   bundles libmpv + its ffmpeg deps into the `.app` (self-contained, arm64-only).
-   `ci_post_clone.sh` installs libmpv + `dylibbundler` via `scripts/fetch_mpv.sh`.
-   The bundled dylibs are re-signed in the build phase; verify codesign/notarization
-   on the first archive. See [docs/architecture/PLAYER_ENGINES.md](docs/architecture/PLAYER_ENGINES.md).
+```sh
+scripts/package-mac.sh     # build → sign (Developer ID) → notarize → staple → DMG
+scripts/deploy-dmg.sh      # upload the DMG to the website + verify
+```
+
+Full setup + steps: **[RELEASING-macos.md](RELEASING-macos.md)**. A `macos/…` tag
+and Cloud workflow may exist, but they're not the distribution path.
 
 ### Tag format
 
