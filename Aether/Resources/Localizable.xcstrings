@@ -6280,6 +6280,40 @@
           }
         }
       }
+    },
+    "Mark as Watched?": {
+      "comment": "Confirmation title when marking an in-progress title watched (discards resume).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Označit jako zhlédnuté?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позначити як переглянуте?"
+          }
+        }
+      }
+    },
+    "This title is in progress. Marking it watched removes it from Continue Watching.": {
+      "comment": "Confirmation message: marking an in-progress title watched discards its resume point.",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tento titul je rozkoukaný. Označením jako zhlédnuté ho odeberete z Pokračovat ve sledování."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей запис не дограно. Позначення переглянутим прибере його з «Продовжити перегляд»."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

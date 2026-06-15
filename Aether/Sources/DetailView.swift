@@ -37,6 +37,9 @@ struct DetailView: View {
     var availableSources: [UnifiedSource] = []
 
     @State private var resume: ResumePoint?
+    /// Drives the "mark an in-progress title watched?" confirmation — marking
+    /// watched discards the resume point, so it asks first.
+    @State private var confirmMarkWatched = false
     /// The source the user manually switched to via "Available Sources". `nil`
     /// = use the title's preferred source (the navigated `item`). Everything
     /// playback-related (`current`, `source`, hydration, downloads, resume,
@@ -362,6 +365,16 @@ struct DetailView: View {
                 preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
             ) { vlcPlayback = nil }
                 .ignoresSafeArea()
+        }
+        .confirmationDialog(
+            "Mark as Watched?",
+            isPresented: $confirmMarkWatched,
+            titleVisibility: .visible
+        ) {
+            Button("Mark as Watched") { Task { await setWatched(true) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This title is in progress. Marking it watched removes it from Continue Watching.")
         }
         #if os(visionOS)
         .onChange(of: cinema.isActive) { _, active in
@@ -2388,10 +2401,27 @@ struct DetailView: View {
 
     private func toggleWatched() async {
         let next = !isWatched
+        // Marking an **in-progress** title watched throws away its resume point.
+        // Confirm first so a single tap can't silently wipe progress; un-marking
+        // or marking a not-started title needs no confirmation.
+        if next, resume != nil {
+            confirmMarkWatched = true
+            return
+        }
+        await setWatched(next)
+    }
+
+    private func setWatched(_ next: Bool) async {
         watchedOverride = next   // optimistic
         // Sync across every source that has this title, not just `source` —
         // e.g. a movie on both Plex and Jellyfin flips on both.
         await appSession.markWatchedEverywhere(activeItem, watched: next)
+        // Watched ends "in progress": drop the resume point so the title leaves
+        // Continue Watching and never offers "Resume" a second before the end.
+        if next {
+            await resumeStore.clear(for: activeItem.id)
+            resume = nil
+        }
     }
 
     /// Favorite state — the optimistic override wins over the source's value so
