@@ -39,11 +39,16 @@ struct LibraryGridView: View {
         .toolbar {
             // macOS has no pull-to-refresh — a toolbar Reload force-refreshes the
             // unified library across sources (parity with iOS's pull-to-refresh).
+            // While refreshing it becomes a spinner, so a reload over existing
+            // content still gives feedback (iOS shows the pull spinner there).
             ToolbarItem {
-                Button { Task { await load(forceRefresh: true) } } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { Task { await load(forceRefresh: true) } } label: {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                    }
                 }
-                .disabled(isLoading)
             }
         }
         .task(id: session.libraryToken) { await load() }
@@ -75,23 +80,27 @@ struct LibraryGridView: View {
 
     private func load(forceRefresh: Bool = false) async {
         guard session.hasAnySource else { movies = []; shows = []; return }
-        // Only show the skeleton when we have nothing yet — a warm cache/snapshot
-        // paints instantly, no full-screen loading (parity with iOS, #197).
-        if movies.isEmpty && shows.isEmpty { isLoading = true }
+        // Always mark loading (iOS parity): the skeleton still only shows over an
+        // empty grid (warm cache/snapshot paints instantly), but on a reload over
+        // existing content the toolbar spinner gives feedback.
+        isLoading = true
+        defer { isLoading = false }
         let library = session.makeLibrary()
-        movies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
-        shows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
-        isLoading = false
+        let freshMovies = await library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
+        let freshShows = await library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
+        // Don't blank existing content on a transient empty result (iOS parity).
+        if !freshMovies.isEmpty || movies.isEmpty { movies = freshMovies }
+        if !freshShows.isEmpty || shows.isEmpty { shows = freshShows }
         guard !forceRefresh else { return }
         // Stale-while-revalidate: the snapshot was served instantly above; if it's
         // older than the freshness window, quietly refresh in the background.
         let staleMovies = await library.isStale(kind: .movie)
         let staleShows = await library.isStale(kind: .show)
         if staleMovies || staleShows {
-            let freshMovies = await library.unifiedItems(kind: .movie, forceRefresh: true)
-            let freshShows = await library.unifiedItems(kind: .show, forceRefresh: true)
-            if !freshMovies.isEmpty { movies = freshMovies }
-            if !freshShows.isEmpty { shows = freshShows }
+            let m = await library.unifiedItems(kind: .movie, forceRefresh: true)
+            let s = await library.unifiedItems(kind: .show, forceRefresh: true)
+            if !m.isEmpty { movies = m }
+            if !s.isEmpty { shows = s }
         }
     }
 }
@@ -212,10 +221,13 @@ struct LibraryBrowseView: View {
                 }
             }
             ToolbarItem {
-                Button { Task { await load(forceRefresh: true) } } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { Task { await load(forceRefresh: true) } } label: {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                    }
                 }
-                .disabled(isLoading)
             }
         }
         .task(id: session.libraryToken) { await load() }
@@ -223,14 +235,16 @@ struct LibraryBrowseView: View {
 
     private func load(forceRefresh: Bool = false) async {
         guard session.hasAnySource else { items = []; return }
-        if items.isEmpty { isLoading = true }
+        isLoading = true
+        defer { isLoading = false }
         let library = session.makeLibrary()
-        items = await library.unifiedItems(kind: route.kind, forceRefresh: forceRefresh)
-        isLoading = false
+        let fresh = await library.unifiedItems(kind: route.kind, forceRefresh: forceRefresh)
+        // Don't blank existing content on a transient empty result (iOS parity).
+        if !fresh.isEmpty || items.isEmpty { items = fresh }
         guard !forceRefresh else { return }
         if await library.isStale(kind: route.kind) {
-            let fresh = await library.unifiedItems(kind: route.kind, forceRefresh: true)
-            if !fresh.isEmpty { items = fresh }
+            let revalidated = await library.unifiedItems(kind: route.kind, forceRefresh: true)
+            if !revalidated.isEmpty { items = revalidated }
         }
     }
 }
