@@ -67,12 +67,38 @@ xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 
 echo "==> building DMG"
-rm -rf "$STAGE"; mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"          # drag-to-install affordance
 DMG="$ROOT/build/Aether-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Aether $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+
+# Prefer create-dmg for a proper installer window (sized layout, big icons, the
+# app on the left and an Applications drop-target on the right). Fall back to a
+# bare hdiutil image if create-dmg isn't installed.
+if command -v create-dmg >/dev/null 2>&1; then
+  echo "    using create-dmg (drag-to-install window)"
+  # create-dmg returns non-zero if it can't bless the volume on a headless box,
+  # even when the DMG is written fine — so don't let `set -e` kill us here.
+  create-dmg \
+    --volname "Aether $VERSION" \
+    --window-pos 200 120 \
+    --window-size 560 380 \
+    --icon-size 120 \
+    --icon "Aether.app" 150 190 \
+    --app-drop-link 410 190 \
+    --hide-extension "Aether.app" \
+    --no-internet-enable \
+    "$DMG" \
+    "$APP" || true
+fi
+
+if [ ! -f "$DMG" ]; then
+  echo "    create-dmg unavailable or failed — falling back to hdiutil"
+  rm -rf "$STAGE"; mkdir -p "$STAGE"
+  cp -R "$APP" "$STAGE/"
+  ln -s /Applications "$STAGE/Applications"        # drag-to-install affordance
+  hdiutil create -volname "Aether $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+fi
+
+[ -f "$DMG" ] || { echo "error: DMG was not created"; exit 1; }
 echo "==> notarizing the DMG (the .app inside is already notarized+stapled)"
 xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 echo "==> stapling the DMG"
