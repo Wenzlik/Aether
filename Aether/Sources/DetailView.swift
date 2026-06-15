@@ -2170,6 +2170,11 @@ struct DetailView: View {
         }
     }
 
+    /// Width cap for the first-use caption — narrower than the 720 content cap
+    /// because it's a caption, not a content block; keeps the trailing "Got it"
+    /// beside the text on the wide visionOS/iPad column (#355).
+    private var hintMaxWidth: CGFloat { 480 }
+
     /// First-use discoverability for the bare icon row (§4, "bare + first-use
     /// hint"): a one-time caption naming the icons that are actually present,
     /// dismissed by "Got it" — or by tapping an icon, since that *is* discovery.
@@ -2182,7 +2187,11 @@ struct DetailView: View {
                 Image(systemName: "hand.tap")
                     .font(.caption2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
-                Text(items.joined(separator: " · "))
+                // Lead-in prose ("Tap an icon below — …") shifts the labels to the
+                // right so none sits directly under its icon — the eye used to sit
+                // above the word "Watch status" and read as a duplicate control
+                // (#355). It's a sentence, not a column of captions.
+                Text("Tap an icon below — \(items.joined(separator: ", ")).")
                     .font(AetherDesign.Typography.caption)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2193,6 +2202,12 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                     .premiumFocus()
             }
+            // Cap the caption width so on the spacious visionOS/iPad layout the
+            // trailing "Got it" no longer floats out to the centre of the wide
+            // content column (#355) — it stays beside the text. On compact iPhone
+            // (column < cap) this is a no-op, so that already-correct layout is
+            // untouched.
+            .frame(maxWidth: hintMaxWidth, alignment: .leading)
             .padding(.top, AetherDesign.Spacing.xxs)
             .transition(.opacity)
         }
@@ -2200,12 +2215,16 @@ struct DetailView: View {
 
     /// Labels for whichever compact icons are currently visible, left-to-right.
     private var compactActionHintItems: [String] {
+        // Localized so the joined caption reads in the user's language (the items
+        // are interpolated into a String, so they must be resolved here rather
+        // than relying on SwiftUI's literal auto-localization).
         var items: [String] = []
-        if shouldShowDownloadControl { items.append("Download") }
-        if source != nil { items.append("Watch status") }
-        if source?.supportsFavorites == true { items.append("Favorite") }
-        if availableSources.count > 1 { items.append("Source") }
-        if current.mediaInfo != nil { items.append("Details") }
+        if shouldShowDownloadControl { items.append(String(localized: "Download")) }
+        if source != nil { items.append(String(localized: "Watch status")) }
+        if source?.supportsFavorites == true { items.append(String(localized: "Favorite")) }
+        // "Source" intentionally absent — switching now lives only in the
+        // "Available Sources" section, not the icon row (#356).
+        if current.mediaInfo != nil { items.append(String(localized: "Details")) }
         return items
     }
 
@@ -2242,9 +2261,10 @@ struct DetailView: View {
                     Task { await toggleFavorite() }
                 }
             }
-            if availableSources.count > 1 {
-                sourceMenuButton
-            }
+            // Source switching is not a tertiary icon here: it lived as a cryptic,
+            // width-shifting, blue-tinted glyph that collided with "blue = active"
+            // (#356). The dedicated "Available Sources" section in the body is the
+            // single, labelled home for it (always present when count > 1).
             if current.mediaInfo != nil {
                 AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                     dismissIconHint()
@@ -2274,28 +2294,6 @@ struct DetailView: View {
         }
     }
 
-    /// Source switcher as a compact icon `Menu` (only shown when the title is on
-    /// more than one source). Mirrors the "Available Sources" section's switching.
-    private var sourceMenuButton: some View {
-        Menu {
-            ForEach(availableSources) { src in
-                Button {
-                    selectSource(src)
-                } label: {
-                    if src.item.id == activeItem.id {
-                        Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(src.serverName ?? src.kind.displayName)
-                    }
-                }
-                .disabled(!src.playable)
-            }
-        } label: {
-            AetherIconCircleLabel(systemImage: "rectangle.2.swap")
-        }
-        .accessibilityLabel("Switch source")
-    }
-
     /// Download as a compact icon `Menu`: the glyph reflects the current state,
     /// and the menu offers the state-appropriate actions (download / pause /
     /// resume / cancel / delete / retry), with the live status as a header.
@@ -2308,6 +2306,11 @@ struct DetailView: View {
                 isActive: isDownloaded
             )
         }
+        // Strip the Menu's default accent-tinted button chrome so the icon reads
+        // identically to the plain `AetherIconButton`s in the row — blue is then
+        // driven only by `isActive` (downloaded), never by the menu decoration,
+        // keeping "blue = primary/active" consistent (#356 follow-up).
+        .buttonStyle(.plain)
         .accessibilityLabel("Download")
     }
 
