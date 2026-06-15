@@ -73,6 +73,8 @@ ln -s /Applications "$STAGE/Applications"          # drag-to-install affordance
 DMG="$ROOT/build/Aether-$VERSION.dmg"
 rm -f "$DMG"
 hdiutil create -volname "Aether $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+echo "==> notarizing the DMG (the .app inside is already notarized+stapled)"
+xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 echo "==> stapling the DMG"
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
