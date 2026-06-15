@@ -84,15 +84,13 @@ struct HomeView: View {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
-                        // iPad (regular width): the wordmark + search live in the
-                        // top tab-bar row as toolbar items (#370), so the idle
-                        // header row is gone and the first rail rises. The search
-                        // *field* still needs somewhere to land once invoked — a
-                        // slim row that appears only while searching. iPhone /
-                        // visionOS / tvOS keep the inline branded header.
+                        // iPad (regular width): search rides the top tab-bar row
+                        // (toolbar); the brand mark sits in a large header below
+                        // (#370 + feedback — toolbar can't size the logo up).
+                        // iPhone / visionOS / tvOS keep the inline branded header.
                         #if os(iOS)
                         if usesTopBarChrome {
-                            if isSearchActive { topBarSearchRow }
+                            iPadBrandHeader
                         } else {
                             brandedHeader
                         }
@@ -260,20 +258,12 @@ struct HomeView: View {
     }
 
     #if os(iOS)
-    /// Brand (leading) + search (trailing) flanking the centered top tab-bar
-    /// pill on iPad — replaces the second header row so content rises (#370).
+    /// iPad: search rides the top tab-bar row (trailing). The brand mark lives in
+    /// a header below (`iPadBrandHeader`) where it can be properly sized — the
+    /// toolbar clamps item height to the bar, so a wordmark there stays tiny.
     @ToolbarContentBuilder
     private var homeTopBarItems: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            AetherWordmark(.large)
-        }
-        // iOS 26 wraps toolbar items in a circular "Liquid Glass" background,
-        // which clipped the wide (~3:2) wordmark into a broken disc. Hide the
-        // shared background so the lockup renders flush, like a brand mark and
-        // not a button. (The search glyph below keeps its glass — an icon reads
-        // fine as a circular control.)
-        .sharedBackgroundVisibility(.hidden)
-        // While searching, the field + Cancel own the slim row below; the
+        // While searching, the field + Cancel own the header row below; the
         // trailing glyph would be redundant, so it hides until search dismisses.
         if !isSearchActive {
             ToolbarItem(placement: .topBarTrailing) {
@@ -288,24 +278,30 @@ struct HomeView: View {
         }
     }
 
-    /// The search field revealed on iPad once the toolbar search button is
-    /// tapped — a slim row above the rails (no permanent search bar), dismissed
-    /// by Cancel. Mirrors the inline field used on iPhone.
-    private var topBarSearchRow: some View {
+    /// iPad brand header — a large `AetherWordmark` in its own slim row above the
+    /// content (the toolbar can't size it up). Swaps to the search field while
+    /// searching.
+    private var iPadBrandHeader: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
-            Button("Cancel") {
-                searchQuery = ""
-                searchFocused = false
-                isSearchActive = false
+            if isSearchActive {
+                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                Button("Cancel") {
+                    searchQuery = ""
+                    searchFocused = false
+                    isSearchActive = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            } else {
+                AetherWordmark(.large)
+                Spacer(minLength: AetherDesign.Spacing.l)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(AetherDesign.Palette.accent)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.top, AetherDesign.Spacing.s)
-        .padding(.bottom, AetherDesign.Spacing.m)
+        .padding(.top, AetherDesign.Spacing.m)
+        .padding(.bottom, AetherDesign.Spacing.s)
     }
+
     #endif
 
     /// True when the user is searching from Home. Drives the swap from

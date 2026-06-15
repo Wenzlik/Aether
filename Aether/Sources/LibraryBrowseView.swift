@@ -83,7 +83,7 @@ struct LibraryBrowseView: View {
                         // iPhone / visionOS / tvOS keep the inline header.
                         #if os(iOS)
                         if usesTopBarChrome {
-                            if isSearchActive { topBarSearchRow }
+                            iPadBrandHeader
                         } else {
                             brandedHeader
                         }
@@ -284,16 +284,11 @@ struct LibraryBrowseView: View {
     }
 
     #if os(iOS)
-    /// Brand (leading, flush) + Filter + Search (trailing) flanking the centered
-    /// top tab-bar pill on iPad.
+    /// iPad: Filter + Search ride the top tab-bar row (trailing). The brand mark
+    /// lives in a large header below (`iPadBrandHeader`) — the toolbar clamps
+    /// item height to the bar, so a wordmark there stays tiny.
     @ToolbarContentBuilder
     private var libraryTopBarItems: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            AetherWordmark(.large)
-        }
-        // Render the wide wordmark flush — iOS 26's circular toolbar glass would
-        // otherwise clip it into a broken disc (see Home #370 fix).
-        .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
             Button { openUnifiedFilter() } label: {
                 Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
@@ -314,22 +309,27 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// The search field revealed on iPad once the toolbar search button is
-    /// tapped — a slim row above content (no permanent bar), dismissed by Cancel.
-    private var topBarSearchRow: some View {
+    /// iPad brand header — a large `AetherWordmark` in its own slim row above the
+    /// content. Swaps to the search field while searching.
+    private var iPadBrandHeader: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
-            Button("Cancel") {
-                searchQuery = ""
-                searchFocused = false
-                isSearchActive = false
+            if isSearchActive {
+                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                Button("Cancel") {
+                    searchQuery = ""
+                    searchFocused = false
+                    isSearchActive = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AetherDesign.Palette.accent)
+            } else {
+                AetherWordmark(.large)
+                Spacer(minLength: AetherDesign.Spacing.l)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(AetherDesign.Palette.accent)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.top, AetherDesign.Spacing.s)
-        .padding(.bottom, AetherDesign.Spacing.m)
+        .padding(.top, AetherDesign.Spacing.m)
+        .padding(.bottom, AetherDesign.Spacing.s)
     }
     #endif
 
