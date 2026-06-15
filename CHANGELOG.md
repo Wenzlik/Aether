@@ -12,6 +12,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   Continue Watching.
 - **Library** (#351, all platforms) — **multi-select Year** filter and a compact
   **community-rating number** on poster cells.
+- **Cross-device resume via the media server** (#352, all platforms) — playback
+  progress now syncs through Plex/Jellyfin themselves, not just iCloud. The app
+  reports the playhead while playing (Plex timeline / Jellyfin Sessions, #353) and
+  seeds **Continue Watching** from the server's own resume list on load (Plex On
+  Deck / Jellyfin Resume, #354). This gives macOS cross-device resume despite
+  having no iCloud (Developer ID build), and works across non-Apple clients too.
 
 ### Changed — macOS parity & polish
 
