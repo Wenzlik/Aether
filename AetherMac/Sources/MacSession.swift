@@ -323,6 +323,61 @@ final class MacSession {
     /// Close the inline player.
     func stopPlayback() { playbackURL = nil }
 
+    /// Shared Home/Discover rails, cached on the session. The sidebar's detail
+    /// pane recreates its view on every tab switch (NavigationSplitView), so a
+    /// per-view `@State` reloaded the rails on every click. Holding them here —
+    /// keyed by the library + resume generation — lets a tab switch repaint
+    /// instantly and only triggers a real load when something actually changed.
+    private(set) var homeRailsCache: UnifiedRails = .empty
+    /// True while the first rails load (empty cache) is in flight — drives the
+    /// loading animation. A background revalidate over existing rails doesn't set
+    /// it (content stays on screen).
+    private(set) var isLoadingRails = false
+    /// The `libraryToken-resumeRevision` the cache was built for; a mismatch means
+    /// sources or resume state changed and the cache is stale.
+    private var railsCacheKey = ""
+    /// Guards against overlapping loads (Home + Discover both fire `.task` on the
+    /// same generation) — a wasted concurrent fan-out, not a correctness issue.
+    private var railsLoadInFlight = false
+
+    private var currentRailsKey: String { "\(libraryToken)-\(resumeRevision)" }
+
+    /// Load the Home/Discover rails into `homeRailsCache` if they aren't already
+    /// current. A no-op (instant) when the cache matches the live generation, so
+    /// switching tabs doesn't reload. `force` always re-hits the servers.
+    func loadHomeRailsIfNeeded(force: Bool = false) async {
+        if !force, railsCacheKey == currentRailsKey, !homeRailsCache.isEmpty { return }
+        if railsLoadInFlight { return }
+        railsLoadInFlight = true
+        defer { railsLoadInFlight = false }
+        guard hasAnySource else {
+            homeRailsCache = .empty
+            railsCacheKey = currentRailsKey
+            return
+        }
+        if homeRailsCache.isEmpty { isLoadingRails = true }
+        defer { isLoadingRails = false }
+        let library = makeLibrary()
+        let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: force)
+        // Don't blank existing rails on a transient empty result.
+        if !built.isEmpty || homeRailsCache.isEmpty { homeRailsCache = built }
+        railsCacheKey = currentRailsKey
+        AetherImageCache.shared.prefetch(
+            built.recentlyAdded.map(\.posterURL)
+                + built.recentlyReleased.map(\.posterURL)
+                + built.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+        )
+        // Stale-while-revalidate: refresh quietly in the background if the
+        // snapshot is past its window (also seeds cross-device server resume,
+        // which is kept off the cold path for speed).
+        guard !force, await isLibraryStale() else { return }
+        let fresh = await library.homeRails(resumeStore: resumeStore, forceRefresh: true)
+        if !fresh.isEmpty {
+            homeRailsCache = fresh
+            railsCacheKey = currentRailsKey
+        }
+    }
+
     /// Discover rails (Recently Added / Released, Top Rated, …) across sources.
     /// Served from the shared cache/snapshot instantly; pass `forceRefresh` to
     /// re-hit the servers for a background revalidate (#197 parity).

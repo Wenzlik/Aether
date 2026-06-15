@@ -13,18 +13,23 @@ struct DiscoverView: View {
     let session: MacSession
     var mode: Mode = .discover
 
-    @State private var rails: UnifiedRails = .empty
-    @State private var isLoading = false
+    /// Rails are cached on the session (survive sidebar tab switches, which
+    /// recreate this view), so a tab click repaints instantly instead of
+    /// reloading.
+    private var rails: UnifiedRails { session.homeRailsCache }
 
     var body: some View {
         ScrollView {
             if !rails.isEmpty {
                 content
-            } else if isLoading || !session.didRestore {
+            } else if session.isLoadingRails || !session.didRestore {
                 // Starting up (sources still restoring) or actively loading —
-                // show the skeleton rather than flashing "connect a source", so a
-                // slow first load never reads as a frozen window (iOS parity).
-                AetherLoadingState(.rails(count: 3)).padding(.vertical, 24)
+                // show the branded animated loader (iOS parity) rather than a
+                // static skeleton or a premature "connect a source" empty state,
+                // so a slow first load never reads as a frozen window.
+                AetherLoadingDots(caption: "Loading your library…")
+                    .frame(maxWidth: .infinity, minHeight: 320)
+                    .padding(.vertical, 60)
             } else {
                 AetherEmptyState(
                     glyph: "sparkles",
@@ -39,15 +44,18 @@ struct DiscoverView: View {
         .navigationTitle(mode == .home ? "Home" : "Discover")
         .toolbar {
             // A spinner while a load/refresh is in flight gives feedback even
-            // when content is already on screen (the skeleton only shows over an
+            // when content is already on screen (the loader only shows over an
             // empty view) — so a background revalidate never looks like a hang.
             ToolbarItem {
-                if isLoading { ProgressView().controlSize(.small) }
+                if session.isLoadingRails { ProgressView().controlSize(.small) }
             }
         }
         // Reload when sources change AND after a player records a resume point,
-        // so Continue Watching reflects what was just played.
-        .task(id: "\(session.libraryToken)-\(session.resumeRevision)") { await load() }
+        // so Continue Watching reflects what was just played. The session cache
+        // makes this a no-op when nothing changed (instant on tab switch).
+        .task(id: "\(session.libraryToken)-\(session.resumeRevision)") {
+            await session.loadHomeRailsIfNeeded()
+        }
     }
 
     /// The loaded rails — the real content body.
@@ -218,27 +226,6 @@ struct DiscoverView: View {
         }
     }
 
-    private func load() async {
-        guard session.hasAnySource else { rails = .empty; return }
-        // Skeleton only when we have nothing — a warm cache/snapshot paints
-        // instantly (parity with iOS, #197).
-        if rails.isEmpty { isLoading = true }
-        rails = await session.homeRails()
-        isLoading = false
-        // Warm the artwork cache for the rails we're about to show (iOS parity).
-        AetherImageCache.shared.prefetch(
-            rails.recentlyAdded.map(\.posterURL)
-                + rails.recentlyReleased.map(\.posterURL)
-                + rails.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
-        )
-        // Stale-while-revalidate: refresh quietly in the background if stale.
-        // The forced refresh also seeds cross-device resume from the servers'
-        // own Continue Watching lists (kept off the cold path for speed).
-        if await session.isLibraryStale() {
-            let fresh = await session.homeRails(forceRefresh: true)
-            if !fresh.isEmpty { rails = fresh }
-        }
-    }
 }
 
 /// A landscape Continue Watching card: backdrop still, a resume progress bar,
