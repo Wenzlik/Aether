@@ -84,13 +84,13 @@ struct HomeView: View {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
-                        // iPad (regular width): search rides the top tab-bar row
-                        // (toolbar); the brand mark sits in a large header below
-                        // (#370 + feedback — toolbar can't size the logo up).
-                        // iPhone / visionOS / tvOS keep the inline branded header.
+                        // iPad (regular width): the brand mark (app icon) + search
+                        // ride the top tab-bar row as toolbar items; only the
+                        // search field drops to a slim row while active. iPhone /
+                        // visionOS / tvOS keep the inline branded header.
                         #if os(iOS)
                         if usesTopBarChrome {
-                            iPadBrandHeader
+                            if isSearchActive { iPadSearchRow }
                         } else {
                             brandedHeader
                         }
@@ -258,12 +258,15 @@ struct HomeView: View {
     }
 
     #if os(iOS)
-    /// iPad: search rides the top tab-bar row (trailing). The brand mark lives in
-    /// a header below (`iPadBrandHeader`) where it can be properly sized — the
-    /// toolbar clamps item height to the bar, so a wordmark there stays tiny.
+    /// iPad: the brand icon (leading) + search (trailing) ride the top tab-bar
+    /// row. The brand mark is the square app icon (the toolbar clamps height, so
+    /// the wide wordmark stayed tiny); tapping it pops Home to root.
     @ToolbarContentBuilder
     private var homeTopBarItems: some ToolbarContent {
-        // While searching, the field + Cancel own the header row below; the
+        ToolbarItem(placement: .topBarLeading) {
+            AetherBrandIcon { navigationPath = NavigationPath() }
+        }
+        // While searching, the field + Cancel own the slim row below; the
         // trailing glyph would be redundant, so it hides until search dismisses.
         if !isSearchActive {
             ToolbarItem(placement: .topBarTrailing) {
@@ -278,28 +281,22 @@ struct HomeView: View {
         }
     }
 
-    /// iPad brand header — a large `AetherWordmark` in its own slim row above the
-    /// content (the toolbar can't size it up). Swaps to the search field while
-    /// searching.
-    private var iPadBrandHeader: some View {
+    /// iPad: the slim search-field row shown only while searching (the brand +
+    /// search button live in the tab-bar toolbar).
+    private var iPadSearchRow: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            if isSearchActive {
-                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
-                Button("Cancel") {
-                    searchQuery = ""
-                    searchFocused = false
-                    isSearchActive = false
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AetherDesign.Palette.accent)
-            } else {
-                AetherWordmark(.large)
-                Spacer(minLength: AetherDesign.Spacing.l)
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            Button("Cancel") {
+                searchQuery = ""
+                searchFocused = false
+                isSearchActive = false
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(AetherDesign.Palette.accent)
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
-        .padding(.top, AetherDesign.Spacing.m)
-        .padding(.bottom, AetherDesign.Spacing.s)
+        .padding(.top, AetherDesign.Spacing.s)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
 
     #endif

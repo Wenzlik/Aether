@@ -117,7 +117,9 @@ struct UnifiedLibraryGridView: View {
         .navigationBarTitleDisplayMode(.large)
         #endif
         #if !os(tvOS)
-        .toolbar { sortToolbarItem; filterToolbarItem }
+        // Filter before Sort so Filter sits on the left of the cluster —
+        // consistent with the Library landing (Filter left of Search).
+        .toolbar { filterToolbarItem; sortToolbarItem }
         #else
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
@@ -723,7 +725,16 @@ struct UnifiedLibraryGridView: View {
             options = merged.filter { seen.insert($0.code).inserted }
         }
         guard key == sourcesKey else { return }
-        audioLanguageOptions = options
+        // Show only audio languages the app itself is localized into (the app's
+        // UI languages, e.g. cs / en / uk) rather than every track language in
+        // the library — keeps the filter to the handful that matter here.
+        audioLanguageOptions = options.filter { appLanguageCodes.contains($0.code) }
+    }
+
+    /// Canonical codes of the app's bundled UI localizations (cs / en / uk …) —
+    /// the audio filter is limited to these.
+    private var appLanguageCodes: Set<String> {
+        Set(Bundle.main.localizations.map { AudioLanguage.canonical($0) })
     }
 
     /// Toggle the audio-language chip and lazily load that language's membership
