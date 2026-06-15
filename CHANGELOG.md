@@ -6,17 +6,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
-- **Library: active-filter summary** (#367, iOS/iPadOS/tvOS) — once you narrow a
+- **Library: active-filter summary** (#367, all platforms) — once you narrow a
   category grid, a row of **removable chips** above the grid shows exactly which
   facets are on (genre, audio language, rating, each year) with a **Clear all**.
   Tap a chip's ✕ to drop just that facet; the row vanishes when nothing's
   filtered. Surfaces filter state without reopening the sheet, and on tvOS the
   chips are focusable so a fully-filtered (empty) grid is never a focus trap.
-- **Library: search inside category grids** (#369, iOS/iPadOS) — the Movies /
-  TV Shows grid is now `.searchable`, filtering by title **client-side** (no
+- **Library: search inside category grids** (#369, iOS/iPadOS/macOS) — the Movies
+  / TV Shows grid is now `.searchable`, filtering by title **client-side** (no
   reload, like the facet filters). The Filter control is also **labeled**
-  ("Filter" beside the glyph on iPad, icon-only on iPhone) so it's discoverable
-  next to Search and Sort.
+  ("Filter" beside the glyph on iPad, icon-only on iPhone; macOS already had a
+  labeled Filter menu) so it's discoverable next to Search and Sort.
 - **Home: Continue Watching in-place actions** (#368, all platforms) — long-press
   (iOS/iPadOS), the focused-card menu (tvOS), or right-click a Continue Watching
   card for **Mark as Watched** and **Remove from Continue Watching**. Remove
