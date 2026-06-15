@@ -552,6 +552,13 @@ struct DetailView: View {
                     }
                     .frame(maxWidth: wideColumnWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Episodes have no rail between this column and Cast & Crew, so
+                    // make the (full-width) column a focus section → Up from any
+                    // cast card lands here at any scroll offset (#359). Containers
+                    // (seasons) opt out: their episodes rail already brackets cast,
+                    // and the nested Next-Up section (#266) must stay the rail's Up
+                    // target rather than being shadowed by an outer column section.
+                    .aetherDetailFocusSection(when: !item.kind.isContainer)
                     .padding(.horizontal, AetherDesign.Spacing.xl)
 
                     // Seasons / Episodes rail breaks out of the left column on
@@ -734,22 +741,23 @@ struct DetailView: View {
                 synopsis(summary)
                     .frame(maxWidth: 720, alignment: .leading)
             }
+            // Each focusable section that neighbours the More Like This / Cast
+            // rails below is a full-width focus column, so Up/Down from any rail
+            // card lands cleanly above/below at any scroll offset (#359).
             if availableSources.count > 1 {
                 availableSourcesSection
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .aetherDetailFocusSection()
+                    .aetherDetailColumn()
             }
             #if !os(tvOS)
             if current.mediaInfo != nil {
                 technicalDetailsSection
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .aetherDetailFocusSection()
+                    .aetherDetailColumn()
             }
             #endif
             relatedRail
             if current.streamURL != nil {
                 playbackSection
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .aetherDetailColumn()
             }
             // Cast & Crew last — below Related (#247).
             castSection
@@ -1319,9 +1327,12 @@ struct DetailView: View {
                 }
                 relatedRail
                 seriesDetailsSection
+                // Full-width focus column so Down from any More Like This card
+                // lands here at any scroll offset — the section above the rail is
+                // the seasons rail (already full-width); below is this (#359).
                 if availableSources.count > 1 {
                     availableSourcesSection
-                        .frame(maxWidth: 720, alignment: .leading)
+                        .aetherDetailColumn()
                 }
             }
         }
@@ -3012,6 +3023,15 @@ struct DetailView: View {
 
 }
 
+/// Shared layout metrics for the Detail screen.
+private enum DetailLayout {
+    /// Readable content-column width for the capped body sections (synopsis,
+    /// Available Sources, Playback, Technical Details). Named so the magic number
+    /// lives in one place and the focus-column helper can pair the visual cap
+    /// with a full-width focus frame.
+    static let contentWidth: CGFloat = 720
+}
+
 private extension View {
     /// Apply `.focusSection()` on tvOS so the focus engine can move into and
     /// **out of** this region (e.g. Up from the seasons rail back to the tab
@@ -3023,6 +3043,36 @@ private extension View {
         #else
         self
         #endif
+    }
+
+    /// `aetherDetailFocusSection()` applied only when `condition` holds — so a
+    /// section can opt out of being its own focus group where that would shadow
+    /// a more specific inner section (e.g. the seasons layout's Next-Up anchor,
+    /// #266). No-op off tvOS.
+    @ViewBuilder
+    func aetherDetailFocusSection(when condition: Bool) -> some View {
+        if condition {
+            self.aetherDetailFocusSection()
+        } else {
+            self
+        }
+    }
+
+    /// A width-capped Detail body section whose **focus-section frame spans the
+    /// full width** while the content stays visually capped + leading-aligned.
+    ///
+    /// On tvOS, section-to-section (Up/Down) focus is resolved by the section
+    /// *frames*, not the focused card's geometry — so a horizontal rail's vertical
+    /// neighbour must be full-width to remain a focus target at *any* horizontal
+    /// scroll offset. A neighbour capped to `contentWidth` stops overlapping a
+    /// card once the rail scrolls past it, and focus gets trapped in the rail
+    /// (#359). This generalises the #266 seasons fix (a full-width Next-Up anchor)
+    /// to every Detail rail. Visual layout is unchanged on every platform.
+    func aetherDetailColumn(maxWidth: CGFloat = DetailLayout.contentWidth) -> some View {
+        self
+            .frame(maxWidth: maxWidth, alignment: .leading)   // readable visual cap
+            .frame(maxWidth: .infinity, alignment: .leading)  // full-width focus frame
+            .aetherDetailFocusSection()
     }
 
     /// Bolder, couch-visible focus for season cards — a brighter accent glow and
