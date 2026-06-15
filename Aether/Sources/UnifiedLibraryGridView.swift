@@ -16,9 +16,23 @@ import AetherCore
 /// button + sheet on tvOS (which doesn't render toolbar menus usefully).
 struct UnifiedLibraryGridView: View {
     let title: String
-    let kind: MediaItem.Kind
+    /// The kind this grid shows. **`nil` = all kinds** (Movies + TV Shows) — the
+    /// landing's unified Filter target, which adds a Type facet to the sheet.
+    let kind: MediaItem.Kind?
     let connectedSources: [any MediaSource]
     let downloadStore: DownloadStore?
+    /// Present the filter sheet automatically on first appear — set when the
+    /// landing's Filter button pushed us, so "Filter" is one tap, not two.
+    var autoOpenFilter: Bool = false
+
+    /// Type facet, only meaningful in all-kinds mode (`kind == nil`).
+    enum KindFilter: Hashable { case all, movies, shows }
+    @State private var kindFilter: KindFilter = .all
+    /// Ids of the loaded **show** titles, so the Type facet can split the
+    /// combined catalog without a per-item kind lookup (we load the two kinds
+    /// separately and remember which were shows).
+    @State private var showIDs: Set<String> = []
+    @State private var didAutoOpenFilter = false
 
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
@@ -82,7 +96,10 @@ struct UnifiedLibraryGridView: View {
                 // moves and overlaps the content (fine on iOS, where the large
                 // title collapses on scroll).
                 #if os(tvOS)
-                Text(title)
+                // LocalizedStringKey (not verbatim) so the section title
+                // ("Movies" / "TV Shows" / "Library") translates via the catalog
+                // in the app's locale (#320).
+                Text(LocalizedStringKey(title))
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,7 +111,7 @@ struct UnifiedLibraryGridView: View {
         }
         .aetherScreenBackground()
         #if !os(tvOS)
-        .navigationTitle(title)
+        .navigationTitle(LocalizedStringKey(title))
         #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
@@ -115,6 +132,15 @@ struct UnifiedLibraryGridView: View {
         // are both client-side filters now, so a chip tap never reloads (#319).
         .task(id: sourcesKey) { await load() }
         .task(id: sourcesKey) { await loadAudioLanguageOptions() }
+        // When the landing's Filter button pushed us, present the filter sheet
+        // immediately so "Filter" is one tap. Guarded so it fires only once (not
+        // when returning from a pushed Detail).
+        .onAppear {
+            if autoOpenFilter, !didAutoOpenFilter {
+                didAutoOpenFilter = true
+                isFilterSheetPresented = true
+            }
+        }
     }
 
     private var sourcesKey: String {
@@ -182,6 +208,15 @@ struct UnifiedLibraryGridView: View {
     /// client-side over the loaded catalog, so they apply instantly (#319).
     private var filteredItems: [UnifiedMediaItem] {
         var result = items
+        // Type facet (all-kinds mode only): split the combined catalog by the
+        // remembered show ids.
+        if kind == nil {
+            switch kindFilter {
+            case .all:    break
+            case .movies: result = result.filter { !showIDs.contains($0.id) }
+            case .shows:  result = result.filter { showIDs.contains($0.id) }
+            }
+        }
         // Audio language (#319): filter by the lazily-loaded membership set. If
         // the tapped language hasn't loaded yet, leave the set unfiltered so we
         // never flash the *wrong* language — it narrows the moment the set lands.
@@ -209,7 +244,8 @@ struct UnifiedLibraryGridView: View {
     /// Any filter narrowing the grid — drives the Filter button's active dot and
     /// the "Clear" affordance.
     private var hasActiveFilter: Bool {
-        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil || !selectedYears.isEmpty
+        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil
+            || !selectedYears.isEmpty || (kind == nil && kindFilter != .all)
     }
 
     private func clearFilters() {
@@ -217,6 +253,12 @@ struct UnifiedLibraryGridView: View {
         selectedAudioLanguage = nil
         selectedMinRating = nil
         selectedYears = []
+        kindFilter = .all
+    }
+
+    /// Localized label for the active Type facet chip / token.
+    private var kindFilterLabel: String {
+        kindFilter == .movies ? "Movies" : "TV Shows"
     }
 
     // MARK: - Active-filter summary (#367)
@@ -237,6 +279,9 @@ struct UnifiedLibraryGridView: View {
     /// lists its groups (Genre · Audio · Rating · Year).
     private var activeFilterTokens: [FilterToken] {
         var tokens: [FilterToken] = []
+        if kind == nil, kindFilter != .all {
+            tokens.append(.init(id: "type", label: kindFilterLabel) { self.kindFilter = .all })
+        }
         if let selectedGenre {
             tokens.append(.init(id: "genre", label: selectedGenre) { self.selectedGenre = nil })
         }
@@ -458,6 +503,25 @@ struct UnifiedLibraryGridView: View {
     }
     #endif
 
+    /// Type filter chips (all-kinds mode): All / Movies / TV Shows.
+    private var typeFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                genreChip(label: "All", isSelected: kindFilter == .all) { kindFilter = .all }
+                genreChip(label: "Movies", isSelected: kindFilter == .movies) {
+                    kindFilter = (kindFilter == .movies) ? .all : .movies
+                }
+                genreChip(label: "TV Shows", isSelected: kindFilter == .shows) {
+                    kindFilter = (kindFilter == .shows) ? .all : .shows
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
     /// Rating filter chips: Any + score buckets (9+/8+/7+/6+) over `communityRating`.
     private var ratingFilterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -508,6 +572,11 @@ struct UnifiedLibraryGridView: View {
                 Text("Filter")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
+                // Type facet — only in all-kinds mode (the unified Library grid),
+                // so movies/shows can be picked alongside the other facets.
+                if kind == nil {
+                    filterGroup("Show") { typeFilterRow }
+                }
                 if !availableGenres.isEmpty {
                     filterGroup("Genre") { genreFilterRow }
                 }
@@ -617,6 +686,7 @@ struct UnifiedLibraryGridView: View {
     private func load() async {
         guard !connectedSources.isEmpty else {
             items = []
+            showIDs = []
             return
         }
         let key = sourcesKey
@@ -624,9 +694,22 @@ struct UnifiedLibraryGridView: View {
         defer { isLoading = false }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
         // Always the full catalog — audio + genre are client-side filters (#319).
-        let fetched = await library.unifiedItems(kind: kind)
-        // Drop a stale result if the source set changed while we were loading.
-        guard key == sourcesKey else { return }
+        let fetched: [UnifiedMediaItem]
+        if let kind {
+            fetched = await library.unifiedItems(kind: kind)
+            guard key == sourcesKey else { return }
+            showIDs = []
+        } else {
+            // All-kinds mode: load Movies + TV Shows and remember which ids are
+            // shows so the Type facet can split them client-side.
+            async let moviesTask = library.unifiedItems(kind: .movie)
+            async let showsTask = library.unifiedItems(kind: .show)
+            let movies = await moviesTask
+            let shows = await showsTask
+            guard key == sourcesKey else { return }
+            fetched = movies + shows
+            showIDs = Set(shows.map(\.id))
+        }
         items = fetched
         // Warm the artwork cache for the first screenful of the grid.
         AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
@@ -642,7 +725,16 @@ struct UnifiedLibraryGridView: View {
         }
         let key = sourcesKey
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let options = await library.audioLanguageOptions(kind: kind, locale: locale)
+        let options: [AudioLanguageOption]
+        if let kind {
+            options = await library.audioLanguageOptions(kind: kind, locale: locale)
+        } else {
+            async let moviesTask = library.audioLanguageOptions(kind: .movie, locale: locale)
+            async let showsTask = library.audioLanguageOptions(kind: .show, locale: locale)
+            let merged = await moviesTask + (await showsTask)
+            var seen = Set<String>()
+            options = merged.filter { seen.insert($0.code).inserted }
+        }
         guard key == sourcesKey else { return }
         audioLanguageOptions = options
     }
@@ -661,7 +753,14 @@ struct UnifiedLibraryGridView: View {
         loadingLanguage = code
         defer { if loadingLanguage == code { loadingLanguage = nil } }
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let ids = await library.audioLanguageIDs(kind: kind, language: code)
+        let ids: Set<String>
+        if let kind {
+            ids = await library.audioLanguageIDs(kind: kind, language: code)
+        } else {
+            async let moviesTask = library.audioLanguageIDs(kind: .movie, language: code)
+            async let showsTask = library.audioLanguageIDs(kind: .show, language: code)
+            ids = await moviesTask.union(await showsTask)
+        }
         guard key == sourcesKey else { return }
         audioMembership[code] = ids
     }

@@ -265,7 +265,7 @@ struct HomeView: View {
     @ToolbarContentBuilder
     private var homeTopBarItems: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            AetherWordmark(.medium)
+            AetherWordmark(.large)
         }
         // iOS 26 wraps toolbar items in a circular "Liquid Glass" background,
         // which clipped the wide (~3:2) wordmark into a broken disc. Hide the

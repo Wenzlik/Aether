@@ -72,13 +72,6 @@ struct LibraryBrowseView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
-    /// Landing-level **Type** filter — show only Movies, only TV Shows, or both.
-    /// The one facet that makes a Filter control meaningful on the landing (which
-    /// previews *both* kinds); the rich genre/year/rating filters live on each
-    /// kind's "See all" grid. Drives the Movies / TV Shows rail visibility.
-    enum KindFilter: Hashable { case all, movies, shows }
-    @State private var kindFilter: KindFilter = .all
-
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
@@ -140,6 +133,14 @@ struct LibraryBrowseView: View {
             // Browse facets (Genres, …) — the richer Library hierarchy (#266).
             .navigationDestination(for: LibraryBrowseRoute.self) { route in
                 switch route {
+                case .allTitles:
+                    UnifiedLibraryGridView(
+                        title: "Library",
+                        kind: nil,
+                        connectedSources: connectedSources,
+                        downloadStore: downloadStore,
+                        autoOpenFilter: true
+                    )
                 case .genres:
                     GenreListView(connectedSources: connectedSources)
                 case .genre(let name):
@@ -217,7 +218,7 @@ struct LibraryBrowseView: View {
             } else {
                 AetherWordmark(.medium)
                 Spacer(minLength: AetherDesign.Spacing.l)
-                filterMenuCircular
+                filterButtonCircular
                 searchButton
             }
             #endif
@@ -227,34 +228,27 @@ struct LibraryBrowseView: View {
         .padding(.bottom, AetherDesign.Spacing.m)
     }
 
-    // MARK: - Type filter (#369 follow-up)
+    // MARK: - Filter (opens the unified, fully-filterable Library grid)
 
-    private var filterIcon: String {
-        kindFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill"
-    }
-
-    /// The single landing facet — pick which kinds' rails show.
-    @ViewBuilder
-    private var kindPicker: some View {
-        Picker("Show", selection: $kindFilter) {
-            Label("All", systemImage: "square.stack").tag(KindFilter.all)
-            Label("Movies", systemImage: "film").tag(KindFilter.movies)
-            Label("TV Shows", systemImage: "tv").tag(KindFilter.shows)
-        }
-        .pickerStyle(.inline)
+    /// Push the unified Library grid (Type + Genre + Audio + Rating + Year, all
+    /// in one sheet) — the full filter the user expects, reusing the See-all
+    /// grid's tested filter rather than a landing-only subset.
+    private func openUnifiedFilter() {
+        navigationPath.append(LibraryBrowseRoute.allTitles)
     }
 
     #if !os(tvOS)
-    /// Circular Filter menu matching `searchButton`, for the inline header
+    /// Circular Filter button matching `searchButton`, for the inline header
     /// (iPhone compact / visionOS).
-    private var filterMenuCircular: some View {
-        Menu { kindPicker } label: {
-            Image(systemName: filterIcon)
+    private var filterButtonCircular: some View {
+        Button { openUnifiedFilter() } label: {
+            Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
                 .frame(width: 44, height: 44)
                 .background(AetherDesign.Palette.surface, in: Circle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel("Filter")
     }
     #endif
@@ -295,14 +289,14 @@ struct LibraryBrowseView: View {
     @ToolbarContentBuilder
     private var libraryTopBarItems: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            AetherWordmark(.medium)
+            AetherWordmark(.large)
         }
         // Render the wide wordmark flush — iOS 26's circular toolbar glass would
         // otherwise clip it into a broken disc (see Home #370 fix).
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
-            Menu { kindPicker } label: {
-                Label("Filter", systemImage: filterIcon)
+            Button { openUnifiedFilter() } label: {
+                Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
             }
             .labelStyle(.titleAndIcon)
             .accessibilityLabel("Filter")
@@ -414,15 +408,10 @@ struct LibraryBrowseView: View {
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                // Active Type filter (#369 follow-up) — removable chip so the
-                // narrowed landing reads as narrowed and is one tap to reset.
-                if kindFilter != .all {
-                    activeKindChip
-                }
-                if kindFilter != .shows, !rails.movies.isEmpty {
+                if !rails.movies.isEmpty {
                     unifiedRail(title: "Movies", count: rails.movieCount, kind: .movie, items: rails.movies)
                 }
-                if kindFilter != .movies, !rails.shows.isEmpty {
+                if !rails.shows.isEmpty {
                     unifiedRail(title: "TV Shows", count: rails.showCount, kind: .show, items: rails.shows)
                 }
                 browseSection
@@ -433,25 +422,6 @@ struct LibraryBrowseView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
-    }
-
-    /// Removable chip naming the active Type filter (Movies / TV Shows), tapped
-    /// to clear back to All. Mirrors the #367 active-filter chip language.
-    private var activeKindChip: some View {
-        Button { kindFilter = .all } label: {
-            HStack(spacing: AetherDesign.Spacing.xxs) {
-                Text(kindFilter == .movies ? "Movies" : "TV Shows")
-                    .font(AetherDesign.Typography.metadata)
-                Image(systemName: "xmark").font(.caption2.weight(.semibold))
-            }
-            .padding(.horizontal, AetherDesign.Spacing.m)
-            .padding(.vertical, AetherDesign.Spacing.xs)
-            .background(AetherDesign.Palette.accent, in: Capsule())
-            .foregroundStyle(Color.white)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, AetherDesign.Spacing.l)
-        .accessibilityLabel(Text("Remove \(kindFilter == .movies ? "Movies" : "TV Shows") filter"))
     }
 
     /// "Browse" facet links (iOS / iPadOS / visionOS) — Genres / Years filter the
