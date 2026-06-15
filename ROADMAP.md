@@ -242,6 +242,51 @@ pipeline.
 
 ---
 
+## ✅ macOS App (0.7.x)
+
+A native Mac app (Apple Silicon), sharing `AetherCore` with the Apple-platform
+targets. The fourth first-class platform alongside iOS / iPadOS / tvOS / visionOS.
+
+- ✅ **Native Mac app** ([#232](https://github.com/Wenzlik/Aether/issues/232)) —
+  Plex / Jellyfin + local files, a Metal-backed **libmpv** player (rewritten off
+  the deprecated NSOpenGLView), Continue Watching / resume, full Detail parity
+  (Resume / Play from Beginning, Mark Watched, Favorite, episode → season → show
+  navigation, full-screen backdrop), Library (multi-source, sort + multi-year +
+  rating filters), Discover, Search, and Settings.
+- ✅ **Distribution — Developer ID notarized DMG, over the web.** The bundled
+  mpv / FFmpeg / x264 / x265 stack is GPL, so the Mac App Store is out (the same
+  reason VLC / IINA aren't there). The app is Developer-ID signed, hardened-runtime
+  + notarized, and shipped as a drag-to-install DMG from
+  [aetherplayer.com](https://aetherplayer.com). `scripts/package-mac.sh` builds →
+  signs → notarizes → DMGs; `scripts/deploy-dmg.sh` publishes it.
+- ✅ **All-platform feature parity** — the Discover revamp
+  ([#350](https://github.com/Wenzlik/Aether/issues/350)) and Library year/rating
+  filters ([#351](https://github.com/Wenzlik/Aether/issues/351)) landed on macOS
+  alongside the others; Home/Discover caching + loading states mirror iOS.
+
+Notes: [`RELEASING-macos.md`](RELEASING-macos.md).
+
+---
+
+## 🚧 Cross-device resume via the media server
+
+Make "pick up where you left off" work across every device and client —
+**through the media server itself**, not just iCloud. This is the only
+cross-device path macOS has (iCloud KVS is App-Store-only; the Developer-ID Mac
+build can't use it), and it also reaches non-Apple clients (Plex web, the TV's
+native app). Tracked under [#352](https://github.com/Wenzlik/Aether/issues/352).
+
+- 🚧 **Write** — report the playhead to the server while playing (Plex timeline /
+  Jellyfin Sessions). ([#353](https://github.com/Wenzlik/Aether/issues/353))
+- 🚧 **Read** — seed Continue Watching from the server's own resume list (Plex On
+  Deck / Jellyfin Resume) on load.
+  ([#354](https://github.com/Wenzlik/Aether/issues/354))
+
+The local `ResumeStore` (disk + iCloud KVS on the Apple platforms) stays as the
+offline cache and the only sync for sources with no server (Local / SMB / DLNA).
+
+---
+
 ## ⬜ Search & Filtering (proposed 0.7)
 
 Builds on the Unified Library: richer, **source-agnostic** filtering that works
@@ -296,9 +341,12 @@ New connectors that slot into the Unified Library — each is just another
 
 Get it into people's hands without embarrassment. The Xcode Cloud → TestFlight
 pipeline already feeds `main`; the rest of this milestone is the App-Store-ready
-layer.
+layer. **macOS distributes differently** — Developer ID notarized DMG over the
+web (see the macOS App milestone above), because the GPL mpv stack rules out the
+Mac App Store. So this milestone is iOS / iPadOS / tvOS / visionOS.
 
 - ✅ **Xcode Cloud-backed internal TestFlight pipeline.**
+- ✅ **macOS: Developer ID notarized DMG, web-distributed** (see macOS App).
 - ⬜ **Localization scaffolding** (`Localizable.xcstrings`) and at least English +
   Czech.
 - ⬜ **Accessibility** — VoiceOver labels, Dynamic Type on iOS, sufficient
@@ -321,7 +369,6 @@ Examples currently on the table:
 
 - Disk budget with explicit cap + LRU eviction for downloads *(carried from 0.3)*
 - SwiftData-backed persistent ResumeStore + offline write outbox *(carried from 0.3)*
-- iCloud sync of resume state across devices when no media server is reachable
 - Apple Watch now-playing surface
 - Picture-in-picture on iPad with multi-touch gestures
 - Personal "watch with friends" via SharePlay (Vision Pro Cinema Phase 4)
