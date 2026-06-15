@@ -138,6 +138,8 @@ struct DetailView: View {
     /// source that has the title (not just the one Detail is acting on), so a
     /// movie on both Plex and Jellyfin stays in sync (#232 follow-up).
     @Environment(AppSession.self) private var appSession
+    /// For the "Play on Netflix" link-out (#360).
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the backdrop layout: compact (iPhone) → full-width 16:9; regular
     /// (iPad / tvOS / visionOS) → edge-to-edge fill at a fixed height.
@@ -917,7 +919,8 @@ struct DetailView: View {
                                 AetherCard.poster(
                                     title: rel.title,
                                     posterURL: rel.posterURL,
-                                    isWatched: rel.isWatched
+                                    isWatched: rel.isWatched,
+                                    netflixLogoURL: appSession.watchAvailability.netflixLogoURL(for: rel)
                                 )
                                 .frame(width: relatedPosterWidth)
                             }
@@ -2165,6 +2168,8 @@ struct DetailView: View {
                 compactActionHint
                 #endif
             }
+        } else if isNetflixOnly {
+            netflixOnlyActions
         } else {
             unavailableState
         }
@@ -2225,6 +2230,7 @@ struct DetailView: View {
         // "Source" intentionally absent — switching now lives only in the
         // "Available Sources" section, not the icon row (#356).
         if current.mediaInfo != nil { items.append(String(localized: "Details")) }
+        if ownedNetflixProvider != nil && NetflixLauncher.canLaunch { items.append(String(localized: "Play on Netflix")) }
         return items
     }
 
@@ -2269,6 +2275,14 @@ struct DetailView: View {
                 AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                     dismissIconHint()
                     presentedSelector = .technicalDetails
+                }
+            }
+            // "Also on Netflix" (#360): a secondary link-out for an owned title
+            // that's also on Netflix. Launch-capable platforms only (not tvOS).
+            if ownedNetflixProvider != nil && NetflixLauncher.canLaunch {
+                AetherIconButton(systemImage: "play.tv", accessibilityLabel: "Play on Netflix") {
+                    dismissIconHint()
+                    playOnNetflix()
                 }
             }
             #if !os(tvOS)
@@ -2489,6 +2503,48 @@ struct DetailView: View {
             message: "This title isn't streamable yet. If it's a format Plex can't direct-play, transcode support lands in a future update."
         )
         .padding(.top, -AetherDesign.Spacing.xxl)
+    }
+
+    // MARK: - Netflix availability (#360)
+
+    /// `true` when this is a Netflix-only title (no library source backs it) —
+    /// its primary action is "Play on Netflix", not in-app playback.
+    private var isNetflixOnly: Bool {
+        if case .external = item.id.source { return true }
+        return false
+    }
+
+    /// The Netflix provider for an **owned** title (badge + secondary action),
+    /// or nil. External-only titles are handled by `isNetflixOnly` instead.
+    private var ownedNetflixProvider: ExternalProvider? {
+        guard !isNetflixOnly else { return nil }
+        return appSession.watchAvailability.netflix(forTMDb: current.guids.tmdb, isShow: current.kind == .show)
+    }
+
+    /// Open the title on Netflix (app or web). No-op on tvOS (caller hides it).
+    private func playOnNetflix() {
+        guard let url = NetflixLauncher.searchURL(title: current.title) else { return }
+        openURL(url)
+    }
+
+    /// Primary actions for a Netflix-only title: "Play on Netflix" where it can
+    /// launch (iOS/iPadOS/macOS/visionOS), or an informational note on tvOS.
+    @ViewBuilder
+    private var netflixOnlyActions: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            if NetflixLauncher.canLaunch {
+                AetherButton("Play on Netflix", systemImage: "play.fill", role: .primary) {
+                    playOnNetflix()
+                }
+            } else {
+                Label("Available on Netflix", systemImage: "tv")
+                    .font(AetherDesign.Typography.body)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+            Text("Aether links out to Netflix — it doesn't stream it here.")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+        }
     }
 
     // MARK: - Playback options (compact selectors + media info)

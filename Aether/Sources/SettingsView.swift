@@ -60,10 +60,15 @@ struct SettingsView: View {
     /// column on the phone.
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
+    /// The app locale (UI-language override aware) — used to localize the
+    /// Netflix region country names (#360), per localization rule (c).
+    @Environment(\.locale) private var locale
+
     /// Identifier for whichever default-pref sheet is open. Driven via
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     private enum PrefPicker: String, Identifiable {
         case quality, audio, subtitles, appearance, language, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        case netflixRegion
         #if os(iOS)
         case appIcon
         #endif
@@ -320,6 +325,7 @@ struct SettingsView: View {
         case .accountsSources:
             accountSection
             metadataSection
+            streamingServicesSection
             #if !os(tvOS)
             localLibrarySection
             #endif
@@ -776,6 +782,89 @@ struct SettingsView: View {
         return viewModel.hasBuiltInTMDbKey ? "Built-in" : "Not set"
     }
 
+    // MARK: - Streaming Services (Netflix availability, #360)
+
+    /// Opt-in switch + region for showing where a title is also available on
+    /// Netflix (badges on owned titles; Netflix-only posters in Discover /
+    /// Search). Off by default. Availability data is TMDb Watch Providers
+    /// (powered by JustWatch) — no new key, so it rides on the TMDb token above.
+    private var streamingServicesSection: some View {
+        AetherSettingsSection("Streaming Services") {
+            settingsToggle(
+                "Show Netflix availability",
+                description: "Mark titles you own that are also on Netflix, and surface Netflix-only titles in Discover and Search. Aether links out — it never streams Netflix.",
+                isOn: Binding(
+                    get: { viewModel.streamingPreferences.netflixAvailabilityEnabled },
+                    set: { viewModel.setNetflixAvailabilityEnabled($0) }
+                )
+            )
+            if viewModel.streamingPreferences.netflixAvailabilityEnabled {
+                settingsToggle(
+                    "Show Netflix-only titles",
+                    description: "Surface titles that aren't in your library but are on Netflix as posters in Discover and Search. Turn off to keep those screens to what you own — owned titles still get the badge.",
+                    isOn: Binding(
+                        get: { viewModel.streamingPreferences.showNetflixOnlyTitles },
+                        set: { viewModel.streamingPreferences.showNetflixOnlyTitles = $0 }
+                    )
+                )
+                AetherDisclosureRow(
+                    label: "Region",
+                    value: regionDisplayName(viewModel.resolvedNetflixRegion)
+                ) { openPicker = .netflixRegion }
+                if !viewModel.isTMDbConfigured {
+                    Text("Add a TMDb token above to enable availability lookups.")
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.warning)
+                        .padding(.horizontal, AetherDesign.Spacing.m)
+                }
+                Text("Availability data by JustWatch.")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .padding(.horizontal, AetherDesign.Spacing.m)
+                    .padding(.bottom, AetherDesign.Spacing.xs)
+            }
+        }
+    }
+
+    /// Region codes Netflix availability can be checked against — the common
+    /// markets, "follow device" first. Display names are localized through the
+    /// app locale (not `Locale.current`), per the localization rules.
+    private static let netflixRegions = [
+        "US", "GB", "CA", "AU", "IE",
+        "CZ", "SK", "DE", "AT", "CH", "FR", "ES", "IT", "NL", "BE", "PL",
+        "SE", "NO", "DK", "FI", "PT", "BR", "MX", "JP", "KR", "IN"
+    ]
+
+    /// A region's localized country name (e.g. "United States"), via the app
+    /// locale. Falls back to the raw code.
+    private func regionDisplayName(_ code: String) -> String {
+        locale.localizedString(forRegionCode: code) ?? code
+    }
+
+    private var netflixRegionPickerSheet: some View {
+        PreferencePickerSheet(title: "Region") {
+            // "Follow device" clears the explicit choice (region = nil).
+            AetherSelectionRow(
+                title: String(localized: "Follow device") + " (\(regionDisplayName(deviceRegionCode)))",
+                isSelected: viewModel.streamingPreferences.region == nil
+            ) {
+                viewModel.setNetflixRegion(nil)
+                openPicker = nil
+            }
+            ForEach(Self.netflixRegions, id: \.self) { code in
+                AetherSelectionRow(
+                    title: regionDisplayName(code),
+                    isSelected: viewModel.streamingPreferences.region == code
+                ) {
+                    viewModel.setNetflixRegion(code)
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var deviceRegionCode: String { Locale.current.region?.identifier ?? "US" }
+
     #if !os(tvOS)
     /// Count + total size of completed SMB downloads, from the live snapshot.
     private var smbDownloadedValue: String {
@@ -1197,6 +1286,7 @@ struct SettingsView: View {
         case .countdown:      countdownPickerSheet
         case .watchedDimming: watchedDimmingPickerSheet
         case .watchedLabelOpacity: watchedLabelOpacityPickerSheet
+        case .netflixRegion: netflixRegionPickerSheet
         #if os(iOS)
         case .appIcon: appIconPickerSheet
         #endif

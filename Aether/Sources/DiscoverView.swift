@@ -33,10 +33,18 @@ struct DiscoverView: View {
     let downloads: DownloadObserver?
     let playbackPreferences: PlaybackPreferencesStore?
 
+    /// Netflix availability (#360): badges on owned posters + the Netflix-only
+    /// discovery rails.
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var hero: UnifiedMediaItem?
     @State private var randomPicks: [UnifiedMediaItem] = []
     @State private var newReleases: [UnifiedMediaItem] = []
     @State private var topRated: [UnifiedMediaItem] = []
+    /// Netflix-only titles (not owned) — "New on Netflix" / "Top on Netflix"
+    /// (#360). Empty unless the feature + "show Netflix-only" are both on.
+    @State private var netflixNew: [UnifiedMediaItem] = []
+    @State private var netflixTop: [UnifiedMediaItem] = []
     @State private var isLoading = false
     /// `true` once at least one `load()` has completed — so the empty state only
     /// shows after a real completed load, never during the first load / refresh.
@@ -159,6 +167,13 @@ struct DiscoverView: View {
                 if !randomPicks.isEmpty {
                     rail(title: "Picked for You", items: randomPicks)
                 }
+                // Netflix-only discovery (#360) — opt-in, after the owned rails.
+                if !netflixNew.isEmpty {
+                    rail(title: "New on Netflix", items: netflixNew)
+                }
+                if !netflixTop.isEmpty {
+                    rail(title: "Top on Netflix", items: netflixTop)
+                }
             }
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
@@ -268,7 +283,7 @@ struct DiscoverView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: item))
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
@@ -365,6 +380,27 @@ struct DiscoverView: View {
         artworkURLs += topRated.map(\.posterURL)
         artworkURLs += newReleases.map(\.posterURL)
         AetherImageCache.shared.prefetch(artworkURLs)
+
+        // Netflix-only rails (#360) — opt-in, deduped against owned titles.
+        await loadNetflixRails(ownedTMDbIDs: Set(all.compactMap(\.tmdbID)))
+    }
+
+    /// Build the "New on Netflix" / "Top on Netflix" rails (movies), filtering
+    /// out titles already in the user's library. No-op unless the feature +
+    /// "show Netflix-only" are on, or there's no TMDb key. (#360)
+    private func loadNetflixRails(ownedTMDbIDs: Set<String>) async {
+        guard let availability, availability.showsNetflixOnly else {
+            netflixNew = []; netflixTop = []
+            return
+        }
+        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            items.filter { item in item.tmdbID.map { !ownedTMDbIDs.contains($0) } ?? true }
+        }
+        let new = await availability.netflixOnlyDiscover(isShow: false, sort: .newest)
+        let top = await availability.netflixOnlyDiscover(isShow: false, sort: .topRated)
+        netflixNew = Array(unowned(new).prefix(12))
+        netflixTop = Array(unowned(top).prefix(12))
+        AetherImageCache.shared.prefetch((netflixNew + netflixTop).map(\.posterURL))
     }
 
     private func resetRails() {
@@ -372,6 +408,8 @@ struct DiscoverView: View {
         randomPicks = []
         newReleases = []
         topRated = []
+        netflixNew = []
+        netflixTop = []
     }
 
     /// One automatic retry when a connected source returns empty (often a

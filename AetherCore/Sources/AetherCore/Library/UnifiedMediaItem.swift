@@ -15,6 +15,10 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
     /// preferred when the same title exists there too (#214, #212).
     case smb = 5
     case dlna = 6
+    /// An availability-only provider (Netflix link-out, #360). Never playable, so
+    /// it sorts last and never wins `preferredSource`; it exists only so a
+    /// Netflix-only title can be a `UnifiedSource` behind a card / Detail.
+    case external = 7
 
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 
@@ -29,6 +33,8 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
         case .smb:      self = .smb
         case .dlna:     self = .dlna
         case .mock:     return nil
+        // Availability-only (Netflix link-out, #360) — never a playback source.
+        case .external: return nil
         }
     }
 
@@ -41,6 +47,7 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
         case .local:    return "Local"
         case .smb:      return "SMB"
         case .dlna:     return "DLNA"
+        case .external: return "Netflix"
         }
     }
 }
@@ -173,6 +180,53 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
     /// not badged (#260). This is what the card badge should use.
     public var isFullyWatched: Bool {
         sources.contains { $0.item.isFullyWatched }
+    }
+
+    /// The title's TMDb id, from whichever source carries one — the key for
+    /// availability lookups (#360).
+    public var tmdbID: String? {
+        sources.lazy.compactMap { $0.item.guids.tmdb }.first
+    }
+
+    /// Whether this title is a series (picks the TMDb media type for lookups).
+    public var isShow: Bool { type == .show }
+
+    /// `true` when this title is *only* available externally (a Netflix-only
+    /// discover/search result) — nothing in the user's library backs it, so its
+    /// Detail offers "Play on Netflix" (link-out) instead of in-app playback.
+    public var isExternalOnly: Bool {
+        !sources.isEmpty && sources.allSatisfy { $0.kind == .external }
+    }
+
+    /// Build a Netflix-only title from a TMDb discover/search result (#360). The
+    /// synthesized `MediaItem` has no `streamURL` (Aether never streams Netflix)
+    /// and carries the TMDb id so it can be deduped against owned titles. Wrapped
+    /// in a single, non-playable `.external` source so it flows through the
+    /// normal card / navigation / Detail pipeline.
+    public static func externalNetflix(from meta: TMDbMetadata, isShow: Bool) -> UnifiedMediaItem {
+        let kind: MediaItem.Kind = isShow ? .show : .movie
+        let raw = String(meta.tmdbID)
+        let item = MediaItem(
+            id: MediaID(source: .external(id: raw), rawValue: raw),
+            title: meta.title,
+            kind: kind,
+            year: meta.year,
+            summary: meta.overview,
+            posterURL: meta.posterURL,
+            backdropURL: meta.backdropURL,
+            streamURL: nil,
+            guids: MediaGuids(tmdb: raw)
+        )
+        return UnifiedMediaItem(
+            id: "external.netflix.\(raw)",
+            title: meta.title,
+            year: meta.year,
+            overview: meta.overview,
+            posterURL: meta.posterURL,
+            backdropURL: meta.backdropURL,
+            type: kind,
+            sources: [UnifiedSource(kind: .external, item: item, serverName: "Netflix", playable: false)]
+        )
     }
 }
 

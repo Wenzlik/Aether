@@ -572,6 +572,13 @@ public enum MediaSourceID: Hashable, Sendable {
     /// The on-device Local Library (files Aether owns). Singular — one store
     /// per device — so no associated value. See #173.
     case local
+    /// An **availability-only** title that Aether doesn't host or stream — today
+    /// a Netflix-only title from TMDb Watch Providers (#360). Never enters the
+    /// unified playback priority (`MediaSourceKind(streaming:)` returns nil); its
+    /// synthesized `MediaItem` has no `streamURL`, so Detail offers "Play on
+    /// Netflix" (link-out) instead of in-app playback. Keyed by TMDb id so the
+    /// same title is stable run-to-run.
+    case external(id: String)
 
     /// A stable, run-to-run identical string for this source. Suitable as a
     /// component of persistence keys (e.g. per-library preferences). The
@@ -592,6 +599,8 @@ public enum MediaSourceID: Hashable, Sendable {
             return "dlna.\(udn)"
         case .local:
             return "local"
+        case .external(let id):
+            return "external.\(id)"
         }
     }
 }

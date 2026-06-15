@@ -18,7 +18,12 @@ struct MediaSearchResults: View {
     let sources: [any MediaSource]
     let query: String
 
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var items: [UnifiedMediaItem] = []
+    /// Netflix-only matches for the query (#360) — appended after owned results,
+    /// deduped against them. Empty unless the feature + "show Netflix-only" are on.
+    @State private var netflixResults: [UnifiedMediaItem] = []
     @State private var isLoading = false
     /// People (actors + directors) across the sources, loaded once with the
     /// catalog so name matching is client-side (#296) — no per-keystroke server
@@ -34,6 +39,20 @@ struct MediaSearchResults: View {
             .task(id: sourcesKey) { await load() }
             // Debounced person lookup, re-run as the query changes (#296).
             .task(id: query) { await loadPersonMatches() }
+            // Netflix-only matches, re-run as the query changes (#360).
+            .task(id: query) { await loadNetflixMatches() }
+    }
+
+    /// Netflix-only titles matching the query (#360) — appended to results,
+    /// deduped against owned. No-op unless the feature + "show Netflix-only" are
+    /// on. Cancelled + re-run per query via `.task(id: query)`.
+    private func loadNetflixMatches() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let availability, availability.showsNetflixOnly, trimmed.count >= 2 else {
+            netflixResults = []
+            return
+        }
+        netflixResults = await availability.netflixOnlySearch(trimmed)
     }
 
     /// Stable reload key across the given sources.
@@ -68,7 +87,7 @@ struct MediaSearchResults: View {
                 LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                     ForEach(results) { unified in
                         NavigationLink(value: unified) {
-                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched)
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: unified))
                         }
                         .buttonStyle(.plain)
                     }
@@ -90,7 +109,15 @@ struct MediaSearchResults: View {
         }
         var seen = Set(titleMatches.map(\.id))
         let personDerived = personItems.filter { seen.insert($0.id).inserted }
-        return titleMatches + personDerived
+        // Netflix-only matches (#360) last, deduped against owned results — both
+        // by unified id and by the owned TMDb ids, so an owned title that's also
+        // on Netflix isn't duplicated as a Netflix-only poster.
+        let ownedTMDb = Set((titleMatches + personDerived).compactMap(\.tmdbID))
+        let netflixOnly = netflixResults.filter {
+            guard seen.insert($0.id).inserted else { return false }
+            return $0.tmdbID.map { !ownedTMDb.contains($0) } ?? true
+        }
+        return titleMatches + personDerived + netflixOnly
     }
 
     private var columns: [GridItem] {

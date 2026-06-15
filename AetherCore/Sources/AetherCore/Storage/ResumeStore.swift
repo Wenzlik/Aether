@@ -242,6 +242,9 @@ private struct WirePoint: Codable {
             param = udn
         case .local:
             kind = "local"
+        case .external(let id):
+            kind = "external"
+            param = id
         }
         self.sourceKind = kind
         self.sourceParam = param
@@ -273,6 +276,9 @@ private struct WirePoint: Codable {
             source = .dlna(udn: param)
         case "local":
             source = .local
+        case "external":
+            guard let param = sourceParam else { return nil }
+            source = .external(id: param)
         default:
             return nil
         }

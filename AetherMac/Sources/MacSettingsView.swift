@@ -201,8 +201,47 @@ private struct GeneralSettings: View {
                 Text("Used to fetch posters and descriptions for your local library. Leave the built-in key, or paste your own from themoviedb.org — it's verified against TMDb before saving, then hidden.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            // Netflix availability (#360) — opt-in, mirrors iOS Settings.
+            Section("Streaming Services") {
+                Toggle("Show Netflix availability", isOn: Binding(
+                    get: { session.streamingPreferences.netflixAvailabilityEnabled },
+                    set: { session.streamingPreferences.netflixAvailabilityEnabled = $0; session.watchAvailability.invalidate() }
+                ))
+                if session.streamingPreferences.netflixAvailabilityEnabled {
+                    Toggle("Show Netflix-only titles", isOn: Binding(
+                        get: { session.streamingPreferences.showNetflixOnlyTitles },
+                        set: { session.streamingPreferences.showNetflixOnlyTitles = $0 }
+                    ))
+                    Picker("Region", selection: Binding(
+                        get: { session.streamingPreferences.region ?? "" },
+                        set: { session.streamingPreferences.region = $0.isEmpty ? nil : $0; session.watchAvailability.invalidate() }
+                    )) {
+                        Text("Follow device").tag("")
+                        ForEach(Self.regions, id: \.self) { code in
+                            Text(regionName(code)).tag(code)
+                        }
+                    }
+                    if !session.isTMDBConfigured {
+                        Label("Add a TMDb key above to enable availability lookups.", systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                    Text("Mark titles you own that are also on Netflix, and surface Netflix-only titles in Discover and Search. Aether links out — it never streams Netflix. Availability data by JustWatch.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    /// Region codes Netflix availability can be checked against (mirrors iOS).
+    private static let regions = [
+        "US", "GB", "CA", "AU", "IE",
+        "CZ", "SK", "DE", "AT", "CH", "FR", "ES", "IT", "NL", "BE", "PL",
+        "SE", "NO", "DK", "FI", "PT", "BR", "MX", "JP", "KR", "IN"
+    ]
+    private func regionName(_ code: String) -> String {
+        session.appLocale.localizedString(forRegionCode: code) ?? code
     }
 
     /// Verify the entered key against TMDb, then save + hide it. Invalid keys are

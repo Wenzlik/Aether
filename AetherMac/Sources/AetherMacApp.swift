@@ -15,6 +15,7 @@ struct AetherMacApp: App {
         WindowGroup {
             HomeView(session: session, recents: recents, appDelegate: appDelegate)
                 .frame(minWidth: 820, minHeight: 520)
+                .environment(session.watchAvailability)   // Netflix badges (#360)
         }
         .commands {
             // Real File ▸ Open… (⌘O) + Open Recent, instead of "New".

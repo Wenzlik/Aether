@@ -52,6 +52,20 @@ The shape on disk mirrors the diagram. If it doesn't, that's a bug.
 
 **Multiple sources, one active.** Two connectors implement `MediaSource` today — Plex and Jellyfin — and the app is source-agnostic above the protocol (everything reads a single `source: (any MediaSource)?`). The user can connect both; `AppSession` keeps an `activeSourceKind` (persisted) and points `source` at the active connector. Switching happens in Settings → Sources. There is no merged multi-source feed yet — it can be layered on later without changing the protocol. Jellyfin differs from Plex only in its connector internals (one typed server URL + Quick Connect auth, vs plex.tv discovery + ranked connections); both produce `MediaItem`s and answer `resolvePlayback`, so Detail, the player, resume, and the URL resolver are identical for both.
 
+**Availability ≠ playback (#360).** Netflix is an *availability* source, not a
+playback `MediaSource`: Aether never streams it, it only shows where a title can
+also be watched and links out. This lives outside the `MediaSource` protocol —
+`WatchProvidersService` (AetherCore, over the existing `TMDbClient` Watch
+Providers endpoints, with a 24h TTL cache) answers "is this on Netflix here?"
+and "what's on Netflix to discover?". A `@MainActor @Observable`
+`WatchAvailabilityStore` (app target) mirrors results so cards read them
+synchronously in `body` (the `DownloadObserver` pattern) while lookups run in the
+background. Netflix-*only* titles are modelled as synthesized, non-playable
+`MediaItem`s under a new `MediaSourceID.external` / `MediaSourceKind.external`
+case (`streamURL == nil`, never enters playback priority), so they flow through
+the normal card / navigation / Detail pipeline; their Detail action is "Play on
+Netflix".
+
 > See [`../../AGENTS.md`](../../AGENTS.md) → *Design system* for the inventory of `Aether*` primitives and when to extend each.
 
 ---

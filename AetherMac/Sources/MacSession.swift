@@ -87,6 +87,32 @@ final class MacSession {
         await TMDbClient(apiKey: key.trimmingCharacters(in: .whitespacesAndNewlines), api: api).validate()
     }
 
+    // MARK: - Netflix availability (#360)
+
+    /// Opt-in Netflix-availability prefs (toggle + region), shared store with iOS.
+    let streamingPreferences = StreamingPreferencesStore()
+
+    /// Shared 24h cache so the badge store + every Discover/Search lookup hit the
+    /// same warm entries.
+    private let watchProvidersCache = WatchProvidersService.Cache()
+
+    /// A service over the current TMDb key + resolved region, or nil with no key.
+    /// Region is the user's Settings choice, else the device region (availability
+    /// is about where you physically are, not the UI language).
+    func makeWatchProvidersService() -> WatchProvidersService? {
+        guard isTMDBConfigured else { return nil }
+        let fallback = Locale.current.region?.identifier ?? "US"
+        let region = streamingPreferences.resolvedRegion(default: fallback)
+        return WatchProvidersService(apiKey: effectiveTMDBKey, api: api, region: region, cache: watchProvidersCache)
+    }
+
+    /// `@MainActor`-bound badge store views read synchronously (see iOS).
+    @ObservationIgnored
+    private(set) lazy var watchAvailability = WatchAvailabilityStore(
+        preferences: streamingPreferences,
+        makeService: { [weak self] in self?.makeWatchProvidersService() }
+    )
+
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || !localFolders.isEmpty }

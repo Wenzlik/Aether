@@ -12,6 +12,8 @@ struct MacPoster: View {
     /// resizes instead of clipping fixed-width posters.
     var width: CGFloat? = nil
     @Environment(\.watchedDisplay) private var watchedDisplay
+    /// Netflix-availability badge (#360); optional so previews still render.
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -21,6 +23,7 @@ struct MacPoster: View {
                 // Compact community-rating chip in the top-leading corner (#351)
                 // — just the score, so it barely takes space. Hidden when absent.
                 .overlay(alignment: .topLeading) { ratingBadge }
+                .overlay(alignment: .topTrailing) { netflixBadge }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             Text(item.title)
                 .font(.callout)
@@ -46,6 +49,20 @@ struct MacPoster: View {
                 .overlay { Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5) }
                 .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
                 .padding(6)
+        }
+    }
+
+    /// "Also on Netflix" badge (#360) — the TMDb-served logo, top-trailing.
+    @ViewBuilder
+    private var netflixBadge: some View {
+        if let url = availability?.netflixLogoURL(for: item) {
+            CachedAsyncImage(url: url, aspectRatio: 1)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 0.5) }
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                .padding(6)
+                .accessibilityLabel(Text("On Netflix"))
         }
     }
 }

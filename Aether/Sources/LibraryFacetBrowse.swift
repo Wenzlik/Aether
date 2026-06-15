@@ -265,6 +265,8 @@ struct SourceFacetGridView: View {
     let downloadStore: DownloadStore?
     let load: () async -> [MediaItem]
 
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var items: [MediaItem] = []
     @State private var isLoading = false
 
@@ -294,7 +296,7 @@ struct SourceFacetGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(items) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
+                                AetherCard.poster(title: item.displayTitle, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating, netflixLogoURL: availability?.netflixLogoURL(for: item))
                             }
                             .buttonStyle(.plain)
                         }

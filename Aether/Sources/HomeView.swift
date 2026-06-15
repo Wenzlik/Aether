@@ -36,6 +36,10 @@ struct HomeView: View {
     /// Backs the unified aggregator's offline fold-in.
     let downloadStore: DownloadStore?
 
+    /// Netflix-availability badges (#360). Optional so previews without the
+    /// environment store still render.
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var feed: HomeFeed = .empty
     @State private var rails: UnifiedRails = .empty
     @State private var loadError: String?
@@ -277,7 +281,7 @@ struct HomeView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { unified in
                         NavigationLink(value: unified) {
-                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched)
+                            AetherCard.poster(title: unified.title, posterURL: unified.posterURL, isWatched: unified.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: unified))
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
@@ -354,7 +358,7 @@ struct HomeView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: item))
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)
