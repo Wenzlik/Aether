@@ -208,7 +208,15 @@ struct DiscoverView: View {
         if rails.isEmpty { isLoading = true }
         rails = await session.homeRails()
         isLoading = false
+        // Warm the artwork cache for the rails we're about to show (iOS parity).
+        AetherImageCache.shared.prefetch(
+            rails.recentlyAdded.map(\.posterURL)
+                + rails.recentlyReleased.map(\.posterURL)
+                + rails.continueWatching.map { $0.item.backdropURL ?? $0.item.posterURL }
+        )
         // Stale-while-revalidate: refresh quietly in the background if stale.
+        // The forced refresh also seeds cross-device resume from the servers'
+        // own Continue Watching lists (kept off the cold path for speed).
         if await session.isLibraryStale() {
             let fresh = await session.homeRails(forceRefresh: true)
             if !fresh.isEmpty { rails = fresh }

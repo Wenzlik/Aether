@@ -345,16 +345,23 @@ public actor UnifiedLibrary {
         // call, so resume state stays fresh even on a cache hit.
         async let moviesTask = unifiedItems(kind: .movie, forceRefresh: forceRefresh)
         async let showsTask = unifiedItems(kind: .show, forceRefresh: forceRefresh)
+        let movies = await moviesTask
+        let shows = await showsTask
         // Seed the resume store from each source's server-side "Continue
         // Watching" list (Plex On Deck, Jellyfin Resume) so progress made on
         // other devices surfaces here even with no local history — the
         // cross-device read path, the only one macOS has (no iCloud). Merge is
         // latest-`updatedAt`-wins, so a server point never clobbers a fresher
-        // local one. Best-effort, runs concurrently with the catalog fetch.
-        async let seedTask: Void = seedServerResume(into: resumeStore)
-        let movies = await moviesTask
-        let shows = await showsTask
-        await seedTask
+        // local one.
+        //
+        // Only on a forced refresh — i.e. the background stale-while-revalidate
+        // pass, never the cold cached paint. A network round-trip here would
+        // make the first Home/Discover render wait on the servers while the
+        // catalog is already cached (parity with iOS, which paints from cache
+        // then revalidates). The seeded points are written to the resume store
+        // (and disk), so they surface on the revalidate that re-rendered us and
+        // instantly on the next launch.
+        if forceRefresh { await seedServerResume(into: resumeStore) }
 
         var continueWatching: [HomeFeed.ContinueWatchingEntry] = []
         for unified in movies + shows {
