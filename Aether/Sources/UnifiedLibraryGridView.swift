@@ -376,26 +376,38 @@ struct UnifiedLibraryGridView: View {
         #endif
     }
 
+    // MARK: - Filter chip container
+
+    /// Filter-sheet chip container: on iOS / iPadOS / visionOS the chips **wrap**
+    /// to multiple lines so every option is visible at once (#369 follow-up — no
+    /// chips hidden off-screen to the right); tvOS keeps a horizontal focus row.
+    @ViewBuilder
+    private func chipContainer<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        #if os(tvOS)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) { content() }
+                .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        .focusSection()
+        #else
+        FlowLayout(spacing: AetherDesign.Spacing.s) { content() }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        #endif
+    }
+
     // MARK: - Genre filter
 
-    /// Horizontal capsule chips: "All" + each genre. Tapping filters the grid in
-    /// place. Mirrors the season-selector chips on Series Detail for consistency.
+    /// Capsule chips: "All" + each genre. Tapping filters the grid in place.
     private var genreFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                genreChip(label: "All", isSelected: selectedGenre == nil) { selectedGenre = nil }
-                ForEach(availableGenres, id: \.self) { genre in
-                    genreChip(label: genre, isSelected: selectedGenre == genre) {
-                        // Tapping the active genre again clears the filter.
-                        selectedGenre = (selectedGenre == genre) ? nil : genre
-                    }
+        chipContainer {
+            genreChip(label: "All", isSelected: selectedGenre == nil) { selectedGenre = nil }
+            ForEach(availableGenres, id: \.self) { genre in
+                genreChip(label: genre, isSelected: selectedGenre == genre) {
+                    // Tapping the active genre again clears the filter.
+                    selectedGenre = (selectedGenre == genre) ? nil : genre
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     // MARK: - Audio-language filter (#295/#319)
@@ -405,31 +417,21 @@ struct UnifiedLibraryGridView: View {
     /// language is picked its membership loads (cached after), shown by a small
     /// spinner. "All" is always instant.
     private var audioLanguageFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                Label("Audio", systemImage: "waveform")
-                    .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+        chipContainer {
+            if loadingLanguage != nil {
+                ProgressView()
+                    .controlSize(.small)
                     .padding(.trailing, AetherDesign.Spacing.xxs)
-                if loadingLanguage != nil {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.trailing, AetherDesign.Spacing.xxs)
-                }
-                genreChip(label: "All", isSelected: selectedAudioLanguage == nil) {
-                    selectAudioLanguage(nil)
-                }
-                ForEach(audioLanguageOptions) { option in
-                    genreChip(label: option.displayName, isSelected: selectedAudioLanguage == option.code) {
-                        selectAudioLanguage(option.code)
-                    }
+            }
+            genreChip(label: "All", isSelected: selectedAudioLanguage == nil) {
+                selectAudioLanguage(nil)
+            }
+            ForEach(audioLanguageOptions) { option in
+                genreChip(label: option.displayName, isSelected: selectedAudioLanguage == option.code) {
+                    selectAudioLanguage(option.code)
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     private func genreChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -505,63 +507,45 @@ struct UnifiedLibraryGridView: View {
 
     /// Type filter chips (all-kinds mode): All / Movies / TV Shows.
     private var typeFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                genreChip(label: "All", isSelected: kindFilter == .all) { kindFilter = .all }
-                genreChip(label: "Movies", isSelected: kindFilter == .movies) {
-                    kindFilter = (kindFilter == .movies) ? .all : .movies
-                }
-                genreChip(label: "TV Shows", isSelected: kindFilter == .shows) {
-                    kindFilter = (kindFilter == .shows) ? .all : .shows
-                }
+        chipContainer {
+            genreChip(label: "All", isSelected: kindFilter == .all) { kindFilter = .all }
+            genreChip(label: "Movies", isSelected: kindFilter == .movies) {
+                kindFilter = (kindFilter == .movies) ? .all : .movies
             }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
+            genreChip(label: "TV Shows", isSelected: kindFilter == .shows) {
+                kindFilter = (kindFilter == .shows) ? .all : .shows
+            }
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     /// Rating filter chips: Any + score buckets (9+/8+/7+/6+) over `communityRating`.
     private var ratingFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                genreChip(label: "Any", isSelected: selectedMinRating == nil) { selectedMinRating = nil }
-                ForEach(ratingBuckets, id: \.min) { bucket in
-                    genreChip(label: bucket.label, isSelected: selectedMinRating == bucket.min) {
-                        selectedMinRating = (selectedMinRating == bucket.min) ? nil : bucket.min
-                    }
+        chipContainer {
+            genreChip(label: "Any", isSelected: selectedMinRating == nil) { selectedMinRating = nil }
+            ForEach(ratingBuckets, id: \.min) { bucket in
+                genreChip(label: bucket.label, isSelected: selectedMinRating == bucket.min) {
+                    selectedMinRating = (selectedMinRating == bucket.min) ? nil : bucket.min
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     /// Year filter chips (#351): "All" + each release year, **multi-select** so
     /// the grid can span several years at once. Tapping toggles a year in/out;
     /// "All" clears the whole selection.
     private var yearFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                genreChip(label: "All", isSelected: selectedYears.isEmpty) { selectedYears = [] }
-                ForEach(availableYears, id: \.self) { year in
-                    genreChip(label: String(year), isSelected: selectedYears.contains(year)) {
-                        if selectedYears.contains(year) {
-                            selectedYears.remove(year)
-                        } else {
-                            selectedYears.insert(year)
-                        }
+        chipContainer {
+            genreChip(label: "All", isSelected: selectedYears.isEmpty) { selectedYears = [] }
+            ForEach(availableYears, id: \.self) { year in
+                genreChip(label: String(year), isSelected: selectedYears.contains(year)) {
+                    if selectedYears.contains(year) {
+                        selectedYears.remove(year)
+                    } else {
+                        selectedYears.insert(year)
                     }
                 }
             }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
         }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     /// Filter sheet — Genre / Audio / Rating / Year (#342/#351), reusing the chip
@@ -600,7 +584,10 @@ struct UnifiedLibraryGridView: View {
         return NavigationStack { sheetBody }
         #else
         return sheetBody
-            .presentationDetents([.medium, .large])
+            // Open full-height so every group (Show / Genre / Audio / Rating /
+            // Year) is visible without scrolling past a half-sheet fold (#369
+            // follow-up). Chips wrap, so nothing hides off the right edge either.
+            .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         #endif
     }
@@ -763,5 +750,50 @@ struct UnifiedLibraryGridView: View {
         }
         guard key == sourcesKey else { return }
         audioMembership[code] = ids
+    }
+}
+
+/// A line-wrapping layout for filter chips — lays children left-to-right,
+/// wrapping to a new line when the next child would overflow the proposed
+/// width. Used so the filter sheet shows every chip at once instead of hiding
+/// them in a horizontal scroller (#369 follow-up).
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        let width = maxWidth.isFinite ? maxWidth : max(0, x - spacing)
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        let maxWidth = bounds.width
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            view.place(
+                at: CGPoint(x: bounds.minX + x, y: bounds.minY + y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(size)
+            )
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
