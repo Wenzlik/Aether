@@ -92,20 +92,27 @@ cp "$WORKSPACE/ci_scripts/Package.resolved.pinned" "$SWIFTPM_DIR/Package.resolve
 # Binary dependencies LAST — the project already exists, so a failure here is a
 # clear link-time error, not a missing-project error.
 #
-# Player engine per platform — they never mix:
-#   • iOS/iPadOS/tvOS/visionOS → VLCKit  (the `Aether` target links it)
-#   • macOS                    → libmpv  (the `AetherMac` target links it)
-# So fetch ONLY the engine the platform being archived actually uses. macOS
-# doesn't import VLCKit anywhere, so its ~522 MB download is pure waste there;
-# iOS et al. don't need libmpv. Gate both on CI_PRODUCT_PLATFORM.
+# VLCKit xcframework — fetched on EVERY platform, including macOS. Even though
+# the macOS app plays via libmpv and never imports VLCKit, VLCKit is a
+# project-level SPM binaryTarget (the iOS `Aether` target links it), and
+# `xcodebuild -resolvePackageDependencies` validates ALL binaryTargets in the
+# graph — so a missing/empty VLCKit.xcframework fails resolution for the AetherMac
+# scheme too ("does not contain a binary artifact"), before any build. ~522 MB,
+# re-fetched per build (fresh VM). Removing this cost would need VLCKit out of the
+# shared project graph (e.g. a separate macOS project) — deferred.
+echo "ci_post_clone: fetching VLCKit"
+bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+
+# libmpv (#232) — the macOS player engine + dylibbundler for the bundling phase.
+# ONLY on the macOS archive (macOS-specific brew install); gated on the platform
+# so iOS/tvOS/visionOS skip it.
 case "${CI_PRODUCT_PLATFORM:-}" in
   macOS|macos|*[Mm]ac*)
-    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM); skipping VLCKit (macOS uses libmpv)"
+    echo "ci_post_clone: fetching libmpv (platform=$CI_PRODUCT_PLATFORM)"
     bash "$WORKSPACE/scripts/fetch_mpv.sh"
     ;;
   *)
-    echo "ci_post_clone: fetching VLCKit (platform=${CI_PRODUCT_PLATFORM:-unknown}); skipping libmpv (not macOS)"
-    bash "$WORKSPACE/scripts/fetch_vlckit.sh"
+    echo "ci_post_clone: skipping libmpv (platform=${CI_PRODUCT_PLATFORM:-unknown}, not macOS)"
     ;;
 esac
 
