@@ -169,6 +169,110 @@ public struct TMDbClient: Sendable {
         return URL(string: imageBase + size + path)
     }
 
+    // MARK: - Watch providers + discovery (#360)
+
+    /// Whether a title is a movie or a TV show, for the path segment TMDb uses.
+    public enum MediaType: Sendable {
+        case movie, tv
+        var path: String { self == .tv ? "tv" : "movie" }
+    }
+
+    /// Sort order for `discover` rails (#360 — "New on Netflix" vs "Top on
+    /// Netflix"). Raw values are TMDb `sort_by` values.
+    public enum DiscoverSort: String, Sendable {
+        case newest = "primary_release_date.desc"
+        case topRated = "vote_average.desc"
+        case popular = "popularity.desc"
+    }
+
+    /// Streaming providers a title is available on in `region`, from
+    /// `GET /{movie|tv}/{id}/watch/providers` → `results[region].flatrate`.
+    /// Best-effort + non-throwing: empty on any failure (no key, network, no
+    /// result), mirroring the rest of the client.
+    public func watchProviders(forTMDb tmdbID: Int, type: MediaType, region: String) async -> [ExternalProvider] {
+        guard isConfigured, let request = simpleRequest(path: "/\(type.path)/\(tmdbID)/watch/providers") else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? await api.decode(WatchProvidersResponse.self, from: request, decoder: decoder) else {
+            return []
+        }
+        // `flatrate` = subscription (what Netflix is); ignore rent / buy.
+        let entry = response.results[region.uppercased()]
+        return (entry?.flatrate ?? []).map {
+            ExternalProvider(
+                id: $0.providerId,
+                name: $0.providerName,
+                logoURL: Self.imageURL($0.logoPath, size: "w92")
+            )
+        }
+    }
+
+    /// Titles available on `provider` in `region`, from
+    /// `GET /discover/{movie|tv}?with_watch_providers=…&watch_region=…`. Used
+    /// for the "New on Netflix" / "Top on Netflix" Discover rails. Empty on any
+    /// failure.
+    public func discover(
+        provider: Int,
+        type: MediaType,
+        region: String,
+        sortBy: DiscoverSort = .popular,
+        page: Int = 1
+    ) async -> [TMDbMetadata] {
+        let extra = [
+            URLQueryItem(name: "with_watch_providers", value: String(provider)),
+            URLQueryItem(name: "watch_region", value: region.uppercased()),
+            URLQueryItem(name: "with_watch_monetization_types", value: "flatrate"),
+            URLQueryItem(name: "sort_by", value: sortBy.rawValue),
+            URLQueryItem(name: "include_adult", value: "false"),
+            URLQueryItem(name: "vote_count.gte", value: "100"),
+            URLQueryItem(name: "page", value: String(page))
+        ]
+        guard isConfigured, let request = simpleRequest(path: "/discover/\(type.path)", extraQuery: extra) else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? await api.decode(SearchResponse.self, from: request, decoder: decoder) else {
+            return []
+        }
+        return response.results.map { result in
+            let name = result.title ?? result.name ?? ""
+            let date = result.releaseDate ?? result.firstAirDate
+            let year = date.flatMap { Int($0.prefix(4)) }
+            return TMDbMetadata(
+                tmdbID: result.id,
+                title: name,
+                year: year,
+                overview: result.overview?.nonEmptyTrimmed,
+                posterURL: Self.imageURL(result.posterPath, size: "w500"),
+                backdropURL: Self.imageURL(result.backdropPath, size: "w1280")
+            )
+        }
+    }
+
+    /// A bare GET request to `path` with the credential attached the same way as
+    /// a search request (api_key query param, or a v4 bearer header), plus any
+    /// `extraQuery` items (used by the discover endpoint).
+    private func simpleRequest(path: String, extraQuery: [URLQueryItem] = []) -> URLRequest? {
+        var components = URLComponents(
+            url: Self.base.appendingPathComponent(path), resolvingAgainstBaseURL: false
+        )
+        var items = extraQuery
+        if !usesBearerToken {
+            items.insert(URLQueryItem(name: "api_key", value: apiKey), at: 0)
+        }
+        components?.queryItems = items.isEmpty ? nil : items
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        if usesBearerToken {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "accept")
+        }
+        return request
+    }
+
     // MARK: - DTOs
 
     private struct SearchResponse: Decodable, Sendable {
@@ -184,5 +288,23 @@ public struct TMDbClient: Sendable {
         let overview: String?
         let posterPath: String?
         let backdropPath: String?
+    }
+
+    /// `/watch/providers` response: per-region buckets of provider lists.
+    private struct WatchProvidersResponse: Decodable, Sendable {
+        let results: [String: RegionProviders]
+    }
+
+    private struct RegionProviders: Decodable, Sendable {
+        let flatrate: [Provider]?
+    }
+
+    private struct Provider: Decodable, Sendable {
+        // `.convertFromSnakeCase` maps `provider_id` → `providerId` (lowercase d),
+        // so the property must match exactly — `providerID` silently fails to
+        // decode and drops every provider.
+        let providerId: Int
+        let providerName: String
+        let logoPath: String?
     }
 }

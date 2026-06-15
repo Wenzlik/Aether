@@ -49,6 +49,7 @@ struct AetherApp: App {
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
                 .environment(session)
+                .environment(session.watchAvailability)
                 .environment(cinema)
         }
         #else
@@ -64,6 +65,7 @@ struct AetherApp: App {
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
                 .task { await session.start() }
                 .environment(session)
+                .environment(session.watchAvailability)
         }
         #endif
 
@@ -148,6 +150,8 @@ final class AppSession {
     let appearance: AppearancePreferenceStore
     /// In-app UI language override (#312); `.system` follows the device language.
     let language: LanguagePreferenceStore
+    /// Netflix-availability opt-in + region (#360). Off by default.
+    let streamingPreferences: StreamingPreferencesStore
 
     // MARK: - Local Library
 
@@ -308,6 +312,16 @@ final class AppSession {
     /// `body` — no actor hop, no `await` in the render path.
     private(set) var downloads: DownloadObserver?
 
+    /// `@MainActor`-bound mirror of Netflix availability for SwiftUI views
+    /// (#360). Cards read `watchAvailability.netflix(forTMDb:)` synchronously;
+    /// lookups run in the background and write back. Always present (the feature
+    /// gates itself on the opt-in toggle inside the store).
+    @ObservationIgnored
+    private(set) lazy var watchAvailability = WatchAvailabilityStore(
+        preferences: streamingPreferences,
+        makeService: { [weak self] in self?.makeWatchProvidersService() }
+    )
+
     // MARK: - Plex — auth
 
     private(set) var plexConfiguration: PlexConfiguration?
@@ -423,8 +437,27 @@ final class AppSession {
         self.cinemaPreferences = CinemaPreferencesStore()
         self.appearance = AppearancePreferenceStore()
         self.language = LanguagePreferenceStore()
+        self.streamingPreferences = StreamingPreferencesStore()
         self.localSource = LocalMediaSource(store: localLibraryStore)
     }
+
+    // MARK: - Netflix availability (#360)
+
+    /// A `WatchProvidersService` over the current TMDb key + resolved region, or
+    /// nil when TMDb isn't configured. Cheap to build (the 24h cache is shared
+    /// across instances, so a fresh one still hits warm entries). Region is the
+    /// user's Settings choice, else the device region (availability is about
+    /// where you physically are, not the UI language).
+    func makeWatchProvidersService() -> WatchProvidersService? {
+        guard isTMDbConfigured else { return nil }
+        let fallback = Locale.current.region?.identifier ?? "US"
+        let region = streamingPreferences.resolvedRegion(default: fallback)
+        return WatchProvidersService(apiKey: tmdbAPIKey, api: api, region: region, cache: watchProvidersCache)
+    }
+
+    /// Shared 24h cache so every `makeWatchProvidersService()` and the badge
+    /// store hit the same warm entries instead of re-querying TMDb.
+    private let watchProvidersCache = WatchProvidersService.Cache()
 
     // MARK: - Lifecycle
 

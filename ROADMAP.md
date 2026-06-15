@@ -319,6 +319,11 @@ Notes: [`docs/next-steps/0.6-search-filtering.md`](docs/next-steps/0.6-search-fi
 New connectors that slot into the Unified Library — each is just another
 `MediaSource` behind the same titles.
 
+- ✅ **Netflix availability** *(availability source, not playback)* — opt-in
+  "on Netflix" badges on owned titles + Netflix-only posters in Discover /
+  Search, with **Play on Netflix** linking out (search URL v1). Powered by TMDb
+  Watch Providers (JustWatch); off by default, with a Region setting. tvOS is
+  badge + discovery only. *(Shipped 0.7.5; [#360](https://github.com/Wenzlik/Aether/issues/360).)*
 - ⬜ **Emby connector** — auth + libraries + items + playback, alongside Plex /
   Jellyfin. ([#171](https://github.com/Wenzlik/Aether/issues/171))
 - ✅ **SMB** — connect to a NAS, browse + auth natively (pure-Swift `SMBClient`),

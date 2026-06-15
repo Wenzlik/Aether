@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AetherCore
 
 /// Detail screen for a library item. Movies (and episodes) hydrate to expose
@@ -179,17 +180,44 @@ struct MediaDetailView: View {
     @ViewBuilder
     private var primaryActions: some View {
         HStack(spacing: 14) {
-            if let resumeAt, resumeAt > 1 {
+            if isNetflixOnly {
+                // Netflix-only title — link out, no in-app playback (#360).
+                bigButton("Play on Netflix", systemImage: "play.fill", prominent: true) { playOnNetflix() }
+            } else if let resumeAt, resumeAt > 1 {
                 bigButton("Resume · \(timecode(resumeAt))", systemImage: "play.fill", prominent: true) {
                     Task { await session.play(current) }
                 }
                 bigButton("Restart", systemImage: "gobackward", prominent: false) {
                     Task { await session.play(current, startAt: 0) }
                 }
+                if ownedNetflixProvider != nil {
+                    bigButton("Play on Netflix", systemImage: "play.tv", prominent: false) { playOnNetflix() }
+                }
             } else {
                 bigButton("Play", systemImage: "play.fill", prominent: true) { onPlay(current) }
+                if ownedNetflixProvider != nil {
+                    bigButton("Play on Netflix", systemImage: "play.tv", prominent: false) { playOnNetflix() }
+                }
             }
         }
+    }
+
+    /// `true` when this is a Netflix-only title (no library source backs it).
+    private var isNetflixOnly: Bool {
+        if case .external = item.id.source { return true }
+        return false
+    }
+
+    /// The Netflix provider for an owned title (secondary action), or nil.
+    private var ownedNetflixProvider: ExternalProvider? {
+        guard !isNetflixOnly else { return nil }
+        return session.watchAvailability.netflix(forTMDb: current.guids.tmdb, isShow: current.kind == .show)
+    }
+
+    /// Open the title on Netflix (app or web) via the system browser (#360).
+    private func playOnNetflix() {
+        guard let url = NetflixLauncher.searchURL(title: current.title) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// An oversized action button — Play/Resume should immediately draw the eye

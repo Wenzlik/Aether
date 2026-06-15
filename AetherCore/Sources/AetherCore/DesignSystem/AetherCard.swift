@@ -25,6 +25,9 @@ public struct AetherCard: View {
     /// pass `2` so longer "S2 · Asylum" labels stay legible instead of clipping
     /// to "Seaso…" (#263); most cards keep the single-line default.
     public let titleLineLimit: Int
+    /// When set, a small Netflix badge (the TMDb-served logo) sits in the
+    /// artwork's top-trailing corner — the "also on Netflix" signal (#360).
+    public let netflixLogoURL: URL?
     /// Watched dimming intensity + label toggle, from the user's preference (#280).
     @Environment(\.watchedDisplay) private var watchedDisplay
 
@@ -36,7 +39,8 @@ public struct AetherCard: View {
         progress: Double? = nil,
         isWatched: Bool = false,
         rating: Double? = nil,
-        titleLineLimit: Int = 1
+        titleLineLimit: Int = 1,
+        netflixLogoURL: URL? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -46,6 +50,7 @@ public struct AetherCard: View {
         self.isWatched = isWatched
         self.rating = rating
         self.titleLineLimit = titleLineLimit
+        self.netflixLogoURL = netflixLogoURL
     }
 
     public var body: some View {
@@ -53,6 +58,7 @@ public struct AetherCard: View {
             artwork
                 .overlay(alignment: .bottom) { progressBar }
                 .overlay(alignment: .topLeading) { ratingBadge }
+                .overlay(alignment: .topTrailing) { netflixBadge }
                 .clipShape(RoundedRectangle(cornerRadius: platformCornerRadius, style: .continuous))
                 // Premium focus: lift + soft blue glow, no border (Apple TV+ feel).
                 // Cards earn the larger lift.
@@ -171,6 +177,31 @@ public struct AetherCard: View {
         #endif
     }
 
+    /// "Also on Netflix" badge (#360): the TMDb-served provider logo in the
+    /// artwork's top-trailing corner — license-clean (TMDb/JustWatch). Small and
+    /// rounded so it reads as a provider chip, not a UI control. Hidden unless a
+    /// logo URL was supplied.
+    @ViewBuilder
+    private var netflixBadge: some View {
+        if let netflixLogoURL {
+            CachedAsyncImage(url: netflixLogoURL, aspectRatio: 1)
+                .frame(width: netflixBadgeSize, height: netflixBadgeSize)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 0.5) }
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                .padding(AetherDesign.Spacing.xs)
+                .accessibilityLabel(Text("On Netflix"))
+        }
+    }
+
+    private var netflixBadgeSize: CGFloat {
+        #if os(tvOS) || os(visionOS)
+        return 28
+        #else
+        return 20
+        #endif
+    }
+
     private var platformCornerRadius: CGFloat {
         #if os(tvOS)
         AetherDesign.Radius.cardTV
@@ -283,9 +314,10 @@ extension AetherCard {
         progress: Double? = nil,
         isWatched: Bool = false,
         rating: Double? = nil,
-        titleLineLimit: Int = 1
+        titleLineLimit: Int = 1,
+        netflixLogoURL: URL? = nil
     ) -> AetherCard {
-        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, rating: rating, titleLineLimit: titleLineLimit)
+        AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, rating: rating, titleLineLimit: titleLineLimit, netflixLogoURL: netflixLogoURL)
     }
 
     /// 16:9 hero card — used for the featured rail and continue-watching, where

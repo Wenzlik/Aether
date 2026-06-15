@@ -87,6 +87,8 @@ struct FacetGridView: View {
     let downloadStore: DownloadStore?
     let filter: (UnifiedMediaItem) -> Bool
 
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var items: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
@@ -120,7 +122,7 @@ struct FacetGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(items) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating)
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating, netflixLogoURL: availability?.netflixLogoURL(for: item))
                             }
                             .buttonStyle(.plain)
                         }

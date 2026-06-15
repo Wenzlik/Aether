@@ -18,6 +18,16 @@ struct DiscoverView: View {
     /// reloading.
     private var rails: UnifiedRails { session.homeRailsCache }
 
+    /// Netflix-only discovery rails (#360) — opt-in, loaded on demand.
+    @State private var netflixNew: [UnifiedMediaItem] = []
+    @State private var netflixTop: [UnifiedMediaItem] = []
+
+    /// Re-key the Netflix load when the toggle / region / show-only change.
+    private var netflixKey: String {
+        let p = session.streamingPreferences
+        return "\(p.netflixAvailabilityEnabled)-\(p.showNetflixOnlyTitles)-\(p.region ?? "auto")-\(session.libraryToken)"
+    }
+
     var body: some View {
         ScrollView {
             if !rails.isEmpty {
@@ -56,6 +66,22 @@ struct DiscoverView: View {
         .task(id: "\(session.libraryToken)-\(session.resumeRevision)") {
             await session.loadHomeRailsIfNeeded()
         }
+        .task(id: netflixKey) { await loadNetflixRails() }
+    }
+
+    /// "New on Netflix" / "Top on Netflix" (movies), deduped against owned. No-op
+    /// unless the feature + "show Netflix-only" are on, or there's no TMDb key.
+    private func loadNetflixRails() async {
+        guard mode == .discover, session.watchAvailability.showsNetflixOnly else {
+            netflixNew = []; netflixTop = []
+            return
+        }
+        let owned = Set((rails.movies + rails.shows).compactMap(\.tmdbID))
+        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            Array(items.filter { $0.tmdbID.map { !owned.contains($0) } ?? true }.prefix(12))
+        }
+        netflixNew = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .newest))
+        netflixTop = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .topRated))
     }
 
     /// The loaded rails — the real content body.
@@ -78,6 +104,8 @@ struct DiscoverView: View {
                 rail("New Releases", newReleases)
                 rail("Top Rated", filtered(topRated))
                 rail("Picked for You", pickedForYou)
+                if !netflixNew.isEmpty { rail("New on Netflix", netflixNew) }
+                if !netflixTop.isEmpty { rail("Top on Netflix", netflixTop) }
             }
         }
         .padding(.vertical, 24)

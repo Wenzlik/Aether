@@ -1677,6 +1677,113 @@ struct TMDbClientTests {
     }
 }
 
+@Suite("AetherCore — Netflix availability (#360)")
+struct NetflixAvailabilityTests {
+    private struct StubAPI: APIClient {
+        let json: String
+        func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            (Data(json.utf8),
+             HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    @Test("watch/providers → Netflix detected in region from flatrate")
+    func watchProvidersNetflix() async {
+        let json = #"""
+        {"id":603,"results":{
+          "US":{"flatrate":[{"provider_id":8,"provider_name":"Netflix","logo_path":"/nflx.jpg"}]},
+          "CZ":{"flatrate":[{"provider_id":119,"provider_name":"Amazon Prime"}]}
+        }}
+        """#
+        let us = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .watchProviders(forTMDb: 603, type: .movie, region: "US")
+        #expect(us.contains { $0.isNetflix })
+        #expect(us.first(where: \.isNetflix)?.logoURL?.absoluteString == "https://image.tmdb.org/t/p/w92/nflx.jpg")
+
+        // A region with no Netflix flatrate → no Netflix provider.
+        let cz = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .watchProviders(forTMDb: 603, type: .movie, region: "CZ")
+        #expect(!cz.contains { $0.isNetflix })
+
+        // A region absent from the response → empty.
+        let de = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .watchProviders(forTMDb: 603, type: .movie, region: "DE")
+        #expect(de.isEmpty)
+    }
+
+    @Test("discover maps results to TMDbMetadata")
+    func discoverMaps() async {
+        let json = #"""
+        {"results":[{"id":1,"title":"A","release_date":"2024-01-01","poster_path":"/a.jpg"}]}
+        """#
+        let titles = await TMDbClient(apiKey: "k", api: StubAPI(json: json))
+            .discover(provider: 8, type: .movie, region: "US", sortBy: .newest)
+        #expect(titles.count == 1)
+        #expect(titles[0].tmdbID == 1)
+        #expect(titles[0].year == 2024)
+    }
+
+    @Test("WatchProvidersService caches provider lookups within TTL")
+    func serviceCaches() async {
+        // A stub that counts calls, to prove the second lookup is served warm.
+        actor Counter { var n = 0; func bump() { n += 1 }; func count() -> Int { n } }
+        struct CountingAPI: APIClient {
+            let counter: Counter
+            let json: String
+            func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+                await counter.bump()
+                return (Data(json.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+        }
+        let counter = Counter()
+        let json = #"{"id":603,"results":{"US":{"flatrate":[{"provider_id":8,"provider_name":"Netflix"}]}}}"#
+        let service = WatchProvidersService(apiKey: "k", api: CountingAPI(counter: counter, json: json), region: "US")
+        let first = await service.netflix(forTMDb: 603, type: .movie)
+        let second = await service.netflix(forTMDb: 603, type: .movie)
+        #expect(first != nil)
+        #expect(second != nil)
+        #expect(await counter.count() == 1)   // second served from cache
+    }
+
+    @Test("StreamingPreferencesStore round-trips and resolves region")
+    @MainActor
+    func preferences() {
+        let defaults = UserDefaults(suiteName: "netflix.tests.\(UUID().uuidString)")!
+        let store = StreamingPreferencesStore(defaults: defaults)
+        #expect(store.netflixAvailabilityEnabled == false)   // off by default
+        #expect(store.showNetflixOnlyTitles == true)         // on by default
+        #expect(store.resolvedRegion(default: "cz") == "CZ") // falls back, uppercased
+        store.region = "us"
+        #expect(store.resolvedRegion(default: "GB") == "US") // explicit choice wins
+        store.netflixAvailabilityEnabled = true
+        let reloaded = StreamingPreferencesStore(defaults: defaults)
+        #expect(reloaded.netflixAvailabilityEnabled == true)
+        #expect(reloaded.region == "us")
+    }
+
+    @Test("MediaSourceID.external — stableKey, Codable round-trip, not a playback kind")
+    func externalSource() throws {
+        let id = MediaSourceID.external(id: "603")
+        #expect(id.stableKey == "external.603")
+        #expect(MediaSourceKind(streaming: id) == nil)   // never enters playback priority
+
+        let data = try JSONEncoder().encode(id)
+        let decoded = try JSONDecoder().decode(MediaSourceID.self, from: data)
+        #expect(decoded == id)
+    }
+
+    @Test("externalNetflix factory builds a non-playable unified title")
+    func externalFactory() {
+        let meta = TMDbMetadata(tmdbID: 603, title: "The Matrix", year: 1999,
+                                overview: "Neo.", posterURL: nil, backdropURL: nil)
+        let item = UnifiedMediaItem.externalNetflix(from: meta, isShow: false)
+        #expect(item.isExternalOnly)
+        #expect(item.tmdbID == "603")
+        #expect(item.preferredSource == nil)              // not playable
+        #expect(item.sources.first?.item.streamURL == nil)
+    }
+}
+
 @Suite("AetherCore — DetailFormatting (#241)")
 struct DetailFormattingTests {
     @Test("kind labels")

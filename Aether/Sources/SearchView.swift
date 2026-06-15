@@ -26,6 +26,8 @@ struct SearchView: View {
     let downloads: DownloadObserver?
     let playbackPreferences: PlaybackPreferencesStore?
 
+    @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+
     @State private var query = ""
     /// Owns keyboard focus so taps outside the field, scrolling the results, or
     /// selecting a result all dismiss the keyboard — the native search feel.
@@ -180,7 +182,7 @@ struct SearchView: View {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(items) { item in
                         NavigationLink(value: item) {
-                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched)
+                            AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, netflixLogoURL: availability?.netflixLogoURL(for: item))
                                 .frame(width: posterWidth)
                         }
                         .buttonStyle(.plain)

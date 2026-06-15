@@ -4,8 +4,20 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-06-15 · "Draco"
+
 ### Added
 
+- **Netflix availability** (#360, opt-in, all platforms) — see where titles you
+  own are **also on Netflix** (a small "on Netflix" badge on posters + Detail),
+  and discover **Netflix-only** titles as posters in **Discover** ("New on
+  Netflix" / "Top on Netflix") and **Search**, with **Play on Netflix** linking
+  out to the app/web. Off by default; enabled in **Settings ▸ Streaming
+  Services** with a **Region** and a "show Netflix-only titles" switch (turn it
+  off to keep Discover/Search to what you own — owned titles still get the
+  badge). Powered by **TMDb Watch Providers** (data by JustWatch) — no new key.
+  Aether never streams Netflix; it only links out. On **tvOS** it's badge +
+  discovery only (no launch).
 - **Discover revamp** (#350, all platforms) — dropped the genre rails in favour of
   curated rails: **New Releases** and **Top Rated** (plus Picked for You). Discover
   now also hides **in-progress** titles, not just fully-watched ones — they live in
