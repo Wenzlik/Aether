@@ -81,6 +81,12 @@ final class MacSession {
         return key.isEmpty ? nil : TMDbClient(apiKey: key, api: api)
     }
 
+    /// Verify a TMDb key against the API (`/authentication`) before saving it, so
+    /// Settings can confirm it's valid and only then store + hide it.
+    func validateTMDbKey(_ key: String) async -> TMDbClient.ValidationResult {
+        await TMDbClient(apiKey: key.trimmingCharacters(in: .whitespacesAndNewlines), api: api).validate()
+    }
+
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || !localFolders.isEmpty }

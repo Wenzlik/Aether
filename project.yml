@@ -255,6 +255,10 @@ targets:
         CFBundleDisplayName: Aether
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Short git commit, stamped into the built Info.plist by the "Stamp git
+        # commit" phase below — the build identifier shown in Settings ▸ About
+        # (CFBundleVersion is "1" on local builds). Default "dev" if git is absent.
+        AetherGitCommit: dev
         # TMDb key baked in at build (from Config/App.xcconfig / Xcode Cloud).
         TMDBAPIKey: "$(TMDB_API_KEY)"
         # Supported UI languages — Czech + English (in-app switcher in Settings,
@@ -308,6 +312,21 @@ targets:
     # @executable_path/../Frameworks, so it runs on Macs without Homebrew (Xcode
     # Cloud archives, end users). dylibbundler comes from scripts/fetch_mpv.sh.
     postBuildScripts:
+      # Stamp the short git commit into the built Info.plist (AetherGitCommit) so
+      # the build carries a clear identifier even when CFBundleVersion is "1".
+      # Best-effort: "dev" if git is unavailable; never fails the build.
+      - name: Stamp git commit
+        basedOnDependencyAnalysis: false
+        script: |
+          set +e
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          [ -f "$PLIST" ] || exit 0
+          HASH=$(git -C "$SRCROOT" rev-parse --short HEAD 2>/dev/null)
+          [ -z "$HASH" ] && HASH="dev"
+          if ! git -C "$SRCROOT" diff --quiet HEAD 2>/dev/null; then HASH="${HASH}+"; fi
+          /usr/libexec/PlistBuddy -c "Set :AetherGitCommit ${HASH}" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :AetherGitCommit string ${HASH}" "$PLIST"
+          exit 0
       - name: Bundle libmpv into app
         basedOnDependencyAnalysis: false
         script: |
