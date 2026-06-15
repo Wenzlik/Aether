@@ -423,6 +423,24 @@ final class MacSession {
         libraryToken &+= 1   // refresh watched badges
     }
 
+    /// Source skip segments (intro / recap / credits) for the player's Skip
+    /// Intro / Skip Credits + Auto-Play-Next. Empty when the source has none.
+    func segments(for item: MediaItem) async -> [PlaybackSegment] {
+        await source(for: item)?.segments(for: item.id) ?? []
+    }
+
+    /// The next episode after `item` in its season/show, for Auto-Play-Next.
+    func nextEpisode(after item: MediaItem) async -> MediaItem? {
+        await source(for: item)?.nextEpisode(after: item.id)
+    }
+
+    /// Forget an item's resume point — called when it finishes so it leaves
+    /// Continue Watching and never offers "resume" a second before the end.
+    func clearResume(for item: MediaItem) async {
+        await resumeStore.clear(for: item.id)
+        resumeRevision &+= 1
+    }
+
     /// Whether the item's source supports favorites (Plex/Jellyfin do; local no).
     func canFavorite(_ item: MediaItem) -> Bool {
         source(for: item)?.supportsFavorites ?? false
