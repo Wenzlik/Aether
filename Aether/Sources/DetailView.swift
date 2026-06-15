@@ -2287,6 +2287,11 @@ struct DetailView: View {
                 isActive: isDownloaded
             )
         }
+        // Strip the Menu's default accent-tinted button chrome so the icon reads
+        // identically to the plain `AetherIconButton`s in the row — blue is then
+        // driven only by `isActive` (downloaded), never by the menu decoration,
+        // keeping "blue = primary/active" consistent (#356 follow-up).
+        .buttonStyle(.plain)
         .accessibilityLabel("Download")
     }
 
