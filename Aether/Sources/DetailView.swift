@@ -2151,6 +2151,11 @@ struct DetailView: View {
         }
     }
 
+    /// Width cap for the first-use caption — narrower than the 720 content cap
+    /// because it's a caption, not a content block; keeps the trailing "Got it"
+    /// beside the text on the wide visionOS/iPad column (#355).
+    private var hintMaxWidth: CGFloat { 480 }
+
     /// First-use discoverability for the bare icon row (§4, "bare + first-use
     /// hint"): a one-time caption naming the icons that are actually present,
     /// dismissed by "Got it" — or by tapping an icon, since that *is* discovery.
@@ -2163,7 +2168,11 @@ struct DetailView: View {
                 Image(systemName: "hand.tap")
                     .font(.caption2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
-                Text(items.joined(separator: " · "))
+                // Lead-in prose ("Tap an icon below — …") shifts the labels to the
+                // right so none sits directly under its icon — the eye used to sit
+                // above the word "Watch status" and read as a duplicate control
+                // (#355). It's a sentence, not a column of captions.
+                Text("Tap an icon below — \(items.joined(separator: ", ")).")
                     .font(AetherDesign.Typography.caption)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2174,6 +2183,12 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                     .premiumFocus()
             }
+            // Cap the caption width so on the spacious visionOS/iPad layout the
+            // trailing "Got it" no longer floats out to the centre of the wide
+            // content column (#355) — it stays beside the text. On compact iPhone
+            // (column < cap) this is a no-op, so that already-correct layout is
+            // untouched.
+            .frame(maxWidth: hintMaxWidth, alignment: .leading)
             .padding(.top, AetherDesign.Spacing.xxs)
             .transition(.opacity)
         }
@@ -2185,7 +2200,8 @@ struct DetailView: View {
         if shouldShowDownloadControl { items.append("Download") }
         if source != nil { items.append("Watch status") }
         if source?.supportsFavorites == true { items.append("Favorite") }
-        if availableSources.count > 1 { items.append("Source") }
+        // "Source" intentionally absent — switching now lives only in the
+        // "Available Sources" section, not the icon row (#356).
         if current.mediaInfo != nil { items.append("Details") }
         return items
     }
@@ -2223,9 +2239,10 @@ struct DetailView: View {
                     Task { await toggleFavorite() }
                 }
             }
-            if availableSources.count > 1 {
-                sourceMenuButton
-            }
+            // Source switching is not a tertiary icon here: it lived as a cryptic,
+            // width-shifting, blue-tinted glyph that collided with "blue = active"
+            // (#356). The dedicated "Available Sources" section in the body is the
+            // single, labelled home for it (always present when count > 1).
             if current.mediaInfo != nil {
                 AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                     dismissIconHint()
@@ -2253,28 +2270,6 @@ struct DetailView: View {
             #endif
             Spacer(minLength: 0)
         }
-    }
-
-    /// Source switcher as a compact icon `Menu` (only shown when the title is on
-    /// more than one source). Mirrors the "Available Sources" section's switching.
-    private var sourceMenuButton: some View {
-        Menu {
-            ForEach(availableSources) { src in
-                Button {
-                    selectSource(src)
-                } label: {
-                    if src.item.id == activeItem.id {
-                        Label(src.serverName ?? src.kind.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(src.serverName ?? src.kind.displayName)
-                    }
-                }
-                .disabled(!src.playable)
-            }
-        } label: {
-            AetherIconCircleLabel(systemImage: "rectangle.2.swap")
-        }
-        .accessibilityLabel("Switch source")
     }
 
     /// Download as a compact icon `Menu`: the glyph reflects the current state,
