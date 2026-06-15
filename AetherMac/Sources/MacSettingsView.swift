@@ -61,8 +61,27 @@ private struct AccountsSettings: View {
         Form {
             Section("Plex") {
                 if session.isPlexConnected {
-                    ForEach(session.plexServerNames, id: \.self) { name in
-                        LabeledContent("Server", value: name)
+                    if session.plexServerRecords.count > 1 {
+                        // Multiple servers (#325) — choose which streams first when
+                        // a title is on more than one.
+                        Picker("Primary Server", selection: Binding(
+                            get: { session.primaryPlexServerID ?? "" },
+                            set: { id in
+                                if let record = session.plexServerRecords.first(where: { $0.clientIdentifier == id }) {
+                                    Task { await session.setPrimaryPlexServer(record) }
+                                }
+                            }
+                        )) {
+                            ForEach(session.plexServerRecords, id: \.clientIdentifier) { record in
+                                Text(record.name).tag(record.clientIdentifier)
+                            }
+                        }
+                        Text("The primary server streams first when a title is on more than one of your servers.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(session.plexServerNames, id: \.self) { name in
+                            LabeledContent("Server", value: name)
+                        }
                     }
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }

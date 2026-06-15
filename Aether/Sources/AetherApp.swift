@@ -794,6 +794,22 @@ final class AppSession {
         if plexSource != nil { setActiveSource(.plex) }
     }
 
+    /// Make `record` the **primary** Plex server — the one the Unified Library
+    /// streams from first when a title lives on more than one server (#325
+    /// follow-up). "Primary" is purely positional: sources keep server order and
+    /// `preferredSource` picks the first among same-kind sources, so moving the
+    /// chosen server to the front of the enabled list makes it win. No-op when it
+    /// isn't enabled or is already primary.
+    func setPrimaryPlexServer(_ record: PlexServerRecord) async {
+        var records = plexServers
+        guard let index = records.firstIndex(where: { $0.clientIdentifier == record.clientIdentifier }),
+              index != 0 else { return }
+        let chosen = records.remove(at: index)
+        records.insert(chosen, at: 0)
+        await setEnabledPlexServers(records)
+        if plexSource != nil { setActiveSource(.plex) }
+    }
+
     /// Set the enabled-servers list, rebuild the live sources, and persist.
     private func setEnabledPlexServers(_ records: [PlexServerRecord]) async {
         applyEnabledPlexServers(records)
