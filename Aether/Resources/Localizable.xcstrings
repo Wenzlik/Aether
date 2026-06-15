@@ -6124,6 +6124,54 @@
           }
         }
       }
+    },
+    "Primary Server": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hlavní server"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основний сервер"
+          }
+        }
+      }
+    },
+    "The primary server streams first when a title is on more than one of your servers.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hlavní server se přehrává jako první, když je titul na více vašich serverech."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основний сервер відтворюється першим, коли тайтл є на кількох ваших серверах."
+          }
+        }
+      }
+    },
+    "Plex Servers": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servery Plex"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервери Plex"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

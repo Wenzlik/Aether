@@ -98,6 +98,18 @@ final class SettingsViewModel {
         await session.setPlexServerEnabled(record, enabled: enabled)
     }
 
+    /// The currently-enabled Plex servers, primary first.
+    var plexServers: [PlexServerRecord] { session.plexServers }
+
+    /// The primary (first) enabled Plex server's id — what streams first when a
+    /// title is on several servers (#325 follow-up).
+    var primaryPlexServerID: String? { session.plexServers.first?.clientIdentifier }
+
+    /// Make a server the primary streaming source.
+    func setPrimaryPlexServer(_ record: PlexServerRecord) async {
+        await session.setPrimaryPlexServer(record)
+    }
+
     // MARK: - Sources
 
     var plexSourceStatus: AetherStatus {
@@ -209,7 +221,8 @@ final class SettingsViewModel {
         "Resume across all your devices through Plex/Jellyfin themselves — Continue Watching now seeds from the server, so you pick up where you left off even on a new device",
         "Discover, refreshed — New Releases and Top Rated rails, with in-progress titles kept in Continue Watching instead of cluttering Discover",
         "Library: filter by year, with a quick community rating on each poster",
-        "macOS polish — Resume / Play from Beginning, Mark Watched, Favorite, episode navigation, and a sharper full-screen backdrop"
+        "macOS polish — Resume / Play from Beginning, Mark Watched, Favorite, episode navigation, and a sharper full-screen backdrop",
+        "Multiple Plex servers? Pick which one streams first in Settings ▸ Account ▸ Plex Servers — now on Apple TV and Mac too"
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.

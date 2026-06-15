@@ -8,6 +8,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **Primary Plex server** (#325 follow-up, all platforms incl. Apple TV) — with
+  more than one Plex server connected, choose which one **streams first** when a
+  title lives on several. Apple TV now also surfaces the full multi-server
+  manager (it previously showed only one server), and macOS gains a server
+  picker it didn't have. Settings ▸ Account ▸ Plex Servers.
 - **Netflix availability** (#360, opt-in, all platforms) — see where titles you
   own are **also on Netflix** (a small "on Netflix" badge on posters + Detail),
   and discover **Netflix-only** titles as posters in **Discover** ("New on

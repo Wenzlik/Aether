@@ -20,6 +20,9 @@ final class MacSession {
     private let jellyfinServerStore: JellyfinServerStore
 
     private(set) var plexSources: [PlexMediaSource] = []
+    /// The enabled Plex servers, primary first — kept so the Settings server
+    /// picker can reorder them (#325). Mirrors `plexSources`.
+    private(set) var plexServerRecords: [PlexServerRecord] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
 
     /// User-picked local/network folders scanned into a library, and the source
@@ -226,6 +229,7 @@ final class MacSession {
         await resumeStore.loadFromDisk()
         rebuildLocalSource()    // build the local library from persisted folders
         if let records = try? await plexServerStore.readAll(), !records.isEmpty {
+            plexServerRecords = records
             plexSources = records.map(makePlexSource)
             plexServerNames = records.map(\.name)
         }
@@ -249,6 +253,7 @@ final class MacSession {
         let records = PlexServerSelector().rankedSelections(from: resources).map { $0.makeRecord() }
         guard !records.isEmpty else { return }
         try? await plexServerStore.writeAll(records)
+        plexServerRecords = records
         plexSources = records.map(makePlexSource)
         plexServerNames = records.map(\.name)
         libraryToken &+= 1
@@ -257,8 +262,29 @@ final class MacSession {
     func signOutPlex() async {
         try? await keychain.removeValue(for: Self.plexTokenKey)
         try? await plexServerStore.clear()
+        plexServerRecords = []
         plexSources = []
         plexServerNames = []
+        libraryToken &+= 1
+    }
+
+    /// The primary (first) Plex server's id — streams first when a title is on
+    /// several servers (#325).
+    var primaryPlexServerID: String? { plexServerRecords.first?.clientIdentifier }
+
+    /// Make `record` the primary streaming server: move it to the front, persist,
+    /// and rebuild the live sources so the Unified Library prefers it. No-op when
+    /// it isn't enabled or is already primary.
+    func setPrimaryPlexServer(_ record: PlexServerRecord) async {
+        var records = plexServerRecords
+        guard let index = records.firstIndex(where: { $0.clientIdentifier == record.clientIdentifier }),
+              index != 0 else { return }
+        let chosen = records.remove(at: index)
+        records.insert(chosen, at: 0)
+        try? await plexServerStore.writeAll(records)
+        plexServerRecords = records
+        plexSources = records.map(makePlexSource)
+        plexServerNames = records.map(\.name)
         libraryToken &+= 1
     }
 

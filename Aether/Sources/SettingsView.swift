@@ -916,6 +916,11 @@ struct SettingsView: View {
         AetherSettingsSection("Account") {
             if viewModel.isPlexSignedIn {
                 AetherSettingsRow(label: "Plex", value: accountRowValue(.plex, serverName: viewModel.connectedServerName))
+                // Multi-server manager (#325) — Apple TV can now see every
+                // connected Plex server and choose the primary one to stream from.
+                AetherSettingsRow(label: "Plex Servers", value: viewModel.plexServerSummary) {
+                    isPickingPlexServer = true
+                }
                 if viewModel.canSwitchSources && !viewModel.isActiveSource(.plex) {
                     AetherSettingsRow(label: "Set Plex as Active Source", actionRole: .primary) { viewModel.setActive(.plex) }
                 }
@@ -948,8 +953,24 @@ struct SettingsView: View {
                 AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
             }
         }
+        // Reachable on tvOS (no account sheet there) so Apple TV can manage
+        // servers + primary inline (#325).
+        .sheet(isPresented: $isPickingPlexServer) { plexServerPicker }
     }
     #endif
+
+    /// The Plex multi-server manager (#325) — enable/disable servers and pick the
+    /// primary streaming server. Shared by the iOS account sheet and the tvOS
+    /// inline Account row, so Apple TV can see + choose servers too.
+    private var plexServerPicker: some View {
+        PlexServerPickerSheet(
+            enabledIDs: viewModel.enabledPlexServerIDs,
+            load: { await viewModel.availablePlexServers() },
+            onToggle: { await viewModel.setPlexServerEnabled($0, enabled: $1) },
+            primaryServerID: viewModel.primaryPlexServerID,
+            onSetPrimary: { await viewModel.setPrimaryPlexServer($0) }
+        )
+    }
 
     /// Per-source detail sheet opened from the compact Account rows.
     @ViewBuilder
@@ -971,13 +992,7 @@ struct SettingsView: View {
                 onSignOut: { Task { await performSignOut(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
-            .sheet(isPresented: $isPickingPlexServer) {
-                PlexServerPickerSheet(
-                    enabledIDs: viewModel.enabledPlexServerIDs,
-                    load: { await viewModel.availablePlexServers() },
-                    onToggle: { await viewModel.setPlexServerEnabled($0, enabled: $1) }
-                )
-            }
+            .sheet(isPresented: $isPickingPlexServer) { plexServerPicker }
         case .jellyfin:
             SourceAccountSheet(
                 title: "Jellyfin",

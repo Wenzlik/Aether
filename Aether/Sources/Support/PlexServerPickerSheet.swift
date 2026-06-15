@@ -17,6 +17,11 @@ struct PlexServerPickerSheet: View {
     /// Enable / disable a server. The view mirrors the session's "keep ≥1
     /// enabled" rule so the last toggle can't be turned off.
     let onToggle: (PlexServerRecord, Bool) async -> Void
+    /// Id of the current primary (first-enabled) server — gets the selected mark.
+    var primaryServerID: String?
+    /// Make a server the primary streaming source (#325 follow-up). Only enabled
+    /// servers are offered.
+    var onSetPrimary: (PlexServerRecord) async -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
 
@@ -29,6 +34,9 @@ struct PlexServerPickerSheet: View {
     /// Local, optimistic enabled set so toggles feel instant; seeded from
     /// `enabledIDs` once the list loads.
     @State private var enabled: Set<String> = []
+    /// Local, optimistic primary id so the selection moves instantly; seeded
+    /// from `primaryServerID`.
+    @State private var primary: String?
     @State private var seeded = false
     /// A server mid-toggle, so its row shows progress and the list locks briefly.
     @State private var busy: String?
@@ -111,6 +119,29 @@ struct PlexServerPickerSheet: View {
                 }
             }
 
+            // Which enabled server streams first when a title is on more than one
+            // (#325 follow-up). Radio-style so it works the same on Apple TV.
+            let enabledServers = servers.filter { enabled.contains($0.clientIdentifier) }
+            if enabledServers.count > 1 {
+                AetherSettingsSection("Primary Server") {
+                    ForEach(enabledServers, id: \.clientIdentifier) { server in
+                        AetherSelectionRow(
+                            title: server.name,
+                            detail: connectionDetail(server),
+                            isSelected: (primary ?? primaryServerID) == server.clientIdentifier
+                        ) {
+                            primary = server.clientIdentifier
+                            Task { await onSetPrimary(server) }
+                        }
+                        .disabled(busy != nil)
+                    }
+                }
+                Text("The primary server streams first when a title is on more than one of your servers.")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Text("To disconnect Plex entirely, use Sign Out.")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
@@ -133,6 +164,7 @@ struct PlexServerPickerSheet: View {
         // servers reachable" than a hard error, so show the empty state.
         if !seeded {
             enabled = enabledIDs
+            primary = primaryServerID
             seeded = true
         }
         state = .loaded(servers)
