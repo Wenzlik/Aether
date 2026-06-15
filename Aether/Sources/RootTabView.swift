@@ -329,3 +329,25 @@ extension View {
         ))
     }
 }
+
+// MARK: - Brand icon (top tab-bar leading)
+
+/// The AETHER **app-icon** brand mark for the top tab-bar leading slot on iPad.
+/// A square icon (unlike the wide wordmark, it doesn't get clipped by the iOS 26
+/// toolbar glass) used identically on Home / Library / Discover, and tappable to
+/// pop the current tab to its root (`action`).
+struct AetherBrandIcon: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image("AetherIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Aether — back to top")
+    }
+}

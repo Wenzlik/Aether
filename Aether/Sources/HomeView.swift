@@ -42,6 +42,9 @@ struct HomeView: View {
     /// Backs the Continue Watching context-menu actions (#368) — Mark as Watched
     /// fans watched state across sources, Remove clears the server playhead.
     @Environment(AppSession.self) private var appSession
+    /// Continue Watching entry awaiting a "mark watched?" confirmation (#368) —
+    /// marking an in-progress title watched discards its resume point.
+    @State private var confirmWatchedEntry: HomeFeed.ContinueWatchingEntry?
 
     @State private var feed: HomeFeed = .empty
     @State private var rails: UnifiedRails = .empty
@@ -81,15 +84,13 @@ struct HomeView: View {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
-                        // iPad (regular width): the wordmark + search live in the
-                        // top tab-bar row as toolbar items (#370), so the idle
-                        // header row is gone and the first rail rises. The search
-                        // *field* still needs somewhere to land once invoked — a
-                        // slim row that appears only while searching. iPhone /
+                        // iPad (regular width): the brand mark (app icon) + search
+                        // ride the top tab-bar row as toolbar items; only the
+                        // search field drops to a slim row while active. iPhone /
                         // visionOS / tvOS keep the inline branded header.
                         #if os(iOS)
                         if usesTopBarChrome {
-                            if isSearchActive { topBarSearchRow }
+                            if isSearchActive { iPadSearchRow }
                         } else {
                             brandedHeader
                         }
@@ -131,6 +132,25 @@ struct HomeView: View {
                 downloads: downloads,
                 playbackPreferences: playbackPreferences
             )
+            // Confirm before marking an in-progress Continue Watching title
+            // watched — it discards the resume point (#368). Items on this rail
+            // are by definition in progress, so always confirm.
+            .confirmationDialog(
+                "Mark as Watched?",
+                isPresented: Binding(
+                    get: { confirmWatchedEntry != nil },
+                    set: { if !$0 { confirmWatchedEntry = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: confirmWatchedEntry
+            ) { entry in
+                Button("Mark as Watched") {
+                    Task { await markEntryWatched(entry); confirmWatchedEntry = nil }
+                }
+                Button("Cancel", role: .cancel) { confirmWatchedEntry = nil }
+            } message: { _ in
+                Text("This title is in progress. Marking it watched removes it from Continue Watching.")
+            }
         }
         // Reload when the connected set changes (sign-in / discovery / sign-out).
         .task(id: taskKey) { await load() }
@@ -238,12 +258,13 @@ struct HomeView: View {
     }
 
     #if os(iOS)
-    /// Brand (leading) + search (trailing) flanking the centered top tab-bar
-    /// pill on iPad — replaces the second header row so content rises (#370).
+    /// iPad: the brand icon (leading) + search (trailing) ride the top tab-bar
+    /// row. The brand mark is the square app icon (the toolbar clamps height, so
+    /// the wide wordmark stayed tiny); tapping it pops Home to root.
     @ToolbarContentBuilder
     private var homeTopBarItems: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            AetherWordmark(.medium)
+            AetherBrandIcon { navigationPath = NavigationPath() }
         }
         // While searching, the field + Cancel own the slim row below; the
         // trailing glyph would be redundant, so it hides until search dismisses.
@@ -260,10 +281,9 @@ struct HomeView: View {
         }
     }
 
-    /// The search field revealed on iPad once the toolbar search button is
-    /// tapped — a slim row above the rails (no permanent search bar), dismissed
-    /// by Cancel. Mirrors the inline field used on iPhone.
-    private var topBarSearchRow: some View {
+    /// iPad: the slim search-field row shown only while searching (the brand +
+    /// search button live in the tab-bar toolbar).
+    private var iPadSearchRow: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
             AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
             Button("Cancel") {
@@ -278,6 +298,7 @@ struct HomeView: View {
         .padding(.top, AetherDesign.Spacing.s)
         .padding(.bottom, AetherDesign.Spacing.m)
     }
+
     #endif
 
     /// True when the user is searching from Home. Drives the swap from
@@ -495,7 +516,10 @@ struct HomeView: View {
 
     private var continueWatchingSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off")
+            // Subtitle doubles as the discoverability hint for the in-place
+            // context menu (#368) — users won't find a long-press affordance
+            // without a cue.
+            AetherSectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off · hold to remove")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
@@ -534,7 +558,7 @@ struct HomeView: View {
     @ViewBuilder
     private func continueWatchingMenu(for entry: HomeFeed.ContinueWatchingEntry) -> some View {
         Button {
-            Task { await markEntryWatched(entry) }
+            confirmWatchedEntry = entry
         } label: {
             Label("Mark as Watched", systemImage: "checkmark.circle")
         }
