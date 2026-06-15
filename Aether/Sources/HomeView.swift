@@ -245,6 +245,12 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             AetherWordmark(.medium)
         }
+        // iOS 26 wraps toolbar items in a circular "Liquid Glass" background,
+        // which clipped the wide (~3:2) wordmark into a broken disc. Hide the
+        // shared background so the lockup renders flush, like a brand mark and
+        // not a button. (The search glyph below keeps its glass — an icon reads
+        // fine as a circular control.)
+        .sharedBackgroundVisibility(.hidden)
         // While searching, the field + Cancel own the slim row below; the
         // trailing glyph would be redundant, so it hides until search dismisses.
         if !isSearchActive {
@@ -495,7 +501,10 @@ struct HomeView: View {
 
     private var continueWatchingSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off")
+            // Subtitle doubles as the discoverability hint for the in-place
+            // context menu (#368) — users won't find a long-press affordance
+            // without a cue.
+            AetherSectionHeader(title: "Continue Watching", subtitle: "Pick up where you left off · hold to remove")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {

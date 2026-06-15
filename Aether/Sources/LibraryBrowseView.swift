@@ -66,13 +66,37 @@ struct LibraryBrowseView: View {
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
+    #if os(iOS)
+    /// iPad (regular) vs iPhone (compact) — drives whether the brand + search +
+    /// filter ride the top tab-bar row (parity with Home #370) or stay inline.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// Landing-level **Type** filter — show only Movies, only TV Shows, or both.
+    /// The one facet that makes a Filter control meaningful on the landing (which
+    /// previews *both* kinds); the rich genre/year/rating filters live on each
+    /// kind's "See all" grid. Drives the Movies / TV Shows rail visibility.
+    enum KindFilter: Hashable { case all, movies, shows }
+    @State private var kindFilter: KindFilter = .all
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
+                        // iPad (regular): brand + search + filter ride the top
+                        // tab-bar row as toolbar items (parity with Home #370);
+                        // only the search field drops to a slim row while active.
+                        // iPhone / visionOS / tvOS keep the inline header.
+                        #if os(iOS)
+                        if usesTopBarChrome {
+                            if isSearchActive { topBarSearchRow }
+                        } else {
+                            brandedHeader
+                        }
+                        #else
                         brandedHeader
+                        #endif
                         content
                             .dismissSearchKeyboardOnTap { searchFocused = false }
                     }
@@ -88,6 +112,11 @@ struct LibraryBrowseView: View {
             .aetherScreenBackground()
             #if !os(tvOS)
             .refreshable { await load(forceRefresh: true) }
+            #endif
+            // iPad: brand (leading, flush) + Filter + Search (trailing) on the
+            // top tab-bar row instead of a second header band.
+            #if os(iOS)
+            .toolbar { if usesTopBarChrome && shouldShowBrandedChrome { libraryTopBarItems } }
             #endif
             .mediaNavigationDestinations(
                 source: connectedSources.first,
@@ -188,6 +217,7 @@ struct LibraryBrowseView: View {
             } else {
                 AetherWordmark(.medium)
                 Spacer(minLength: AetherDesign.Spacing.l)
+                filterMenuCircular
                 searchButton
             }
             #endif
@@ -196,6 +226,38 @@ struct LibraryBrowseView: View {
         .padding(.top, AetherDesign.Spacing.l)
         .padding(.bottom, AetherDesign.Spacing.m)
     }
+
+    // MARK: - Type filter (#369 follow-up)
+
+    private var filterIcon: String {
+        kindFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill"
+    }
+
+    /// The single landing facet — pick which kinds' rails show.
+    @ViewBuilder
+    private var kindPicker: some View {
+        Picker("Show", selection: $kindFilter) {
+            Label("All", systemImage: "square.stack").tag(KindFilter.all)
+            Label("Movies", systemImage: "film").tag(KindFilter.movies)
+            Label("TV Shows", systemImage: "tv").tag(KindFilter.shows)
+        }
+        .pickerStyle(.inline)
+    }
+
+    #if !os(tvOS)
+    /// Circular Filter menu matching `searchButton`, for the inline header
+    /// (iPhone compact / visionOS).
+    private var filterMenuCircular: some View {
+        Menu { kindPicker } label: {
+            Image(systemName: filterIcon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(AetherDesign.Palette.surface, in: Circle())
+        }
+        .accessibilityLabel("Filter")
+    }
+    #endif
 
     #if !os(tvOS)
     /// Top-right magnifying-glass that reveals the search field.
@@ -212,6 +274,68 @@ struct LibraryBrowseView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search")
+    }
+    #endif
+
+    // MARK: - iPad top-bar chrome (parity with Home #370)
+
+    /// iPad regular width — brand + filter + search ride the top tab-bar row.
+    /// False on iPhone (compact, keeps the inline header) and visionOS / tvOS.
+    private var usesTopBarChrome: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    /// Brand (leading, flush) + Filter + Search (trailing) flanking the centered
+    /// top tab-bar pill on iPad.
+    @ToolbarContentBuilder
+    private var libraryTopBarItems: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            AetherWordmark(.medium)
+        }
+        // Render the wide wordmark flush — iOS 26's circular toolbar glass would
+        // otherwise clip it into a broken disc (see Home #370 fix).
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu { kindPicker } label: {
+                Label("Filter", systemImage: filterIcon)
+            }
+            .labelStyle(.titleAndIcon)
+            .accessibilityLabel("Filter")
+        }
+        if !isSearchActive {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isSearchActive = true
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search")
+            }
+        }
+    }
+
+    /// The search field revealed on iPad once the toolbar search button is
+    /// tapped — a slim row above content (no permanent bar), dismissed by Cancel.
+    private var topBarSearchRow: some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            Button("Cancel") {
+                searchQuery = ""
+                searchFocused = false
+                isSearchActive = false
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AetherDesign.Palette.accent)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.s)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
     #endif
 
@@ -290,10 +414,15 @@ struct LibraryBrowseView: View {
     private var railsContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                if !rails.movies.isEmpty {
+                // Active Type filter (#369 follow-up) — removable chip so the
+                // narrowed landing reads as narrowed and is one tap to reset.
+                if kindFilter != .all {
+                    activeKindChip
+                }
+                if kindFilter != .shows, !rails.movies.isEmpty {
                     unifiedRail(title: "Movies", count: rails.movieCount, kind: .movie, items: rails.movies)
                 }
-                if !rails.shows.isEmpty {
+                if kindFilter != .movies, !rails.shows.isEmpty {
                     unifiedRail(title: "TV Shows", count: rails.showCount, kind: .show, items: rails.shows)
                 }
                 browseSection
@@ -304,6 +433,25 @@ struct LibraryBrowseView: View {
             .padding(.top, AetherDesign.Spacing.l)
             .padding(.bottom, AetherDesign.Spacing.xxl)
         }
+    }
+
+    /// Removable chip naming the active Type filter (Movies / TV Shows), tapped
+    /// to clear back to All. Mirrors the #367 active-filter chip language.
+    private var activeKindChip: some View {
+        Button { kindFilter = .all } label: {
+            HStack(spacing: AetherDesign.Spacing.xxs) {
+                Text(kindFilter == .movies ? "Movies" : "TV Shows")
+                    .font(AetherDesign.Typography.metadata)
+                Image(systemName: "xmark").font(.caption2.weight(.semibold))
+            }
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .padding(.vertical, AetherDesign.Spacing.xs)
+            .background(AetherDesign.Palette.accent, in: Capsule())
+            .foregroundStyle(Color.white)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .accessibilityLabel(Text("Remove \(kindFilter == .movies ? "Movies" : "TV Shows") filter"))
     }
 
     /// "Browse" facet links (iOS / iPadOS / visionOS) — Genres / Years filter the

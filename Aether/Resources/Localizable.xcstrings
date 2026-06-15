@@ -6246,6 +6246,40 @@
           }
         }
       }
+    },
+    "Pick up where you left off · hold to remove": {
+      "comment": "Home: Continue Watching subtitle + discoverability hint for the long-press remove menu (#368).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pokračujte tam, kde jste skončili · podržením odeberete"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продовжте з місця зупинки · утримуйте, щоб прибрати"
+          }
+        }
+      }
+    },
+    "Show": {
+      "comment": "Library landing: Type filter menu header (Show: All / Movies / TV Shows) (#369 follow-up).",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazit"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показати"
+          }
+        }
+      }
     }
   },
   "version": "1.1"
