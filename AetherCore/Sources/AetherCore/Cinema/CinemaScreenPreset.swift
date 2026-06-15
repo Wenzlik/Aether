@@ -46,6 +46,21 @@ public enum CinemaScreenPreset: String, Sendable, Hashable, CaseIterable, Codabl
         }
     }
 
+    /// Docked-screen width:height. The system docks `AVPlayerViewController` at a
+    /// fixed 2.4:1 (WWDC24), so the immersive layer derives the screen's height —
+    /// and from it the bottom-edge placement (#357) — from this single constant
+    /// rather than a literal scattered across the layout code.
+    public static let dockingAspectRatio: Float = 2.4
+
+    /// Target screen height in metres, derived from `widthMetres` at the docking
+    /// aspect so width and height stay in lockstep. Used to anchor the screen by
+    /// its bottom edge (a fixed clearance above the floor) instead of scaling
+    /// about a fixed centre — the fix for the screen sitting too high at Medium
+    /// and clipping the floor at IMAX/Wall (#357).
+    public var heightMetres: Float {
+        widthMetres / CinemaScreenPreset.dockingAspectRatio
+    }
+
     /// Scale applied to the screen entity relative to its `.medium` baseline.
     /// `.medium` is `1.0` so the default reads at the entity's natural size;
     /// the others widen from there. Derived from `widthMetres` so the two
