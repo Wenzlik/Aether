@@ -851,20 +851,34 @@ struct CinemaPresetTests {
         #expect(reloaded.screenPreset == .imax)
     }
 
-    @Test("CinemaSeat: middle is the authored origin; back is farther + higher")
+    @Test("CinemaSeat: middle is the Z origin; the rake only lowers the room, never raises it")
     func seatGeometry() {
-        // Middle = authored layout (no offset).
+        // Middle = authored seat distance (no Z offset). Vertical placement is now
+        // owned by the bottom-edge anchor (#357), so the rake only tilts the view.
         #expect(CinemaSeat.middle.zOffsetMetres == 0)
-        #expect(CinemaSeat.middle.yOffsetMetres == 0)
         // Back sits farther from the screen (-Z) and higher (room drops, -Y).
         #expect(CinemaSeat.back.zOffsetMetres < CinemaSeat.middle.zOffsetMetres)
         #expect(CinemaSeat.back.yOffsetMetres < CinemaSeat.middle.yOffsetMetres)
-        // Front is closer (+Z) and lower (room up, +Y) than middle.
+        // Front is closer (+Z) and the highest room-Y (looks most level) of the three.
         #expect(CinemaSeat.front.zOffsetMetres > CinemaSeat.middle.zOffsetMetres)
         #expect(CinemaSeat.front.yOffsetMetres > CinemaSeat.middle.yOffsetMetres)
+        // The rake never raises the room above the authored layout — front used to
+        // (+Y) and was the worst "look up" case; it now sits level (0) at most.
+        #expect(CinemaSeat.ordered.allSatisfy { $0.yOffsetMetres <= 0 })
         // Each row back sits a bit higher than the one ahead (front→middle→back).
         let heights = CinemaSeat.ordered.map(\.yOffsetMetres)   // ordered front→back
         #expect(heights == heights.sorted(by: >))   // strictly descending room-Y = rising viewer
+    }
+
+    @Test("CinemaScreenPreset.heightMetres tracks width at the docking aspect")
+    func heightTracksWidth() {
+        // Height is derived from width at the fixed docking aspect, so the two stay
+        // in lockstep and the screen can be placed by its bottom edge (#357).
+        for preset in CinemaScreenPreset.ordered {
+            #expect(preset.heightMetres == preset.widthMetres / CinemaScreenPreset.dockingAspectRatio)
+        }
+        let heights = CinemaScreenPreset.ordered.map(\.heightMetres)
+        #expect(heights == heights.sorted())   // grows monotonically with size
     }
 
     @Test("CinemaSeat persists in CinemaPreferencesStore")

@@ -36,14 +36,19 @@ public enum CinemaSeat: String, Sendable, Hashable, CaseIterable, Codable {
     }
 
     /// Y translation (metres) applied to the theater root — stadium rake. Moving
-    /// the room *down* (`-Y`) lifts the viewer relative to it, so the back row
-    /// sits higher (and looks slightly *down* at the screen); the front row sits
-    /// lower (room up, `+Y`, look slightly *up*). Each row a bit higher than the
-    /// one ahead, like a real cinema. First-pass values — tune on device.
+    /// the room *down* (`-Y`) lifts the viewer relative to it, so each row back
+    /// sits a little higher and looks slightly *down* at the screen.
+    ///
+    /// Absolute *vertical placement* is no longer this control's job — the
+    /// immersive layer anchors the screen by its bottom edge (#357). So the rake
+    /// only ever holds the room at or below the authored layout (front `0`, never
+    /// `+Y`): front raised the screen and was the worst "look up" case, so front
+    /// now sits level and the room only descends from there. First-pass values —
+    /// tune on device.
     public var yOffsetMetres: Float {
         switch self {
-        case .front:  return 0.4
-        case .middle: return 0.0
+        case .front:  return 0.0
+        case .middle: return -0.2
         case .back:   return -0.4
         }
     }

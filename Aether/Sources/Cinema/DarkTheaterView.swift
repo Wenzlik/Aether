@@ -118,15 +118,29 @@ struct DarkTheaterView: View {
             let scale = cinema.screenPreset.relativeScale
             if var region = dock.components[DockingRegionComponent.self] {
                 if refs.baselineDockWidth == nil { refs.baselineDockWidth = region.width }
-                region.width = (refs.baselineDockWidth ?? region.width) * scale
+                let width = (refs.baselineDockWidth ?? region.width) * scale
+                region.width = width
                 dock.components.set(region)
+                // Anchor the *bottom edge* a fixed clearance above the floor
+                // instead of scaling about a fixed centre (#357): the screen grows
+                // upward, so the bottom never sinks into the floor at IMAX/Wall and
+                // Medium drops to a comfortable height. Height is derived from the
+                // width actually applied (the source of truth for what's rendered),
+                // not the preset's intent, so it's correct even if the authored
+                // baseline differs from `.medium`'s nominal width.
+                let screenHeight = width / CinemaScreenPreset.dockingAspectRatio
+                dock.position.y = Self.screenBottomClearance + screenHeight / 2
             } else {
+                // No resolved DockingRegion (rare fallback): uniform scale, with the
+                // same bottom anchor from the preset's intended height.
                 dock.scale = SIMD3<Float>(repeating: scale)
+                dock.position.y = Self.screenBottomClearance + cinema.screenPreset.heightMetres / 2
             }
         }
-        // Seat: slide the whole room. -Z = back (screen farther), -Y = room down
-        // so the viewer sits higher — a stadium rake where each row back is a
-        // little higher. Absolute, anchored at the authored layout (.middle=0,0).
+        // Seat: slide the whole room. -Z = back (screen farther); -Y = room down
+        // so the viewer sits higher — a stadium rake where each row back looks a
+        // little more down. Absolute (never accumulated); the dock's own Y above
+        // owns vertical *placement*, so this is purely the rake. `.middle` Z = 0.
         if let root = refs.root {
             root.position = SIMD3<Float>(0, cinema.seat.yOffsetMetres, cinema.seat.zOffsetMetres)
         }
@@ -158,6 +172,11 @@ struct DarkTheaterView: View {
     /// resizes the docked screen. Matches the `Player` prim in the `.usda`.
     private static let dockEntityName = "Player"
 
+    /// Clearance (metres) the docked screen's bottom edge holds above the floor at
+    /// every size. The screen grows upward from this line instead of about its
+    /// centre, so it never clips the floor (#357). First pass — tune on device.
+    private static let screenBottomClearance: Float = 0.6
+
     /// Load the authored Dark Theater from the app bundle (the Reality Composer
     /// Pro `.rkassets`, compiled in as an app resource). Returns `nil` if the
     /// asset is missing, so the caller falls back to the procedural room. The
@@ -166,6 +185,41 @@ struct DarkTheaterView: View {
     @MainActor
     private static func loadAuthoredEnvironment() async -> Entity? {
         try? await Entity(named: sceneName, in: .main)
+    }
+
+    // MARK: - Environment look
+
+    /// The procedural Dark Theater's tunable palette + light intensities, in one
+    /// documented block so the on-device tuning surface isn't hex literals
+    /// scattered across the `make*` builders.
+    ///
+    /// **#358:** darkened and pulled toward neutral so the room recedes behind a
+    /// dark, low-key film. The old amber-brown drove *both* the visible skybox and
+    /// the IBL, washing the whole room (and the floor pool) warm; a low-key film
+    /// (Pirates) competed badly. The room should read as a near-black screening
+    /// room that disappears around the screen — but the IBL stays bright enough
+    /// that the glossy floor still pools a faint screen-bloom (the "screening
+    /// room" cue); don't crush it to flat black. Tune on device.
+    private enum Style {
+        /// Vertical skybox/IBL gradient, nadir → zenith. The top carries the most
+        /// energy because a flat floor reflects the *upper* hemisphere.
+        static let gradientNadir: UInt32   = 0x070402   // floor never reflects this
+        static let gradientHorizon: UInt32 = 0x0C0905
+        static let gradientZenith: UInt32  = 0x140E08   // the floor's reflected source
+        /// Soft screen-bloom band high in the dome → pooled on the glossy floor.
+        static let glowColor: UInt32           = 0x2A1D0E
+        static let glowRadiusFraction: CGFloat = 0.30    // × image width (smaller, dimmer bloom)
+        /// IBL strength as a power-of-two exponent (−1.0 ≈ 0.5×). Halved from the
+        /// old −0.5 (≈0.71×) so the room recedes, but kept off the −1.5 (≈0.35×)
+        /// first pass that crushed the floor pool to flat black.
+        static let iblIntensityExponent: Float = -1.0
+        /// Near-black warm-wood floor (kept; the IBL pool reads against it).
+        static let floorColor: UInt32 = 0x150F0A
+        /// Architectural cove accent — thin warm strips, dimmed to a faint line.
+        static let coveColor: UInt32 = 0x301A0A
+        /// Dim warm key for a soft floor specular; the IBL does the ambient work.
+        static let keyLightColor: UInt32     = 0xFFD9A0
+        static let keyLightIntensity: Float  = 120
     }
 
     // MARK: - Environment
@@ -217,12 +271,9 @@ struct DarkTheaterView: View {
         guard let resource = try? await EnvironmentResource(equirectangular: image) else { return nil }
         let ibl = Entity()
         ibl.name = "IBL"
-        // `intensityExponent` is a power-of-two multiplier (−0.5 ≈ 0.71×). Kept
-        // only slightly under unity so the glossy floor still picks up a visible
-        // reflection of the gradient's glow band — a more negative value (the
-        // first pass used −1.5 ≈ 0.35×) crushed the floor back to flat black.
-        // TUNE ON DEVICE.
-        ibl.components.set(ImageBasedLightComponent(source: .single(resource), intensityExponent: -0.5))
+        // Strength lives in `Style.iblIntensityExponent` (a power-of-two
+        // multiplier) — see its doc for the dark-but-not-crushed rationale.
+        ibl.components.set(ImageBasedLightComponent(source: .single(resource), intensityExponent: Style.iblIntensityExponent))
         return ibl
     }
 
@@ -233,7 +284,7 @@ struct DarkTheaterView: View {
     @MainActor
     private static func makeFloor() -> Entity {
         var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(tint: color(0x150F0A))   // warm dark wood
+        material.baseColor = .init(tint: color(Style.floorColor))   // warm dark wood
         material.roughness = .init(floatLiteral: 0.18)
         material.metallic = .init(floatLiteral: 0.0)
         material.clearcoat = .init(floatLiteral: 1.0)
@@ -273,7 +324,7 @@ struct DarkTheaterView: View {
     private static func makeKeyLight() -> Entity {
         let entity = Entity()
         entity.name = "KeyLight"
-        entity.components.set(DirectionalLightComponent(color: color(0xFFD9A0), intensity: 180))
+        entity.components.set(DirectionalLightComponent(color: color(Style.keyLightColor), intensity: Style.keyLightIntensity))
         entity.orientation = simd_quatf(angle: -.pi * 0.34, axis: [1, 0, 0])
         return entity
     }
@@ -289,7 +340,7 @@ struct DarkTheaterView: View {
         func strip(_ name: String, width: Float, depth: Float, at position: SIMD3<Float>) -> Entity {
             let entity = ModelEntity(
                 mesh: .generatePlane(width: width, depth: depth),
-                materials: [UnlitMaterial(color: color(0x553014))]
+                materials: [UnlitMaterial(color: color(Style.coveColor))]
             )
             entity.name = name
             entity.position = position
@@ -305,8 +356,9 @@ struct DarkTheaterView: View {
     // MARK: - Procedural gradient
 
     /// Draw a 1024×512 equirectangular gradient used for both the IBL and the
-    /// skybox: near-black at the nadir, rising to a warm amber-brown zenith, with a
-    /// soft brighter warm glow toward the upper-front. The glow sits high on purpose —
+    /// skybox: near-black at the nadir, rising to a dark, near-neutral warm zenith
+    /// (#358 — recedes behind the film), with a soft, restrained glow toward the
+    /// upper-front. The glow sits high on purpose —
     /// a flat floor's reflection samples the *upper* hemisphere, so that's where
     /// the on-floor pool comes from. Brightness + exact placement need on-device
     /// tuning (equirectangular yaw and Simulator lighting are unreliable here). No
@@ -323,9 +375,9 @@ struct DarkTheaterView: View {
         // Vertical gradient: near-black nadir → warm amber-brown zenith. The top
         // carries the most energy because that's what the floor reflects.
         let colors = [
-            color(0x070402).cgColor,   // nadir — floor never reflects this
-            color(0x16100A).cgColor,   // horizon
-            color(0x2E2010).cgColor,   // zenith — warm amber-brown, the floor's source
+            color(Style.gradientNadir).cgColor,    // nadir — floor never reflects this
+            color(Style.gradientHorizon).cgColor,  // horizon
+            color(Style.gradientZenith).cgColor,   // zenith — the floor's reflected source
         ] as CFArray
         guard let gradient = CGGradient(
             colorsSpace: colorSpace, colors: colors, locations: [0.0, 0.5, 1.0]
@@ -342,14 +394,14 @@ struct DarkTheaterView: View {
         // floor. Kept restrained so the room still reads dark.
         if let glow = CGGradient(
             colorsSpace: colorSpace,
-            colors: [color(0x5A3E1E).cgColor, color(0x2E2010).withAlphaComponent(0).cgColor] as CFArray,
+            colors: [color(Style.glowColor).cgColor, color(Style.glowColor).withAlphaComponent(0).cgColor] as CFArray,
             locations: [0.0, 1.0]
         ) {
             let center = CGPoint(x: CGFloat(width) / 2, y: CGFloat(height) * 0.80)
             context.drawRadialGradient(
                 glow,
                 startCenter: center, startRadius: 0,
-                endCenter: center, endRadius: CGFloat(width) * 0.42,
+                endCenter: center, endRadius: CGFloat(width) * Style.glowRadiusFraction,
                 options: []
             )
         }
