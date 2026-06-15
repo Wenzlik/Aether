@@ -26,6 +26,8 @@ struct MediaDetailView: View {
     @State private var parentSeason: MediaItem?
     @State private var parentShow: MediaItem?
     @State private var isLoading = false
+    /// Cast rail collapses to the top billing until "Show All" (point 5).
+    @State private var showAllCast = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
     @State private var resumeAt: Double?
     /// Optimistic watched/favorite overrides so the buttons flip instantly.
@@ -59,17 +61,21 @@ struct MediaDetailView: View {
                 if item.kind == .show { nextUpSection }
                 if item.kind.isContainer { childrenSection }
             }
-            .padding(40)
-            .frame(maxWidth: 1320)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 56)
+            .padding(.vertical, 52)
+            // Left-anchored over the backdrop (Apple TV / Infuse hero), so the
+            // content sits where the scrim is darkest and the artwork breathes on
+            // the right — rather than a centred strip with empty margins.
+            .frame(maxWidth: 1360, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollContentBackground(.hidden)
         .background {
-            // iOS-style cinematic background: the title's **backdrop** fills the
-            // whole screen, crisp (aspect-fill). A poster fallback (no backdrop)
-            // gets blurred into atmosphere, like iOS. On top, a stronger vertical
-            // scrim keeps the title (top) and description (bottom) readable over
-            // bright backdrops.
+            // The title's **backdrop** fills the screen (crisp; a poster fallback
+            // is blurred into atmosphere). Two scrims keep the content readable
+            // over bright/detailed artwork (Apple TV / Infuse are aggressive
+            // here): a strong LEFT→right fade darkens the whole content column,
+            // plus a top+bottom vertical fade for the title and description.
             let backdrop = current.backdropURL
             ZStack {
                 CinematicArtworkBackground(
@@ -77,8 +83,12 @@ struct MediaDetailView: View {
                     blurRadius: backdrop != nil ? 0 : 40
                 )
                 LinearGradient(
-                    colors: [.black.opacity(0.55), .black.opacity(0.12),
-                             .black.opacity(0.45), .black.opacity(0.8)],
+                    colors: [.black.opacity(0.92), .black.opacity(0.7),
+                             .black.opacity(0.3), .clear],
+                    startPoint: .leading, endPoint: .trailing
+                )
+                LinearGradient(
+                    colors: [.black.opacity(0.5), .clear, .black.opacity(0.55)],
                     startPoint: .top, endPoint: .bottom
                 )
             }
@@ -128,19 +138,20 @@ struct MediaDetailView: View {
     private var header: some View {
         // No small poster — the title's artwork already fills the screen as the
         // backdrop (#20), so the thumbnail was redundant. Just the title + meta.
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
             // Title as the clearLogo wordmark when the source has one, else the
-            // title text (iOS-style "special text"). Scaled up for desktop.
+            // title text (iOS-style "special text"). `.fit` so a wide logo scales
+            // within its box instead of overflowing onto the metadata below.
             if let logo = current.logoURL() {
-                CachedAsyncImage(url: logo)
-                    .frame(maxWidth: 540, maxHeight: 150, alignment: .leading)
+                CachedAsyncImage(url: logo, contentMode: .fit)
+                    .frame(maxWidth: 640, maxHeight: 200, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(current.title)
-                    .font(.system(size: 56, weight: .bold))
-                    .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                    .font(.system(size: 64, weight: .bold))
+                    .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
             }
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 if let year = current.year { Text(String(year)) }
                 if let runtime = current.runtime { Text(DetailFormatting.runtime(runtime)) }
                 if let rating = current.contentRating { Text(rating) }
@@ -148,8 +159,9 @@ struct MediaDetailView: View {
                     Label(String(format: "%.1f", community), systemImage: "star.fill")
                 }
             }
-            .font(.title3)
-            .foregroundStyle(.secondary)
+            .font(.title2)
+            .foregroundStyle(.white.opacity(0.85))
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
             if let badge = DetailFormatting.hdrBadge(current.mediaInfo) {
                 Text(badge)
                     .font(.caption.bold())
@@ -186,9 +198,9 @@ struct MediaDetailView: View {
     @ViewBuilder
     private func bigButton(_ title: String, systemImage: String, prominent: Bool, action: @escaping () -> Void) -> some View {
         let label = Label(title, systemImage: systemImage)
-            .font(.title3.weight(.semibold))
-            .frame(minWidth: prominent ? 260 : 150)
-            .padding(.vertical, 8)
+            .font(prominent ? .title2.weight(.bold) : .title3.weight(.semibold))
+            .frame(minWidth: prominent ? 340 : 170)
+            .padding(.vertical, prominent ? 14 : 10)
         if prominent {
             Button(action: action) { label }
                 .controlSize(.extraLarge)
@@ -240,16 +252,18 @@ struct MediaDetailView: View {
     /// Overview + genres — allowed to run wide for easy reading (point 4).
     @ViewBuilder
     private var descriptionBlock: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             if let overview = current.summary, !overview.isEmpty {
                 Text(overview)
                     .font(.title3)
-                    .foregroundStyle(.primary.opacity(0.9))
-                    .lineSpacing(4)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineSpacing(5)
+                    .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
             }
             if !current.genres.isEmpty {
                 Text(current.genres.joined(separator: " · "))
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.white.opacity(0.7))
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
             }
         }
     }
@@ -258,8 +272,8 @@ struct MediaDetailView: View {
     /// on the right — collapses to a single column on narrow windows.
     private var infoColumns: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 36) {
-                descriptionBlock.frame(maxWidth: 720, alignment: .leading)
+            HStack(alignment: .top, spacing: 40) {
+                descriptionBlock.frame(maxWidth: 820, alignment: .leading)
                 infoSidebar.frame(width: 360)
             }
             VStack(alignment: .leading, spacing: 24) {
@@ -373,43 +387,67 @@ struct MediaDetailView: View {
             current.mediaInfo?.fileSizeBytes.map { "Size: \(DetailFormatting.fileSize($0))" }
         ].compactMap { $0 }
         if !lines.isEmpty {
-            // Always shown in the right rail (the desktop has the space), rather
-            // than a collapsed disclosure buried in the main flow.
-            VStack(alignment: .leading, spacing: 8) {
+            // Always shown in the right rail (the desktop has the space). A solid
+            // dark panel — not a faint material — so it reads as an intentional
+            // information panel rather than debug text bleeding into the backdrop.
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Technical Details")
-                    .font(.headline)
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(lines, id: \.self) { Text($0) }
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                Divider().overlay(.white.opacity(0.15))
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(lines, id: \.self) { line in
+                        Text(line).font(.callout)
+                    }
                 }
-                .font(.callout.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.82))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.black.opacity(0.45))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.white.opacity(0.12))
+            )
         }
     }
 
     // MARK: Cast
 
+    private static let castCap = 10
+
     private var castSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Cast").font(.title2.bold())
+        let cast = showAllCast ? current.cast : Array(current.cast.prefix(Self.castCap))
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Text("Cast").font(.title.bold())
+                if current.cast.count > Self.castCap {
+                    Button(showAllCast ? "Show Less" : "Show All Cast (\(current.cast.count))") {
+                        withAnimation(.easeInOut(duration: 0.2)) { showAllCast.toggle() }
+                    }
+                    .buttonStyle(.link)
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 16) {
-                    ForEach(current.cast) { member in
-                        VStack(spacing: 6) {
+                LazyHStack(alignment: .top, spacing: 18) {
+                    ForEach(cast) { member in
+                        VStack(spacing: 8) {
                             CachedAsyncImage(url: member.photoURL, aspectRatio: 1)
-                                .frame(width: 72, height: 72)
+                                .frame(width: 88, height: 88)
                                 .clipShape(Circle())
-                            Text(member.name).font(.caption).lineLimit(1)
+                            Text(member.name).font(.callout).lineLimit(1)
                             if let role = member.role {
-                                Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                Text(role).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
-                        .frame(width: 84)
+                        .frame(width: 104)
                     }
                 }
+                .padding(.vertical, 2)
             }
         }
     }
