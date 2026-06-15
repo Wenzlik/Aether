@@ -66,13 +66,30 @@ struct LibraryBrowseView: View {
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
+    #if os(iOS)
+    /// iPad (regular) vs iPhone (compact) — drives whether the brand + search +
+    /// filter ride the top tab-bar row (parity with Home #370) or stay inline.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if shouldShowBrandedChrome {
                     VStack(spacing: 0) {
+                        // iPad (regular): brand + search + filter ride the top
+                        // tab-bar row as toolbar items (parity with Home #370);
+                        // only the search field drops to a slim row while active.
+                        // iPhone / visionOS / tvOS keep the inline header.
+                        #if os(iOS)
+                        if usesTopBarChrome {
+                            if isSearchActive { iPadSearchRow }
+                        } else {
+                            brandedHeader
+                        }
+                        #else
                         brandedHeader
+                        #endif
                         content
                             .dismissSearchKeyboardOnTap { searchFocused = false }
                     }
@@ -88,6 +105,11 @@ struct LibraryBrowseView: View {
             .aetherScreenBackground()
             #if !os(tvOS)
             .refreshable { await load(forceRefresh: true) }
+            #endif
+            // iPad: brand (leading, flush) + Filter + Search (trailing) on the
+            // top tab-bar row instead of a second header band.
+            #if os(iOS)
+            .toolbar { if usesTopBarChrome && shouldShowBrandedChrome { libraryTopBarItems } }
             #endif
             .mediaNavigationDestinations(
                 source: connectedSources.first,
@@ -111,6 +133,14 @@ struct LibraryBrowseView: View {
             // Browse facets (Genres, …) — the richer Library hierarchy (#266).
             .navigationDestination(for: LibraryBrowseRoute.self) { route in
                 switch route {
+                case .allTitles:
+                    UnifiedLibraryGridView(
+                        title: "Library",
+                        kind: nil,
+                        connectedSources: connectedSources,
+                        downloadStore: downloadStore,
+                        autoOpenFilter: true
+                    )
                 case .genres:
                     GenreListView(connectedSources: connectedSources)
                 case .genre(let name):
@@ -188,6 +218,7 @@ struct LibraryBrowseView: View {
             } else {
                 AetherWordmark(.medium)
                 Spacer(minLength: AetherDesign.Spacing.l)
+                filterButtonCircular
                 searchButton
             }
             #endif
@@ -196,6 +227,31 @@ struct LibraryBrowseView: View {
         .padding(.top, AetherDesign.Spacing.l)
         .padding(.bottom, AetherDesign.Spacing.m)
     }
+
+    // MARK: - Filter (opens the unified, fully-filterable Library grid)
+
+    /// Push the unified Library grid (Type + Genre + Audio + Rating + Year, all
+    /// in one sheet) — the full filter the user expects, reusing the See-all
+    /// grid's tested filter rather than a landing-only subset.
+    private func openUnifiedFilter() {
+        navigationPath.append(LibraryBrowseRoute.allTitles)
+    }
+
+    #if !os(tvOS)
+    /// Circular Filter button matching `searchButton`, for the inline header
+    /// (iPhone compact / visionOS).
+    private var filterButtonCircular: some View {
+        Button { openUnifiedFilter() } label: {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(AetherDesign.Palette.surface, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Filter")
+    }
+    #endif
 
     #if !os(tvOS)
     /// Top-right magnifying-glass that reveals the search field.
@@ -212,6 +268,65 @@ struct LibraryBrowseView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search")
+    }
+    #endif
+
+    // MARK: - iPad top-bar chrome (parity with Home #370)
+
+    /// iPad regular width — brand + filter + search ride the top tab-bar row.
+    /// False on iPhone (compact, keeps the inline header) and visionOS / tvOS.
+    private var usesTopBarChrome: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    /// iPad: the brand icon (leading) + Filter + Search (trailing) ride the top
+    /// tab-bar row. Brand is the square app icon; tapping it pops Library to root.
+    @ToolbarContentBuilder
+    private var libraryTopBarItems: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            AetherBrandIcon { navigationPath = NavigationPath() }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { openUnifiedFilter() } label: {
+                Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .labelStyle(.titleAndIcon)
+            .accessibilityLabel("Filter")
+        }
+        if !isSearchActive {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isSearchActive = true
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search")
+            }
+        }
+    }
+
+    /// iPad: the slim search-field row shown only while searching (the brand +
+    /// Filter + search button live in the tab-bar toolbar).
+    private var iPadSearchRow: some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            Button("Cancel") {
+                searchQuery = ""
+                searchFocused = false
+                isSearchActive = false
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AetherDesign.Palette.accent)
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.top, AetherDesign.Spacing.s)
+        .padding(.bottom, AetherDesign.Spacing.m)
     }
     #endif
 

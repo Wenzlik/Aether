@@ -28,10 +28,25 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
-- **iPad Home** (#370) — the AETHER wordmark and search lift up to the **top
-  tab-bar level** (leading wordmark, trailing search) instead of occupying a
-  second header row, so the first rail rises and there's more content above the
-  fold. iPhone keeps its inline header; tvOS / visionOS unchanged.
+- **iPad top chrome** (#370) — Home / Library / Discover now show the **app-icon
+  brand mark** in the top tab-bar leading slot (tap it to pop the tab to its
+  root), with search (and Library's Filter) on the same row — no second header
+  band, more content above the fold. iPhone / visionOS / tvOS keep the inline
+  wordmark header.
+- **Library: one unified Filter** — the landing's Filter opens the full,
+  fully-filterable Library grid in one place: **Type** (All / Movies / TV Shows)
+  alongside Genre / Audio / Rating / Year + search. The filter sheet opens
+  full-height with **wrapping** chips, so every option is visible at once.
+- **Library: audio filter** now lists only the app's own UI languages (cs / en /
+  uk) rather than every track language in the library; Filter sits left of Sort
+  to match the landing.
+
+### Fixed
+
+- **Mark as Watched on an in-progress title** now clears its resume point (so it
+  leaves Continue Watching) and asks for confirmation first, since marking
+  watched discards the saved position. Continue Watching's subtitle hints the
+  long-press remove menu.
 
 ## [0.7.5] — 2026-06-15 · "Draco"
 

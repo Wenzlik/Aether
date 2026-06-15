@@ -55,6 +55,20 @@ struct DiscoverView: View {
     @State private var autoRetried = false
     /// Reload (non-destructively) when the app returns to the foreground.
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    /// iPad (regular) shows the brand mark as a top tab-bar toolbar icon, like
+    /// Home / Library; compact (iPhone) keeps the inline wordmark header.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// iPad regular width — brand icon rides the top tab-bar row.
+    private var usesTopBarChrome: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -62,6 +76,17 @@ struct DiscoverView: View {
                 .aetherScreenBackground()
                 #if !os(tvOS)
                 .refreshable { await load(forceRefresh: true) }
+                #endif
+                // iPad: brand icon on the top tab-bar row (parity with Home /
+                // Library); tapping it pops Discover to root.
+                #if os(iOS)
+                .toolbar {
+                    if usesTopBarChrome {
+                        ToolbarItem(placement: .topBarLeading) {
+                            AetherBrandIcon { navigationPath = NavigationPath() }
+                        }
+                    }
+                }
                 #endif
                 .mediaNavigationDestinations(
                     source: connectedSources.first,
@@ -136,21 +161,24 @@ struct DiscoverView: View {
     private var rails: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                // Brand mark leads Discover too (0.6.x header refresh), so the
-                // logo reads consistently across Home / Library / Discover.
+                // Brand mark leads Discover too, consistent across Home / Library
+                // / Discover. On iPad it rides the top tab-bar row (toolbar icon),
+                // so the inline wordmark header shows only on compact / tvOS.
                 // Discover has no search field; Reload rides the trailing edge on
                 // tvOS (no pull-to-refresh there).
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    AetherWordmark(.medium)
-                    Spacer(minLength: AetherDesign.Spacing.l)
-                    #if os(tvOS)
-                    AetherTVReloadButton { Task { await load() } }
-                        .frame(width: 260)
-                    #endif
+                if !usesTopBarChrome {
+                    HStack(spacing: AetherDesign.Spacing.m) {
+                        AetherWordmark(.medium)
+                        Spacer(minLength: AetherDesign.Spacing.l)
+                        #if os(tvOS)
+                        AetherTVReloadButton { Task { await load() } }
+                            .frame(width: 260)
+                        #endif
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xs)
                 }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                .padding(.top, AetherDesign.Spacing.l)
-                .padding(.bottom, AetherDesign.Spacing.xs)
                 // Discovery Hub order: a featured pick, then fresh arrivals, the
                 // best-rated, and serendipitous picks at the tail. Genre lanes were
                 // removed (#350) — Library already has genre browse; Discover is

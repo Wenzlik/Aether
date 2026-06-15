@@ -5,6 +5,10 @@ import AetherCore
 /// first slice of the richer Library hierarchy (#266). More facets (Years,
 /// Collections, Actors, Directors) slot in here as data becomes available.
 enum LibraryBrowseRoute: Hashable {
+    /// The unified, fully-filterable Library grid (all kinds) — the landing's
+    /// Filter button opens this with the filter sheet auto-presented, so Type +
+    /// Genre + Audio + Rating + Year live in one place (#369 follow-up).
+    case allTitles
     case genres
     case genre(String)
     case years
