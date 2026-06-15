@@ -197,7 +197,7 @@ struct LibraryBrowseView: View {
                             Image(systemName: "xmark").font(.caption2.weight(.semibold))
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(MacTheme.accent, in: Capsule())
+                        .background(AetherMacTheme.accent, in: Capsule())
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
