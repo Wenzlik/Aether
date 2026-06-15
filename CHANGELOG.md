@@ -4,6 +4,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-06-15
+
 ### Added
 
 - **Library: active-filter summary** (#367, all platforms) — once you narrow a
