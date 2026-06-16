@@ -305,9 +305,9 @@ final class DetailViewModel {
     /// Seeds the user's app-wide playback defaults onto a freshly hydrated item
     /// (audio/subtitle language + default quality), via
     /// `PlaybackPreferencesStore.applied(to:)` so every player entry point shares
-    /// it (#68). Internal — the view-side launchers call it during their fallback
-    /// hydrate.
-    func applyingPreferences(to hydrated: MediaItem) -> MediaItem {
+    /// it (#68). The launcher fallback hydrate now runs through
+    /// `ensureConfiguredForPlayback()`, so this is VM-private again.
+    private func applyingPreferences(to hydrated: MediaItem) -> MediaItem {
         playbackPreferences?.applied(to: hydrated) ?? hydrated
     }
 
@@ -358,5 +358,117 @@ final class DetailViewModel {
         overrideItem = refreshed
         configuredItem = applyingPreferences(to: refreshed)
         return .updated
+    }
+
+    // MARK: - Derived watched / favorite (#241 inc 3)
+
+    /// Optimistic watched state — the override wins over the source's value so the
+    /// eye flips instantly on tap. `nil` override = use the item's own `isWatched`.
+    var isWatched: Bool { watchedOverride ?? current.isWatched }
+
+    /// Optimistic favorite state — the override wins over the source's value so the
+    /// heart flips instantly on tap.
+    var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
+
+    // MARK: - Mutators (#241 inc 3)
+
+    /// Switch the screen to another source that has this title (from "Available
+    /// Sources"). Everything playback-related derives from `activeItem`, so
+    /// re-pointing `overrideItem` swaps the whole screen to the chosen server
+    /// without re-navigating. Clears the per-source caches so the new source
+    /// reloads its own children / resume / watched / favorite state.
+    ///
+    /// `toggleWatched` (and its cross-source fan-out) stays view-side: it's coupled
+    /// to `AppSession` via the Environment, which isn't available at VM-init.
+    func selectSource(_ src: UnifiedSource) {
+        guard src.playable, src.item.id != activeItem.id else { return }
+        configuredItem = nil
+        playbackItem = nil
+        advancedItem = nil   // a manual source switch supersedes any auto-advance
+        children = []
+        related = []
+        resume = nil
+        watchedOverride = nil   // the new source carries its own watched state
+        favoriteOverride = nil  // …and its own favorite state
+        overrideItem = (src.item.id == item.id) ? nil : src.item
+    }
+
+    /// Toggle the title's Favorite state on its source (server-side), with an
+    /// optimistic override so the heart flips instantly.
+    func toggleFavorite() async {
+        guard let source, source.supportsFavorites else { return }
+        let next = !isFavorite
+        favoriteOverride = next   // optimistic
+        await source.setFavorite(activeItem.id, to: next)
+    }
+
+    // MARK: - Downloads (#241 inc 3)
+
+    func startDownload(quality: PlaybackQuality) async {
+        guard let manager = downloadManager, let source else { return }
+        isEnqueuingDownload = true
+        defer { isEnqueuingDownload = false }
+        do {
+            _ = try await manager.enqueue(item: current, source: source, quality: quality)
+        } catch {
+            // Surface failure via the row's next render (DownloadStatus
+            // moves to .failed in the store) — no toast / alert chrome
+            // for Phase 2.1.
+        }
+    }
+
+    func pauseDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: activeItem.id) else { return }
+        await manager.pause(job.id)
+    }
+
+    func resumeDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: activeItem.id) else { return }
+        await manager.resume(job.id)
+    }
+
+    func cancelDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: activeItem.id) else { return }
+        await manager.cancel(job.id)
+    }
+
+    func removeDownload() async {
+        guard let manager = downloadManager,
+              let job = downloads?.job(for: activeItem.id) else { return }
+        await manager.remove(job.id)
+    }
+
+    /// Retry path: drop the existing record + start a fresh enqueue at
+    /// the same quality. Cleaner than trying to in-place revive a
+    /// `.failed` URLSession task (URLSession's resumeData for that task
+    /// is gone by then).
+    func retryDownload() async {
+        guard let manager = downloadManager,
+              let source,
+              let job = downloads?.job(for: activeItem.id) else { return }
+        let quality = job.quality
+        await manager.remove(job.id)
+        do {
+            _ = try await manager.enqueue(item: current, source: source, quality: quality)
+        } catch {
+            // Same swallow as `startDownload` — store status will reflect.
+        }
+    }
+
+    // MARK: - Playback prep (#241 inc 3)
+
+    /// The data phase the playback launchers run before presenting: `current` is
+    /// normally already hydrated (on appear) and carries the user's audio /
+    /// subtitle / quality choices, so the player launches exactly what Detail
+    /// showed. This is the fallback for a fast Play before that hydrate resolved —
+    /// without it the default-language prefs were dropped (#68). The launchers
+    /// themselves (animation / cinema / fullScreenCover) stay view-side.
+    func ensureConfiguredForPlayback() async {
+        guard configuredItem == nil, let source,
+              let hydrated = try? await source.item(for: activeItem.id) else { return }
+        configuredItem = applyingPreferences(to: hydrated)
     }
 }
