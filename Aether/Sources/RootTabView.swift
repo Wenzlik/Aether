@@ -170,6 +170,13 @@ struct RootTabView: View {
                 )
             }
         }
+        // iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
+        // native pattern (#391). iPhone (compact) keeps its bottom tab bar; tvOS
+        // / visionOS keep their own default top bar (no sidebar), so this is
+        // scoped to iOS only.
+        #if os(iOS)
+        .tabViewStyle(.sidebarAdaptable)
+        #endif
         .sheet(isPresented: $session.isSignInPresented) {
             switch session.signInTarget {
             case .plex:
