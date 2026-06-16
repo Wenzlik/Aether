@@ -2287,17 +2287,13 @@ struct DetailView: View {
     }
 
     /// `<server> · <quality> · Preferred` — the dynamic parts are verbatim
-    /// (server name / resolution are data), only "Preferred" is localized, so the
-    /// pieces are composed with `Text` concatenation to keep that segment
-    /// translatable.
-    @ViewBuilder
-    private func sourceMenuTitle(name: String, quality: String?, isPreferred: Bool) -> some View {
-        let base = quality.map { Text(verbatim: "\(name) · \($0)") } ?? Text(verbatim: name)
-        if isPreferred {
-            base + Text(verbatim: " · ") + Text("Preferred")
-        } else {
-            base
-        }
+    /// (server name / resolution are data), only "Preferred" is localized. We
+    /// resolve that segment with `String(localized:)` and compose one verbatim
+    /// `Text`, avoiding the deprecated `Text` `+` concatenation (iOS 26).
+    private func sourceMenuTitle(name: String, quality: String?, isPreferred: Bool) -> Text {
+        let base = quality.map { "\(name) · \($0)" } ?? name
+        guard isPreferred else { return Text(verbatim: base) }
+        return Text(verbatim: "\(base) · \(String(localized: "Preferred"))")
     }
 
     /// Switch the screen to a different source. Resets the per-source state
