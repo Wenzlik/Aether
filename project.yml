@@ -63,6 +63,14 @@ packages:
   SMBClient:
     url: https://github.com/kishikawakatsumi/SMBClient
     from: 0.1.0
+  # Sparkle — in-app auto-update for the macOS Developer ID build (#405). The
+  # Mac app isn't on the App Store (GPL mpv/FFmpeg), so it self-updates from the
+  # website appcast instead. macOS-only; the iOS target never links it. The
+  # companion CLI tools (sign_update / generate_appcast) are NOT part of the SPM
+  # package — fetch them with scripts/fetch-sparkle-tools.sh.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.9.3
 
 targets:
   # Single multiplatform target. One bundle ID
@@ -234,6 +242,9 @@ targets:
     dependencies:
       - package: AetherCore
         product: AetherCore
+      # Sparkle — in-app auto-update for the web-distributed build (#405).
+      - package: Sparkle
+        product: Sparkle
       # libmpv — the engine behind IINA (#232). The macOS player uses mpv's
       # **software render API** and composites via **Metal** (MTKView), so there's
       # no OpenGL link (NSOpenGLView/OpenGL are deprecated — #19). Metal/MetalKit
@@ -261,6 +272,16 @@ targets:
         AetherGitCommit: dev
         # TMDb key baked in at build (from Config/App.xcconfig / Xcode Cloud).
         TMDBAPIKey: "$(TMDB_API_KEY)"
+        # Sparkle auto-update (#405). The appcast lives next to the DMGs on the
+        # website; the public EdDSA key verifies every update came from us (the
+        # private half is in the build machine's login Keychain — see
+        # RELEASING-macos.md). SUEnableAutomaticChecks defaults on; the user can
+        # toggle it in Settings ▸ About. No SUScheduledCheckInterval → Sparkle's
+        # default (daily). SUEnableInstallerLauncherService isn't needed (the app
+        # isn't sandboxed).
+        SUFeedURL: https://aetherplayer.com/appcast.xml
+        SUPublicEDKey: W1h42sR7S00GgCTS6B7J8+O/8S/vrt8+epvt2iZ1K6o=
+        SUEnableAutomaticChecks: true
         # Supported UI languages — Czech + English (in-app switcher in Settings,
         # backed by Localizable.xcstrings). Lets the app run localized in cs.
         CFBundleLocalizations:

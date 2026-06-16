@@ -105,6 +105,63 @@ echo "==> stapling the DMG"
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
 
+# ── Sparkle appcast (#405) ───────────────────────────────────────────────────
+# EdDSA-sign the DMG and write the appcast Sparkle clients poll (SUFeedURL).
+# We build the item directly around `sign_update` rather than letting
+# `generate_appcast` sign: in 2.9.3 generate_appcast silently omits the
+# edSignature when given --ed-key-file, and a SILENTLY unsigned appcast makes
+# every client REJECT the update (SUPublicEDKey is set) — worse than a hard
+# fail. So we sign explicitly and assert the signature is present.
+#
+# Signing key: the EdDSA private key in the login Keychain (account "ed25519",
+# created by `generate_keys` — see RELEASING-macos.md). First use in a Terminal
+# session prompts once to allow access ("Always Allow"). For CI / a second Mac,
+# set SPARKLE_ED_KEY_FILE to an exported key file (`generate_keys -x`).
+SPARKLE_BIN="$ROOT/Vendor/Sparkle/bin"
+if [ -x "$SPARKLE_BIN/sign_update" ]; then
+  echo "==> signing update + writing appcast"
+  APPCAST_DIR="$ROOT/build/appcast"
+  mkdir -p "$APPCAST_DIR"
+
+  KEY_ARGS=()
+  [ -n "${SPARKLE_ED_KEY_FILE:-}" ] && KEY_ARGS=(--ed-key-file "$SPARKLE_ED_KEY_FILE")
+
+  # sign_update prints: sparkle:edSignature="…" length="…"
+  SIGN_OUT="$("$SPARKLE_BIN/sign_update" "${KEY_ARGS[@]}" "$DMG")"
+  EDSIG="$(printf '%s' "$SIGN_OUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+  LENGTH="$(stat -f%z "$DMG")"
+  MIN_OS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist" 2>/dev/null || echo 26.0)"
+  PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+
+  [ -n "$EDSIG" ] || { echo "error: failed to EdDSA-sign the DMG (no key access?). $SIGN_OUT" >&2; exit 1; }
+
+  # Single-item appcast: the latest release. That's all Sparkle needs to detect
+  # an update; sparkle:version is the (monotonic) build number it compares.
+  cat > "$APPCAST_DIR/appcast.xml" <<XML
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Aether</title>
+        <link>https://aetherplayer.com/appcast.xml</link>
+        <item>
+            <title>$VERSION</title>
+            <pubDate>$PUBDATE</pubDate>
+            <link>https://aetherplayer.com</link>
+            <sparkle:version>$BUILD</sparkle:version>
+            <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>$MIN_OS</sparkle:minimumSystemVersion>
+            <enclosure url="https://aetherplayer.com/downloads/$(basename "$DMG")" length="$LENGTH" type="application/octet-stream" sparkle:edSignature="$EDSIG"/>
+        </item>
+    </channel>
+</rss>
+XML
+  echo "    appcast: $APPCAST_DIR/appcast.xml  (version $VERSION build $BUILD, signed)"
+else
+  echo "==> WARNING: Sparkle tools not found ($SPARKLE_BIN)"
+  echo "    Run scripts/fetch-sparkle-tools.sh, then re-run — without the appcast"
+  echo "    clients won't see this release as an update."
+fi
+
 echo
 echo "==> done: $DMG"
-echo "    Upload it to the web download section (scripts/deploy-web.sh / NAS web/aether/downloads/)."
+echo "    Deploy with scripts/deploy-dmg.sh (uploads the DMG + appcast.xml)."
