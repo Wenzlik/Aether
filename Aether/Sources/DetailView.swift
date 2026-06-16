@@ -116,10 +116,6 @@ struct DetailView: View {
         get { viewModel.watchedOverride }
         nonmutating set { viewModel.watchedOverride = newValue }
     }
-    private var favoriteOverride: Bool? {
-        get { viewModel.favoriteOverride }
-        nonmutating set { viewModel.favoriteOverride = newValue }
-    }
     private var playbackItem: MediaItem? {
         get { viewModel.playbackItem }
         nonmutating set { viewModel.playbackItem = newValue }
@@ -147,10 +143,6 @@ struct DetailView: View {
     private var related: [MediaItem] {
         get { viewModel.related }
         nonmutating set { viewModel.related = newValue }
-    }
-    private var selectedSeason: MediaItem? {
-        get { viewModel.selectedSeason }
-        nonmutating set { viewModel.selectedSeason = newValue }
     }
     private var seasonEpisodes: [MediaItem] {
         get { viewModel.seasonEpisodes }
@@ -1546,7 +1538,7 @@ struct DetailView: View {
                         accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
                         isActive: isFavorite
                     ) {
-                        Task { await toggleFavorite() }
+                        Task { await viewModel.toggleFavorite() }
                     }
                 }
                 Spacer(minLength: 0)
@@ -2160,7 +2152,7 @@ struct DetailView: View {
         Menu {
             ForEach(availableSources) { src in
                 Button {
-                    selectSource(src)
+                    viewModel.selectSource(src)
                 } label: {
                     sourceMenuRow(src)
                 }
@@ -2225,19 +2217,6 @@ struct DetailView: View {
     /// (hydration / playback / resume / children) so `.task(id:)` reloads it for
     /// the chosen server. Clearing `overrideItem` (selecting the preferred
     /// source) returns to the navigated item.
-    private func selectSource(_ src: UnifiedSource) {
-        guard src.playable, src.item.id != activeItem.id else { return }
-        configuredItem = nil
-        playbackItem = nil
-        advancedItem = nil   // a manual source switch supersedes any auto-advance
-        children = []
-        related = []
-        resume = nil
-        watchedOverride = nil   // the new source carries its own watched state
-        favoriteOverride = nil  // …and its own favorite state
-        overrideItem = (src.item.id == item.id) ? nil : src.item
-    }
-
     // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
 
     @ViewBuilder
@@ -2307,7 +2286,7 @@ struct DetailView: View {
                 accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
                 isActive: isFavorite
             ) {
-                Task { await toggleFavorite() }
+                Task { await viewModel.toggleFavorite() }
             }
         }
         // Source switching is not a tertiary icon here: it lived as a cryptic,
@@ -2390,7 +2369,7 @@ struct DetailView: View {
                 // SMB is a raw file share — no server transcode, so skip the
                 // quality picker and download the original file directly.
                 if isSMBSource(activeItem.id.source) {
-                    Task { await startDownload(quality: .original) }
+                    Task { await viewModel.startDownload(quality: .original) }
                 } else {
                     presentedSelector = .downloadQuality
                 }
@@ -2398,31 +2377,35 @@ struct DetailView: View {
             .disabled(isEnqueuingDownload)
         case .queued:
             Text("Queued")
-            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+            Button(role: .destructive) { Task { await viewModel.cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .downloading(fraction):
             Text("Downloading · \(DetailFormatting.percent(fraction))")
-            Button { Task { await pauseDownload() } } label: { Label("Pause", systemImage: "pause") }
-            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+            Button { Task { await viewModel.pauseDownload() } } label: { Label("Pause", systemImage: "pause") }
+            Button(role: .destructive) { Task { await viewModel.cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .paused(fraction):
             Text("Paused at \(DetailFormatting.percent(fraction))")
-            Button { Task { await resumeDownload() } } label: { Label("Resume", systemImage: "play") }
-            Button(role: .destructive) { Task { await cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
+            Button { Task { await viewModel.resumeDownload() } } label: { Label("Resume", systemImage: "play") }
+            Button(role: .destructive) { Task { await viewModel.cancelDownload() } } label: { Label("Cancel", systemImage: "xmark") }
         case let .completed(_, size):
             Text("Downloaded · \(formatBytes(size))")
-            Button(role: .destructive) { Task { await removeDownload() } } label: { Label("Delete Download", systemImage: "trash") }
+            Button(role: .destructive) { Task { await viewModel.removeDownload() } } label: { Label("Delete Download", systemImage: "trash") }
         case let .failed(reason):
             Text("Failed · \(reason)")
-            Button { Task { await retryDownload() } } label: { Label("Retry", systemImage: "arrow.clockwise") }
+            Button { Task { await viewModel.retryDownload() } } label: { Label("Retry", systemImage: "arrow.clockwise") }
         case .expired:
             Text("Expired")
-            Button { Task { await retryDownload() } } label: { Label("Re-download", systemImage: "arrow.clockwise") }
+            Button { Task { await viewModel.retryDownload() } } label: { Label("Re-download", systemImage: "arrow.clockwise") }
         }
     }
 
-    /// Displayed watched state — the optimistic override wins over the hydrated
-    /// item's server value so the button + badge flip instantly on tap.
-    private var isWatched: Bool { watchedOverride ?? current.isWatched }
+    /// Displayed watched state (#241: derived in the VM). Kept here so the action
+    /// row + `toggleWatched` read it unchanged.
+    private var isWatched: Bool { viewModel.isWatched }
 
+    /// Marking watched fans out across every connected source via `AppSession`
+    /// (an `@Environment`, unavailable at VM-init), so this stays view-side —
+    /// same bucket as the playback launchers. The VM owns `watchedOverride` /
+    /// `resume`, written here through the forwarders.
     private func toggleWatched() async {
         let next = !isWatched
         // Marking an **in-progress** title watched throws away its resume point.
@@ -2448,16 +2431,9 @@ struct DetailView: View {
         }
     }
 
-    /// Favorite state — the optimistic override wins over the source's value so
-    /// the heart flips instantly on tap.
-    private var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
-
-    private func toggleFavorite() async {
-        guard let source, source.supportsFavorites else { return }
-        let next = !isFavorite
-        favoriteOverride = next   // optimistic
-        await source.setFavorite(activeItem.id, to: next)
-    }
+    /// Favorite state (#241: derived in the VM). Kept here so the action row
+    /// reads it unchanged.
+    private var isFavorite: Bool { viewModel.isFavorite }
 
     /// True when a Download surface should appear below the play buttons —
     /// only for Plex / Jellyfin items (the only sources that implement
@@ -2807,64 +2783,8 @@ struct DetailView: View {
                 isSelected: false
             ) {
                 presentedSelector = nil
-                Task { await startDownload(quality: quality) }
+                Task { await viewModel.startDownload(quality: quality) }
             }
-        }
-    }
-
-    // MARK: - Download actions
-
-    private func startDownload(quality: PlaybackQuality) async {
-        guard let manager = downloadManager, let source else { return }
-        isEnqueuingDownload = true
-        defer { isEnqueuingDownload = false }
-        do {
-            _ = try await manager.enqueue(item: current, source: source, quality: quality)
-        } catch {
-            // Surface failure via the row's next render (DownloadStatus
-            // moves to .failed in the store) — no toast / alert chrome
-            // for Phase 2.1.
-        }
-    }
-
-    private func pauseDownload() async {
-        guard let manager = downloadManager,
-              let job = downloads?.job(for: activeItem.id) else { return }
-        await manager.pause(job.id)
-    }
-
-    private func resumeDownload() async {
-        guard let manager = downloadManager,
-              let job = downloads?.job(for: activeItem.id) else { return }
-        await manager.resume(job.id)
-    }
-
-    private func cancelDownload() async {
-        guard let manager = downloadManager,
-              let job = downloads?.job(for: activeItem.id) else { return }
-        await manager.cancel(job.id)
-    }
-
-    private func removeDownload() async {
-        guard let manager = downloadManager,
-              let job = downloads?.job(for: activeItem.id) else { return }
-        await manager.remove(job.id)
-    }
-
-    /// Retry path: drop the existing record + start a fresh enqueue at
-    /// the same quality. Cleaner than trying to in-place revive a
-    /// `.failed` URLSession task (URLSession's resumeData for that task
-    /// is gone by then).
-    private func retryDownload() async {
-        guard let manager = downloadManager,
-              let source,
-              let job = downloads?.job(for: activeItem.id) else { return }
-        let quality = job.quality
-        await manager.remove(job.id)
-        do {
-            _ = try await manager.enqueue(item: current, source: source, quality: quality)
-        } catch {
-            // Same swallow as `startDownload` — store status will reflect.
         }
     }
 
@@ -3042,11 +2962,7 @@ struct DetailView: View {
         // audio + subtitle + quality choices, so the player launches exactly
         // what the Detail screen showed. Fall back to a fresh hydrate if it
         // somehow hasn't resolved yet.
-        if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
-            // Same seeding as the on-appear hydrate — without it, a fast Play
-            // before hydration resolved dropped the default-language prefs (#68).
-            configuredItem = viewModel.applyingPreferences(to: hydrated)
-        }
+        await viewModel.ensureConfiguredForPlayback()
         playbackItem = current
 
         // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
@@ -3093,11 +3009,7 @@ struct DetailView: View {
         isPreparingPlayback = true
         defer { isPreparingPlayback = false }
 
-        if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
-            // Same seeding as the on-appear hydrate — without it, a fast Play
-            // before hydration resolved dropped the default-language prefs (#68).
-            configuredItem = viewModel.applyingPreferences(to: hydrated)
-        }
+        await viewModel.ensureConfiguredForPlayback()
         playbackItem = current
         playbackStartAt = fromStart ? 0 : (resume != nil ? nil : 0)
         launchingInCinema = true   // auto-expand so it docks into the theater
