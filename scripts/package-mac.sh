@@ -7,11 +7,23 @@
 # One-time setup:
 #   1. A "Developer ID Application" certificate in your login keychain
 #      (Xcode ▸ Settings ▸ Accounts ▸ Manage Certificates ▸ + ▸ Developer ID Application).
-#   2. notarytool credentials stored once in the keychain:
-#        xcrun notarytool store-credentials aether-notary \
-#          --apple-id "you@apple.id" --team-id 8PW5FWH7P2 \
-#          --password "<app-specific-password>"
-#      (app-specific password: appleid.apple.com ▸ Sign-In & Security ▸ App-Specific Passwords)
+#   2. Notarization credentials — pick ONE:
+#      a) App Store Connect API key (RECOMMENDED — headless / CI / second-Mac
+#         friendly, and immune to the keychain-profile ACL churn that bites every
+#         Xcode-beta update). Generate a key at
+#         App Store Connect ▸ Users and Access ▸ Integrations ▸ App Store Connect API,
+#         download the AuthKey_<KEYID>.p8 (one chance!), then point the script at it:
+#           export NOTARY_API_KEY=~/.private_keys/AuthKey_XXXXXXXXXX.p8
+#           export NOTARY_API_KEY_ID=XXXXXXXXXX           # the key's Key ID
+#           export NOTARY_API_ISSUER=aaaa-bbbb-…          # Issuer ID (top of that page)
+#         (a "Developer" role key is enough for notarization.)
+#      b) Keychain profile (fallback, used when the API-key vars are unset):
+#           xcrun notarytool store-credentials aether-notary \
+#             --apple-id "you@apple.id" --team-id 8PW5FWH7P2 \
+#             --password "<app-specific-password>"
+#         (app-specific password: appleid.apple.com ▸ Sign-In & Security)
+#         NB: this profile's keychain ACL is bound to the notarytool binary, so a
+#         new Xcode-beta makes it "disappear" until re-stored — prefer (a).
 #
 # Usage:
 #   scripts/package-mac.sh                 # build number from the date
@@ -26,6 +38,18 @@ cd "$ROOT"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 BUILD="${BUILD_NUMBER:-$(date +%y%m%d%H%M)}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-aether-notary}"
+
+# Notarization auth: an App Store Connect API key if NOTARY_API_KEY/_ID/_ISSUER
+# are all set (preferred — no keychain ACL, works headless), otherwise the
+# keychain profile. notarytool takes the same flags for both `submit` calls.
+if [ -n "${NOTARY_API_KEY:-}" ] && [ -n "${NOTARY_API_KEY_ID:-}" ] && [ -n "${NOTARY_API_ISSUER:-}" ]; then
+  [ -f "$NOTARY_API_KEY" ] || { echo "error: NOTARY_API_KEY file not found: $NOTARY_API_KEY"; exit 1; }
+  NOTARY_AUTH=(--key "$NOTARY_API_KEY" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER")
+  echo "==> notarizing via App Store Connect API key ($NOTARY_API_KEY_ID)"
+else
+  NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+  echo "==> notarizing via keychain profile ($NOTARY_PROFILE)"
+fi
 
 ARCHIVE="$ROOT/build/Aether-mac.xcarchive"
 EXPORT_DIR="$ROOT/build/export"
@@ -61,7 +85,7 @@ echo "==> notarizing (this can take a few minutes)"
 NOTARY_ZIP="$ROOT/build/Aether-notarize.zip"
 rm -f "$NOTARY_ZIP"
 /usr/bin/ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
-xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+xcrun notarytool submit "$NOTARY_ZIP" "${NOTARY_AUTH[@]}" --wait
 echo "==> stapling the app"
 xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
@@ -100,7 +124,7 @@ fi
 
 [ -f "$DMG" ] || { echo "error: DMG was not created"; exit 1; }
 echo "==> notarizing the DMG (the .app inside is already notarized+stapled)"
-xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" --wait
 echo "==> stapling the DMG"
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
