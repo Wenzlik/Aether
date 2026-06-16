@@ -265,6 +265,7 @@ struct DiscoverView: View {
                     .frame(width: 7, height: 7)
             }
         }
+        .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.2), value: current)
     }
 
