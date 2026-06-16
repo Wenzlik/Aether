@@ -10,14 +10,22 @@ struct AetherMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @State private var recents = RecentsStore()
     @State private var session = MacSession()
+    // In-app auto-update (#405). @StateObject so the updater (and its scheduled
+    // background checks) lives for the whole app session.
+    @StateObject private var updater = AppUpdater()
 
     var body: some Scene {
         WindowGroup {
             HomeView(session: session, recents: recents, appDelegate: appDelegate)
                 .frame(minWidth: 820, minHeight: 520)
                 .environment(session.watchAvailability)   // Netflix badges (#360)
+                .environmentObject(updater)               // Settings ▸ About toggle (#405)
         }
         .commands {
+            // "Check for Updates…" right under "About Aether" in the app menu.
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updater)
+            }
             // Real File ▸ Open… (⌘O) + Open Recent, instead of "New".
             CommandGroup(replacing: .newItem) {
                 FileCommands(recents: recents)
@@ -39,6 +47,7 @@ struct AetherMacApp: App {
         // Native Settings window — "Aether ▸ Settings…" (⌘,).
         Settings {
             MacSettingsView(session: session)
+                .environmentObject(updater)   // About ▸ auto-update toggle (#405)
         }
     }
 

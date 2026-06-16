@@ -111,7 +111,14 @@ cache and the only sync for Local/SMB/DLNA.
 - **Cache-busting** the download link (same filename `Aether-0.7.3.dmg` is cached
   by browsers/CDN). Add `?b=<commit>` on the `aether_web` download button, or
   `Cache-Control: no-cache` for `.dmg` — otherwise a re-shipped 0.7.3 serves stale.
-- Auto-update mechanism (Sparkle) — not started.
+  (Auto-updating users are unaffected — Sparkle keys off the build number, see
+  below.)
+- **Auto-update (Sparkle) — shipped (#405).** The app self-updates from the
+  website appcast (`SUFeedURL` → `https://aetherplayer.com/appcast.xml`), verifying
+  each update against the baked-in `SUPublicEDKey`. `package-mac.sh` signs + writes
+  the appcast and `deploy-dmg.sh` uploads it — both automatic. Setup (CLI tools +
+  EdDSA key, incl. second-Mac/CI) is in `RELEASING-macos.md`. Possible follow-ups:
+  Sparkle **delta updates** (smaller downloads) and per-item **release notes**.
 
 **Cross-platform follow-ups:**
 - #352/#353/#354 verification (above), then close.
@@ -130,11 +137,16 @@ cache and the only sync for Local/SMB/DLNA.
 - `AetherMac/Sources/MediaDetailView.swift` — desktop Detail screen.
 - `AetherMac/Sources/DiscoverView.swift` / `LibraryGridView.swift` / `ContentView.swift`
   — Home/Discover, Library, window/navigation shell.
-- `AetherMac/Sources/MacSettingsView.swift` — Settings (TMDb key, appearance, About).
+- `AetherMac/Sources/MacSettingsView.swift` — Settings (TMDb key, appearance, About,
+  Software Update toggle).
+- `AetherMac/Sources/AppUpdater.swift` — Sparkle auto-update wrapper (#405): updater
+  lifecycle, "Check for Updates…" command, automatic-check preference.
 - `project.yml` — AetherMac target: deployment macOS 26, hardened-runtime
   entitlements, `Config/App.xcconfig`, "Stamp git commit" + "Bundle libmpv" phases
   (incl. the LC_RPATH de-dup that fixed the macOS-26 launch crash).
 - `scripts/package-mac.sh`, `scripts/deploy-dmg.sh`, `ci_scripts/ExportOptions-DeveloperID.plist`.
+- `scripts/fetch-sparkle-tools.sh` — fetch the Sparkle CLI tools (sign_update etc.)
+  used to sign + publish the auto-update appcast (#405).
 
 ---
 
