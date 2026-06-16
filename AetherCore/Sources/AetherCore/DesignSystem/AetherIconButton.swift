@@ -24,15 +24,20 @@ public struct AetherIconCircleLabel: View {
     public var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: diameter * 0.4, weight: .semibold))
-            .foregroundStyle(isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.textPrimary)
+            // Borderless (#382): no stroke ring on any platform. Active reads
+            // through an accent-*filled* circle + white glyph — an unmistakable
+            // "on" without the old border; inactive sits on a faint material
+            // circle that keeps the ≥44pt hit target legible. tvOS focus is
+            // still driven by `premiumFocus` (lift + glow), so the button stays
+            // clearly focusable even though the static ring is gone.
+            .foregroundStyle(isActive ? Color.white : AetherDesign.Palette.textPrimary)
             .frame(width: diameter, height: diameter)
-            .background(AetherDesign.Materials.card, in: Circle())
-            .overlay {
-                Circle().strokeBorder(
-                    isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.separator,
-                    lineWidth: isActive ? 2 : 1
-                )
-            }
+            .background(
+                isActive
+                    ? AnyShapeStyle(AetherDesign.Palette.accent)
+                    : AnyShapeStyle(AetherDesign.Materials.card),
+                in: Circle()
+            )
             .contentShape(Circle())
             .premiumFocus(scale: 1.12)
     }

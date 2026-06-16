@@ -267,6 +267,21 @@ private struct MediaNavigationDestinations: ViewModifier {
                     playbackPreferences: playbackPreferences
                 )
             }
+            // The show "Play S1E1 · Pilot" pill (#382): opens the on-deck
+            // episode's Detail and autoplays it, so one tap plays while still
+            // routing through the episode's own well-tested playback path.
+            .navigationDestination(for: EpisodeAutoplayRoute.self) { route in
+                DetailView(
+                    item: route.item,
+                    connectedSources: connectedSources,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession,
+                    downloadManager: downloadManager,
+                    downloads: downloads,
+                    playbackPreferences: playbackPreferences,
+                    autoplay: true
+                )
+            }
             // Unified-feed titles (Home / Search) navigate the aggregated item so
             // Detail can show "Available Sources" + let the user switch servers.
             // Base item = the preferred source; falls back to any source.

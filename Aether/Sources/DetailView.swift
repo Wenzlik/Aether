@@ -4,6 +4,16 @@ import UIKit   // UIViewController / UIHostingController for the visionOS cinema
 #endif
 import AetherCore
 
+/// Navigation value that opens an item's Detail **and immediately starts
+/// playback** (#382). Used by the show "Play S1E1 · Pilot" pill so one tap plays
+/// the on-deck episode, while still reusing the episode's own Detail playback
+/// path (hydration, language prefs, VLC/SMB engine, resume) rather than
+/// reimplementing it at the show level. Distinct from a plain `MediaItem` nav so
+/// only this entry point autoplays — opening the episode any other way doesn't.
+struct EpisodeAutoplayRoute: Hashable {
+    let item: MediaItem
+}
+
 struct DetailView: View {
     let item: MediaItem
     /// Every connected source. The connector this screen uses is derived from
@@ -35,6 +45,11 @@ struct DetailView: View {
     /// (`var` with a default so it stays in the memberwise init — a `let` with a
     /// default would be dropped from it.)
     var availableSources: [UnifiedSource] = []
+    /// Start playback automatically once the screen has hydrated (#382). Set by
+    /// the `EpisodeAutoplayRoute` destination so the show "Play S1E1" pill plays
+    /// the on-deck episode on one tap while still routing through the episode's
+    /// own, well-tested Detail playback path. `false` everywhere else.
+    var autoplay: Bool = false
 
     @State private var resume: ResumePoint?
     /// Drives the "mark an in-progress title watched?" confirmation — marking
@@ -134,9 +149,10 @@ struct DetailView: View {
     @State private var isEnqueuingDownload = false
     /// Technical Details starts tucked — rich info without cluttering the page.
     @State private var technicalDetailsExpanded = false
-    /// First-use discoverability for the bare compact icon row: captions show
-    /// beneath the icons until the user taps one, then never again (persisted).
-    @AppStorage("aether.detail.iconHintSeen") private var iconHintSeen = false
+    /// Guards the one-shot autoplay (#382) so re-running the load task (source
+    /// switch, scene re-activation) can't relaunch the player after the user has
+    /// already dismissed it.
+    @State private var didAutoplay = false
     /// The app session — used to mark watched/unwatched on **every** connected
     /// source that has the title (not just the one Detail is acting on), so a
     /// movie on both Plex and Jellyfin stays in sync (#232 follow-up).
@@ -323,6 +339,15 @@ struct DetailView: View {
             }
             if item.kind == .episode {
                 await loadEpisodeParents()   // #282: Season / Show navigation
+            }
+            // One-shot autoplay (#382): the show "Play S1E1" pill routes here
+            // with `autoplay` set. Hydration is done, so launch the player now —
+            // `fromStart: false` resumes from the saved point when the on-deck
+            // episode is in progress, else starts from the top. Guarded so a
+            // later task re-run (source switch / re-activation) can't relaunch.
+            if autoplay, !didAutoplay {
+                didAutoplay = true
+                await presentPlayer(fromStart: false)
             }
             related = await source?.related(to: activeItem.id) ?? []
         }
@@ -1424,11 +1449,15 @@ struct DetailView: View {
             if isLoadingChildren && children.isEmpty {
                 AetherLoadingState(.inline)
             } else {
-                // Full-width focus section so Up from ANY season card lands on
-                // Next Up — section-to-section focus uses the section frames, not
+                // Unified action cluster (#382): the show's primary action is a
+                // single "▶ S1E1 · Pilot" pill that plays the on-deck episode,
+                // beside the borderless Favorite icon — collapsing the old "NEXT
+                // UP" card (a navigate-to-episode tile) into one Infuse-style
+                // row. Full-width focus section so Up from ANY season card lands
+                // here — section-to-section focus uses the section frames, not
                 // the card geometry, so it works from Season 1 through Season N
                 // (#266 feedback). Pairs with the seasons rail's own focus section.
-                nextUpCard
+                showActionCluster
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .aetherDetailFocusSection()
                 if children.count > 1 {
@@ -1459,6 +1488,51 @@ struct DetailView: View {
                 }
             }
         }
+    }
+
+    /// The show's unified action cluster (#382): a primary pill that plays the
+    /// on-deck episode (newest in-progress, else the one after the last watched —
+    /// `OnDeck.next`), beside the borderless Favorite icon when the source
+    /// supports it. Replaces the old "NEXT UP" navigate-to-episode card. The pill
+    /// routes through `EpisodeAutoplayRoute` so one tap plays while still reusing
+    /// the episode's own, well-tested Detail playback path — `NavigationLink`,
+    /// not a `Button`, so it's focusable on tvOS and reachable by the remote.
+    /// Hidden until the on-deck episode resolves.
+    @ViewBuilder
+    private var showActionCluster: some View {
+        if let episode = nextUpEpisode {
+            HStack(spacing: AetherDesign.Spacing.m) {
+                NavigationLink(value: EpisodeAutoplayRoute(item: episode)) {
+                    AetherButtonLabel(
+                        title: showPlayLabel(for: episode),
+                        systemImage: "play.fill",
+                        role: .primary
+                    )
+                }
+                .buttonStyle(.plain)
+                if source?.supportsFavorites == true {
+                    AetherIconButton(
+                        systemImage: isFavorite ? "heart.fill" : "heart",
+                        accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
+                        isActive: isFavorite
+                    ) {
+                        Task { await toggleFavorite() }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    /// The on-deck episode pill label: "S1E1 · Pilot" to start fresh, or
+    /// "S2E4 · Continue" when that episode is already in progress (#382). The
+    /// episode code / title aren't translatable; "Continue" is resolved here so
+    /// it localizes even though it's interpolated into the string.
+    private func showPlayLabel(for episode: MediaItem) -> String {
+        if nextUpResume != nil, let s = episode.seasonNumber, let e = episode.episodeNumber {
+            return "S\(s)E\(e) · " + String(localized: "Continue")
+        }
+        return DetailFormatting.episodeLabel(episode)
     }
 
     /// "On Deck"-style card: thumbnail + episode code + title, with a resume
@@ -2257,29 +2331,20 @@ struct DetailView: View {
     @ViewBuilder
     private var actionRow: some View {
         if current.streamURL != nil {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                // Primary actions as a single horizontal pill row (Infuse-style),
-                // Resume carrying its position inline — a compact cluster instead
-                // of a tall Resume / caption / Restart stack (#266 Detail Phase 1).
-                // Pills come first so the tvOS remote still lands on Play/Resume on
-                // arrival (not the watched toggle).
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    if resume != nil { resumeButton } else { playButton }
-                    if resume != nil { restartButton }
-                    #if os(visionOS)
-                    watchInCinemaButton
-                    #endif
-                }
-                // Tertiary actions as a compact, equal-weight icon row beneath.
-                compactActionRow
-                // The first-use hint is a touch affordance (tap "Got it" / tap an
-                // icon). On tvOS it created an unreachable focus dead-zone, and
-                // the remote already moves focus across the labelled icons — so
-                // it's iOS / iPadOS / visionOS only.
-                #if !os(tvOS)
-                compactActionHint
-                #endif
+            // Compact iPhone can't fit the whole cluster (Resume pill + Restart +
+            // up to ~4 tertiary icons) on one line, and the old two-row layout is
+            // gone — so let it scroll horizontally there instead of clipping. iPad
+            // / tvOS / visionOS have the width, so they keep a plain row (no
+            // scroll → no change to remote focus traversal on tvOS).
+            #if os(iOS)
+            if hSizeClass == .compact {
+                ScrollView(.horizontal, showsIndicators: false) { actionCluster }
+            } else {
+                actionCluster
             }
+            #else
+            actionCluster
+            #endif
         } else if isNetflixOnly {
             netflixOnlyActions
         } else {
@@ -2287,137 +2352,85 @@ struct DetailView: View {
         }
     }
 
-    /// Width cap for the first-use caption — narrower than the 720 content cap
-    /// because it's a caption, not a content block; keeps the trailing "Got it"
-    /// beside the text on the wide visionOS/iPad column (#355).
-    private var hintMaxWidth: CGFloat { 480 }
-
-    /// First-use discoverability for the bare icon row (§4, "bare + first-use
-    /// hint"): a one-time caption naming the icons that are actually present,
-    /// dismissed by "Got it" — or by tapping an icon, since that *is* discovery.
-    /// `iconHintSeen` persists, so the row is clean forever after.
-    @ViewBuilder
-    private var compactActionHint: some View {
-        let items = compactActionHintItems
-        if !iconHintSeen, !items.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.xs) {
-                Image(systemName: "hand.tap")
-                    .font(.caption2)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-                // Lead-in prose ("Tap an icon below — …") shifts the labels to the
-                // right so none sits directly under its icon — the eye used to sit
-                // above the word "Watch status" and read as a duplicate control
-                // (#355). It's a sentence, not a column of captions.
-                Text("Tap an icon below — \(items.joined(separator: ", ")).")
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: AetherDesign.Spacing.s)
-                Button("Got it") { dismissIconHint() }
-                    .font(AetherDesign.Typography.caption.weight(.semibold))
-                    .foregroundStyle(AetherDesign.Palette.accent)
-                    .buttonStyle(.plain)
-                    .premiumFocus()
-            }
-            // Cap the caption width so on the spacious visionOS/iPad layout the
-            // trailing "Got it" no longer floats out to the centre of the wide
-            // content column (#355) — it stays beside the text. On compact iPhone
-            // (column < cap) this is a no-op, so that already-correct layout is
-            // untouched.
-            .frame(maxWidth: hintMaxWidth, alignment: .leading)
-            .padding(.top, AetherDesign.Spacing.xxs)
-            .transition(.opacity)
-        }
-    }
-
-    /// Labels for whichever compact icons are currently visible, left-to-right.
-    private var compactActionHintItems: [String] {
-        // Localized so the joined caption reads in the user's language (the items
-        // are interpolated into a String, so they must be resolved here rather
-        // than relying on SwiftUI's literal auto-localization).
-        var items: [String] = []
-        if shouldShowDownloadControl { items.append(String(localized: "Download")) }
-        if source != nil { items.append(String(localized: "Watch status")) }
-        if source?.supportsFavorites == true { items.append(String(localized: "Favorite")) }
-        // "Source" intentionally absent — switching now lives only in the
-        // "Available Sources" section, not the icon row (#356).
-        if current.mediaInfo != nil { items.append(String(localized: "Details")) }
-        if ownedNetflixProvider != nil && NetflixLauncher.canLaunch { items.append(String(localized: "Play on Netflix")) }
-        return items
-    }
-
-    private func dismissIconHint() {
-        guard !iconHintSeen else { return }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { iconHintSeen = true }
-    }
-
-    /// Tertiary actions as a row of compact circular icon buttons (Infuse-style)
-    /// so they never compete with Resume/Play. Each is a focusable `Button` /
-    /// `Menu`, so the whole row is reachable left/right by the tvOS remote.
-    private var compactActionRow: some View {
+    /// The unified action cluster (#382, Infuse-style): the primary Resume/Play
+    /// pill, Restart demoted to a borderless icon right after it, then the
+    /// tertiary icons — all at one vertical level instead of a pill row stacked
+    /// over a separate icon row. Play/Resume stays first so the tvOS remote lands
+    /// on it (not the watched toggle), and every button is reachable left→right
+    /// by the Siri Remote. Left-aligned by the parent column (no trailing Spacer,
+    /// which would misbehave inside the compact-width horizontal ScrollView).
+    private var actionCluster: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            if shouldShowDownloadControl {
-                downloadIconButton
-            }
-            if source != nil {
-                AetherIconButton(
-                    systemImage: isWatched ? "eye.fill" : "eye",
-                    accessibilityLabel: isWatched ? "Mark as unwatched" : "Mark as watched",
-                    isActive: isWatched
-                ) {
-                    dismissIconHint()
-                    Task { await toggleWatched() }
-                }
-            }
-            if source?.supportsFavorites == true {
-                AetherIconButton(
-                    systemImage: isFavorite ? "heart.fill" : "heart",
-                    accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
-                    isActive: isFavorite
-                ) {
-                    dismissIconHint()
-                    Task { await toggleFavorite() }
-                }
-            }
-            // Source switching is not a tertiary icon here: it lived as a cryptic,
-            // width-shifting, blue-tinted glyph that collided with "blue = active"
-            // (#356). The dedicated "Available Sources" section in the body is the
-            // single, labelled home for it (always present when count > 1).
-            if current.mediaInfo != nil {
-                AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
-                    dismissIconHint()
-                    presentedSelector = .technicalDetails
-                }
-            }
-            // "Also on Netflix" (#360): a secondary link-out for an owned title
-            // that's also on Netflix. Launch-capable platforms only (not tvOS).
-            if ownedNetflixProvider != nil && NetflixLauncher.canLaunch {
-                AetherIconButton(systemImage: "play.tv", accessibilityLabel: "Play on Netflix") {
-                    dismissIconHint()
-                    playOnNetflix()
-                }
-            }
-            #if !os(tvOS)
-            // Edit metadata — local items only (movies / episodes, not show
-            // containers, whose id is "show:<series>" rather than an item id).
-            if activeItem.id.source == .local && !activeItem.kind.isContainer {
-                AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit metadata") {
-                    dismissIconHint()
-                    presentedSelector = .editMetadata
-                }
-            }
-            // SMB items carry no metadata — let the user correct the title/year
-            // so a mis-named file matches a TMDb poster (#213). Movies/episodes
-            // only (not show containers, whose id is "show:<series>").
-            if isSMBSource(activeItem.id.source) && !activeItem.kind.isContainer {
-                AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
-                    dismissIconHint()
-                    presentedSelector = .smbEditMetadata
-                }
-            }
+            if resume != nil { resumeButton } else { playButton }
+            if resume != nil { restartIconButton }
+            #if os(visionOS)
+            watchInCinemaButton
             #endif
-            Spacer(minLength: 0)
+            compactActionButtons
         }
+    }
+
+    /// Tertiary actions as borderless icon buttons (#382) — Download · Watched ·
+    /// Favorite · Details · etc. Returned as bare buttons (no enclosing HStack)
+    /// so they drop straight into `actionRow`'s single horizontal cluster; each
+    /// is a focusable `Button` / `Menu`, so the whole row stays reachable
+    /// left/right by the tvOS remote.
+    @ViewBuilder
+    private var compactActionButtons: some View {
+        if shouldShowDownloadControl {
+            downloadIconButton
+        }
+        if source != nil {
+            AetherIconButton(
+                systemImage: isWatched ? "eye.fill" : "eye",
+                accessibilityLabel: isWatched ? "Mark as unwatched" : "Mark as watched",
+                isActive: isWatched
+            ) {
+                Task { await toggleWatched() }
+            }
+        }
+        if source?.supportsFavorites == true {
+            AetherIconButton(
+                systemImage: isFavorite ? "heart.fill" : "heart",
+                accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
+                isActive: isFavorite
+            ) {
+                Task { await toggleFavorite() }
+            }
+        }
+        // Source switching is not a tertiary icon here: it lived as a cryptic,
+        // width-shifting, blue-tinted glyph that collided with "blue = active"
+        // (#356). The dedicated "Available Sources" section in the body is the
+        // single, labelled home for it (always present when count > 1).
+        if current.mediaInfo != nil {
+            AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
+                presentedSelector = .technicalDetails
+            }
+        }
+        // "Also on Netflix" (#360): a secondary link-out for an owned title
+        // that's also on Netflix. Launch-capable platforms only (not tvOS).
+        if ownedNetflixProvider != nil && NetflixLauncher.canLaunch {
+            AetherIconButton(systemImage: "play.tv", accessibilityLabel: "Play on Netflix") {
+                playOnNetflix()
+            }
+        }
+        #if !os(tvOS)
+        // Edit metadata — local items only (movies / episodes, not show
+        // containers, whose id is "show:<series>" rather than an item id).
+        if activeItem.id.source == .local && !activeItem.kind.isContainer {
+            AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit metadata") {
+                presentedSelector = .editMetadata
+            }
+        }
+        // SMB items carry no metadata — let the user correct the title/year
+        // so a mis-named file matches a TMDb poster (#213). Movies/episodes
+        // only (not show containers, whose id is "show:<series>").
+        if isSMBSource(activeItem.id.source) && !activeItem.kind.isContainer {
+            AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
+                presentedSelector = .smbEditMetadata
+            }
+        }
+        #endif
     }
 
     /// Download as a compact icon `Menu`: the glyph reflects the current state,
@@ -2613,16 +2626,20 @@ struct DetailView: View {
         .disabled(isPreparingPlayback)
     }
 
-    /// Level 2 — Restart, secondary emphasis, sitting under Resume.
-    private var restartButton: some View {
-        AetherButton(
-            "Restart",
+    /// Restart — demoted from a text pill to a borderless icon button right
+    /// after the primary pill (#382), so the cluster reads as one row. The pill
+    /// label already carries the resume time, so "from the beginning" only needs
+    /// an icon. Disabled while playback is preparing, like the primary buttons.
+    @ViewBuilder
+    private var restartIconButton: some View {
+        AetherIconButton(
             systemImage: "backward.end.fill",
-            role: .secondary
+            accessibilityLabel: "Play from beginning"
         ) {
+            guard !isPreparingPlayback else { return }
             Task { await presentPlayer(fromStart: true) }
         }
-        .disabled(isPreparingPlayback)
+        .opacity(isPreparingPlayback ? 0.4 : 1)
     }
 
     private var unavailableState: some View {
