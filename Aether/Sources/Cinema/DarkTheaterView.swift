@@ -110,40 +110,46 @@ struct DarkTheaterView: View {
     /// because every value is absolute, never accumulated.
     @MainActor
     private func applyLayout() {
+        // Seat FIRST: slide the whole room so the floor lands at its final
+        // world-Y before the dock Y is computed below. `.middle` Z = 0.
+        // -Z = back (screen farther); -Y = room down → viewer looks slightly
+        // down at the screen (stadium rake). Absolute, never accumulated.
+        if let root = refs.root {
+            root.position = SIMD3<Float>(0, cinema.seat.yOffsetMetres, cinema.seat.zOffsetMetres)
+        }
+
         // Size: prefer the documented `DockingRegionComponent.width` knob (height
         // follows at 2.4:1, per WWDC24); fall back to a uniform transform scale
         // if the component doesn't resolve. width = authored baseline × scale,
         // so `.medium` (×1.0) is exactly the authored dock.
         if let dock = refs.dock {
             let scale = cinema.screenPreset.relativeScale
+            let screenHeight: Float
             if var region = dock.components[DockingRegionComponent.self] {
                 if refs.baselineDockWidth == nil { refs.baselineDockWidth = region.width }
                 let width = (refs.baselineDockWidth ?? region.width) * scale
                 region.width = width
                 dock.components.set(region)
-                // Anchor the *bottom edge* a fixed clearance above the floor
-                // instead of scaling about a fixed centre (#357): the screen grows
-                // upward, so the bottom never sinks into the floor at IMAX/Wall and
-                // Medium drops to a comfortable height. Height is derived from the
-                // width actually applied (the source of truth for what's rendered),
-                // not the preset's intent, so it's correct even if the authored
-                // baseline differs from `.medium`'s nominal width.
-                let screenHeight = width / CinemaScreenPreset.dockingAspectRatio
-                dock.position.y = Self.screenBottomClearance + screenHeight / 2
+                screenHeight = width / CinemaScreenPreset.dockingAspectRatio
             } else {
-                // No resolved DockingRegion (rare fallback): uniform scale, with the
-                // same bottom anchor from the preset's intended height.
+                // No resolved DockingRegion (rare fallback): uniform scale.
                 dock.scale = SIMD3<Float>(repeating: scale)
-                dock.position.y = Self.screenBottomClearance + cinema.screenPreset.heightMetres / 2
+                screenHeight = cinema.screenPreset.heightMetres
             }
+
+            // Anchor the *bottom edge* a fixed clearance above the theater floor
+            // in **world space** (#357 revisited). The theater floor sits at world
+            // Y = seat.yOffsetMetres (the root has just been placed above). Using
+            // `setPosition(relativeTo: nil)` is essential: the authored `Video_Dock`
+            // parent entity sits ~2.5 m above the root in the USDA, so assigning
+            // `dock.position.y` in local space silently adds that offset and pushes
+            // the screen ~2.5 m too high (#357 regression).
+            let floorWorldY = cinema.seat.yOffsetMetres
+            let targetWorldY = floorWorldY + Self.screenBottomClearance + screenHeight / 2
+            let worldPos = dock.position(relativeTo: nil)
+            dock.setPosition(SIMD3<Float>(worldPos.x, targetWorldY, worldPos.z), relativeTo: nil)
         }
-        // Seat: slide the whole room. -Z = back (screen farther); -Y = room down
-        // so the viewer sits higher — a stadium rake where each row back looks a
-        // little more down. Absolute (never accumulated); the dock's own Y above
-        // owns vertical *placement*, so this is purely the rake. `.middle` Z = 0.
-        if let root = refs.root {
-            root.position = SIMD3<Float>(0, cinema.seat.yOffsetMetres, cinema.seat.zOffsetMetres)
-        }
+
         Self.log.debug("cinema layout: size=\(cinema.screenPreset.rawValue, privacy: .public) (×\(cinema.screenPreset.relativeScale, privacy: .public)) seat=\(cinema.seat.rawValue, privacy: .public)")
     }
 
