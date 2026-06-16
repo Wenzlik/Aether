@@ -110,8 +110,14 @@ struct FeatureRequestSheet: View {
     }
 
     private var emailBody: String {
-        """
-        \(detail)
+        // Include the Title in the body, not just the subject (#384). The form's
+        // required field is Title (Description is optional), so a title-only
+        // request previously produced a body with nothing but the footer — the
+        // email read as empty. Lead with the title, then the description if any.
+        let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = trimmedDetail.isEmpty ? title : "\(title)\n\n\(detail)"
+        return """
+        \(request)
 
         \(SupportDiagnostics.featureRequestFooter())
         """
