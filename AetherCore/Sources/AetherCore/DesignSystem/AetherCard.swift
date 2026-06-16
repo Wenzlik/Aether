@@ -324,15 +324,19 @@ extension AetherCard {
     /// the backdrop matters more than the poster. `progress` draws the frosted
     /// Continue-Watching strip along the lower edge; `rating` adds the compact
     /// community-rating badge — both are how the Discover hero carousel (#381)
-    /// surfaces "you're 40% in" and "8.4" on a featured slide.
+    /// surfaces "you're 40% in" and "8.4" on a featured slide. `aspectRatio`
+    /// defaults to 16:9; the Discover hero passes a wider cinematic ratio on
+    /// iPad / visionOS so the banner can fill the full content width without
+    /// becoming absurdly tall (the backdrop fills + crops to the ratio).
     public static func hero(
         title: String,
         subtitle: String? = nil,
         posterURL: URL?,
         progress: Double? = nil,
-        rating: Double? = nil
+        rating: Double? = nil,
+        aspectRatio: CGFloat = 16.0 / 9.0
     ) -> AetherCard {
-        AetherCard(title: title, subtitle: subtitle, posterURL: posterURL, aspectRatio: 16.0 / 9.0, progress: progress, rating: rating)
+        AetherCard(title: title, subtitle: subtitle, posterURL: posterURL, aspectRatio: aspectRatio, progress: progress, rating: rating)
     }
 
     /// 16:9 episode still — same shape as hero, but conventionally smaller and

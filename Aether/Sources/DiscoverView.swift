@@ -57,6 +57,11 @@ struct DiscoverView: View {
     /// `heroIndex` `onChange` can tell an auto-advance apart from a real user
     /// swipe (only the latter should pause auto-advance).
     @State private var programmaticAdvance = false
+    #if !os(tvOS)
+    /// Measured width of the touch/spatial hero carousel, used to size the
+    /// cinematic full-width banner on iPad / visionOS (see `resolvedHeroHeight`).
+    @State private var heroContentWidth: CGFloat = 0
+    #endif
     /// Reduce Motion disables auto-advance entirely (#381) — manual swipe stays.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(tvOS)
@@ -191,9 +196,22 @@ struct DiscoverView: View {
         }
     }
 
+    /// Vertical gap between Discover sections. Wider on the wide layouts (iPad
+    /// regular / visionOS) so the full-width hero and the rails below it breathe;
+    /// iPhone / tvOS keep the standard spacing.
+    private var sectionSpacing: CGFloat {
+        #if os(visionOS)
+        AetherDesign.Spacing.xxl
+        #elseif os(iOS)
+        horizontalSizeClass == .regular ? AetherDesign.Spacing.xxl : AetherDesign.Spacing.xl
+        #else
+        AetherDesign.Spacing.xl
+        #endif
+    }
+
     private var rails: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            LazyVStack(alignment: .leading, spacing: sectionSpacing) {
                 // Brand mark leads Discover too, consistent across Home / Library
                 // / Discover. On iPad it rides the top tab-bar row (toolbar icon),
                 // so the inline wordmark header shows only on compact / tvOS.
@@ -278,6 +296,9 @@ struct DiscoverView: View {
                     .frame(width: 7, height: 7)
             }
         }
+        // Center the dots under the hero on every platform (they used to hug the
+        // leading edge inside the section padding).
+        .frame(maxWidth: .infinity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: heroIndex)
         .accessibilityElement()
         .accessibilityLabel(Text("Featured"))
@@ -287,8 +308,15 @@ struct DiscoverView: View {
     #if !os(tvOS)
     /// Swipeable paged carousel for touch / spatial platforms. A horizontal drag
     /// pages; a tap opens Detail. A genuine user swipe pauses auto-advance.
+    ///
+    /// On a wide layout (iPad regular / visionOS) the hero fills the full content
+    /// width at a cinematic ratio — the height is derived from the measured width
+    /// (`width / heroAspect` + room for the title) rather than a fixed constant,
+    /// so the banner can't shrink to a small centered card on a wide window. On
+    /// iPhone it keeps the original fixed-height 16:9 hero.
     private var touchFeaturedCarousel: some View {
-        TabView(selection: $heroIndex) {
+        let h = resolvedHeroHeight
+        return TabView(selection: $heroIndex) {
             ForEach(Array(heroItems.enumerated()), id: \.element.id) { index, item in
                 NavigationLink(value: item) {
                     AetherCard.hero(
@@ -296,17 +324,21 @@ struct DiscoverView: View {
                         subtitle: featuredMetaLine(item),
                         posterURL: item.backdropURL ?? item.posterURL,
                         progress: heroProgress[item.id],
-                        rating: item.communityRating
+                        rating: item.communityRating,
+                        aspectRatio: heroAspect
                     )
                     .frame(maxWidth: .infinity)
-                    .frame(height: heroHeight)
+                    .frame(height: h)
                 }
                 .buttonStyle(.plain)
                 .tag(index)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: heroHeight)
+        .frame(height: h)
+        // Measure the carousel's own width (inside the section padding) so the
+        // cinematic hero height tracks the available width on resize / rotation.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { heroContentWidth = $0 }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .onChange(of: heroIndex) { _, _ in
             // Auto-advance moves the page too; only a real user swipe should
@@ -314,6 +346,52 @@ struct DiscoverView: View {
             if programmaticAdvance { programmaticAdvance = false }
             else { pauseCountdown = Self.resumeIdleSeconds }
         }
+    }
+
+    /// `true` on the wide layouts (iPad regular width / visionOS) where the hero
+    /// should fill the content width with a cinematic crop; `false` on iPhone,
+    /// which keeps the compact fixed-height 16:9 hero.
+    private var isWideHero: Bool {
+        #if os(visionOS)
+        true
+        #elseif os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    /// Cinematic ratio for the wide hero so a full-width banner stays a sensible
+    /// height; the compact iPhone hero keeps the backdrop's native 16:9.
+    private var heroAspect: CGFloat {
+        isWideHero ? 2.4 : 16.0 / 9.0
+    }
+
+    /// Vertical room reserved below the artwork for the title + subtitle block, so
+    /// the artwork keeps its full cinematic width instead of shrinking to fit.
+    private var heroTitleAllowance: CGFloat {
+        #if os(visionOS)
+        66
+        #else
+        58
+        #endif
+    }
+
+    /// Hero height. Wide layouts derive it from the measured content width
+    /// (`width / aspect` + the title block) so the banner fills the width; iPhone
+    /// keeps the original fixed height.
+    private var resolvedHeroHeight: CGFloat {
+        guard isWideHero else { return heroHeight }
+        guard heroContentWidth > 0 else {
+            // Before the first geometry measurement, fall back to a reasonable
+            // banner height so the carousel doesn't pop from a tiny size.
+            #if os(visionOS)
+            return 460
+            #else
+            return 360
+            #endif
+        }
+        return (heroContentWidth / heroAspect) + heroTitleAllowance
     }
     #endif
 
@@ -445,8 +523,13 @@ struct DiscoverView: View {
     private var posterWidth: CGFloat {
         #if os(tvOS)
         300
+        #elseif os(visionOS)
+        // Wider tiles so the rails keep pace with the full-width spatial hero.
+        220
         #else
-        168
+        // iPad (regular) gets larger tiles to match the full-width hero; iPhone
+        // (compact) keeps the original size.
+        horizontalSizeClass == .regular ? 200 : 168
         #endif
     }
 
