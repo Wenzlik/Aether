@@ -218,7 +218,8 @@ struct LibraryBrowseView: View {
             } else {
                 AetherWordmark(.medium)
                 Spacer(minLength: AetherDesign.Spacing.l)
-                filterButtonCircular
+                // Top-right is Search only (#383) — browse facets now live in the
+                // pill row in the content; filtering happens inside each grid.
                 searchButton
             }
             #endif
@@ -228,30 +229,7 @@ struct LibraryBrowseView: View {
         .padding(.bottom, AetherDesign.Spacing.m)
     }
 
-    // MARK: - Filter (opens the unified, fully-filterable Library grid)
-
-    /// Push the unified Library grid (Type + Genre + Audio + Rating + Year, all
-    /// in one sheet) — the full filter the user expects, reusing the See-all
-    /// grid's tested filter rather than a landing-only subset.
-    private func openUnifiedFilter() {
-        navigationPath.append(LibraryBrowseRoute.allTitles)
-    }
-
-    #if !os(tvOS)
-    /// Circular Filter button matching `searchButton`, for the inline header
-    /// (iPhone compact / visionOS).
-    private var filterButtonCircular: some View {
-        Button { openUnifiedFilter() } label: {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                .frame(width: 44, height: 44)
-                .background(AetherDesign.Palette.surface, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Filter")
-    }
-    #endif
+    // MARK: - Search
 
     #if !os(tvOS)
     /// Top-right magnifying-glass that reveals the search field.
@@ -291,13 +269,8 @@ struct LibraryBrowseView: View {
         ToolbarItem(placement: .topBarLeading) {
             AetherBrandIcon { navigationPath = NavigationPath() }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { openUnifiedFilter() } label: {
-                Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
-            }
-            .labelStyle(.titleAndIcon)
-            .accessibilityLabel("Filter")
-        }
+        // Top-right is Search only (#383) — browse facets live in the pill row in
+        // the content, and filtering happens inside each grid.
         if !isSearchActive {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -421,42 +394,41 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// "Browse" facet links (iOS / iPadOS / visionOS) — Genres / Years filter the
-    /// local catalog; Collections / Actors / Directors query the servers and only
-    /// appear when a connected source supports them (#273). tvOS surfaces the
-    /// same facets in its category list instead.
+    /// Browse facets (iOS / iPadOS / visionOS) as a compact horizontal pill row
+    /// (#383, Infuse-style) instead of full-width disclosure rows + a "Browse"
+    /// header. Genres / Years filter the local catalog; Collections / Actors /
+    /// Directors query the servers and only appear when a connected source
+    /// supports them (#273). Each pill navigates the same `LibraryBrowseRoute` as
+    /// the old row. tvOS surfaces the same facets in its category list instead.
     @ViewBuilder
     private var browseSection: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: "Browse")
-            VStack(spacing: AetherDesign.Spacing.s) {
-                NavigationLink(value: LibraryBrowseRoute.genres) {
-                    LibraryBrowseRow(title: "Genres")
-                }
-                .buttonStyle(.plain)
-                NavigationLink(value: LibraryBrowseRoute.years) {
-                    LibraryBrowseRow(title: "Years")
-                }
-                .buttonStyle(.plain)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                browsePill("Genres", route: .genres)
+                browsePill("Years", route: .years)
                 if hasCollections {
-                    NavigationLink(value: LibraryBrowseRoute.collections) {
-                        LibraryBrowseRow(title: "Collections")
-                    }
-                    .buttonStyle(.plain)
+                    browsePill("Collections", route: .collections)
                 }
                 if connectedSources.contains(where: { $0.supportsPeople }) {
-                    NavigationLink(value: LibraryBrowseRoute.actors) {
-                        LibraryBrowseRow(title: "Actors")
-                    }
-                    .buttonStyle(.plain)
-                    NavigationLink(value: LibraryBrowseRoute.directors) {
-                        LibraryBrowseRow(title: "Directors")
-                    }
-                    .buttonStyle(.plain)
+                    browsePill("Actors", route: .actors)
+                    browsePill("Directors", route: .directors)
                 }
             }
             .padding(.horizontal, AetherDesign.Spacing.l)
+            .padding(.vertical, AetherDesign.Spacing.xxs)
         }
+    }
+
+    private func browsePill(_ title: LocalizedStringKey, route: LibraryBrowseRoute) -> some View {
+        NavigationLink(value: route) {
+            Text(title)
+                .font(AetherDesign.Typography.metadata)
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+                .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .buttonStyle(.plain)
     }
 
     #if os(tvOS)

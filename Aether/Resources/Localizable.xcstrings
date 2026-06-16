@@ -2346,6 +2346,23 @@
         }
       }
     },
+    "Filters (%lld)" : {
+      "comment" : "Library grid filter button with the active-facet count, e.g. \"Filters (2)\" (#383).",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtry (%lld)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фільтри (%lld)"
+          }
+        }
+      }
+    },
     "Filters · On" : {
       "comment" : "UI label (cs localization, #320).",
       "extractionState" : "manual",
