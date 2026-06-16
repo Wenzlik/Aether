@@ -496,7 +496,7 @@ struct DetailView: View {
 
                     // Only meaningful when the title exists on more than one source.
                     if availableSources.count > 1 {
-                        availableSourcesSection
+                        sourceSwitcher
                             .padding(.horizontal, AetherDesign.Spacing.l)
                             .frame(maxWidth: 720, alignment: .leading)
                     }
@@ -600,7 +600,7 @@ struct DetailView: View {
                         }
                         #endif
                         if availableSources.count > 1 {
-                            availableSourcesSection
+                            sourceSwitcher
                         }
                     }
                     .frame(maxWidth: wideColumnWidth, alignment: .leading)
@@ -705,7 +705,7 @@ struct DetailView: View {
                         }
 
                         if availableSources.count > 1 {
-                            availableSourcesSection
+                            sourceSwitcher
                         }
 
                         // Episode list (season page) — the primary browse target,
@@ -884,7 +884,7 @@ struct DetailView: View {
             // rails below is a full-width focus column, so Up/Down from any rail
             // card lands cleanly above/below at any scroll offset (#359).
             if availableSources.count > 1 {
-                availableSourcesSection
+                sourceSwitcher
                     .aetherDetailColumn()
             }
             #if !os(tvOS)
@@ -1483,7 +1483,7 @@ struct DetailView: View {
                 // lands here at any scroll offset — the section above the rail is
                 // the seasons rail (already full-width); below is this (#359).
                 if availableSources.count > 1 {
-                    availableSourcesSection
+                    sourceSwitcher
                         .aetherDetailColumn()
                 }
             }
@@ -2221,92 +2221,83 @@ struct DetailView: View {
         }
     }
 
-    // MARK: - Available Sources (manual source override)
+    // MARK: - Source switcher (compact, #380)
 
-    /// Lists every source that has this title. The active one is checked; the
-    /// preferred one is tagged. Tapping a different (playable) source re-points
-    /// the whole screen at that server. Only rendered when `availableSources`
-    /// has more than one entry.
-    @ViewBuilder
-    private var availableSourcesSection: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                Text("Available Sources")
-                    .font(AetherDesign.Typography.sectionTitle)
-                    .foregroundStyle(AetherDesign.Palette.textPrimary)
-                // Unified Library framing — this title exists on more than one
-                // connected server; the row marks which one is playing.
-                Text("Play this title from any connected source.")
-                    .font(AetherDesign.Typography.caption)
-                    .foregroundStyle(AetherDesign.Palette.textTertiary)
-            }
-
-            VStack(spacing: AetherDesign.Spacing.xs) {
-                ForEach(availableSources) { src in
-                    sourceRow(src)
+    /// Compact replacement for the old full-width "Available Sources" section
+    /// (#380): a labelled `Menu` pill (e.g. `Plex ▾`) showing the active source.
+    /// The menu lists every source — the active one checked, the preferred one
+    /// tagged, the quality noted — and tapping a playable source re-points the
+    /// whole screen (`selectSource`). Deliberately a *labelled* control rather
+    /// than a cryptic tertiary icon, so it doesn't reintroduce the width-shifting
+    /// blue glyph removed from the action row in #356. Only rendered when
+    /// `availableSources.count > 1` (call-site guard).
+    private var sourceSwitcher: some View {
+        Menu {
+            ForEach(availableSources) { src in
+                Button {
+                    selectSource(src)
+                } label: {
+                    sourceMenuRow(src)
                 }
+                .disabled(!src.playable)
             }
+        } label: {
+            sourceSwitcherLabel
         }
+        // Strip the Menu's default accent button chrome so the pill reads as a
+        // neutral secondary control (matches `downloadIconButton`, #356).
+        .buttonStyle(.plain)
+        .accessibilityLabel("Source")
     }
 
-    private func sourceRow(_ src: UnifiedSource) -> some View {
+    /// The inline pill: a drive glyph, the active source's name, and a chevron.
+    private var sourceSwitcherLabel: some View {
+        let active = availableSources.first { $0.item.id == activeItem.id }
+        return HStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: "externaldrive")
+                .font(.caption)
+            Text(verbatim: active?.serverName ?? active?.kind.displayName ?? "")
+                .font(AetherDesign.Typography.caption)
+            Image(systemName: "chevron.down")
+                .font(.caption2)
+        }
+        .foregroundStyle(AetherDesign.Palette.textSecondary)
+        .padding(.horizontal, AetherDesign.Spacing.m)
+        .padding(.vertical, AetherDesign.Spacing.xs)
+        .background(AetherDesign.Materials.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(AetherDesign.Palette.separator, lineWidth: 1))
+        .contentShape(Capsule())
+        .premiumFocus()
+    }
+
+    /// One menu entry: a checkmark on the active source (otherwise the kind
+    /// glyph), the server name, its quality if known, and a "Preferred" tag on
+    /// the default source.
+    @ViewBuilder
+    private func sourceMenuRow(_ src: UnifiedSource) -> some View {
         let isActive = src.item.id == activeItem.id
         let isPreferred = src.item.id == item.id
-        return Button {
-            selectSource(src)
-        } label: {
-            HStack(spacing: AetherDesign.Spacing.m) {
-                Image(systemName: src.kind == .offline ? "arrow.down.circle.fill" : "externaldrive.fill")
-                    .font(.title3)
-                    .foregroundStyle(AetherDesign.Palette.accent)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                    HStack(spacing: AetherDesign.Spacing.xs) {
-                        Text(src.serverName ?? src.kind.displayName)
-                            .font(AetherDesign.Typography.cardTitle)
-                            .foregroundStyle(AetherDesign.Palette.textPrimary)
-                        if isPreferred {
-                            AetherBadge("Preferred")
-                        }
-                    }
-                    Text(sourceSubtitle(src))
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
-                }
-
-                Spacer(minLength: 0)
-
-                if isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(AetherDesign.Palette.accent)
-                }
-            }
-            .padding(AetherDesign.Spacing.m)
-            .background(
-                AetherDesign.Materials.card,
-                in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                    .strokeBorder(
-                        isActive ? AetherDesign.Palette.accent : AetherDesign.Palette.separator,
-                        lineWidth: isActive ? 2 : 1
-                    )
-            )
-            .contentShape(Rectangle())
+        let name = src.serverName ?? src.kind.displayName
+        let glyph = src.kind == .offline ? "arrow.down.circle" : "externaldrive"
+        Label {
+            sourceMenuTitle(name: name, quality: src.quality, isPreferred: isPreferred)
+        } icon: {
+            Image(systemName: isActive ? "checkmark" : glyph)
         }
-        .buttonStyle(.plain)
-        .disabled(!src.playable)
-        .opacity(src.playable ? 1 : 0.5)
     }
 
-    private func sourceSubtitle(_ src: UnifiedSource) -> String {
-        var parts = [src.kind.displayName]
-        if let quality = src.quality { parts.append(quality) }
-        if !src.playable { parts.append("Unavailable") }
-        return parts.joined(separator: " · ")
+    /// `<server> · <quality> · Preferred` — the dynamic parts are verbatim
+    /// (server name / resolution are data), only "Preferred" is localized, so the
+    /// pieces are composed with `Text` concatenation to keep that segment
+    /// translatable.
+    @ViewBuilder
+    private func sourceMenuTitle(name: String, quality: String?, isPreferred: Bool) -> some View {
+        let base = quality.map { Text(verbatim: "\(name) · \($0)") } ?? Text(verbatim: name)
+        if isPreferred {
+            base + Text(verbatim: " · ") + Text("Preferred")
+        } else {
+            base
+        }
     }
 
     /// Switch the screen to a different source. Resets the per-source state
@@ -2400,8 +2391,8 @@ struct DetailView: View {
         }
         // Source switching is not a tertiary icon here: it lived as a cryptic,
         // width-shifting, blue-tinted glyph that collided with "blue = active"
-        // (#356). The dedicated "Available Sources" section in the body is the
-        // single, labelled home for it (always present when count > 1).
+        // (#356). It now has a labelled home in the body — the compact
+        // `sourceSwitcher` pill (#380), shown when count > 1.
         if current.mediaInfo != nil {
             AetherIconButton(systemImage: "info.circle", accessibilityLabel: "Technical details") {
                 presentedSelector = .technicalDetails
