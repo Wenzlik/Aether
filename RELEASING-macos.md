@@ -45,15 +45,37 @@ security find-identity -v -p codesigning | grep "Developer ID Application"
 why the app carries **no iCloud entitlement**: iCloud is App-Store-only and can't
 be Developer-ID signed.)
 
-### 3. Notarization credentials (notarytool keychain profile)
-Generate an **app-specific password** at [appleid.apple.com](https://appleid.apple.com)
-▸ Sign-In & Security ▸ App-Specific Passwords. Then store it once:
+### 3. Notarization credentials — pick one
+
+**(a) App Store Connect API key — recommended.** A `.p8` key file is immune to the
+keychain-profile problem below (it has no keychain ACL, so an Xcode-beta update
+can't make it "disappear"), and it works headless / in CI / on a second Mac.
+
+1. App Store Connect ▸ **Users and Access** ▸ **Integrations** ▸ **App Store
+   Connect API** ▸ generate a key (a **Developer** role is enough for notarizing).
+2. **Download `AuthKey_<KEYID>.p8`** — you only get one chance; store it somewhere
+   safe (e.g. `~/.private_keys/`), never commit it.
+3. Note the key's **Key ID** and the **Issuer ID** (shown at the top of that page).
+4. Point the script at it (e.g. in your shell profile):
+   ```sh
+   export NOTARY_API_KEY=~/.private_keys/AuthKey_XXXXXXXXXX.p8
+   export NOTARY_API_KEY_ID=XXXXXXXXXX
+   export NOTARY_API_ISSUER=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+   ```
+   When all three are set, `package-mac.sh` notarizes with the key; otherwise it
+   falls back to the keychain profile (b).
+
+**(b) Keychain profile — fallback.** Generate an **app-specific password** at
+[appleid.apple.com](https://appleid.apple.com) ▸ Sign-In & Security, then store it:
 ```sh
 xcrun notarytool store-credentials aether-notary \
   --apple-id "vasek@zmrhal.cz" --team-id 8PW5FWH7P2
 # (omit --password and it prompts, so it stays out of shell history)
 ```
-The profile name **`aether-notary`** is what `package-mac.sh` expects.
+The profile name **`aether-notary`** is what `package-mac.sh` defaults to. ⚠️ This
+profile's keychain item is ACL-bound to the `notarytool` binary, so a new
+**Xcode-beta** breaks access ("No Keychain password item found for profile…") and
+you must re-run `store-credentials`. Prefer (a) to avoid this entirely.
 
 ### 4. NAS access for deploy (SSH key)
 The website lives on the Synology at `192.168.1.10` (SSH **port 5002**, user
