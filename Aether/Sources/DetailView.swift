@@ -389,58 +389,41 @@ struct DetailView: View {
         // Keyed on the active item: re-runs when the user switches source via
         // "Available Sources", re-hydrating + reloading resume/children for the
         // newly-selected server.
+        // Keyed on the active item: re-runs when the user switches source via
+        // "Available Sources", re-hydrating + reloading resume/children for the
+        // newly-selected server. The `.task` stays on the view (SwiftUI cancels
+        // it on id change / disappear); the VM methods are awaited inside it so
+        // cooperative cancellation flows through unchanged (#241 inc 2).
         .task(id: activeItem.id) {
-            resume = await resumeStore.point(for: activeItem.id)
-            await hydrateForPlayback()
-            await loadChildrenIfNeeded()
-            await setupSeasonsIfNeeded()
-            if item.kind == .season {
-                // Season page: its children ARE its episodes — Next Up within
-                // the season, and the parent show's cast as a fallback (#267).
-                await computeNextUp()
-                await loadFallbackCastIfNeeded()
-            }
-            if item.kind == .episode {
-                await loadEpisodeParents()   // #282: Season / Show navigation
-            }
+            await viewModel.runMainPipeline()
             // One-shot autoplay (#382): the show "Play S1E1" pill routes here
             // with `autoplay` set. Hydration is done, so launch the player now —
             // `fromStart: false` resumes from the saved point when the on-deck
-            // episode is in progress, else starts from the top. Guarded so a
-            // later task re-run (source switch / re-activation) can't relaunch.
+            // episode is in progress, else starts from the top. The launcher is
+            // Environment-coupled so it stays view-side. Guarded so a later task
+            // re-run (source switch / re-activation) can't relaunch.
             if autoplay, !didAutoplay {
                 didAutoplay = true
                 await presentPlayer(fromStart: false)
             }
-            related = await source?.related(to: activeItem.id) ?? []
+            await viewModel.loadRelated()
         }
         // Re-point the screen after the local metadata editor closes (#211): the
-        // item id is unchanged, so the main task won't re-run. Feeding the
-        // refreshed item into `overrideItem` (the same channel the source switch
-        // uses) repaints the hero, which reads `activeItem`. If the edit changed
-        // the kind (movie↔episode) the item now lives under a different library
-        // grouping, so pop back rather than render a contradictory screen.
+        // item id is unchanged, so the main task won't re-run. The token gate
+        // stays here (the view owns the token); the VM does the fetch + decides.
+        // On a kind change (movie↔episode) the item now lives under a different
+        // library grouping, so pop back rather than render a contradictory screen.
         .task(id: localEditToken) {
-            guard localEditToken != nil,
-                  activeItem.id.source == .local || isSMBSource(activeItem.id.source),
-                  let source,
-                  let refreshed = try? await source.item(for: activeItem.id) else { return }
-            if refreshed.kind != activeItem.kind {
+            guard localEditToken != nil else { return }
+            if await viewModel.refreshAfterLocalEdit() == .kindChanged {
                 dismiss()
-            } else {
-                overrideItem = refreshed
-                configuredItem = applyingPreferences(to: refreshed)
             }
         }
         // clearLogo for the hero — keyed on the minted URL so it re-fires when
         // hydration fills `configuredItem` (Plex logos arrive on the detail
         // endpoint, not the library list) and when the user switches source.
         .task(id: current.logoURL()) {
-            guard item.kind != .episode, let url = current.logoURL() else {
-                heroLogo = nil
-                return
-            }
-            heroLogo = await AetherImageCache.shared.image(for: url, maxPixel: ArtworkTier.logo.maxPixel)
+            await viewModel.loadHeroLogo()
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in
@@ -486,7 +469,7 @@ struct DetailView: View {
                 isPlayerPresented = false
             }
             playbackItem = nil
-            Task { resume = await resumeStore.point(for: activeItem.id) }
+            Task { await viewModel.refreshResume() }
         }
         #endif
     }
@@ -1485,22 +1468,6 @@ struct DetailView: View {
     }
     #endif
 
-    private func loadChildrenIfNeeded() async {
-        guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
-        isLoadingChildren = true
-        defer { isLoadingChildren = false }
-        do {
-            children = try await source.children(of: activeItem.id)
-            // A navigated season's children are episodes — load their resume
-            // points so the rows show in-progress state (#260).
-            if children.contains(where: { $0.kind == .episode }) {
-                await loadEpisodeResumes(children)
-            }
-        } catch {
-            children = []
-        }
-    }
-
     // MARK: - Series layout (Next Up → Season Selector → Episodes → Details)
 
     /// The dedicated TV-show body. `children` here are the show's *seasons*; the
@@ -1741,85 +1708,6 @@ struct DetailView: View {
     /// Season 1. Then compute the series' Next Up from that season's episodes.
     /// Idempotent — only runs while no season is selected, so re-running the
     /// `.task` after hydration doesn't reset the user's manual season choice.
-    private func setupSeasonsIfNeeded() async {
-        guard isShow, selectedSeason == nil, !children.isEmpty else { return }
-        let deck = children.first { ($0.unwatchedEpisodeCount ?? 0) > 0 } ?? children.first
-        selectedSeason = deck
-        if let deck { await loadSeasonEpisodes(deck) }
-        await computeNextUp()
-    }
-
-    /// Every episode of the show, across all seasons. `children` are seasons for
-    /// Plex/Jellyfin (fetch each one's episodes) or already episodes for a flat
-    /// source (Local) — handle both.
-    private func allShowEpisodes() async -> [MediaItem] {
-        guard let source else { return [] }
-        if children.contains(where: { $0.kind == .season }) {
-            var episodes: [MediaItem] = []
-            for season in children {
-                episodes += (try? await source.children(of: season.id)) ?? []
-            }
-            return episodes
-        }
-        return children   // already episodes (flat source)
-    }
-
-    /// The series **On Deck** episode (#260): the most-recently-watched
-    /// *in-progress* (resumable) episode, else the episode **following** the
-    /// last one finished — computed across ALL seasons, not just the first
-    /// season that happens to have an unwatched episode (which surfaced e.g.
-    /// Season 3 while the user was mid-Season 7).
-    private func computeNextUp() async {
-        let episodes = await allShowEpisodes()
-        guard !episodes.isEmpty else { nextUpEpisode = nil; nextUpResume = nil; return }
-
-        var resumes: [MediaID: ResumePoint] = [:]
-        for episode in episodes {
-            if let point = await resumeStore.point(for: episode.id) { resumes[episode.id] = point }
-        }
-
-        let next = OnDeck.next(episodes: episodes) { episode in
-            guard let resume = resumes[episode.id], !episode.isWatched else { return nil }
-            return resume.updatedAt
-        }
-        nextUpEpisode = next
-        nextUpResume = next.flatMap { resumes[$0.id] }
-    }
-
-    /// Seasons rarely carry their own cast — fetch the parent show's once, so
-    /// the season page's Cast & Crew isn't empty (#267). No-op when the season
-    /// has cast, the fallback is already loaded, or there's no parent to ask.
-    private func loadFallbackCastIfNeeded() async {
-        guard item.kind == .season, current.cast.isEmpty, fallbackCast.isEmpty,
-              let source,
-              let showID = activeItem.parentID ?? item.parentID,
-              let show = try? await source.item(for: showID) else { return }
-        fallbackCast = show.cast
-    }
-
-    /// Resolve an episode's parent season + show from `parentID` so the detail
-    /// can offer upward navigation (#282). Server episodes nest episode → season
-    /// → show; flat sources (Local / SMB) nest episode → show directly, so the
-    /// immediate parent may already be the show.
-    private func loadEpisodeParents() async {
-        parentSeason = nil
-        parentShow = nil
-        guard item.kind == .episode, let source,
-              let parentID = activeItem.parentID,
-              let parent = try? await source.item(for: parentID) else { return }
-        switch parent.kind {
-        case .season:
-            parentSeason = parent
-            if let showID = parent.parentID, let show = try? await source.item(for: showID) {
-                parentShow = show
-            }
-        case .show:
-            parentShow = parent
-        default:
-            break
-        }
-    }
-
     /// Episode-detail upward navigation: "Season N" and/or the series. Hidden
     /// when neither parent resolved (#282).
     @ViewBuilder
@@ -1853,32 +1741,6 @@ struct DetailView: View {
         .padding(.vertical, AetherDesign.Spacing.s)
         .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
         .premiumFocus()
-    }
-
-    /// Fetch resume points for a set of episodes into `episodeResume` (#260),
-    /// merging so previously-loaded seasons keep theirs.
-    private func loadEpisodeResumes(_ episodes: [MediaItem]) async {
-        var map = episodeResume
-        for episode in episodes {
-            if let point = await resumeStore.point(for: episode.id) { map[episode.id] = point }
-        }
-        episodeResume = map
-    }
-
-    private func loadSeasonEpisodes(_ season: MediaItem) async {
-        guard let source else { return }
-        isLoadingEpisodes = true
-        defer { isLoadingEpisodes = false }
-        do {
-            let episodes = try await source.children(of: season.id)
-            // Bail if the user switched seasons while this was in flight.
-            guard selectedSeason?.id == season.id else { return }
-            seasonEpisodes = episodes
-            await loadEpisodeResumes(episodes)
-        } catch {
-            guard selectedSeason?.id == season.id else { return }
-            seasonEpisodes = []
-        }
     }
 
     /// Hero title. For an **episode** with a known series, the series name is the
@@ -3156,43 +3018,6 @@ struct DetailView: View {
         }
     }
 
-    private func hydrateForPlayback() async {
-        guard !activeItem.kind.isContainer, let source else { return }
-        if let hydrated = try? await source.item(for: activeItem.id) {
-            // Don't clobber a pick the user made while this hydrate was in
-            // flight (#68) — carry any explicit selections onto the fresh item.
-            configuredItem = preservingUserSelections(on: applyingPreferences(to: hydrated))
-        }
-    }
-
-    /// Seeds the user's app-wide playback defaults onto a freshly hydrated
-    /// item (audio/subtitle language + default quality). The logic lives on
-    /// `PlaybackPreferencesStore.applied(to:)` in AetherCore so every player
-    /// entry point — including Auto-Play-Next — shares it (#68).
-    private func applyingPreferences(to hydrated: MediaItem) -> MediaItem {
-        playbackPreferences?.applied(to: hydrated) ?? hydrated
-    }
-
-    /// Re-applies the session's explicit picker choices (audio / subtitles /
-    /// quality) from the current `configuredItem` onto `fresh`, so a re-hydrate
-    /// never silently reverts what the user just selected (#68).
-    private func preservingUserSelections(on fresh: MediaItem) -> MediaItem {
-        guard let existing = configuredItem, existing.id == fresh.id else { return fresh }
-        var result = fresh
-        if let track = existing.selectedAudioTrack,
-           let match = result.audioTracks.first(where: { $0.id == track.id }) {
-            result = result.selectingAudioTrack(match)
-        }
-        if let track = existing.selectedSubtitleTrack,
-           let match = result.subtitleTracks.first(where: { $0.id == track.id }) {
-            result = result.selectingSubtitleTrack(match)
-        } else if existing.selectedSubtitleTrackID == nil, !existing.subtitleTracks.isEmpty {
-            result = result.selectingSubtitleTrack(nil)   // explicit "Off" survives
-        }
-        result = result.selectingQuality(existing.selectedQuality)
-        return result
-    }
-
     // MARK: - Player dismiss
 
     /// Identifies a file routed to the VLCKit engine (for `.fullScreenCover`).
@@ -3224,7 +3049,7 @@ struct DetailView: View {
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
             // Same seeding as the on-appear hydrate — without it, a fast Play
             // before hydration resolved dropped the default-language prefs (#68).
-            configuredItem = applyingPreferences(to: hydrated)
+            configuredItem = viewModel.applyingPreferences(to: hydrated)
         }
         playbackItem = current
 
@@ -3258,7 +3083,7 @@ struct DetailView: View {
         // No-op unless this was a cinema session; tears down the Dark Theater.
         cinema.end()
         #endif
-        Task { resume = await resumeStore.point(for: activeItem.id) }
+        Task { await viewModel.refreshResume() }
     }
 
     #if os(visionOS)
@@ -3275,7 +3100,7 @@ struct DetailView: View {
         if configuredItem == nil, let source, let hydrated = try? await source.item(for: activeItem.id) {
             // Same seeding as the on-appear hydrate — without it, a fast Play
             // before hydration resolved dropped the default-language prefs (#68).
-            configuredItem = applyingPreferences(to: hydrated)
+            configuredItem = viewModel.applyingPreferences(to: hydrated)
         }
         playbackItem = current
         playbackStartAt = fromStart ? 0 : (resume != nil ? nil : 0)
