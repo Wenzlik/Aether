@@ -42,70 +42,31 @@ struct DetailView: View {
     /// `UnifiedMediaItem`). Drives the "Available Sources" section + manual
     /// source override. Empty for single-source contexts (Library / Discover /
     /// Continue Watching), where the section is hidden.
-    /// (`var` with a default so it stays in the memberwise init — a `let` with a
-    /// default would be dropped from it.)
-    var availableSources: [UnifiedSource] = []
+    let availableSources: [UnifiedSource]
     /// Start playback automatically once the screen has hydrated (#382). Set by
     /// the `EpisodeAutoplayRoute` destination so the show "Play S1E1" pill plays
     /// the on-deck episode on one tap while still routing through the episode's
     /// own, well-tested Detail playback path. `false` everywhere else.
-    var autoplay: Bool = false
+    let autoplay: Bool
 
-    @State private var resume: ResumePoint?
+    /// The data / business state for this screen (#241). Owned by the view as
+    /// `@State` and created once per navigation identity — `navigationDestination`
+    /// gives a fresh DetailView (and so a fresh VM) per pushed item.
+    @State private var viewModel: DetailViewModel
+
+    // MARK: - Presentation state (stays in the view)
+
     /// Drives the "mark an in-progress title watched?" confirmation — marking
     /// watched discards the resume point, so it asks first.
     @State private var confirmMarkWatched = false
-    /// The source the user manually switched to via "Available Sources". `nil`
-    /// = use the title's preferred source (the navigated `item`). Everything
-    /// playback-related (`current`, `source`, hydration, downloads, resume,
-    /// children) follows `activeItem`, so switching swaps the whole screen to
-    /// the chosen server without re-navigating.
-    @State private var overrideItem: MediaItem?
-    /// Optimistic watched state for the manual toggle — overrides the hydrated
-    /// item's server value so the UI flips instantly. `nil` = use the item's own
-    /// `isWatched`. Reset when the active source changes.
-    @State private var watchedOverride: Bool?
-    @State private var favoriteOverride: Bool?
     @State private var isPlayerPresented = false
     /// Set when a local file needs the VLCKit engine (mkv etc.) instead of AVKit.
     @State private var vlcPlayback: VLCPlayback?
-    @State private var playbackItem: MediaItem?
-    /// Set when Auto-Play-Next advanced the player to a *different* episode in
-    /// place, so the screen re-points at the episode actually playing (and stays
-    /// there after dismiss) instead of the one Play was pressed on (#315).
-    @State private var advancedItem: MediaItem?
-    /// Where the presented player should begin. `nil` resumes from the saved
-    /// point ("Resume"); `0` forces a restart ("Play From Beginning").
-    @State private var playbackStartAt: Double?
-    @State private var isPreparingPlayback = false
-    /// visionOS: the current player presentation was launched via "Watch in
-    /// Cinema" → auto-expand so it docks into the Dark Theater without a tap.
-    @State private var launchingInCinema = false
     #if os(visionOS)
     /// visionOS: drives the "Continue or Start Over" prompt before entering
     /// Cinema Mode when a resume point exists.
     @State private var showCinemaResumePrompt = false
     #endif
-    @State private var children: [MediaItem] = []
-    @State private var isLoadingChildren = false
-    /// Similar titles for the "More Like This" rail (source recommendations).
-    @State private var related: [MediaItem] = []
-    /// Series detail only — the season the inline episode list is showing.
-    /// Defaults to the first season once `children` (the show's seasons) load.
-    @State private var selectedSeason: MediaItem?
-    /// Episodes of `selectedSeason`, shown inline (no navigation into a season).
-    @State private var seasonEpisodes: [MediaItem] = []
-    @State private var isLoadingEpisodes = false
-    /// The series "On Deck" episode — the next one to watch across the *whole*
-    /// show (the first unwatched episode of the first not-fully-watched season).
-    /// Computed once on load and stays put while the user browses other seasons.
-    @State private var nextUpEpisode: MediaItem?
-    /// Saved resume position for the On Deck episode, when one exists — drives
-    /// the "Resume from m:ss" caption on the Next Up card.
-    @State private var nextUpResume: ResumePoint?
-    /// Resume points for the currently-listed episodes, so each row can show how
-    /// far in you are (#260). Keyed by episode id; filled when episodes load.
-    @State private var episodeResume: [MediaID: ResumePoint] = [:]
     /// tvOS: which season card has focus, so the Show page previews it while
     /// browsing (#266 — Focus = Preview, Select = Open).
     @FocusState private var focusedSeasonID: MediaID?
@@ -117,24 +78,6 @@ struct DetailView: View {
     @FocusState private var focusedEpisodeID: MediaID?
     /// Last-focused episode, kept so the preview stays put when focus leaves.
     @State private var previewEpisodeID: MediaID?
-    /// Season pages rarely carry their own cast — the parent show's cast,
-    /// fetched as a fallback so Cast & Crew isn't missing on a season (#267).
-    @State private var fallbackCast: [CastMember] = []
-    /// Episode detail: the parent season + show, resolved from `parentID` so the
-    /// screen offers "Season N" / "<Series>" navigation instead of dead-ending
-    /// (#282 — matters when an episode is opened straight from Home).
-    @State private var parentSeason: MediaItem?
-    @State private var parentShow: MediaItem?
-    /// The title's clearLogo, once loaded — the hero swaps its text title for
-    /// this wordmark art. Stays nil (text title) for the majority of titles
-    /// whose source has no logo (#273).
-    @State private var heroLogo: AetherPlatformImage?
-    /// The item with full metadata (audio + subtitle streams, partID,
-    /// mediaInfo) once hydrated, carrying the user's audio / subtitle / quality
-    /// choices. Playback decisions happen here on Detail, before the player
-    /// opens — the configured item is what launches. `nil` until the detail
-    /// endpoint resolves; `current` falls back to the list `item`.
-    @State private var configuredItem: MediaItem?
     /// Which compact selector sheet is currently presented on Detail. `nil`
     /// = nothing open; tapping a disclosure row sets one. iOS / iPadOS uses
     /// `.presentationDetents([.medium])` so the picker takes about half the
@@ -144,15 +87,115 @@ struct DetailView: View {
     // edited item so its title / poster / overview repaint (#211). Seeded nil so
     // the re-hydrate task below is a no-op on first appear (no double fetch).
     @State private var localEditToken: UUID?
-    /// True while a Download is being prepared (quality picker → enqueue) so
-    /// the button can read "Starting…" and disable.
-    @State private var isEnqueuingDownload = false
     /// Technical Details starts tucked — rich info without cluttering the page.
     @State private var technicalDetailsExpanded = false
     /// Guards the one-shot autoplay (#382) so re-running the load task (source
     /// switch, scene re-activation) can't relaunch the player after the user has
     /// already dismissed it.
     @State private var didAutoplay = false
+
+    // MARK: - DetailViewModel forwarders (#241 inc 1)
+    // Same-named computed forwarders so the section builders and load / mutate
+    // funcs compile untouched while the data state lives in the VM. `@Observable`
+    // tracking works through these because the `viewModel.x` read happens during
+    // body evaluation. Inlined away as funcs migrate in later increments.
+
+    private var resume: ResumePoint? {
+        get { viewModel.resume }
+        nonmutating set { viewModel.resume = newValue }
+    }
+    private var overrideItem: MediaItem? {
+        get { viewModel.overrideItem }
+        nonmutating set { viewModel.overrideItem = newValue }
+    }
+    private var advancedItem: MediaItem? {
+        get { viewModel.advancedItem }
+        nonmutating set { viewModel.advancedItem = newValue }
+    }
+    private var watchedOverride: Bool? {
+        get { viewModel.watchedOverride }
+        nonmutating set { viewModel.watchedOverride = newValue }
+    }
+    private var favoriteOverride: Bool? {
+        get { viewModel.favoriteOverride }
+        nonmutating set { viewModel.favoriteOverride = newValue }
+    }
+    private var playbackItem: MediaItem? {
+        get { viewModel.playbackItem }
+        nonmutating set { viewModel.playbackItem = newValue }
+    }
+    private var playbackStartAt: Double? {
+        get { viewModel.playbackStartAt }
+        nonmutating set { viewModel.playbackStartAt = newValue }
+    }
+    private var isPreparingPlayback: Bool {
+        get { viewModel.isPreparingPlayback }
+        nonmutating set { viewModel.isPreparingPlayback = newValue }
+    }
+    private var launchingInCinema: Bool {
+        get { viewModel.launchingInCinema }
+        nonmutating set { viewModel.launchingInCinema = newValue }
+    }
+    private var children: [MediaItem] {
+        get { viewModel.children }
+        nonmutating set { viewModel.children = newValue }
+    }
+    private var isLoadingChildren: Bool {
+        get { viewModel.isLoadingChildren }
+        nonmutating set { viewModel.isLoadingChildren = newValue }
+    }
+    private var related: [MediaItem] {
+        get { viewModel.related }
+        nonmutating set { viewModel.related = newValue }
+    }
+    private var selectedSeason: MediaItem? {
+        get { viewModel.selectedSeason }
+        nonmutating set { viewModel.selectedSeason = newValue }
+    }
+    private var seasonEpisodes: [MediaItem] {
+        get { viewModel.seasonEpisodes }
+        nonmutating set { viewModel.seasonEpisodes = newValue }
+    }
+    private var isLoadingEpisodes: Bool {
+        get { viewModel.isLoadingEpisodes }
+        nonmutating set { viewModel.isLoadingEpisodes = newValue }
+    }
+    private var nextUpEpisode: MediaItem? {
+        get { viewModel.nextUpEpisode }
+        nonmutating set { viewModel.nextUpEpisode = newValue }
+    }
+    private var nextUpResume: ResumePoint? {
+        get { viewModel.nextUpResume }
+        nonmutating set { viewModel.nextUpResume = newValue }
+    }
+    private var episodeResume: [MediaID: ResumePoint] {
+        get { viewModel.episodeResume }
+        nonmutating set { viewModel.episodeResume = newValue }
+    }
+    private var fallbackCast: [CastMember] {
+        get { viewModel.fallbackCast }
+        nonmutating set { viewModel.fallbackCast = newValue }
+    }
+    private var parentSeason: MediaItem? {
+        get { viewModel.parentSeason }
+        nonmutating set { viewModel.parentSeason = newValue }
+    }
+    private var parentShow: MediaItem? {
+        get { viewModel.parentShow }
+        nonmutating set { viewModel.parentShow = newValue }
+    }
+    private var heroLogo: AetherPlatformImage? {
+        get { viewModel.heroLogo }
+        nonmutating set { viewModel.heroLogo = newValue }
+    }
+    private var configuredItem: MediaItem? {
+        get { viewModel.configuredItem }
+        nonmutating set { viewModel.configuredItem = newValue }
+    }
+    private var isEnqueuingDownload: Bool {
+        get { viewModel.isEnqueuingDownload }
+        nonmutating set { viewModel.isEnqueuingDownload = newValue }
+    }
     /// The app session — used to mark watched/unwatched on **every** connected
     /// source that has the title (not just the one Detail is acting on), so a
     /// movie on both Plex and Jellyfin stays in sync (#232 follow-up).
@@ -222,11 +265,9 @@ struct DetailView: View {
         }
     }
 
-    /// The source the screen is currently acting on — the manually-selected
-    /// override, or the navigated `item` (the title's preferred source). All
-    /// playback-related state derives from this, so an "Available Sources"
-    /// switch re-points hydration / playback / downloads at the chosen server.
-    private var activeItem: MediaItem { advancedItem ?? overrideItem ?? item }
+    /// The source the screen is currently acting on (#241: body lives in the VM,
+    /// forwarded here so the section builders read it unchanged).
+    private var activeItem: MediaItem { viewModel.activeItem }
 
     /// Whether a source id is an SMB share (drives the title/year editor, #213).
     private func isSMBSource(_ source: MediaSourceID) -> Bool {
@@ -235,21 +276,43 @@ struct DetailView: View {
     }
 
     /// The item reflecting hydration + the user's track / quality selections.
-    private var current: MediaItem { configuredItem ?? activeItem }
+    private var current: MediaItem { viewModel.current }
 
-    /// The connector for the shown item — matched by the item's source id, so
-    /// playback / hydration / downloads use the correct server even when the
-    /// item came from the unified feed and isn't the app's active source. Falls
-    /// back to the first connected source.
-    private var source: (any MediaSource)? {
-        connectedSources.first { $0.id == activeItem.id.source } ?? connectedSources.first
-    }
+    /// The connector for the shown item (#241: derived in the VM).
+    private var source: (any MediaSource)? { viewModel.source }
 
-    /// Download status for this item. `.notDownloaded` when the pipeline
-    /// hasn't booted yet — same surface as "no job recorded" so the UI
-    /// renders identically.
-    private var downloadStatus: DownloadStatus {
-        downloads?.status(for: activeItem.id) ?? .notDownloaded
+    /// Download status for this item (#241: derived in the VM).
+    private var downloadStatus: DownloadStatus { viewModel.downloadStatus }
+
+    init(
+        item: MediaItem,
+        connectedSources: [any MediaSource],
+        resumeStore: ResumeStore,
+        playbackSession: PlaybackSession,
+        downloadManager: DownloadManager?,
+        downloads: DownloadObserver?,
+        playbackPreferences: PlaybackPreferencesStore?,
+        availableSources: [UnifiedSource] = [],
+        autoplay: Bool = false
+    ) {
+        self.item = item
+        self.connectedSources = connectedSources
+        self.resumeStore = resumeStore
+        self.playbackSession = playbackSession
+        self.downloadManager = downloadManager
+        self.downloads = downloads
+        self.playbackPreferences = playbackPreferences
+        self.availableSources = availableSources
+        self.autoplay = autoplay
+        _viewModel = State(initialValue: DetailViewModel(
+            item: item,
+            connectedSources: connectedSources,
+            resumeStore: resumeStore,
+            downloadManager: downloadManager,
+            downloads: downloads,
+            playbackPreferences: playbackPreferences,
+            availableSources: availableSources
+        ))
     }
 
     var body: some View {
