@@ -578,34 +578,13 @@ extension DetailView {
     }
 }
 
-// MARK: - Focus helpers (file-private copies)
+// MARK: - Focus helpers
 //
-// `aetherDetailFocusSection()` / `aetherDetailColumn()` are declared `private
-// extension View` in DetailView.swift; `private` is file-scoped, so this file
-// carries its own copies — the established per-file convention (SettingsView,
-// HomeView, DiscoverView, LibraryBrowseView each do the same). `seasonCardFocus()`
-// + `SeasonCardFocus` moved here outright since the seasons rail is their only user.
+// `aetherDetailFocusSection()` / `aetherDetailColumn()` are `internal extension
+// View` in DetailView.swift, so they're visible here. `seasonCardFocus()` +
+// `SeasonCardFocus` live here (file-private) since the seasons rail is their only
+// user (#241 inc 4).
 private extension View {
-    /// Apply `.focusSection()` on tvOS so the focus engine can move into and out
-    /// of this region. No-op elsewhere — the API is tvOS-only.
-    @ViewBuilder
-    func aetherDetailFocusSection() -> some View {
-        #if os(tvOS)
-        self.focusSection()
-        #else
-        self
-        #endif
-    }
-
-    /// A width-capped Detail body section whose focus-section frame spans the full
-    /// width while the content stays visually capped + leading-aligned (#359).
-    func aetherDetailColumn(maxWidth: CGFloat = DetailLayout.contentWidth) -> some View {
-        self
-            .frame(maxWidth: maxWidth, alignment: .leading)   // readable visual cap
-            .frame(maxWidth: .infinity, alignment: .leading)  // full-width focus frame
-            .aetherDetailFocusSection()
-    }
-
     /// Bolder, couch-visible focus for season cards — a brighter accent glow and
     /// extra lift on top of the card's own focus (#266 feedback). tvOS only.
     @ViewBuilder
