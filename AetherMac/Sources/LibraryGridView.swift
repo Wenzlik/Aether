@@ -18,18 +18,28 @@ struct LibraryGridView: View {
     @State private var shows: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
+    /// Netflix-only titles for the "On Netflix" sections — macOS exclusive.
+    @State private var netflixMovies: [UnifiedMediaItem] = []
+    @State private var netflixShows: [UnifiedMediaItem] = []
+
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
     private let previewCap = 18
+
+    private var netflixKey: String {
+        let p = session.streamingPreferences
+        return "\(p.netflixAvailabilityEnabled)-\(p.region ?? "auto")-\(session.libraryToken)"
+    }
 
     var body: some View {
         ScrollView {
             if isLoading && movies.isEmpty && shows.isEmpty {
-                // Calm skeleton (parity with iOS) instead of a bare spinner.
                 AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     section("Movies", movies, route: .movies)
                     section("TV Shows", shows, route: .shows)
+                    netflixSection("Movies on Netflix", netflixMovies)
+                    netflixSection("Shows on Netflix", netflixShows)
                 }
                 .padding(24)
             }
@@ -37,10 +47,6 @@ struct LibraryGridView: View {
         .cinematicBackground()
         .navigationTitle("Library")
         .toolbar {
-            // macOS has no pull-to-refresh — a toolbar Reload force-refreshes the
-            // unified library across sources (parity with iOS's pull-to-refresh).
-            // While refreshing it becomes a spinner, so a reload over existing
-            // content still gives feedback (iOS shows the pull spinner there).
             ToolbarItem {
                 if isLoading {
                     ProgressView().controlSize(.small)
@@ -52,6 +58,22 @@ struct LibraryGridView: View {
             }
         }
         .task(id: session.libraryToken) { await load() }
+        .task(id: netflixKey) { await loadNetflix() }
+    }
+
+    /// Netflix-only section — only renders when the feature is on and items exist.
+    @ViewBuilder
+    private func netflixSection(_ title: String, _ items: [UnifiedMediaItem]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                AetherSectionHeader(title: title)
+                LazyVGrid(columns: columns, spacing: 20) {
+                    ForEach(items.prefix(previewCap)) { item in
+                        posterLink(item)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -76,6 +98,22 @@ struct LibraryGridView: View {
                 }
             }
         }
+    }
+
+    private func loadNetflix() async {
+        guard session.streamingPreferences.netflixAvailabilityEnabled else {
+            netflixMovies = []; netflixShows = []
+            return
+        }
+        let owned = Set((movies + shows).compactMap(\.tmdbID))
+        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            Array(items.filter { $0.tmdbID.map { !owned.contains($0) } ?? true }.prefix(previewCap))
+        }
+        async let fetchMovies = session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .topRated)
+        async let fetchShows = session.watchAvailability.netflixOnlyDiscover(isShow: true, sort: .topRated)
+        let (m, s) = await (fetchMovies, fetchShows)
+        netflixMovies = unowned(m)
+        netflixShows = unowned(s)
     }
 
     private func load(forceRefresh: Bool = false) async {

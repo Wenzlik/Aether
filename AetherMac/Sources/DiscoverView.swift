@@ -1,11 +1,11 @@
 import SwiftUI
+import Combine
 import AetherCore
 
 /// Horizontal rails across all connected sources. Two modes share the same
 /// loaded `UnifiedRails`:
 /// - `.home` — Continue Watching, Recently Added/Released, Top Rated.
-/// - `.discover` — a featured pick + curated rails (New Releases, Top Rated,
-///   Picked for You); watched + in-progress titles are filtered out (#350).
+/// - `.discover` — a rotating featured carousel + curated rails (#381 parity).
 /// Each poster is a `MacPoster` wrapped in a `NavigationLink` to the base
 /// `MediaItem` (the shared Detail destination).
 struct DiscoverView: View {
@@ -17,6 +17,21 @@ struct DiscoverView: View {
     /// recreate this view), so a tab click repaints instantly instead of
     /// reloading.
     private var rails: UnifiedRails { session.homeRailsCache }
+
+    // MARK: - Carousel state (#381 macOS parity)
+
+    /// The visible carousel slide index.
+    @State private var heroIndex = 0
+    /// Counts down seconds until the next auto-advance.
+    @State private var advanceCountdown = Self.autoAdvanceInterval
+    /// While > 0 the carousel is paused after a manual interaction.
+    @State private var pauseCountdown = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    private static let autoAdvanceInterval = 6
+    private static let resumeIdleSeconds = 3
+
+    // MARK: - Netflix discovery
 
     /// Netflix-only discovery rails (#360) — opt-in, loaded on demand.
     @State private var netflixNew: [UnifiedMediaItem] = []
@@ -33,10 +48,6 @@ struct DiscoverView: View {
             if !rails.isEmpty {
                 content
             } else if session.isLoadingRails || !session.didRestore {
-                // Starting up (sources still restoring) or actively loading —
-                // show the branded animated loader (iOS parity) rather than a
-                // static skeleton or a premature "connect a source" empty state,
-                // so a slow first load never reads as a frozen window.
                 AetherLoadingDots(caption: "Loading your library…")
                     .frame(maxWidth: .infinity, minHeight: 320)
                     .padding(.vertical, 60)
@@ -53,38 +64,55 @@ struct DiscoverView: View {
         .cinematicBackground()
         .navigationTitle(mode == .home ? "Home" : "Discover")
         .toolbar {
-            // A spinner while a load/refresh is in flight gives feedback even
-            // when content is already on screen (the loader only shows over an
-            // empty view) — so a background revalidate never looks like a hang.
             ToolbarItem {
                 if session.isLoadingRails { ProgressView().controlSize(.small) }
             }
         }
-        // Reload when sources change AND after a player records a resume point,
-        // so Continue Watching reflects what was just played. The session cache
-        // makes this a no-op when nothing changed (instant on tab switch).
         .task(id: "\(session.libraryToken)-\(session.resumeRevision)") {
             await session.loadHomeRailsIfNeeded()
         }
         .task(id: netflixKey) { await loadNetflixRails() }
+        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
     }
 
-    /// "New on Netflix" / "Top on Netflix" (movies), deduped against owned. No-op
-    /// unless the feature + "show Netflix-only" are on, or there's no TMDb key.
-    private func loadNetflixRails() async {
-        guard mode == .discover, session.watchAvailability.showsNetflixOnly else {
-            netflixNew = []; netflixTop = []
-            return
+    // MARK: - Hero items (#381)
+
+    /// Rotating carousel: in-progress titles first (≤3, most recently active),
+    /// then top-rated (≤3), then random fills to ≤7 — matching the iOS logic.
+    private var heroItems: [UnifiedMediaItem] {
+        guard mode == .discover else { return [] }
+        var built: [UnifiedMediaItem] = []
+        var seen = Set<String>()
+        func add(_ item: UnifiedMediaItem) {
+            guard built.count < 7, seen.insert(item.id).inserted else { return }
+            built.append(item)
         }
-        let owned = Set((rails.movies + rails.shows).compactMap(\.tmdbID))
-        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
-            Array(items.filter { $0.tmdbID.map { !owned.contains($0) } ?? true }.prefix(12))
+        for entry in rails.continueWatching.prefix(3) { add(entry.item) }
+        for item in topRated where !seen.contains(item.id) {
+            guard built.count < 6 else { break }
+            add(item)
         }
-        netflixNew = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .newest))
-        netflixTop = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .topRated))
+        for item in (rails.movies + rails.shows).shuffled() {
+            guard built.count < 7 else { break }
+            add(item)
+        }
+        return built
     }
 
-    /// The loaded rails — the real content body.
+    /// Progress fraction (0…1) per in-progress hero slide, keyed by item id.
+    private var heroProgress: [String: Double] {
+        var result: [String: Double] = [:]
+        for entry in rails.continueWatching {
+            guard let runtime = entry.item.runtime else { continue }
+            let total = DetailFormatting.seconds(runtime)
+            guard total > 0 else { continue }
+            result[entry.item.id] = min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
+        }
+        return result
+    }
+
+    // MARK: - Content body
+
     @ViewBuilder
     private var content: some View {
         LazyVStack(alignment: .leading, spacing: 32) {
@@ -95,12 +123,10 @@ struct DiscoverView: View {
                 rail("Recently Released", filtered(rails.recentlyReleased))
                 rail("Top Rated", filtered(topRated))
             case .discover:
-                // Curated "what should I watch" rails (#350): genre lanes
-                // and the full Movies / TV Shows catalog dumps were removed
-                // (Library already browses those + by genre). Discover now
-                // mirrors mobile: a featured pick, New Releases, Top Rated,
-                // and a serendipitous Picked for You.
-                if let featured { featuredHero(featured) }
+                let items = heroItems
+                if !items.isEmpty {
+                    heroCarousel(items)
+                }
                 rail("New Releases", newReleases)
                 rail("Top Rated", filtered(topRated))
                 rail("Picked for You", pickedForYou)
@@ -111,18 +137,24 @@ struct DiscoverView: View {
         .padding(.vertical, 24)
     }
 
-    /// The spotlight title for Discover — the highest-rated recently-added title
-    /// that has a backdrop to show.
-    private var featured: UnifiedMediaItem? {
-        let pool = filtered(rails.recentlyAdded.isEmpty ? rails.movies : rails.recentlyAdded)
-            .filter { $0.backdropURL != nil }
-        return pool.max { ($0.communityRating ?? 0) < ($1.communityRating ?? 0) } ?? pool.first
+    // MARK: - Rotating carousel (#381 macOS parity)
+
+    @ViewBuilder
+    private func heroCarousel(_ items: [UnifiedMediaItem]) -> some View {
+        let idx = min(heroIndex, items.count - 1)
+        VStack(alignment: .leading, spacing: 10) {
+            AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
+                .padding(.horizontal, 24)
+            heroSlide(items[idx], progress: heroProgress[items[idx].id], items: items, currentIndex: idx)
+            if items.count > 1 {
+                heroPageDots(count: items.count, current: idx)
+                    .padding(.horizontal, 24)
+            }
+        }
     }
 
-    /// A large cinematic banner: backdrop + gradient scrim, title, metadata, and
-    /// Play / More Info — the iOS-style Featured hero.
     @ViewBuilder
-    private func featuredHero(_ item: UnifiedMediaItem) -> some View {
+    private func heroSlide(_ item: UnifiedMediaItem, progress: Double?, items: [UnifiedMediaItem], currentIndex: Int) -> some View {
         let base = item.preferredSource?.item ?? item.sources.first?.item
         ZStack(alignment: .bottomLeading) {
             CachedAsyncImage(url: item.backdropURL ?? item.posterURL, aspectRatio: 16.0 / 9.0)
@@ -132,8 +164,25 @@ struct DiscoverView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 )
+                .overlay(alignment: .bottom) {
+                    if let progress {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Rectangle().fill(.white.opacity(0.25))
+                                Rectangle()
+                                    .fill(AetherMacTheme.accent)
+                                    .frame(width: geo.size.width * progress)
+                            }
+                            .frame(height: 5)
+                        }
+                        .frame(height: 5)
+                    }
+                }
+
             VStack(alignment: .leading, spacing: 10) {
-                Text(item.title).font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                Text(item.title)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(.white)
                 HStack(spacing: 10) {
                     if let year = item.year { Text(String(year)) }
                     if !item.genres.isEmpty { Text(item.genres.prefix(3).joined(separator: " · ")) }
@@ -158,15 +207,75 @@ struct DiscoverView: View {
             }
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if items.count > 1 {
+                HStack {
+                    Button { advanceHero(by: -1, items: items) } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(10)
+                            .background(.black.opacity(0.35), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 12)
+                    Spacer()
+                    Button { advanceHero(by: 1, items: items) } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(10)
+                            .background(.black.opacity(0.35), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 12)
+                }
+                .frame(maxHeight: .infinity)
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .frame(maxWidth: 1100)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
+        .id(item.id)
+        .transition(.opacity)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: heroIndex)
     }
 
-    /// In-progress titles (movies + episodes) as landscape cards with a progress
-    /// bar — the "pick up where you left off" rail, like the mobile Home.
+    private func heroPageDots(count: Int, current: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(0..<count, id: \.self) { i in
+                Circle()
+                    .fill(i == current ? AetherMacTheme.accent : Color.white.opacity(0.3))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: current)
+    }
+
+    private func autoAdvanceTick() {
+        let items = heroItems
+        guard items.count > 1, !reduceMotion else { return }
+        if pauseCountdown > 0 { pauseCountdown -= 1; return }
+        advanceCountdown -= 1
+        if advanceCountdown <= 0 {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
+                heroIndex = (heroIndex + 1) % items.count
+            }
+            advanceCountdown = Self.autoAdvanceInterval
+        }
+    }
+
+    private func advanceHero(by delta: Int, items: [UnifiedMediaItem]) {
+        pauseCountdown = Self.resumeIdleSeconds
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
+            heroIndex = (heroIndex + delta + items.count) % items.count
+        }
+        advanceCountdown = Self.autoAdvanceInterval
+    }
+
+    // MARK: - Continue Watching rail (home mode)
+
     @ViewBuilder
     private var continueWatchingRail: some View {
         if !rails.continueWatching.isEmpty {
@@ -179,8 +288,6 @@ struct DiscoverView: View {
                                 ContinueWatchingCard(entry: entry)
                             }
                             .buttonStyle(.plain)
-                            // Right-click parity with the mobile long-press menu
-                            // (#368): act on a Continue Watching title in place.
                             .contextMenu {
                                 Button {
                                     Task {
@@ -204,11 +311,23 @@ struct DiscoverView: View {
         }
     }
 
-    /// Drop fully-watched **and** in-progress titles when the user hides them on
-    /// discovery surfaces (#280/#350, mobile parity) — Discover shows what's still
-    /// ahead; started titles live in Continue Watching. In-progress is matched by
-    /// the already-loaded Continue Watching entries' source ids. The Library grid
-    /// stays the complete catalog and is never filtered.
+    // MARK: - Netflix
+
+    private func loadNetflixRails() async {
+        guard mode == .discover, session.watchAvailability.showsNetflixOnly else {
+            netflixNew = []; netflixTop = []
+            return
+        }
+        let owned = Set((rails.movies + rails.shows).compactMap(\.tmdbID))
+        func unowned(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
+            Array(items.filter { $0.tmdbID.map { !owned.contains($0) } ?? true }.prefix(12))
+        }
+        netflixNew = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .newest))
+        netflixTop = unowned(await session.watchAvailability.netflixOnlyDiscover(isShow: false, sort: .topRated))
+    }
+
+    // MARK: - Filtering helpers
+
     private func filtered(_ items: [UnifiedMediaItem]) -> [UnifiedMediaItem] {
         guard session.playbackPrefs.hideWatchedInDiscovery else { return items }
         let started = inProgressIDs
@@ -218,29 +337,19 @@ struct DiscoverView: View {
         }
     }
 
-    /// MediaIDs that are in progress (have a resume point) — taken from the
-    /// loaded Continue Watching rail, so Discover never double-surfaces a title
-    /// the user is mid-way through (movies match exactly; show containers can't,
-    /// since Continue Watching keys on the episode).
     private var inProgressIDs: Set<MediaID> {
         Set(rails.continueWatching.map { $0.item.id })
     }
 
-    /// New Releases ("Novinky"): newest by release date, falling back to recently
-    /// added when the sources don't carry release dates. Watched/in-progress are
-    /// filtered out like every Discover rail.
     private var newReleases: [UnifiedMediaItem] {
         let released = filtered(rails.recentlyReleased)
         return released.isEmpty ? filtered(rails.recentlyAdded) : released
     }
 
-    /// A shuffled grab-bag across the (filtered) catalog — rediscover something
-    /// you own but forgot, mirroring mobile's "Picked for You".
     private var pickedForYou: [UnifiedMediaItem] {
         Array(filtered(rails.movies + rails.shows).shuffled().prefix(20))
     }
 
-    /// Highest-rated titles across movies + shows (mobile's "Top Rated" rail).
     private var topRated: [UnifiedMediaItem] {
         (rails.movies + rails.shows)
             .filter { ($0.communityRating ?? 0) > 0 }
@@ -248,6 +357,8 @@ struct DiscoverView: View {
             .prefix(20)
             .map { $0 }
     }
+
+    // MARK: - Rail
 
     @ViewBuilder
     private func rail(_ title: String, _ items: [UnifiedMediaItem]) -> some View {
@@ -270,7 +381,6 @@ struct DiscoverView: View {
             }
         }
     }
-
 }
 
 /// A landscape Continue Watching card: backdrop still, a resume progress bar,
