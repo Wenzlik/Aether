@@ -118,7 +118,11 @@ struct UnifiedLibraryGridView: View {
         #if os(tvOS)
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
+        // visionOS presents the filter as a popover anchored to the Filter button
+        // (light-dismiss on tap-outside); iOS / tvOS keep the sheet.
+        #if !os(visionOS)
         .sheet(isPresented: $isFilterSheetPresented) { filterSheet }
+        #endif
         // Search *within* the category (#369) — client-side title match over the
         // loaded catalog, the same no-reload model as the facet filters (#319).
         // iOS/iPadOS only; tvOS keeps its existing inline controls unchanged.
@@ -474,6 +478,15 @@ struct UnifiedLibraryGridView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Filter")
+            // visionOS: anchor the filter here as a popover so tapping outside
+            // light-dismisses it (sheets there have no tap-to-dismiss); the facets
+            // apply live, so dismissing keeps the choices. iOS keeps the sheet.
+            #if os(visionOS)
+            .popover(isPresented: $isFilterSheetPresented, arrowEdge: .top) {
+                filterContent
+                    .frame(width: 420, height: 600)
+            }
+            #endif
 
             Menu {
                 ForEach(sortOptions, id: \.self) { option in
@@ -572,10 +585,11 @@ struct UnifiedLibraryGridView: View {
         }
     }
 
-    /// Filter sheet — Genre / Audio / Rating / Year (#342/#351), reusing the chip
-    /// rows (so the audio lazy-load behaviour is unchanged), plus Clear.
-    private var filterSheet: some View {
-        let sheetBody = ScrollView {
+    /// The filter facets — Genre / Audio / Rating / Year (#342/#351), reusing the
+    /// chip rows (so the audio lazy-load behaviour is unchanged), plus Clear.
+    /// Shared by the sheet (iOS/tvOS) and the visionOS popover.
+    private var filterContent: some View {
+        ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
                 Text("Filter")
                     .font(AetherDesign.Typography.sectionTitle)
@@ -604,10 +618,18 @@ struct UnifiedLibraryGridView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .aetherScreenBackground()
+    }
+
+    /// Filter sheet (iOS + tvOS). visionOS instead anchors `filterContent` as a
+    /// popover on the Filter button (see `iosFilterSortBar`): visionOS sheets
+    /// can't be dismissed by tapping outside, and the facets apply live, so a
+    /// light-dismiss popover matches the expectation that tapping away closes the
+    /// panel and keeps the choices.
+    private var filterSheet: some View {
         #if os(tvOS)
-        return NavigationStack { sheetBody }
+        return NavigationStack { filterContent }
         #else
-        return sheetBody
+        return filterContent
             // Open full-height so every group (Show / Genre / Audio / Rating /
             // Year) is visible without scrolling past a half-sheet fold (#369
             // follow-up). Chips wrap, so nothing hides off the right edge either.
