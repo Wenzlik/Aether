@@ -257,7 +257,20 @@ struct DetailView: View {
                     } else if isWideLayout(geo.size) {
                         // Episodes (and other non-movie playables) keep the
                         // responsive wide / stacked split.
+                        #if os(iOS)
+                        // iPad full-screen landscape (regular width): a two-column
+                        // functional layout uses the trailing half instead of
+                        // letting it sit empty over a dark backdrop (#379). Narrow
+                        // splits stay compact (single column), and tvOS / visionOS
+                        // keep the cinematic backdrop-through `wideContent`.
+                        if hSizeClass == .regular {
+                            twoColumnContent
+                        } else {
+                            wideContent
+                        }
+                        #else
                         wideContent
+                        #endif
                     } else {
                         scrollContent
                     }
@@ -610,6 +623,92 @@ struct DetailView: View {
             }
         }
     }
+
+    #if os(iOS)
+    // MARK: - iPad landscape two-column layout (#379)
+
+    /// Fixed trailing-column width — wide enough for a Cast headshot rail and
+    /// the Technical Details rows, narrow enough to leave the primary content
+    /// (title, actions, episode list) the roomy leading column.
+    private var trailingColumnWidth: CGFloat { 360 }
+
+    /// iPad full-screen landscape detail: the primary content stays in a roomy
+    /// leading column, while the secondary detail (Technical Details, Cast &
+    /// Crew) moves into a trailing column so the right half of the screen is
+    /// used instead of sitting empty over a dark backdrop (#379). One shared
+    /// vertical scroll; both columns are top-aligned. tvOS / visionOS keep the
+    /// cinematic single-column `wideContent`.
+    private var twoColumnContent: some View {
+        ZStack(alignment: .topLeading) {
+            wideScrim
+                .ignoresSafeArea()
+
+            ScrollView {
+                HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
+                    // Leading column — primary content (mirrors `wideContent`'s
+                    // left column, minus the secondary sections moved right).
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                        heroTitleBlock
+                        metadataRow
+                        genresRow
+
+                        if !item.kind.isContainer {
+                            actionRow
+                        }
+
+                        episodeParentNavigation
+
+                        if let summary = activeItem.summary {
+                            if item.kind.isContainer {
+                                Text(summary)
+                                    .font(AetherDesign.Typography.body)
+                                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                synopsis(summary)
+                            }
+                        }
+
+                        if item.kind == .season {
+                            nextUpCard
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if !item.kind.isContainer, current.streamURL != nil {
+                            playbackSection
+                        }
+
+                        if availableSources.count > 1 {
+                            availableSourcesSection
+                        }
+
+                        // Episode list (season page) — the primary browse target,
+                        // so it stays in the roomy leading column.
+                        if item.kind.isContainer {
+                            childrenSection
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Trailing column — secondary detail.
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                        if !item.kind.isContainer, current.mediaInfo != nil {
+                            technicalDetailsSection
+                        }
+                        if item.kind != .show {
+                            castSection
+                        }
+                    }
+                    .frame(width: trailingColumnWidth, alignment: .leading)
+                }
+                .padding(.horizontal, AetherDesign.Spacing.xl)
+                .padding(.top, AetherDesign.Spacing.xl)
+                .padding(.bottom, AetherDesign.Spacing.xxl)
+            }
+        }
+    }
+    #endif
 
     /// Left-anchored content column width on wide layouts — the artwork shows
     /// through on the trailing side, the text stays readable on the leading.
