@@ -196,9 +196,22 @@ struct DiscoverView: View {
         }
     }
 
+    /// Vertical gap between Discover sections. Wider on the wide layouts (iPad
+    /// regular / visionOS) so the full-width hero and the rails below it breathe;
+    /// iPhone / tvOS keep the standard spacing.
+    private var sectionSpacing: CGFloat {
+        #if os(visionOS)
+        AetherDesign.Spacing.xxl
+        #elseif os(iOS)
+        horizontalSizeClass == .regular ? AetherDesign.Spacing.xxl : AetherDesign.Spacing.xl
+        #else
+        AetherDesign.Spacing.xl
+        #endif
+    }
+
     private var rails: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            LazyVStack(alignment: .leading, spacing: sectionSpacing) {
                 // Brand mark leads Discover too, consistent across Home / Library
                 // / Discover. On iPad it rides the top tab-bar row (toolbar icon),
                 // so the inline wordmark header shows only on compact / tvOS.
@@ -510,8 +523,13 @@ struct DiscoverView: View {
     private var posterWidth: CGFloat {
         #if os(tvOS)
         300
+        #elseif os(visionOS)
+        // Wider tiles so the rails keep pace with the full-width spatial hero.
+        220
         #else
-        168
+        // iPad (regular) gets larger tiles to match the full-width hero; iPhone
+        // (compact) keeps the original size.
+        horizontalSizeClass == .regular ? 200 : 168
         #endif
     }
 
