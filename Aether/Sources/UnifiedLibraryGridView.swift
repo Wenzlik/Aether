@@ -40,11 +40,6 @@ struct UnifiedLibraryGridView: View {
     /// not the device's `Locale.current`.
     @Environment(\.locale) private var locale
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
-    #if os(iOS)
-    /// Regular (iPad) shows the Filter control's text label; compact (iPhone)
-    /// falls back to icon-only (#369).
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
     /// Client-side title search within the category grid (#369). Filters
     /// `filteredItems` alongside the facet filters — no reload, like #319.
     @State private var searchText = ""
@@ -116,11 +111,11 @@ struct UnifiedLibraryGridView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
         #endif
-        #if !os(tvOS)
-        // Filter before Sort so Filter sits on the left of the cluster —
-        // consistent with the Library landing (Filter left of Search).
-        .toolbar { filterToolbarItem; sortToolbarItem }
-        #else
+        // Filter + Sort live as visible buttons at the top of the grid content
+        // (#383, Infuse-style) rather than hidden in the top-right toolbar — the
+        // trailing nav-bar slot is reserved for Search. tvOS keeps its own sort
+        // sheet (toolbar menus don't render usefully there).
+        #if os(tvOS)
         .sheet(isPresented: $isSortSheetPresented) { tvOSSortSheet }
         #endif
         .sheet(isPresented: $isFilterSheetPresented) { filterSheet }
@@ -156,14 +151,16 @@ struct UnifiedLibraryGridView: View {
                 .padding(.top, AetherDesign.Spacing.l)
         } else {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                // Filters (genre / audio / rating) now live behind the Filter
-                // button (toolbar on iOS, inline trigger on tvOS) instead of
-                // permanent chip rows, freeing vertical space (#342).
+                // Filters (genre / audio / rating) live behind the Filter button
+                // instead of permanent chip rows (#342); the Filter + Sort
+                // buttons sit at the top of the grid content (#383).
                 #if os(tvOS)
                 HStack(spacing: AetherDesign.Spacing.m) {
                     tvOSSortTrigger
                     tvOSFilterTrigger
                 }
+                #else
+                iosFilterSortBar
                 #endif
                 // Active-filter summary (#367): removable token per facet + Clear
                 // all, so a narrowed grid reads as narrowed without reopening the
@@ -457,34 +454,59 @@ struct UnifiedLibraryGridView: View {
     // MARK: - Filters (#342)
 
     #if !os(tvOS)
-    /// iOS Filter control (next to Sort + Search) — opens the filter sheet. Now
-    /// **labeled** so it reads as "Filter", not a bare glyph (#369): the text
-    /// shows on regular width (iPad), icon-only on compact (iPhone). A filled
-    /// icon still marks active filters (ties to the #367 summary row).
-    private var filterToolbarItem: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button { isFilterSheetPresented = true } label: { filterLabel }
-                .accessibilityLabel("Filter")
+    /// The in-content Filter + Sort bar (#383, Infuse-style) at the top of the
+    /// grid: a Filters button carrying the active-facet count (accent-filled when
+    /// any filter is on) and a Sort menu showing the current order. Replaces the
+    /// old top-right toolbar glyphs (#369) so the trailing nav-bar slot is just
+    /// Search.
+    private var iosFilterSortBar: some View {
+        HStack(spacing: AetherDesign.Spacing.s) {
+            Button { isFilterSheetPresented = true } label: {
+                barControl(active: hasActiveFilter) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                    if hasActiveFilter {
+                        Text("Filters (\(activeFilterTokens.count))")
+                    } else {
+                        Text("Filters")
+                    }
+                    Image(systemName: "chevron.down").font(.caption2)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Filter")
+
+            Menu {
+                ForEach(sortOptions, id: \.self) { option in
+                    Button { sort = option } label: {
+                        Label(option.displayName, systemImage: option.systemImage)
+                    }
+                }
+            } label: {
+                barControl(active: false) {
+                    Image(systemName: "arrow.up.arrow.down")
+                    Text("Sort: \(sort.displayName)")
+                    Image(systemName: "chevron.down").font(.caption2)
+                }
+            }
+            .accessibilityLabel("Sort")
+            .accessibilityValue(sort.displayName)
+
+            Spacer(minLength: 0)
         }
     }
 
-    private var filterIcon: String {
-        hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
-    }
-
-    /// iPad shows "Filter" beside the glyph; iPhone (compact) stays icon-only so
-    /// the bar isn't crowded next to Search + Sort (#369).
-    @ViewBuilder
-    private var filterLabel: some View {
-        #if os(iOS)
-        if horizontalSizeClass == .regular {
-            Label("Filter", systemImage: filterIcon).labelStyle(.titleAndIcon)
-        } else {
-            Label("Filter", systemImage: filterIcon).labelStyle(.iconOnly)
-        }
-        #else
-        Label("Filter", systemImage: filterIcon).labelStyle(.iconOnly)
-        #endif
+    /// Shared capsule styling for the in-content bar controls — accent-filled +
+    /// white when `active`, else a quiet elevated surface.
+    private func barControl<Content: View>(active: Bool, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: AetherDesign.Spacing.xs) { content() }
+            .font(AetherDesign.Typography.metadata.weight(.medium))
+            .padding(.horizontal, AetherDesign.Spacing.m)
+            .padding(.vertical, AetherDesign.Spacing.xs)
+            .foregroundStyle(active ? Color.white : AetherDesign.Palette.textPrimary)
+            .background(
+                active ? AnyShapeStyle(AetherDesign.Palette.accent) : AnyShapeStyle(AetherDesign.Palette.surfaceElevated),
+                in: Capsule()
+            )
     }
     #else
     /// tvOS inline Filter trigger (toolbar menus don't render on tvOS).
@@ -606,23 +628,9 @@ struct UnifiedLibraryGridView: View {
 
     // MARK: - Sort UI
 
-    #if !os(tvOS)
-    private var sortToolbarItem: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                ForEach(sortOptions, id: \.self) { option in
-                    Button {
-                        sort = option
-                    } label: {
-                        Label(option.displayName, systemImage: option.systemImage)
-                    }
-                }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-        }
-    }
-    #else
+    // iOS / iPadOS / visionOS sort lives in the in-content `iosFilterSortBar`
+    // (#383); tvOS keeps an inline trigger + focusable sheet below.
+    #if os(tvOS)
     /// tvOS inline sort button — toolbar menus don't render usefully on tvOS,
     /// so it opens a focusable sheet (same approach as `LibraryView`).
     private var tvOSSortTrigger: some View {
