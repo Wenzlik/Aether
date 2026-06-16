@@ -12,18 +12,61 @@ When you open this repo cold, read in this order. It will take ~5 minutes and wi
 
 1. [`README.md`](README.md) — product framing
 2. `AGENTS.md` *(this file)* — how we work
-3. [`ROADMAP.md`](ROADMAP.md) — what we are building, in order; status legend at the top
-4. [`CHANGELOG.md`](CHANGELOG.md) — what's actually landed (the `[Unreleased]` block is what to read)
-5. [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) — audience, scope, non-goals
-6. [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) — module layout
-7. [`docs/ux/DESIGN_PRINCIPLES.md`](docs/ux/DESIGN_PRINCIPLES.md) — visual language and the `Aether*` component naming convention
-8. [`docs/next-steps/`](docs/next-steps/) — the current milestone plan (`0.2-media-sources.md` is in flight; `0.3-offline.md` is queued). `0.1-foundation.md` is closed and kept for context.
+3. [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) — persistent AI-safe project context
+4. [`docs/CURRENT_SPRINT.md`](docs/CURRENT_SPRINT.md) — what matters right now
+5. [`docs/ROADMAP.md`](docs/ROADMAP.md) — quick roadmap summary for AI sessions
+6. [`ROADMAP.md`](ROADMAP.md) — full roadmap and status legend
+7. [`CHANGELOG.md`](CHANGELOG.md) — what's actually landed (read `[Unreleased]` and the latest shipped version)
+8. [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) — audience, scope, non-goals
+9. [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) — module layout
+10. [`docs/ux/DESIGN_PRINCIPLES.md`](docs/ux/DESIGN_PRINCIPLES.md) — visual language and the `Aether*` component naming convention
+11. [`docs/next-steps/`](docs/next-steps/) — milestone-specific plans and design work
 
 Only after this should you open Swift files.
 
 ### Current state in one paragraph
 
-`0.1 Foundation` is shipped. `0.2 Media Sources` is **in flight**: Plex is end-to-end (PIN sign-in → server discovery with off-LAN failover → libraries → direct-play streams + transcode fallback → show / season / episode drill-down → native `AVPlayerViewController` with auto-hiding chrome). Settings + Sign Out land in the polish sprint that closes the Plex side. Synology connector, persistent SwiftData-backed `ResumeStore`, and the upgraded artwork pipeline are the remaining 0.2 work. `0.3 Offline` is queued behind that.
+The product is well past the early connector milestones and is currently on the `0.7.6` line. Aether now ships a unified multi-source media experience across iOS, iPadOS, tvOS, visionOS, and macOS, with Plex multi-server support, Jellyfin, Local Library, SMB, downloads, cross-device resume, and visionOS Cinema Mode. The main day-to-day focus is no longer "can the feature exist?" but "is it stable, premium, and release-ready across every platform?".
+
+---
+
+## AI team system
+
+Aether now carries a lightweight specialized-agent system for AI sessions that need narrower context and clearer role boundaries.
+
+### Shared AI docs
+
+- [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) — stable project knowledge
+- [`docs/CURRENT_SPRINT.md`](docs/CURRENT_SPRINT.md) — current working focus
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — AI-friendly roadmap summary
+- [`docs/ai/`](docs/ai/) — role files for specialized agents
+
+### Slash-command role index
+
+- `/design` → [`docs/ai/product-designer.md`](docs/ai/product-designer.md)
+- `/engineer` → [`docs/ai/senior-engineer.md`](docs/ai/senior-engineer.md)
+- `/qa` → [`docs/ai/qa-lead.md`](docs/ai/qa-lead.md)
+- `/perf` → [`docs/ai/performance-engineer.md`](docs/ai/performance-engineer.md)
+- `/pm` → [`docs/ai/product-manager.md`](docs/ai/product-manager.md)
+- `/release` → [`docs/ai/release-manager.md`](docs/ai/release-manager.md)
+- `/triage` → [`docs/ai/github-triage.md`](docs/ai/github-triage.md)
+- `/visionos` → [`docs/ai/visionos-specialist.md`](docs/ai/visionos-specialist.md)
+- `/tvos` → [`docs/ai/tvos-specialist.md`](docs/ai/tvos-specialist.md)
+- `/review` → [`docs/ai/app-store-reviewer.md`](docs/ai/app-store-reviewer.md)
+- `/docs` → [`docs/ai/technical-writer.md`](docs/ai/technical-writer.md)
+- `/marketing` → [`docs/ai/marketing-lead.md`](docs/ai/marketing-lead.md)
+- `/architect` → [`docs/ai/chief-architect.md`](docs/ai/chief-architect.md)
+
+### Required AI session flow
+
+Every new AI session should:
+
+1. Read [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md)
+2. Read [`docs/CURRENT_SPRINT.md`](docs/CURRENT_SPRINT.md)
+3. Load the requested role from [`docs/ai/`](docs/ai/)
+4. Stay within that role's responsibilities before broadening scope
+
+The goal is specialization, smaller context, and better continuity across parallel AI sessions.
 
 ---
 

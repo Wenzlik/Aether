@@ -170,6 +170,13 @@ struct RootTabView: View {
                 )
             }
         }
+        // iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
+        // native pattern (#391). iPhone (compact) keeps its bottom tab bar; tvOS
+        // / visionOS keep their own default top bar (no sidebar), so this is
+        // scoped to iOS only.
+        #if os(iOS)
+        .tabViewStyle(.sidebarAdaptable)
+        #endif
         .sheet(isPresented: $session.isSignInPresented) {
             switch session.signInTarget {
             case .plex:
@@ -265,6 +272,21 @@ private struct MediaNavigationDestinations: ViewModifier {
                     downloadManager: downloadManager,
                     downloads: downloads,
                     playbackPreferences: playbackPreferences
+                )
+            }
+            // The show "Play S1E1 · Pilot" pill (#382): opens the on-deck
+            // episode's Detail and autoplays it, so one tap plays while still
+            // routing through the episode's own well-tested playback path.
+            .navigationDestination(for: EpisodeAutoplayRoute.self) { route in
+                DetailView(
+                    item: route.item,
+                    connectedSources: connectedSources,
+                    resumeStore: resumeStore,
+                    playbackSession: playbackSession,
+                    downloadManager: downloadManager,
+                    downloads: downloads,
+                    playbackPreferences: playbackPreferences,
+                    autoplay: true
                 )
             }
             // Unified-feed titles (Home / Search) navigate the aggregated item so

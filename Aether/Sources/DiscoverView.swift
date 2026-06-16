@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AetherCore
 
 /// **Discover** — a first-class content tab on every platform.
@@ -37,7 +38,31 @@ struct DiscoverView: View {
     /// discovery rails.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
-    @State private var hero: UnifiedMediaItem?
+    /// The featured carousel (#381): 3–7 slides, in-progress titles first
+    /// (most-recently-active), then top-rated, then random picks — a rotating
+    /// "what should I watch next?" hero instead of one static random pick.
+    @State private var heroItems: [UnifiedMediaItem] = []
+    /// Fractional progress (0…1) per hero slide that has a resume point — drives
+    /// the thin Continue-Watching strip on that slide. Keyed by item id.
+    @State private var heroProgress: [String: Double] = [:]
+    /// The visible carousel page.
+    @State private var heroIndex = 0
+    /// Seconds until the carousel auto-advances (counts down each tick). Reset to
+    /// the full interval after any manual interaction.
+    @State private var advanceCountdown = 6
+    /// While > 0 the carousel is paused after an interaction; it counts down to 0
+    /// over the idle window, then auto-advance resumes (#381: resume after 3 s).
+    @State private var pauseCountdown = 0
+    /// Set while `advanceHero` is moving the page programmatically, so the
+    /// `heroIndex` `onChange` can tell an auto-advance apart from a real user
+    /// swipe (only the latter should pause auto-advance).
+    @State private var programmaticAdvance = false
+    /// Reduce Motion disables auto-advance entirely (#381) — manual swipe stays.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(tvOS)
+    /// tvOS: auto-advance pauses while the hero has focus (#381).
+    @FocusState private var heroFocused: Bool
+    #endif
     @State private var randomPicks: [UnifiedMediaItem] = []
     @State private var newReleases: [UnifiedMediaItem] = []
     @State private var topRated: [UnifiedMediaItem] = []
@@ -69,6 +94,14 @@ struct DiscoverView: View {
         false
         #endif
     }
+
+    /// Carousel auto-advance interval (seconds) and the idle window before
+    /// auto-advance resumes after a manual interaction (#381).
+    private static let autoAdvanceInterval = 6
+    private static let resumeIdleSeconds = 3
+    /// 1 Hz tick driving the countdown-based auto-advance (gives precise
+    /// pause-on-interaction / resume-after-idle without re-arming timers).
+    private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -111,7 +144,7 @@ struct DiscoverView: View {
     }
 
     private var isEmpty: Bool {
-        hero == nil && randomPicks.isEmpty && newReleases.isEmpty
+        heroItems.isEmpty && randomPicks.isEmpty && newReleases.isEmpty
     }
 
     @ViewBuilder
@@ -183,8 +216,8 @@ struct DiscoverView: View {
                 // best-rated, and serendipitous picks at the tail. Genre lanes were
                 // removed (#350) — Library already has genre browse; Discover is
                 // for "what should I watch", so it leads with curated rails.
-                if let hero {
-                    heroSection(hero)
+                if !heroItems.isEmpty {
+                    heroCarousel
                 }
                 if !newReleases.isEmpty {
                     rail(title: "New Releases", items: newReleases)
@@ -209,37 +242,101 @@ struct DiscoverView: View {
 
     // MARK: - Sections
 
-    /// A wide single-card hero showing one randomly-picked title, tappable
-    /// straight into Detail. A *single* artwork (not a rail) so the random pick
-    /// reads as "this is the title we're suggesting."
-    private func heroSection(_ item: UnifiedMediaItem) -> some View {
+    // MARK: - Featured carousel (#381)
+
+    /// Rotating featured carousel: in-progress titles first (most-recently
+    /// active), then top-rated, then random picks — a "what should I watch next?"
+    /// hero instead of one static random pick. Auto-advances every 6 s, pauses on
+    /// interaction (touch) / focus (tvOS), resumes after a 3 s idle, and stops
+    /// auto-advancing entirely under Reduce Motion. Pagination dots underneath.
+    @ViewBuilder
+    private var heroCarousel: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
-
-            NavigationLink(value: item) {
-                #if os(tvOS)
-                featuredHeroTV(item)
-                #else
-                AetherCard.hero(
-                    title: item.title,
-                    subtitle: item.year.map(String.init),
-                    posterURL: item.backdropURL ?? item.posterURL
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: heroHeight)
-                #endif
+            #if os(tvOS)
+            tvFeaturedCarousel
+            #else
+            touchFeaturedCarousel
+            #endif
+            if heroItems.count > 1 {
+                heroPageDots
+                    .padding(.horizontal, AetherDesign.Spacing.l)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, AetherDesign.Spacing.l)
         }
+        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
     }
 
+    /// Pagination dots — accent for the current slide. One accessibility element
+    /// announcing "Featured — slide N of M".
+    private var heroPageDots: some View {
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            ForEach(heroItems.indices, id: \.self) { i in
+                Circle()
+                    .fill(i == heroIndex
+                          ? AetherDesign.Palette.accent
+                          : AetherDesign.Palette.textTertiary.opacity(0.4))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: heroIndex)
+        .accessibilityElement()
+        .accessibilityLabel(Text("Featured"))
+        .accessibilityValue(Text("Slide \(heroIndex + 1) of \(heroItems.count)"))
+    }
+
+    #if !os(tvOS)
+    /// Swipeable paged carousel for touch / spatial platforms. A horizontal drag
+    /// pages; a tap opens Detail. A genuine user swipe pauses auto-advance.
+    private var touchFeaturedCarousel: some View {
+        TabView(selection: $heroIndex) {
+            ForEach(Array(heroItems.enumerated()), id: \.element.id) { index, item in
+                NavigationLink(value: item) {
+                    AetherCard.hero(
+                        title: item.title,
+                        subtitle: featuredMetaLine(item),
+                        posterURL: item.backdropURL ?? item.posterURL,
+                        progress: heroProgress[item.id],
+                        rating: item.communityRating
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: heroHeight)
+                }
+                .buttonStyle(.plain)
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(height: heroHeight)
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .onChange(of: heroIndex) { _, _ in
+            // Auto-advance moves the page too; only a real user swipe should
+            // pause it (the programmatic move clears the flag without pausing).
+            if programmaticAdvance { programmaticAdvance = false }
+            else { pauseCountdown = Self.resumeIdleSeconds }
+        }
+    }
+    #endif
+
     #if os(tvOS)
+    /// tvOS Featured: the side-by-side hero whose content swaps per slide.
+    /// Auto-advance pauses while the hero is focused (so the Select target stays
+    /// put while the user is on it) and resumes once focus moves to the rails.
+    private var tvFeaturedCarousel: some View {
+        let item = heroItems[min(heroIndex, heroItems.count - 1)]
+        return NavigationLink(value: item) {
+            featuredHeroTV(item)
+        }
+        .buttonStyle(.plain)
+        .focused($heroFocused)
+        .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
     /// tvOS Featured presentation: a constrained 16:9 artwork (the card *is* the
     /// artwork — no oversized focus panel or empty letterbox) that lifts gently
     /// on focus, with title / year / genres / synopsis beside it so the section
     /// reads as a purposeful recommendation rather than a giant focus box.
-    /// Tapping opens Detail, where Play / Resume live.
+    /// Tapping opens Detail, where Play / Resume live. A thin progress bar shows
+    /// when the slide is a resumable in-progress title (#381).
     private func featuredHeroTV(_ item: UnifiedMediaItem) -> some View {
         HStack(alignment: .center, spacing: AetherDesign.Spacing.xl) {
             CachedAsyncImage(
@@ -247,11 +344,12 @@ struct DiscoverView: View {
                 aspectRatio: 16.0 / 9.0,
                 maxPixel: ArtworkTier.backdropLarge.maxPixel
             )
+            .frame(width: 600)
+            .overlay(alignment: .bottom) { tvHeroProgressBar(for: item) }
             .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
             // Trimmed from 760 → 600 (≈428pt → ≈338pt tall at 16:9) so Featured
             // stops dominating the page and the rails below show without scrolling
             // (#266 tvOS feedback). Still the prominent top recommendation.
-            .frame(width: 600)
             .premiumFocus(scale: 1.04)
 
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
@@ -275,7 +373,30 @@ struct DiscoverView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // Swap-in fade so the side-by-side content reads as a slide transition.
+        .id(item.id)
+        .transition(.opacity)
     }
+
+    /// Thin Continue-Watching strip along the tvOS hero artwork's lower edge,
+    /// shown only for an in-progress (resumable) slide.
+    @ViewBuilder
+    private func tvHeroProgressBar(for item: UnifiedMediaItem) -> some View {
+        if let fraction = heroProgress[item.id] {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.black.opacity(0.45))
+                    Capsule()
+                        .fill(AetherDesign.Gradients.progress)
+                        .frame(width: max(6, geo.size.width * fraction))
+                }
+            }
+            .frame(height: 6)
+            .padding(.horizontal, AetherDesign.Spacing.s)
+            .padding(.bottom, AetherDesign.Spacing.s)
+        }
+    }
+    #endif
 
     /// "2018 · Drama · Biography" — year then up to two genres.
     private func featuredMetaLine(_ item: UnifiedMediaItem) -> String? {
@@ -284,7 +405,34 @@ struct DiscoverView: View {
         parts.append(contentsOf: item.genres.prefix(2))
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
-    #endif
+
+    // MARK: - Carousel auto-advance
+
+    /// One 1 Hz tick: count down to the next auto-advance, honouring the pause
+    /// window after an interaction and (tvOS) hero focus, and Reduce Motion.
+    private func autoAdvanceTick() {
+        guard heroItems.count > 1, !reduceMotion else { return }
+        #if os(tvOS)
+        if heroFocused { return }   // pause while the hero has focus (#381)
+        #endif
+        if pauseCountdown > 0 { pauseCountdown -= 1; return }
+        advanceCountdown -= 1
+        if advanceCountdown <= 0 {
+            advanceHero(by: 1, interaction: false)
+        }
+    }
+
+    /// Move the carousel by `delta` slides (wrapping). `interaction` marks a
+    /// manual move so auto-advance pauses for the idle window afterwards.
+    private func advanceHero(by delta: Int, interaction: Bool) {
+        guard !heroItems.isEmpty else { return }
+        programmaticAdvance = !interaction
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+            heroIndex = (heroIndex + delta + heroItems.count) % heroItems.count
+        }
+        advanceCountdown = Self.autoAdvanceInterval
+        if interaction { pauseCountdown = Self.resumeIdleSeconds }
+    }
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
@@ -379,17 +527,58 @@ struct DiscoverView: View {
             if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
         }
 
-        // Hero: one random pick. Random Picks: shuffled, hero excluded.
-        let pick = all.randomElement()
-        hero = pick
-        randomPicks = Array(all.filter { $0.id != pick?.id }.shuffled().prefix(12))
+        // --- Featured carousel (#381): in-progress titles first (most-recently
+        // active), then top-rated, then random — capped at 7. In-progress titles
+        // were filtered out of `all` (counted as "started"), so pull them from
+        // the unfiltered union and intersect against the resume points.
+        let resumePoints = await resumeStore.allPoints()
+        let resumeByID = Dictionary(resumePoints.map { ($0.mediaID, $0) },
+                                    uniquingKeysWith: { $0.updatedAt >= $1.updatedAt ? $0 : $1 })
+        func resumePoint(for item: UnifiedMediaItem) -> ResumePoint? {
+            item.sources.compactMap { resumeByID[$0.item.id] }.max { $0.updatedAt < $1.updatedAt }
+        }
+        let inProgressHeroes = (allMovies + allShows)
+            .compactMap { item -> (UnifiedMediaItem, ResumePoint)? in
+                guard !item.isFullyWatched, let point = resumePoint(for: item) else { return nil }
+                return (item, point)
+            }
+            .sorted { $0.1.updatedAt > $1.1.updatedAt }
+            .prefix(3)
+
+        var heroBuilt: [UnifiedMediaItem] = []
+        var heroSeen = Set<String>()
+        var heroProgressBuilt: [String: Double] = [:]
+        func addHero(_ item: UnifiedMediaItem, resume: ResumePoint?) {
+            guard heroBuilt.count < 7, heroSeen.insert(item.id).inserted else { return }
+            heroBuilt.append(item)
+            if let resume, let fraction = progressFraction(item: item, resume: resume) {
+                heroProgressBuilt[item.id] = fraction
+            }
+        }
+        for (item, point) in inProgressHeroes { addHero(item, resume: point) }
+        for item in all.filter({ ($0.communityRating ?? 0) > 0 })
+            .sorted(by: { ($0.communityRating ?? 0) > ($1.communityRating ?? 0) })
+            .prefix(3) {
+            addHero(item, resume: nil)
+        }
+        for item in all.shuffled() where heroBuilt.count < 7 {
+            addHero(item, resume: nil)
+        }
+        heroItems = heroBuilt
+        heroProgress = heroProgressBuilt
+        heroIndex = min(heroIndex, max(0, heroBuilt.count - 1))
+        advanceCountdown = Self.autoAdvanceInterval
+        let heroIDs = heroSeen
+
+        // Random Picks: shuffled, carousel slides excluded.
+        randomPicks = Array(all.filter { !heroIDs.contains($0.id) }.shuffled().prefix(12))
 
         // New Releases: each list is already newest-first (source sort survives
         // the merge's first-seen ordering); interleave movies + shows so neither
-        // dominates, drop the hero, cap at 12. (#350: was "Recently Added".)
+        // dominates, drop the carousel slides, cap at 12. (#350: was "Recently Added".)
         newReleases = Array(
             interleave(movies, shows)
-                .filter { $0.id != pick?.id }
+                .filter { !heroIDs.contains($0.id) }
                 .prefix(12)
         )
 
@@ -403,7 +592,7 @@ struct DiscoverView: View {
         // Warm the artwork cache for the rails we're about to show. Built up
         // step by step with an explicit type — a single long `+` chain of
         // `[URL?]` arrays blows the Swift type-checker's time budget.
-        var artworkURLs: [URL?] = [pick?.backdropURL ?? pick?.posterURL]
+        var artworkURLs: [URL?] = heroBuilt.map { $0.backdropURL ?? $0.posterURL }
         artworkURLs += randomPicks.map(\.posterURL)
         artworkURLs += topRated.map(\.posterURL)
         artworkURLs += newReleases.map(\.posterURL)
@@ -431,8 +620,27 @@ struct DiscoverView: View {
         AetherImageCache.shared.prefetch((netflixNew + netflixTop).map(\.posterURL))
     }
 
+    /// Fractional progress (0…1) for an in-progress hero slide — `position` over
+    /// the runtime of the source that owns the resume point (else any source).
+    /// `nil` when no known runtime, mirroring `ContinueWatchingEntry.progress`.
+    private func progressFraction(item: UnifiedMediaItem, resume: ResumePoint) -> Double? {
+        let runtime = item.sources.first(where: { $0.item.id == resume.mediaID })?.item.runtime
+            ?? item.sources.first?.item.runtime
+        guard let runtime, runtime > .zero else { return nil }
+        let total = durationSeconds(runtime)
+        guard total > 0 else { return nil }
+        return min(1, max(0, durationSeconds(resume.position) / total))
+    }
+
+    private func durationSeconds(_ duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
     private func resetRails() {
-        hero = nil
+        heroItems = []
+        heroProgress = [:]
+        heroIndex = 0
         randomPicks = []
         newReleases = []
         topRated = []

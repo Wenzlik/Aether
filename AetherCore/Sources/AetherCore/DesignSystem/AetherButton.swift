@@ -45,15 +45,23 @@ public struct AetherButton: View {
 // MARK: - Label
 
 /// Pulled out so the focused state environment is read inside `Button`'s
-/// content, where tvOS actually populates `\.isFocused`.
-private struct AetherButtonLabel: View {
+/// content, where tvOS actually populates `\.isFocused`. Public so a
+/// `NavigationLink` can wear the exact same pill (the Detail "Play S1E1" show
+/// action, #382) — a link, not a `Button`, but visually one `AetherButton`.
+public struct AetherButtonLabel: View {
     let title: String
     let systemImage: String?
     let role: AetherButton.Role
 
+    public init(title: String, systemImage: String? = nil, role: AetherButton.Role) {
+        self.title = title
+        self.systemImage = systemImage
+        self.role = role
+    }
+
     @Environment(\.isFocused) private var isFocused
 
-    var body: some View {
+    public var body: some View {
         HStack(spacing: AetherDesign.Spacing.xs) {
             if let systemImage {
                 Image(systemName: systemImage)
