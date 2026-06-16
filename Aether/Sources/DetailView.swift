@@ -2575,6 +2575,13 @@ struct DetailView: View {
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
         }
+        // On tvOS a Netflix-only detail has no launch button (`canLaunch` is
+        // false there), so this block is pure text — and a pushed screen with
+        // NOTHING focusable traps the user: the system reads Back/Menu as
+        // "exit app" instead of "pop" (#377). Make the block self-focus when
+        // there's no button, mirroring AetherEmptyState/AetherErrorState. A
+        // no-op elsewhere, where `canLaunch` is true and the button takes focus.
+        .focusable(!NetflixLauncher.canLaunch)
     }
 
     // MARK: - Playback options (compact selectors + media info)
