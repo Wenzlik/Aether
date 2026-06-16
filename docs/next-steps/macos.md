@@ -38,7 +38,10 @@ scripts/deploy-dmg.sh     # upload to the NAS web root + verify sha256 + https
                           # (needs LAN/VPN to 192.168.1.10; SSH key ~/.ssh/aether_synology)
 ```
 
-Local verify build (no signing):
+Local verify build (no signing) — **run this BEFORE `package-mac.sh`**. Xcode
+Cloud doesn't build `AetherMac`, so macOS-only compile breaks reach `main`
+unnoticed (bit 0.7.6 and 0.7.7); this fails in ~1 min instead of after a full
+archive + notarize:
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 xcodebuild -project Aether.xcodeproj -scheme AetherMac \

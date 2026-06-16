@@ -80,7 +80,22 @@ to the home dir and can't reach `/volume1/web`.
 
 1. **Bump the version** in `project.yml` → `MARKETING_VERSION` (e.g. `0.7.4`).
    The build number is set automatically from the date by `package-mac.sh`.
-2. **Build the DMG**:
+2. **⚠️ Verify the macOS build compiles FIRST** — before the (slow) notarized
+   package. **Xcode Cloud does not build the `AetherMac` target** (see "Why no
+   Xcode Cloud" below), so macOS-only compile errors reach `main` undetected and
+   only surface when you archive. This has bitten two releases running — 0.7.6
+   (`MacTheme` vs `AetherMacTheme`) and 0.7.7 (Discover hero `MediaItem` vs
+   `UnifiedMediaItem`). The verify build fails in ~1 min instead of after a full
+   archive + notarize wait:
+   ```sh
+   export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+   xcodebuild -project Aether.xcodeproj -scheme AetherMac \
+     -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO \
+     -derivedDataPath /tmp/aether-verify build      # expect: ** BUILD SUCCEEDED **
+   ```
+   If it fails, fix on a branch → PR to `staging` (never commit to `main`), then
+   build the DMG from that branch so the stamped `AetherGitCommit` is real.
+3. **Build the DMG**:
    ```sh
    scripts/package-mac.sh
    ```
@@ -89,17 +104,28 @@ to the home dir and can't reach `/volume1/web`.
    with your Developer ID) → export (Developer ID) → notarize the **app** + staple
    → build the DMG → notarize the **DMG** + staple. Notarization waits on Apple
    (a few minutes). Result: `build/Aether-<version>.dmg`.
-3. **Deploy to the web** (on the LAN/VPN):
+4. **Deploy the DMG** (on the LAN/VPN):
    ```sh
    scripts/deploy-dmg.sh                       # newest build/Aether-*.dmg
    # or: scripts/deploy-dmg.sh build/Aether-0.7.4.dmg
    ```
    Uploads to `web/aether/downloads/`, checks the sha256 local-vs-remote, and
    curls the public URL.
-4. **Update the download page version** — `web/aether/download/index.html` (local
-   working copy at `/Users/vasek/Git/aether-web`) hardcodes the DMG filename and
-   the `· 0.7.3` label. Change both to the new version and re-deploy that file
-   (e.g. copy it onto the SMB mount, or `ssh 'cat > /volume1/web/aether/download/index.html'`).
+5. **Bump the version on the website** — the download page is a **Next.js
+   component**, not static HTML (see "The website" below). In the
+   **`aether_web`** repo (`/Users/vasek/Git/aether_web`):
+   - `components/DownloadContent.tsx` → `const VERSION = "0.7.x"` (single source:
+     drives the DMG link, the button label, and the "What's new in" heading).
+   - `lib/i18n.ts` → the `latest:` "Latest release" line **and** the `whatsNew`
+     items, in **all three** locales (`en` / `cs` / `uk` — the build fails if a
+     locale is missing a key).
+   - Then `npm run deploy` (= `next build` + `scripts/deploy.sh`). See
+     `aether_web/docs/DEPLOY.md` for that repo's full runbook.
+
+   ⚠️ **Same-version rebuild?** If you re-ship without bumping `MARKETING_VERSION`,
+   the DMG filename is unchanged, so browsers/CDN may serve a stale copy. Confirm
+   a fresh download via **Settings → About → Build** (matches the shipped commit),
+   or add `?b=<commit>` cache-busting to the download link.
 
 ### Verify
 ```sh
@@ -119,26 +145,21 @@ real test.)
 ## The website
 
 - Served from the Synology `web` share, vhost root = `web/aether` → `aetherplayer.com`.
-- **Download page**: `web/aether/download/index.html` → https://aetherplayer.com/download/
-- **DMGs**: `web/aether/downloads/Aether-<version>.dmg`
-- The **`/download/` page is plain static HTML** (not Next.js) — it renders fine
-  and is safe to edit/deploy directly in the export.
-- ⚠️ **The homepage download link must go in the Next.js SOURCE, not the export.**
-  The homepage is a hydrated Next.js page: editing the deployed `index.html`
-  (and `cs/`, `uk/`) to add a link "works" in the raw HTML but React **removes it
-  on hydration** (it re-renders nav/hero from its component tree). So add it in
-  the homepage component and rebuild. The source is **not in this repo** (it's on
-  a separate machine; put it in git). What to add — a link in the nav and a hero
-  button, e.g.:
-  ```tsx
-  <Link href="/download/" className="rounded-full px-3 py-1.5 text-sm font-medium text-white/70 hover:text-white">Download</Link>
-  // and a secondary hero button next to "Join the Beta":
-  <Link href="/download/" className="rounded-full px-8 py-3.5 font-medium text-white glass hover:opacity-85">Download for Mac</Link>
-  ```
-  Localize the label per locale (cs: "Stáhnout" / "Stáhnout pro Mac"; uk:
-  "Завантажити" / "Завантажити для Mac"). Then `next build && next export` and
-  redeploy. The `/download/` page + the DMG in `downloads/` are independent of
-  the rebuild.
+- **The entire site is a Next.js app**, repo **`aether_web`** at
+  `/Users/vasek/Git/aether_web` (Wenzlik/aether_web). It's a static export
+  (`output: "export"`) deployed with `npm run deploy`. **Clone that repo on any
+  machine you publish from** — the whole site, including `/download/`, is
+  generated from it; do **not** hand-edit the deployed HTML (React re-renders it
+  on hydration and your change disappears).
+- **Download page**: `app/[locale]/download` + `components/DownloadContent.tsx`
+  → https://aetherplayer.com/download/ (and `/cs/download/`, `/uk/download/`).
+- **DMGs**: `web/aether/downloads/Aether-<version>.dmg` — uploaded by
+  `scripts/deploy-dmg.sh` from *this* repo, independent of the site rebuild.
+- The version shown on the site is the `VERSION` constant in
+  `components/DownloadContent.tsx`; copy (incl. the "Latest release" line and the
+  "What's new" items) lives in `lib/i18n.ts` across `en` / `cs` / `uk`. See
+  `aether_web/docs/DEPLOY.md` for the website's own runbook (SSH, atomic swap,
+  signup endpoint).
 
 ## Why no Xcode Cloud for macOS
 A `macos/…` tag + Xcode Cloud workflow exists, but it's **not** the distribution
