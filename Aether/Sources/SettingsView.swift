@@ -299,6 +299,31 @@ struct SettingsView: View {
         ZStack {
             AetherDesign.Gradients.background.ignoresSafeArea()
             GeometryReader { geo in
+                #if os(tvOS)
+                // tvOS renders `.navigationTitle` as a large title that floats
+                // over / scrolls with the content rather than pinning — the same
+                // GeometryReader+ScrollView fragility the iOS branch calls out
+                // below, except tvOS has no nav bar to fall back on (#378). Pin
+                // our own title above the scroll so it stays at the top while the
+                // sections scroll beneath it (the expected tvOS pattern).
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                    Text(LocalizedStringKey(category.title))
+                        .font(AetherDesign.Typography.heroTitle)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        .frame(width: settingsContentWidth(geo.size.width), alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, AetherDesign.Spacing.l)
+
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                            categorySections(category)
+                        }
+                        .padding(.bottom, AetherDesign.Spacing.xxl)
+                        .frame(width: settingsContentWidth(geo.size.width))
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                #else
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         categorySections(category)
@@ -308,9 +333,14 @@ struct SettingsView: View {
                     .frame(width: settingsContentWidth(geo.size.width))
                     .frame(maxWidth: .infinity)
                 }
+                #endif
             }
         }
+        // tvOS pins its own title above (see above), so suppress the floating
+        // system title there; iOS/visionOS keep the nav-bar title.
+        #if !os(tvOS)
         .navigationTitle(LocalizedStringKey(category.title))
+        #endif
         #if os(iOS)
         // Inline (centered) on every category screen — consistent and reliable.
         // Large titles collapsed unpredictably inside the GeometryReader+ScrollView
