@@ -87,7 +87,12 @@ struct DiscoverView: View {
             guard built.count < 7, seen.insert(item.id).inserted else { return }
             built.append(item)
         }
-        for entry in rails.continueWatching.prefix(3) { add(entry.item) }
+        // In-progress titles first — resolve each Continue Watching entry (a bare
+        // `MediaItem`) to its unified title via a shared source id, so the hero
+        // carousel renders it like any other `UnifiedMediaItem` (matches iOS).
+        for entry in rails.continueWatching.prefix(3) {
+            if let unified = unified(matching: entry.item) { add(unified) }
+        }
         for item in topRated where !seen.contains(item.id) {
             guard built.count < 6 else { break }
             add(item)
@@ -99,16 +104,26 @@ struct DiscoverView: View {
         return built
     }
 
-    /// Progress fraction (0…1) per in-progress hero slide, keyed by item id.
+    /// Progress fraction (0…1) per in-progress hero slide, keyed by the unified
+    /// id the carousel looks up (`UnifiedMediaItem.id`).
     private var heroProgress: [String: Double] {
         var result: [String: Double] = [:]
         for entry in rails.continueWatching {
-            guard let runtime = entry.item.runtime else { continue }
+            guard let unified = unified(matching: entry.item),
+                  let runtime = entry.item.runtime else { continue }
             let total = DetailFormatting.seconds(runtime)
             guard total > 0 else { continue }
-            result[entry.item.id] = min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
+            result[unified.id] = min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
         }
         return result
+    }
+
+    /// The loaded unified title whose sources include this Continue Watching
+    /// `MediaItem`, matched by source id. `nil` when the title isn't in the
+    /// capped rails (it then simply sits out of the hero carousel).
+    private func unified(matching item: MediaItem) -> UnifiedMediaItem? {
+        let pool = rails.movies + rails.shows + rails.recentlyAdded + rails.recentlyReleased
+        return pool.first { $0.sources.contains { $0.item.id == item.id } }
     }
 
     // MARK: - Content body
