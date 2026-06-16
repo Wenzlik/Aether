@@ -4,6 +4,50 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-06-16
+
+### Added
+
+- **iPad: sidebar navigation** (#391) — the root tab bar now uses `.sidebarAdaptable`
+  on iPad. The user can toggle between the compact top tab bar and a left sidebar
+  (their choice persists). iPhone and tvOS/visionOS are unchanged.
+
+### Changed
+
+- **Detail: unified action cluster** (#382) — the primary pill row and separate
+  tertiary icon row are collapsed into a single Infuse-style cluster. `AetherIconButton`
+  and `AetherIconCircleLabel` are now borderless; the active state reads through an
+  accent-filled circle + white glyph. tvOS focus still uses `premiumFocus` lift + glow.
+- **Discover: rotating featured carousel** (#381) — the static random hero is replaced
+  by a 3–7 slide carousel (in-progress titles first, then top-rated, then random picks).
+  Slides auto-advance and are tap/click/focus navigable; excluded from source-only-if-available
+  filtering so the carousel always has content.
+- **Library: compact browse + filter controls** (#383) — the full-width Browse disclosure
+  rows (Genres / Years / Collections / Actors / Directors) are replaced by a compact
+  horizontal pill row at the top of the content area. iOS/iPadOS only; tvOS keeps its
+  category list untouched.
+- **Source switcher: compact pill** (#380) — the full-width Available Sources scroll section
+  in Detail is replaced by a labelled capsule pill Menu (e.g. `Plex ▾`). Single-source
+  details hide it entirely. Active source is checked; preferred source is tagged. tvOS uses
+  a focusable button that pushes a picker screen.
+
+### Fixed
+
+- **tvOS Netflix detail — Back closes app** (#377) — a Netflix-only detail with no launch
+  button (tvOS can't open the Netflix app) had nothing focusable, so the system interpreted
+  Back/Menu as "exit app". The block now self-focuses when no button is present, matching
+  the `AetherEmptyState` / `AetherErrorState` convention.
+- **tvOS Settings — section titles scroll with content** (#378) — `.navigationTitle`
+  on tvOS drifted into the rows instead of staying fixed. An explicit title is now laid out
+  above the `ScrollView` on tvOS; the system title is suppressed there.
+- **iPadOS episode/season detail — landscape wastes trailing half** (#379) — on iPad regular
+  width, Detail now renders a two-column layout: primary content in a roomy leading column,
+  Technical Details and Cast & Crew in a fixed trailing column. Narrow split-view and iPhone
+  stay single-column.
+- **Settings — Feature Request email body was empty** (#384) — the form required only the
+  Title field, so a title-only request produced an email body containing nothing but the
+  diagnostics footer. The Title is now included at the top of the body.
+
 ## [0.7.6] — 2026-06-15
 
 ### Added

@@ -5,8 +5,8 @@ AI-facing snapshot of the current working focus. Update this whenever staging pr
 ## Current Release Train
 
 - Branch baseline: `staging`
-- Marketing version: `0.7.6`
-- Recent shipped scope: iPad Library/Home UX polish, active filter chips, grid search, Continue Watching actions, primary Plex streaming server selection, Netflix availability, cross-device resume, macOS parity work
+- Marketing version: `0.7.7`
+- Recent shipped scope: UX polish pass — unified Detail action cluster, rotating Discover carousel, compact Library browse pills, compact source switcher pill, iPad sidebarAdaptable nav, tvOS bug fixes (Netflix Back, Settings sticky headers), iPadOS landscape two-column detail, Settings Feature Request email fix
 
 ## Sprint Goal
 
@@ -17,14 +17,15 @@ Close the gap between "feature-complete for internal use" and "confident enough 
 - visionOS playback ergonomics, especially player controls and dismissal behavior
 - Release hardening across App Store / TestFlight / Xcode Cloud workflows
 - Platform parity gaps between iOS-family targets, tvOS, visionOS, and macOS
-- Continued UX refinement for Library, Discover, and Continue Watching
+- Localized titles and artwork language (#344, #345, #340)
+- SMB + MKV playback latency (#347, #213)
 
 ## Features In Progress
 
 - visionOS Cinema and playback polish
 - macOS polish and release path improvements
-- Unified Library UX follow-ups
-- Release/documentation cleanup for the 0.7.x line
+- Localization tail (#320)
+- DetailViewModel refactor (#241)
 
 ## Immediate Priorities
 
