@@ -321,13 +321,18 @@ extension AetherCard {
     }
 
     /// 16:9 hero card — used for the featured rail and continue-watching, where
-    /// the backdrop matters more than the poster.
+    /// the backdrop matters more than the poster. `progress` draws the frosted
+    /// Continue-Watching strip along the lower edge; `rating` adds the compact
+    /// community-rating badge — both are how the Discover hero carousel (#381)
+    /// surfaces "you're 40% in" and "8.4" on a featured slide.
     public static func hero(
         title: String,
         subtitle: String? = nil,
-        posterURL: URL?
+        posterURL: URL?,
+        progress: Double? = nil,
+        rating: Double? = nil
     ) -> AetherCard {
-        AetherCard(title: title, subtitle: subtitle, posterURL: posterURL, aspectRatio: 16.0 / 9.0)
+        AetherCard(title: title, subtitle: subtitle, posterURL: posterURL, aspectRatio: 16.0 / 9.0, progress: progress, rating: rating)
     }
 
     /// 16:9 episode still — same shape as hero, but conventionally smaller and
