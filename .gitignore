@@ -67,5 +67,8 @@ coverage/
 Vendor/VLCKit/VLCKit.xcframework
 Vendor/VLCKit/*.tar.xz
 
+# Sparkle CLI tools — fetched via scripts/fetch-sparkle-tools.sh, not committed
+Vendor/Sparkle/
+
 # TMDb API key — local secret, set per developer / via Xcode Cloud
 Config/Secrets.xcconfig

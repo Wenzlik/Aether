@@ -384,6 +384,7 @@ private struct AppearanceSettings: View {
 }
 
 private struct AboutSettings: View {
+    @EnvironmentObject private var updater: AppUpdater
     @State private var cacheBytes: Int = AetherImageCache.shared.diskUsageBytes()
 
     private static let repoURL = URL(string: "https://github.com/Wenzlik/Aether")!
@@ -453,6 +454,13 @@ private struct AboutSettings: View {
                 LabeledContent("Version", value: shortVersion)
                 LabeledContent("Build", value: buildIdentifier)
                 LabeledContent("Platform", value: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
+            }
+            Section("Software Update") {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+                Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
+                Text("Aether updates itself from aetherplayer.com — it's not on the Mac App Store. Each update is verified before it's installed.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Storage") {
                 LabeledContent("Image Cache", value: DetailFormatting.fileSize(Int64(cacheBytes)))

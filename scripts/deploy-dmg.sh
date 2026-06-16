@@ -41,4 +41,18 @@ if [ "$LOCAL" = "$REMOTE" ]; then echo "    checksum OK ($LOCAL)"; else
 echo "==> verifying https"
 curl -sS -m 30 -o /dev/null -w "    HTTP %{http_code}  (%{size_download} bytes)\n" "$SITE_URL/downloads/$NAME" || true
 
+# ── Sparkle appcast (#405) ───────────────────────────────────────────────────
+# Upload the appcast next to the site root so SUFeedURL (…/appcast.xml) resolves.
+# package-mac.sh writes it to build/appcast/appcast.xml. Without this, the new
+# DMG is live but in-app auto-update never offers it.
+APPCAST="$ROOT/build/appcast/appcast.xml"
+if [ -f "$APPCAST" ]; then
+  echo "==> uploading appcast.xml → $NAS_HOST:$WEB_ROOT/appcast.xml"
+  "${SSH[@]}" "cat > '$WEB_ROOT/appcast.xml'" < "$APPCAST"
+  "${SSH[@]}" "chmod 644 '$WEB_ROOT/appcast.xml'"
+  curl -sS -m 30 -o /dev/null -w "    appcast HTTP %{http_code}  (%{size_download} bytes)\n" "$SITE_URL/appcast.xml" || true
+else
+  echo "==> WARNING: no appcast at $APPCAST — skipping (run package-mac.sh with Sparkle tools)"
+fi
+
 echo "==> done: $SITE_URL/downloads/$NAME"
