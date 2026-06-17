@@ -2,23 +2,12 @@
 
 All notable changes to Aether are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [0.8.0] — 2026-06-17 · "Eridanus"
 
 ### Changed
 
-- **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
-  longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
-  straight into a single deduplicated grid of everything, with a **persistent
-  Movies / Series toggle** in the top bar (two independent toggles — both on
-  shows all; turning the last one off snaps both back on). The toggle stays put
-  and just depresses, distinct from the genre / year / rating / audio filters,
-  which still appear as removable chips and vanish when cleared. Browse facets
-  (Genres / Years / Collections / Actors / Directors) sit just above the grid;
-  pull-to-refresh re-fetches the catalog.
-- **Library filter: "Downloaded" (works offline)** (iOS/iPadOS/tvOS/visionOS) — a
-  new Availability filter narrows the grid to downloaded titles, sourced from the
-  local download store so it works with no server connection (replaces the old
-  Downloaded rail).
 - **Library: Watched toggle** (iOS/iPadOS/tvOS/visionOS) — a new persistent
   **Watched** chip in the filter bar, placed after Movies / Series. Toggling it
   off hides fully-watched movies and fully-completed series (`unwatchedEpisodeCount
@@ -63,8 +52,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   tiles one level down. iOS/iPadOS keep the list. The tvOS "Library & Downloads"
   category — which compiled down to a single Cache row there — is renamed
   **Storage**, and the category subtitles no longer promise downloads, local-file
-  import, app-icon, or bug-report flows that don't exist on tvOS. Removed the dead
-  two-column dashboard layout left over from the #289 index refactor.
+  import, app-icon, or bug-report flows that don't exist on tvOS.
 - **tvOS: balanced the Library Filter / Sort bar** (#441) — the Sort control
   carried an internal `Spacer()` that made it greedily fill the whole bar width,
   dwarfing the Movies / Series / Filters / Reload controls beside it. Sort now
@@ -75,16 +63,47 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   `confirmationDialog` picker (Plex / Jellyfin / Emby / SMB). Keeps the index
   calm and makes the first-run flow obvious.
 
-- **macOS Library: same combined grid** — the Mac app's Library landing also
+- **macOS Library: same combined grid** (#439) — the Mac app's Library landing
   becomes one combined grid with the persistent Movies/Series toggle (was
-  separate Movies / TV Shows sections + "See All"). It has no Downloaded filter
-  (no downloads on macOS); instead the macOS-exclusive **"On Netflix"** sections
-  become a Filter ▸ Availability toggle — hidden by default, and when on the grid
-  shows Netflix-only discovery (owned titles excluded). Sort + Genre / Year /
-  Rating filters and search are retained.
+  separate Movies / TV Shows sections + "See All"). The macOS-exclusive **"On
+  Netflix"** sections become a Filter ▸ Availability toggle — hidden by default,
+  and when on the grid shows Netflix-only discovery (owned titles excluded). Sort
+  + Genre / Year / Rating filters and audio-language filter (#446) are retained.
 - **macOS: Search is now a field at the top of the sidebar** (#440) — typing
   surfaces unified results over the current pane (Infuse-style). The Search
   section + its broken in-content field are gone.
+
+### Fixed
+
+- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
+  narrow portrait width the Movies · Series · Filters · Sort row was compressing
+  the Filters and Sort capsules until their labels wrapped vertically, one letter
+  per line. The bar now wraps whole controls onto a second line instead, and each
+  control holds its natural single-line width.
+- **macOS: garbled titlebar + broken Search** (#432, #440) — switching to Search
+  left a stray "Settings" + gear lingering over the window's traffic-light
+  controls (alongside the brand wordmark), and the search field didn't appear.
+  Fixes: the AETHER wordmark is removed from the leading titlebar accessory (it
+  sat in the system-owned traffic-light zone — only the sidebar toggle remains
+  there); each pane has a stable `.id` so switching fully replaces the previous
+  title/toolbar instead of leaving it behind.
+
+## [0.7.9] — 2026-06-17
+
+### Changed
+
+- **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
+  longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
+  straight into a single deduplicated grid of everything, with a **persistent
+  Movies / Series toggle** in the top bar (two independent toggles — both on
+  shows all; turning the last one off snaps both back on). The toggle stays put
+  and just depresses, distinct from the genre / year / rating / audio filters,
+  which still appear as removable chips and vanish when cleared. Browse facets
+  (Genres / Years / Collections / Actors / Directors) sit just above the grid;
+  pull-to-refresh re-fetches the catalog.
+- **Library filter: "Downloaded" (works offline)** — a new Availability filter
+  narrows the grid to downloaded titles, sourced from the local download store
+  so it works with no server connection (replaces the old Downloaded rail).
 
 ### Fixed
 
@@ -97,19 +116,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   refresh. The watched write now drops the affected cache + snapshot entries, and
   an `AppSession.libraryRevision` signal (folded into the Library landing's and
   the "See all" grid's reload key) re-reads the fresh server state immediately.
-- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
-  narrow portrait width the Movies · Series · Filters · Sort row was compressing
-  the Filters and Sort capsules until their labels wrapped vertically, one letter
-  per line. The bar now wraps whole controls onto a second line instead, and each
-  control holds its natural single-line width.
 
-- **macOS: garbled titlebar + broken Search** (#432, #440) — switching to Search
-  left a stray "Settings" + gear lingering over the window's traffic-light
-  controls (alongside the brand wordmark), and the search field didn't appear.
-  Fixes: the AETHER wordmark is removed from the leading titlebar accessory (it
-  sat in the system-owned traffic-light zone — only the sidebar toggle remains
-  there); each pane has a stable `.id` so switching fully replaces the previous
-  title/toolbar instead of leaving it behind.
 - **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
   sidebar was collapsed there was no other way to switch Home / Discover /
   Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
@@ -117,7 +124,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   sidebar binds to (hoisted onto `MacSession`), so section switching is always
   reachable regardless of sidebar state. The active section shows a menu
   checkmark. A *macOS navigation* section was added to `DESIGN_PRINCIPLES.md` so
-  this is a rule, not an accident.
+  this is a rule, not an accident. (Titlebar-chrome polish during Search is
+  tracked separately — pending on-device repro.)
 
 - **Player dismiss collided with system controls** (#431, iOS/iPadOS) — the
   custom close ✕ sat on the same top-leading edge AVKit uses for PiP / AirPlay,
