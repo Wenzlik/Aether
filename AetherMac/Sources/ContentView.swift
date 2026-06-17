@@ -87,13 +87,31 @@ struct HomeView: View {
     // MARK: Sidebar
 
     private var sidebarList: some View {
-        // Rows + selection both derive from `MacSession.Section`, the same source
-        // the menu-bar View commands use — so a ⌘1…⌘5 pick highlights the right
-        // row and vice-versa. (Settings opens in this window's detail pane, not
-        // the separate native Settings window.)
-        List(selection: sectionSelection) {
-            ForEach(MacSession.Section.allCases) { section in
-                Label(section.title, systemImage: section.symbol).tag(section)
+        VStack(spacing: 0) {
+            // Infuse-style search field at the top of the sidebar; typing surfaces
+            // results over the current pane (see `detail`). Search is no longer a
+            // section — it lives here, always reachable.
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 4)
+
+            // Rows + selection both derive from `MacSession.Section`, the same
+            // source the menu-bar View commands use — so a ⌘1…⌘4 pick highlights
+            // the right row and vice-versa. (Settings opens in this window's
+            // detail pane, not the separate native Settings window.)
+            List(selection: sectionSelection) {
+                ForEach(MacSession.Section.allCases) { section in
+                    Label(section.title, systemImage: section.symbol).tag(section)
+                }
             }
         }
     }
@@ -114,54 +132,39 @@ struct HomeView: View {
     private var detail: some View {
         NavigationStack(path: $path) {
             Group {
-                switch session.section {
-                case .home:     DiscoverView(session: session, mode: .home)
-                case .discover: DiscoverView(session: session, mode: .discover)
-                case .library:  LibraryGridView(session: session)
-                case .search:   searchPane
-                case .settings: MacSettingsView(session: session, embedded: true)
+                if isSearching {
+                    // Typing in the sidebar field surfaces unified results over
+                    // whatever section is selected.
+                    MacSearchResults(session: session, query: searchText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cinematicBackground()
+                        .navigationTitle("Search")
+                } else {
+                    switch session.section {
+                    case .home:     DiscoverView(session: session, mode: .home)
+                    case .discover: DiscoverView(session: session, mode: .discover)
+                    case .library:  LibraryGridView(session: session)
+                    case .settings: MacSettingsView(session: session, embedded: true)
+                    }
                 }
             }
+            // Stable identity per pane (incl. the search overlay) so switching
+            // fully replaces the view — otherwise the previous pane's
+            // title/toolbar lingers in the titlebar (the stray "Settings" + gear
+            // over the traffic lights, #432).
+            .id(isSearching ? AnyHashable("search") : AnyHashable(session.section))
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
             .navigationDestination(for: LibraryRoute.self) { route in
-                LibraryBrowseView(session: session, route: route)
+                LibraryBrowseView(session: session, kind: route.kind)
             }
         }
     }
 
-    private var searchPane: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search your library", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.title3)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                }
-            }
-            .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-
-            if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                AetherEmptyState(
-                    glyph: "magnifyingglass",
-                    title: "Search your library",
-                    message: "Find movies and shows across your connected sources."
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                MacSearchResults(session: session, query: searchText)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .cinematicBackground()
-        .navigationTitle("Search")
+    /// Whether the sidebar search field has a query — drives the search overlay.
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     // MARK: Open
@@ -194,17 +197,15 @@ struct HomeView: View {
 ///
 private let aetherTitlebarAccessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
 
-/// Builds the leading logo + sidebar-toggle titlebar accessory (no button
-/// background). Sized to the wordmark's natural aspect — a fixed width squished
-/// "AETHER" horizontally, which read as a broken/blurry logo.
+/// Builds the leading sidebar-toggle titlebar accessory (no button background).
+/// The AETHER wordmark was removed from here (#432): a leading accessory sits in
+/// the zone the window's traffic-light controls own, so the brand mark collided /
+/// garbled with them. Only the sidebar toggle — a control that belongs by the
+/// traffic lights — remains.
 private func makeAetherTitlebarAccessory() -> NSTitlebarAccessoryViewController {
-    let content = HStack(spacing: 8) {
-        Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
-            .frame(height: 20)
-        SidebarToggleButton()
-    }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
+    let content = SidebarToggleButton()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     let host = NSHostingController(rootView: content)
     host.view.frame.size = host.view.fittingSize
     let accessory = NSTitlebarAccessoryViewController()

@@ -268,7 +268,7 @@ Notes: [`RELEASING-macos.md`](RELEASING-macos.md).
 
 ---
 
-## 🚧 Cross-device resume via the media server
+## ✅ Cross-device resume via the media server
 
 Make "pick up where you left off" work across every device and client —
 **through the media server itself**, not just iCloud. This is the only
@@ -276,14 +276,16 @@ cross-device path macOS has (iCloud KVS is App-Store-only; the Developer-ID Mac
 build can't use it), and it also reaches non-Apple clients (Plex web, the TV's
 native app). Tracked under [#352](https://github.com/Wenzlik/Aether/issues/352).
 
-- 🚧 **Write** — report the playhead to the server while playing (Plex timeline /
+- ✅ **Write** — report the playhead to the server while playing (Plex timeline /
   Jellyfin Sessions). ([#353](https://github.com/Wenzlik/Aether/issues/353))
-- 🚧 **Read** — seed Continue Watching from the server's own resume list (Plex On
+- ✅ **Read** — seed Continue Watching from the server's own resume list (Plex On
   Deck / Jellyfin Resume) on load.
   ([#354](https://github.com/Wenzlik/Aether/issues/354))
 
 The local `ResumeStore` (disk + iCloud KVS on the Apple platforms) stays as the
 offline cache and the only sync for sources with no server (Local / SMB / DLNA).
+
+**Shipped 0.7.6.**
 
 ---
 
@@ -324,8 +326,9 @@ New connectors that slot into the Unified Library — each is just another
   Search, with **Play on Netflix** linking out (search URL v1). Powered by TMDb
   Watch Providers (JustWatch); off by default, with a Region setting. tvOS is
   badge + discovery only. *(Shipped 0.7.5; [#360](https://github.com/Wenzlik/Aether/issues/360).)*
-- ⬜ **Emby connector** — auth + libraries + items + playback, alongside Plex /
-  Jellyfin. ([#171](https://github.com/Wenzlik/Aether/issues/171))
+- ✅ **Emby** (#425, all platforms) — Quick Connect auth (same handshake as
+  Jellyfin), browse, search, and play alongside Plex and Jellyfin. macOS wired
+  in `MacSession` + Settings. *(Shipped 0.7.8; [#171](https://github.com/Wenzlik/Aether/issues/171).)*
 - ✅ **SMB** — connect to a NAS, browse + auth natively (pure-Swift `SMBClient`),
   play through VLCKit, with a multi-folder picker, TMDb poster matching, editable
   titles, and downloads. *(Shipped 0.7.0; [#214](https://github.com/Wenzlik/Aether/issues/214).)*

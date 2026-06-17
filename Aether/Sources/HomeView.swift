@@ -259,13 +259,8 @@ struct HomeView: View {
 
     #if os(iOS)
     /// iPad: the brand icon (leading) + search (trailing) ride the top tab-bar
-    /// row. The brand mark is the square app icon (the toolbar clamps height, so
-    /// the wide wordmark stayed tiny); tapping it pops Home to root.
     @ToolbarContentBuilder
     private var homeTopBarItems: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            AetherBrandIcon { navigationPath = NavigationPath() }
-        }
         // While searching, the field + Cancel own the slim row below; the
         // trailing glyph would be redundant, so it hides until search dismisses.
         if !isSearchActive {

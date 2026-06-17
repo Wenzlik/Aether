@@ -26,7 +26,7 @@ Only after this should you open Swift files.
 
 ### Current state in one paragraph
 
-The product is well past the early connector milestones and is currently on the `0.7.6` line. Aether now ships a unified multi-source media experience across iOS, iPadOS, tvOS, visionOS, and macOS, with Plex multi-server support, Jellyfin, Local Library, SMB, downloads, cross-device resume, and visionOS Cinema Mode. The main day-to-day focus is no longer "can the feature exist?" but "is it stable, premium, and release-ready across every platform?".
+The product is well past the early connector milestones and is shipping `0.8.0` ("Eridanus"). Aether now ships a unified multi-source media experience across iOS, iPadOS, tvOS, visionOS, and macOS, with Plex multi-server support, Jellyfin, Emby, Local Library, SMB, downloads, cross-device resume, and visionOS Cinema Mode. The main day-to-day focus is no longer "can the feature exist?" but "is it stable, premium, and release-ready across every platform?".
 
 ---
 

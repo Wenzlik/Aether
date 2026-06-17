@@ -69,6 +69,11 @@ public struct AetherCard: View {
                     .font(AetherDesign.Typography.cardTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(titleLineLimit)
+                    .minimumScaleFactor(0.82)
+                    // Reserve the height of the maximum line count so all poster
+                    // cards in a LazyVGrid row have the same total height and
+                    // artwork tops align across columns.
+                    .frame(minHeight: titleLineLimit > 1 ? 40 : 0, alignment: .topLeading)
 
                 if let subtitle {
                     Text(subtitle)
@@ -314,7 +319,7 @@ extension AetherCard {
         progress: Double? = nil,
         isWatched: Bool = false,
         rating: Double? = nil,
-        titleLineLimit: Int = 1,
+        titleLineLimit: Int = 2,
         netflixLogoURL: URL? = nil
     ) -> AetherCard {
         AetherCard(title: title, posterURL: posterURL, aspectRatio: 2.0 / 3.0, progress: progress, isWatched: isWatched, rating: rating, titleLineLimit: titleLineLimit, netflixLogoURL: netflixLogoURL)

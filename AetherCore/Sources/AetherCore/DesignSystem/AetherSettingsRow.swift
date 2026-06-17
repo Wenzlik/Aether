@@ -168,14 +168,22 @@ public struct AetherSettingsSection<Content: View>: View {
         self.content = content
     }
 
+    /// Headerless variant — renders the card without a section label above it.
+    public init(@ViewBuilder content: @escaping () -> Content) {
+        self.title = ""
+        self.content = content
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            if !title.isEmpty {
             Text(LocalizedStringKey(title))
                 .textCase(.uppercase)   // localize the key, then uppercase (#312)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)
                 .padding(.horizontal, AetherDesign.Spacing.m)
+            }
 
             // Hairline separators between rows, inset from the leading edge — so
             // a grouped card reads like an iOS inset-grouped list instead of one

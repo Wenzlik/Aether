@@ -218,7 +218,7 @@ final class SettingsViewModel {
     /// Codename for the current release, shown in the What's New modal. Theme:
     /// constellations, alphabetical per release (see AGENTS.md → Release
     /// process). Update this when `MARKETING_VERSION` bumps to a new version.
-    let releaseCodename = "Draco"
+    let releaseCodename = "Eridanus"
 
     /// Headline highlights for the **current** release, surfaced in What's New.
     /// Previous releases appear below under "Release History" (`releaseHistory`);
@@ -226,11 +226,13 @@ final class SettingsViewModel {
     /// bumps.
     let whatsNewBullets: [String] = [
         "The Library is now one combined grid — open straight into everything with a persistent Movies / Series toggle, browse facets above the grid, and a new \"Downloaded\" filter that works offline.",
-        "Downloaded titles now play reliably offline — Aether uses the local file and the right player engine instead of falling back to the server.",
+        "A new Watched chip hides fully-completed movies and series from the Library grid — useful for revisiting what's still in progress.",
+        "tvOS: Accounts & Sources are now large focusable tiles with brand logos; Settings opens to a category tile grid instead of a long list.",
+        "Discover shows a wide, full-bleed overlay hero on iPad and visionOS — title and metadata sit over the art on a gradient scrim.",
         "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
+        "Downloaded titles now play reliably offline — Aether picks the local file and the right engine instead of falling back to the server.",
         "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
-        "Better battery — background network checks and the Discover carousel now pause while Aether isn't in the foreground.",
-        "macOS — a new View menu with ⌘1…⌘5 jumps between sections even when the sidebar is collapsed."
+        "macOS: Search is now a field at the top of the sidebar; a new View menu with ⌘1…⌘5 reaches every section even when the sidebar is collapsed."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.

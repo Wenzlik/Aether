@@ -20,6 +20,10 @@ struct SourceAccountSheet: View {
     let onSignOut: () -> Void
     let onClose: () -> Void
 
+    /// Sign Out is destructive and easy to hit by accident — gate it behind a
+    /// confirmation (#441), matching the tvOS source-detail screen.
+    @State private var confirmSignOut = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
@@ -57,9 +61,8 @@ struct SourceAccountSheet: View {
                 AetherSettingsSection("Account") {
                     AetherSettingsRow(
                         label: isSigningOut ? "Signing out…" : "Sign Out",
-                        actionRole: .destructive,
-                        action: onSignOut
-                    )
+                        actionRole: .destructive
+                    ) { confirmSignOut = true }
                     .disabled(isSigningOut)
                 }
             }
@@ -67,6 +70,16 @@ struct SourceAccountSheet: View {
             .frame(maxWidth: AetherSheetLayout.maxContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
             .tvOSScrollFocusable()
+        }
+        .confirmationDialog(
+            "Sign out of \(title)?",
+            isPresented: $confirmSignOut,
+            titleVisibility: .visible
+        ) {
+            Button("Sign Out", role: .destructive, action: onSignOut)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can sign back in any time. Downloads and settings stay on this device.")
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {

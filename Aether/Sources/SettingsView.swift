@@ -111,6 +111,8 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
     @State var accountSheet: AccountSheet?
+    /// Triggers the "Add Source" confirmation dialog (non-tvOS).
+    @State var isAddingSource = false
 
     /// Hidden developer mode, unlocked by tapping the wordmark in About.
     @AppStorage("developer.unlocked") var developerUnlocked = false
@@ -120,13 +122,7 @@ struct SettingsView: View {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
-                // Drive content width off the *measured* viewport so it can never
-                // be proposed wider than the screen. A fixed `maxWidth: 1100`
-                // proposed 1100pt to the width-greedy cards even when the viewport
-                // was narrower (iPad portrait / split view), so the two columns
-                // laid out past the edges and centered off-screen — both columns
-                // clipped (#287, same root cause as the old #248 pannability).
-                // `min(viewport − margins, 1100)`, centered, fits + keeps margins.
+                #if os(tvOS)
                 GeometryReader { geo in
                     ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
@@ -143,6 +139,25 @@ struct SettingsView: View {
                         imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
                     }
                 }
+                #else
+                // iOS 26 sidebar layout reports wrong dimensions to GeometryReader —
+                // use padding + maxWidth so content sizes off the real container.
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                        header
+                        settingsIndex
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                    .frame(maxWidth: isWide ? 1100 : .infinity)
+                    .frame(maxWidth: .infinity)
+                }
+                .task {
+                    await refreshCapacity()
+                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                }
+                #endif
             }
             // The root Settings surface carries its own wordmark, so suppress the
             // empty navigation bar; pushed screens (Downloads) show their own.
@@ -152,6 +167,12 @@ struct SettingsView: View {
             .navigationDestination(for: SettingsCategory.self) { category in
                 categoryScreen(category)
             }
+            #if os(tvOS)
+            // Per-source detail pushed from a Connected Sources tile (#441).
+            .navigationDestination(for: SourceDetailRoute.self) { route in
+                sourceDetailScreen(route)
+            }
+            #endif
             #if !os(tvOS)
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
@@ -226,70 +247,117 @@ struct SettingsView: View {
     private enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case accountsSources, playback, libraryDownloads, appearance, supportAbout
         var id: String { rawValue }
+        // Titles / subtitles / icons are platform-aware: tvOS compiles out
+        // downloads, storage, local-file import, app-icon, and the mail-backed
+        // Support flows, so the shared copy ("…and local files", "Downloads,
+        // storage, and cache") would promise things that don't exist there (#441).
         var title: String {
             switch self {
             case .accountsSources: return "Accounts & Sources"
             case .playback: return "Playback"
-            case .libraryDownloads: return "Library & Downloads"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "Storage"
+                #else
+                return "Library & Downloads"
+                #endif
             case .appearance: return "Appearance"
             case .supportAbout: return "Support & About"
             }
         }
         var subtitle: String {
             switch self {
-            case .accountsSources: return "Plex, Jellyfin, SMB, and local files"
+            case .accountsSources:
+                #if os(tvOS)
+                return "Plex, Jellyfin, and SMB"
+                #else
+                return "Plex, Jellyfin, SMB, and local files"
+                #endif
             case .playback: return "Quality, audio & subtitles, skip"
-            case .libraryDownloads: return "Downloads, storage, and cache"
-            case .appearance: return "Theme, app icon, and watched titles"
-            case .supportAbout: return "Report a bug, diagnostics, about"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "Image cache"
+                #else
+                return "Downloads, storage, and cache"
+                #endif
+            case .appearance:
+                #if os(tvOS)
+                return "Theme and watched titles"
+                #else
+                return "Theme, app icon, and watched titles"
+                #endif
+            case .supportAbout:
+                #if os(tvOS)
+                return "Diagnostics and about"
+                #else
+                return "Report a bug, diagnostics, about"
+                #endif
             }
         }
         var systemImage: String {
             switch self {
             case .accountsSources: return "person.2.circle.fill"
             case .playback: return "play.circle.fill"
-            case .libraryDownloads: return "arrow.down.circle.fill"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "internaldrive.fill"
+                #else
+                return "arrow.down.circle.fill"
+                #endif
             case .appearance: return "paintbrush.fill"
             case .supportAbout: return "questionmark.circle.fill"
             }
         }
     }
 
+    @ViewBuilder
     private var settingsIndex: some View {
-        VStack(spacing: AetherDesign.Spacing.m) {
+        #if os(tvOS)
+        // tvOS landing is the first thing you see — a full-width row list wastes
+        // the 10-foot canvas exactly like the old Accounts list did, so the index
+        // is a tile grid (consistent with the source tiles one level down, #441).
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+            ],
+            spacing: AetherDesign.Spacing.l
+        ) {
             ForEach(SettingsCategory.allCases) { category in
                 NavigationLink(value: category) {
-                    HStack(spacing: AetherDesign.Spacing.m) {
-                        Image(systemName: category.systemImage)
-                            .font(.title3)
-                            .foregroundStyle(AetherDesign.Palette.accent)
-                            .frame(width: 34)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(LocalizedStringKey(category.title))
-                                .font(AetherDesign.Typography.cardTitle)
-                                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            Text(LocalizedStringKey(category.subtitle))
-                                .font(AetherDesign.Typography.caption)
-                                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    }
-                    .padding(AetherDesign.Spacing.m)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                            .fill(AetherDesign.Palette.surface)
+                    SettingsCategoryTile(
+                        systemImage: category.systemImage,
+                        title: LocalizedStringKey(category.title),
+                        subtitle: LocalizedStringKey(category.subtitle)
                     )
-                    .premiumFocus()
                 }
                 .buttonStyle(.plain)
             }
         }
+        #else
+        if isWide {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: AetherDesign.Spacing.m),
+                    GridItem(.flexible(), spacing: AetherDesign.Spacing.m),
+                ],
+                spacing: AetherDesign.Spacing.m
+            ) {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) { categoryIndexCard(category) }
+                        .buttonStyle(.plain)
+                }
+            }
+        } else {
+            VStack(spacing: AetherDesign.Spacing.m) {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) { categoryIndexCard(category) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+        #endif
     }
 
     /// One category's own screen — a single-column scroll of the relevant
@@ -329,9 +397,10 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         categorySections(category)
                     }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
-                    .frame(width: settingsContentWidth(geo.size.width))
+                    .frame(maxWidth: isWide ? 1100 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
                 #endif
@@ -387,6 +456,39 @@ struct SettingsView: View {
 
     // MARK: - Layout
 
+    /// Shared card for both the single-column (iPhone) and two-column grid (iPad/visionOS) index.
+    #if !os(tvOS)
+    private func categoryIndexCard(_ category: SettingsCategory) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            Image(systemName: category.systemImage)
+                .font(.title3)
+                .foregroundStyle(AetherDesign.Palette.accent)
+                .frame(width: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(LocalizedStringKey(category.title))
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text(LocalizedStringKey(category.subtitle))
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+        }
+        .padding(AetherDesign.Spacing.m)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Palette.surface)
+        )
+        .premiumFocus()
+    }
+    #endif
+
     /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
     /// the two-column dashboard. iPhone (compact) stays single-column.
     private var isWide: Bool {
@@ -407,70 +509,6 @@ struct SettingsView: View {
         guard viewport > 0 else { return 320 }
         let available = viewport - AetherDesign.Spacing.l * 2
         return isWide ? min(available, 1100) : available
-    }
-
-    /// iPad / tvOS / visionOS: controls on the left, an at-a-glance status
-    /// dashboard (Connected Sources · Storage Summary) on the right — using the
-    /// space instead of centring a phone-width list.
-    private var wideDashboard: some View {
-        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                leftColumnSections
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-            // tvOS: mark each column a focus section so a Right/Left press jumps
-            // between them.
-            .aetherFocusSection()
-
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                rightColumnSections
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-            .aetherFocusSection()
-        }
-    }
-
-    /// iPhone: a single column — both groups stacked.
-    private var compactColumn: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            leftColumnSections
-            rightColumnSections
-        }
-    }
-
-    /// Left column (wide) — the "what to play / from where" configuration.
-    @ViewBuilder
-    private var leftColumnSections: some View {
-        accountSection
-        #if !os(tvOS)
-        localLibrarySection
-        downloadsSection
-        #endif
-        playbackSection
-        #if os(visionOS)
-        cinemaSection
-        #endif
-    }
-
-    /// Right column (wide) — personalization, support/info, and the status +
-    /// cache cards. (Connection state lives on the Account rows; the separate
-    /// "Connected Sources" card and the Sources section were both removed as
-    /// duplicates of Account — #224.)
-    @ViewBuilder
-    private var rightColumnSections: some View {
-        appearanceSection
-        watchedDisplaySection
-        #if !os(tvOS)
-        supportSection
-        #endif
-        aboutSection
-        if developerUnlocked {
-            developerSection
-        }
-        #if !os(tvOS)
-        storageSummaryCard
-        #endif
-        imageCacheCard
     }
 
     #if os(visionOS)
@@ -695,18 +733,5 @@ struct SettingsView: View {
         isSigningOutEmby = true
         await viewModel.signOutOfEmby()
         isSigningOutEmby = false
-    }
-}
-
-private extension View {
-    /// Apply `.focusSection()` on tvOS so the focus engine can move between the
-    /// two dashboard columns; no-op elsewhere (the API is tvOS-only).
-    @ViewBuilder
-    func aetherFocusSection() -> some View {
-        #if os(tvOS)
-        self.focusSection()
-        #else
-        self
-        #endif
     }
 }

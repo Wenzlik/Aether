@@ -4,6 +4,90 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-17 · "Eridanus"
+
+### Changed
+
+- **Library: Watched toggle** (iOS/iPadOS/tvOS/visionOS) — a new persistent
+  **Watched** chip in the filter bar, placed after Movies / Series. Toggling it
+  off hides fully-watched movies and fully-completed series (`unwatchedEpisodeCount
+  == 0`). Client-side, no reload; works in all-kinds and single-kind grids.
+- **Library: browse pills removed** (Genres / Years / Collections / Actors /
+  Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year are now multi-select
+  facets in the Filter sheet, and the remaining pill rail no longer earned its
+  place at the top of the landing. The grid opens straight to the combined poster
+  grid under the Filter / Sort bar.
+- **Library: Genre filter is now multi-select** — picking several genres at once
+  now works (a title matches any selected genre), matching the Year filter.
+- **Poster card titles** — `lineLimit` 1 → 2 for poster cards;
+  `minimumScaleFactor(0.82)` so very long titles shrink rather than hard-truncate;
+  reserved 40 pt minimum title height so all cards in a `LazyVGrid` row have
+  identical total height → artwork tops align.
+
+- **Discover: overlay-style wide hero** (iPad / visionOS) — full-bleed backdrop
+  fills the frame; title + metadata overlaid on a gradient scrim (Netflix / Apple
+  TV+ pattern). Aspect ratio 2.4 → 2.7, title allowance removed → hero ~285 pt
+  instead of ~380 pt. Rails ("New Releases", "Top Rated", "Picked for You") now
+  visible without scrolling on iPad.
+
+- **tvOS: Accounts & Sources redesigned as source tiles** (#441) — the flat list
+  (each source spread across account / set-active / sign-out rows, with Sign Out
+  on the index and the screen's centre empty) is replaced by large focusable
+  **tiles**. Connected sources show a logo, name, server, and an `Active` badge in
+  a two-column grid; not-connected ones are lighter **Add Source** tiles that
+  start sign-in directly. Per-source management — set active, manage servers, SMB
+  folders/re-match, and the destructive **Sign Out** (now behind a confirmation) —
+  moves into a pushed detail screen. Tiles size to their content (no empty boxes)
+  and show each source's brand mark — wired via `SourceGlyph`, which prefers the
+  `Source{Plex,Jellyfin,Emby}` logo asset and falls back to an SF Symbol when one
+  isn't present. So the index stays calm and the focus engine has real targets
+  to lift.
+- **iOS/iPadOS: Account split into Connected Sources + Add Source** (#441) — the
+  signed-in services and the not-yet-wired ones are now separate sections, so the
+  unconnected ones no longer read as broken alongside live ones. Sign Out in a
+  source's detail sheet is now gated by a confirmation.
+- **tvOS: Settings landing is now a category tile grid** (#441) — the index (the
+  first screen you see) had the same full-width-row 10-foot waste as the old
+  Accounts list, so its five categories are now tiles, consistent with the source
+  tiles one level down. iOS/iPadOS keep the list. The tvOS "Library & Downloads"
+  category — which compiled down to a single Cache row there — is renamed
+  **Storage**, and the category subtitles no longer promise downloads, local-file
+  import, app-icon, or bug-report flows that don't exist on tvOS.
+- **tvOS: balanced the Library Filter / Sort bar** (#441) — the Sort control
+  carried an internal `Spacer()` that made it greedily fill the whole bar width,
+  dwarfing the Movies / Series / Filters / Reload controls beside it. Sort now
+  sizes to its content like the rest, so the row reads as one even cluster.
+
+- **Settings: Add Source simplified to a single CTA** — multiple "Not connected"
+  source rows replaced by a single **Add Source** button that opens a native
+  `confirmationDialog` picker (Plex / Jellyfin / Emby / SMB). Keeps the index
+  calm and makes the first-run flow obvious.
+
+- **macOS Library: same combined grid** (#439) — the Mac app's Library landing
+  becomes one combined grid with the persistent Movies/Series toggle (was
+  separate Movies / TV Shows sections + "See All"). The macOS-exclusive **"On
+  Netflix"** sections become a Filter ▸ Availability toggle — hidden by default,
+  and when on the grid shows Netflix-only discovery (owned titles excluded). Sort
+  + Genre / Year / Rating filters and audio-language filter (#446) are retained.
+- **macOS: Search is now a field at the top of the sidebar** (#440) — typing
+  surfaces unified results over the current pane (Infuse-style). The Search
+  section + its broken in-content field are gone.
+
+### Fixed
+
+- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
+  narrow portrait width the Movies · Series · Filters · Sort row was compressing
+  the Filters and Sort capsules until their labels wrapped vertically, one letter
+  per line. The bar now wraps whole controls onto a second line instead, and each
+  control holds its natural single-line width.
+- **macOS: garbled titlebar + broken Search** (#432, #440) — switching to Search
+  left a stray "Settings" + gear lingering over the window's traffic-light
+  controls (alongside the brand wordmark), and the search field didn't appear.
+  Fixes: the AETHER wordmark is removed from the leading titlebar accessory (it
+  sat in the system-owned traffic-light zone — only the sidebar toggle remains
+  there); each pane has a stable `.id` so switching fully replaces the previous
+  title/toolbar instead of leaving it behind.
+
 ## [0.7.9] — 2026-06-17
 
 ### Changed

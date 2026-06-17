@@ -17,12 +17,29 @@ extension SettingsView {
     var accountSection: some View {
         Group {
             #if os(tvOS)
-            accountSectionInline
+            accountSectionTiles
             #else
             accountSectionCompact
             #endif
         }
         .task { await loadSMBMatchSummary() }
+        #if !os(tvOS)
+        .confirmationDialog("Add Source", isPresented: $isAddingSource) {
+            if !viewModel.isPlexSignedIn {
+                Button("Plex") { viewModel.connect() }
+            }
+            if !viewModel.isJellyfinSignedIn {
+                Button("Jellyfin") { viewModel.connectJellyfin() }
+            }
+            if !viewModel.isEmbySignedIn {
+                Button("Emby") { viewModel.connectEmby() }
+            }
+            if !viewModel.isSMBConnected {
+                Button("SMB") { viewModel.connectSMB() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        #endif
     }
 
     private func loadSMBMatchSummary() async {
@@ -240,111 +257,59 @@ extension SettingsView {
     }
     #endif
 
+    /// iOS / iPadOS Account: connected sources as disclosure rows + a single
+    /// "Add Source" entry that fans out to a confirmation dialog. Unconnected
+    /// services no longer appear as individual "Not connected" rows (#441 follow-up).
+    @ViewBuilder
     private var accountSectionCompact: some View {
-        AetherSettingsSection("Account") {
-            if viewModel.isPlexSignedIn {
-                AetherSettingsRow(
-                    label: "Plex",
-                    value: accountRowValue(.plex, serverName: viewModel.connectedServerName)
-                ) { accountSheet = .plex }
-            } else {
-                AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
+        if hasConnectedSource {
+            AetherSettingsSection("Connected Sources") {
+                if viewModel.isPlexSignedIn {
+                    AetherSettingsRow(
+                        label: "Plex",
+                        value: accountRowValue(.plex, serverName: viewModel.connectedServerName)
+                    ) { accountSheet = .plex }
+                }
+                if viewModel.isJellyfinSignedIn {
+                    AetherSettingsRow(
+                        label: "Jellyfin",
+                        value: accountRowValue(.jellyfin, serverName: viewModel.jellyfinServerName)
+                    ) { accountSheet = .jellyfin }
+                }
+                if viewModel.isEmbySignedIn {
+                    AetherSettingsRow(
+                        label: "Emby",
+                        value: accountRowValue(.emby, serverName: viewModel.embyServerName)
+                    ) { accountSheet = .emby }
+                }
+                if viewModel.isSMBConnected {
+                    smbDisclosure
+                }
             }
-
-            if viewModel.isJellyfinSignedIn {
+        }
+        if hasAddableSource {
+            AetherSettingsSection {
                 AetherSettingsRow(
-                    label: "Jellyfin",
-                    value: accountRowValue(.jellyfin, serverName: viewModel.jellyfinServerName)
-                ) { accountSheet = .jellyfin }
-            } else {
-                AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
-            }
-
-            if viewModel.isEmbySignedIn {
-                AetherSettingsRow(
-                    label: "Emby",
-                    value: accountRowValue(.emby, serverName: viewModel.embyServerName)
-                ) { accountSheet = .emby }
-            } else {
-                AetherSettingsRow(label: "Emby", status: .notConnected) { viewModel.connectEmby() }
-            }
-
-            if viewModel.isSMBConnected {
-                smbDisclosure
-            } else {
-                AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
+                    label: "Add Source",
+                    systemImage: "plus.circle.fill",
+                    actionRole: .primary
+                ) { isAddingSource = true }
             }
         }
     }
 
-    #if os(tvOS)
-    /// tvOS Account: server shown as a plain row, with Sign Out as its own
-    /// directly-focusable destructive row (no sheet to get trapped behind).
-    private var accountSectionInline: some View {
-        AetherSettingsSection("Account") {
-            if viewModel.isPlexSignedIn {
-                AetherSettingsRow(label: "Plex", value: accountRowValue(.plex, serverName: viewModel.connectedServerName))
-                // Multi-server manager (#325) — Apple TV can now see every
-                // connected Plex server and choose the primary one to stream from.
-                AetherSettingsRow(label: "Plex Servers", value: viewModel.plexServerSummary) {
-                    isPickingPlexServer = true
-                }
-                if viewModel.canSwitchSources && !viewModel.isActiveSource(.plex) {
-                    AetherSettingsRow(label: "Set Plex as Active Source", actionRole: .primary) { viewModel.setActive(.plex) }
-                }
-                AetherSettingsRow(
-                    label: isSigningOut ? "Signing out…" : "Sign Out of Plex",
-                    actionRole: .destructive
-                ) { Task { await performSignOut() } }
-                .disabled(isSigningOut)
-            } else {
-                AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
-            }
-
-            if viewModel.isJellyfinSignedIn {
-                AetherSettingsRow(label: "Jellyfin", value: accountRowValue(.jellyfin, serverName: viewModel.jellyfinServerName))
-                if viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin) {
-                    AetherSettingsRow(label: "Set Jellyfin as Active Source", actionRole: .primary) { viewModel.setActive(.jellyfin) }
-                }
-                AetherSettingsRow(
-                    label: isSigningOutJellyfin ? "Signing out…" : "Sign Out of Jellyfin",
-                    actionRole: .destructive
-                ) { Task { await performSignOutJellyfin() } }
-                .disabled(isSigningOutJellyfin)
-            } else {
-                AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
-            }
-
-            if viewModel.isEmbySignedIn {
-                AetherSettingsRow(label: "Emby", value: accountRowValue(.emby, serverName: viewModel.embyServerName))
-                if viewModel.canSwitchSources && !viewModel.isActiveSource(.emby) {
-                    AetherSettingsRow(label: "Set Emby as Active Source", actionRole: .primary) { viewModel.setActive(.emby) }
-                }
-                AetherSettingsRow(
-                    label: isSigningOutEmby ? "Signing out…" : "Sign Out of Emby",
-                    actionRole: .destructive
-                ) { Task { await performSignOutEmby() } }
-                .disabled(isSigningOutEmby)
-            } else {
-                AetherSettingsRow(label: "Emby", status: .notConnected) { viewModel.connectEmby() }
-            }
-
-            if viewModel.isSMBConnected {
-                smbDisclosure
-            } else {
-                AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
-            }
-        }
-        // Reachable on tvOS (no account sheet there) so Apple TV can manage
-        // servers + primary inline (#325).
-        .sheet(isPresented: $isPickingPlexServer) { plexServerPicker }
+    private var hasConnectedSource: Bool {
+        viewModel.isPlexSignedIn || viewModel.isJellyfinSignedIn || viewModel.isEmbySignedIn || viewModel.isSMBConnected
     }
-    #endif
+
+    private var hasAddableSource: Bool {
+        !viewModel.isPlexSignedIn || !viewModel.isJellyfinSignedIn || !viewModel.isEmbySignedIn || !viewModel.isSMBConnected
+    }
 
     /// The Plex multi-server manager (#325) — enable/disable servers and pick the
     /// primary streaming server. Shared by the iOS account sheet and the tvOS
     /// inline Account row, so Apple TV can see + choose servers too.
-    private var plexServerPicker: some View {
+    var plexServerPicker: some View {
         PlexServerPickerSheet(
             enabledIDs: viewModel.enabledPlexServerIDs,
             load: { await viewModel.availablePlexServers() },
