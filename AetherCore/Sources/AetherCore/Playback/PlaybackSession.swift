@@ -573,8 +573,10 @@ public actor PlaybackSession {
     /// fails the probe.
     private func offlinePlayableURL(for item: MediaItem) async -> URL? {
         guard let store = downloadStore else { return nil }
-        guard case let .completed(localURL, _) = await store.status(for: item.id) else { return nil }
-        guard FileManager.default.fileExists(atPath: localURL.path) else { return nil }
+        // `existingLocalURL()` re-bases a stale absolute path (changed data-
+        // container UUID) onto the current downloads dir, so a present-but-moved
+        // file still plays locally instead of falling through to the server.
+        guard let localURL = await store.status(for: item.id).existingLocalURL() else { return nil }
         let asset = AVURLAsset(url: localURL)
         let isPlayable: Bool
         do {

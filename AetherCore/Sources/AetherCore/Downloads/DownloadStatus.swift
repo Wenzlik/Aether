@@ -61,4 +61,31 @@ public enum DownloadStatus: Sendable, Equatable, Codable {
         case .notDownloaded, .queued: return false
         }
     }
+
+    /// The on-disk URL for a `.completed` download, **verified to exist** — so
+    /// playback can use the local file instead of falling back to the server
+    /// (which fails offline). `nil` for any other state, or when the file can't
+    /// be found at either the stored or the re-based location.
+    ///
+    /// We persist an **absolute** `file://` path at download time, but the iOS
+    /// data-container UUID can change under us (restore-from-backup, some
+    /// migrations), invalidating that path even though the bytes are still on
+    /// disk at `{downloadsDirectory}/{jobID}.{ext}`. So if the stored path no
+    /// longer resolves, we re-base its filename onto the *current* downloads
+    /// directory and check there before giving up. Without this, a downloaded
+    /// title would silently fall through to a Plex/Jellyfin stream and fail
+    /// when offline.
+    ///
+    /// `downloadsDirectory` defaults to the production location; tests that use
+    /// a custom directory keep working because the stored absolute path still
+    /// resolves there (the re-base is a fallback only).
+    public func existingLocalURL(
+        downloadsDirectory: URL = DownloadManager.defaultDownloadsDirectory()
+    ) -> URL? {
+        guard case let .completed(localURL, _) = self else { return nil }
+        let fm = FileManager.default
+        if fm.fileExists(atPath: localURL.path) { return localURL }
+        let rebased = downloadsDirectory.appendingPathComponent(localURL.lastPathComponent)
+        return fm.fileExists(atPath: rebased.path) ? rebased : nil
+    }
 }

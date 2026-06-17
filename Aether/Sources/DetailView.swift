@@ -511,11 +511,11 @@ struct DetailView: View {
         // hand the local mkv to AVPlayer (which can't demux it), and the
         // AVPlayer path would then fall through to the server address and fail
         // offline ("Unable to prepare playback"). The local file's own
-        // extension routes mkv → VLCKit, mp4/m4v → AVPlayer correctly. The
-        // `fileExists` guard also covers a stale record (file deleted / old
-        // sandbox path): fall through to streaming instead of mis-playing.
-        if case let .completed(localURL, _) = downloadStatus,
-           FileManager.default.fileExists(atPath: localURL.path) {
+        // extension routes mkv → VLCKit, mp4/m4v → AVPlayer correctly.
+        // `existingLocalURL()` verifies the file is on disk (re-basing a stale
+        // absolute path onto the current downloads dir): if it's genuinely gone,
+        // fall through to streaming instead of mis-playing.
+        if let localURL = downloadStatus.existingLocalURL() {
             if PlaybackEngine.engine(for: localURL) == .vlc {
                 // Local file — no SMB credentials / caching options needed.
                 vlcPlayback = VLCPlayback(url: localURL)
