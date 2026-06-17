@@ -418,6 +418,12 @@ final class AppSession {
 
     // MARK: - UI bridging
 
+    /// Bumped whenever a watched/library mutation changes what the catalog should
+    /// show (e.g. marking a title watched/unwatched). Library / grid surfaces key
+    /// their reload `.task(id:)` on it, so they re-read the freshly-invalidated
+    /// unified cache instead of repainting a stale watched badge.
+    private(set) var libraryRevision = 0
+
     var isSignInPresented: Bool = false
     /// Which onboarding the sign-in sheet should show. Decoupled from
     /// `SourceKind` so SMB/DLNA can be sign-in targets without becoming
@@ -657,6 +663,10 @@ final class AppSession {
     /// from — so a title on both Plex and Jellyfin stays in sync.
     func markWatchedEverywhere(_ item: MediaItem, watched: Bool = true) async {
         await makeUnifiedLibrary().markWatchedEverywhere(item, watched: watched)
+        // `markWatchedEverywhere` invalidated the shared unified caches; nudge the
+        // library/grid surfaces to re-read so the poster badge updates now instead
+        // of after the next relaunch / pull-to-refresh.
+        libraryRevision &+= 1
     }
 
     /// Remove a title from Continue Watching on **every connected source** that
