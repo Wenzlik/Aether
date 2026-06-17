@@ -5,8 +5,8 @@ AI-facing snapshot of the current working focus. Update this whenever staging pr
 ## Current Release Train
 
 - Branch baseline: `staging`
-- Marketing version: `0.7.9`
-- Recent shipped scope: offline-download playback fix (#428), player dismiss swipe-down (#431), macOS View menu ⌘1…⌘5 (#432), Library watched-badge cache invalidation (#435), background battery (idle network monitor + carousel ticker), SettingsView split (#415)
+- Marketing version: `0.8.0` *(shipping as "Eridanus" → main 2026-06-17)*
+- Recent shipped scope (0.8.0): Library combined grid + Watched filter + browse pills removed, tvOS source/Settings tile redesign (#441–443), Discover overlay hero, player dismiss swipe-down (#431), offline download playback fix (#428), macOS Search-in-sidebar (#440) + View menu ⌘1…⌘5 (#432), background battery fixes, SettingsView split (#415)
 
 ## Sprint Goal
 

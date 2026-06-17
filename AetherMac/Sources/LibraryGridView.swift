@@ -31,9 +31,10 @@ func posterLink(_ item: UnifiedMediaItem) -> some View {
 
 /// The unified Library grid. `kind == nil` is the **landing**: one combined grid
 /// of Movies + TV Shows with a persistent type toggle. A non-nil `kind` is a
-/// single-kind browse (kept for deep links). Sortable + genre / year / rating
-/// filterable, with an offline-free macOS-exclusive **On Netflix** availability
-/// filter (hidden by default; reveals Netflix-only discovery when turned on).
+/// single-kind browse (kept for deep links). Sortable + genre / audio / year /
+/// rating filterable, with an offline-free macOS-exclusive **On Netflix**
+/// availability filter (hidden by default; reveals Netflix-only discovery when
+/// turned on).
 struct LibraryBrowseView: View {
     let session: MacSession
     /// `nil` = all kinds (the Library landing). Else a single-kind browse.
@@ -53,19 +54,32 @@ struct LibraryBrowseView: View {
     /// rather than vanish — distinct from the removable facet filters.
     @State private var showMovies = true
     @State private var showShows = true
+    /// Persistent "show watched" toggle — on by default; turning it off hides
+    /// fully-watched titles (iOS/iPadOS parity, #445).
+    @State private var showWatched = true
     /// Availability: when on, the grid shows **Netflix-only** titles instead of
     /// your owned library (the old "On Netflix" sections, now a filter). Hidden by
     /// default; only meaningful when Netflix availability is enabled in Settings.
     @State private var onNetflixOnly = false
 
     @State private var sort: LibrarySort = .titleAZ
-    @State private var genre: String? = nil
+    /// Multi-select genres (#445 parity with iOS) — empty = all genres.
+    @State private var selectedGenres: Set<String> = []
     /// Multi-select release years (#351) — empty = all years.
     @State private var selectedYears: Set<Int> = []
     /// Minimum community rating (#342 parity) — `nil` = any.
     @State private var minRating: Double? = nil
     /// Client-side title search within the grid (#369) — no reload.
     @State private var query = ""
+
+    // MARK: Audio language (#295/#445 parity)
+    /// Selected audio language code — `nil` = All. Applied client-side from
+    /// the lazily-loaded `audioMembership` set.
+    @State private var selectedAudioLanguage: String?
+    @State private var audioLanguageOptions: [AudioLanguageOption] = []
+    /// code → set of item ids with that language; loaded lazily on first pick.
+    @State private var audioMembership: [String: Set<String>] = [:]
+    @State private var loadingLanguage: String?
 
     private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
     private let ratingBuckets: [Double] = [9, 8, 7, 6]
@@ -111,15 +125,22 @@ struct LibraryBrowseView: View {
         Array(Set(sourceItems.compactMap(\.year))).sorted(by: >)
     }
     private var hasActiveFilter: Bool {
-        genre != nil || !selectedYears.isEmpty || minRating != nil || onNetflixOnly
+        !selectedGenres.isEmpty || selectedAudioLanguage != nil || !selectedYears.isEmpty
+            || minRating != nil || onNetflixOnly
     }
     private var shown: [UnifiedMediaItem] {
         var filtered = typeFiltered
-        if let genre { filtered = filtered.filter { $0.genres.contains(genre) } }
+        if !selectedGenres.isEmpty {
+            filtered = filtered.filter { item in item.genres.contains { selectedGenres.contains($0) } }
+        }
+        if let language = selectedAudioLanguage, let matching = audioMembership[language] {
+            filtered = filtered.filter { matching.contains($0.id) }
+        }
         if !selectedYears.isEmpty {
             filtered = filtered.filter { $0.year.map { selectedYears.contains($0) } ?? false }
         }
         if let minRating { filtered = filtered.filter { ($0.communityRating ?? 0) >= minRating } }
+        if !showWatched { filtered = filtered.filter { !$0.isFullyWatched } }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !q.isEmpty { filtered = filtered.filter { $0.title.localizedStandardContains(q) } }
         return sort.sorted(filtered)
@@ -140,15 +161,21 @@ struct LibraryBrowseView: View {
         let clear: () -> Void
     }
 
-    /// Active facets as removable tokens (Availability · Genre · Rating · Year).
-    /// The Movies/Series toggle is persistent, so it's *not* a token here.
+    /// Active facets as removable tokens (Availability · Genre · Audio · Rating ·
+    /// Year). The Movies/Series/Watched toggles are persistent, so they're not
+    /// tokens here.
     private var activeFilterTokens: [FilterToken] {
         var tokens: [FilterToken] = []
         if onNetflixOnly {
             tokens.append(.init(id: "netflix", label: "On Netflix") { self.onNetflixOnly = false })
         }
-        if let genre {
-            tokens.append(.init(id: "genre", label: genre) { self.genre = nil })
+        for genre in selectedGenres.sorted() {
+            tokens.append(.init(id: "genre-\(genre)", label: genre) { self.selectedGenres.remove(genre) })
+        }
+        if let selectedAudioLanguage {
+            let name = audioLanguageOptions.first { $0.code == selectedAudioLanguage }?.displayName
+                ?? selectedAudioLanguage
+            tokens.append(.init(id: "audio", label: name) { self.selectedAudioLanguage = nil })
         }
         if let minRating {
             tokens.append(.init(id: "rating", label: "\(Int(minRating))+") { self.minRating = nil })
@@ -160,7 +187,11 @@ struct LibraryBrowseView: View {
     }
 
     private func clearFilters() {
-        genre = nil; selectedYears = []; minRating = nil; onNetflixOnly = false
+        selectedGenres = []
+        selectedAudioLanguage = nil
+        selectedYears = []
+        minRating = nil
+        onNetflixOnly = false
     }
 
     /// Removable-chip row above the grid + Clear all (#367 parity).
@@ -187,15 +218,17 @@ struct LibraryBrowseView: View {
         }
     }
 
-    /// Persistent Movies / Series toggle chips (all-kinds landing only).
+    /// Persistent Movies / Series / Watched toggle chips. Movies + Series only
+    /// appear in all-kinds mode; Watched is always present (#445 parity with iOS).
     @ViewBuilder
     private var typeToggleChips: some View {
-        if kind == nil {
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            if kind == nil {
                 typeChip("Movies", isOn: showMovies) { toggleType(movies: true) }
                 typeChip("Series", isOn: showShows) { toggleType(movies: false) }
-                Spacer()
             }
+            typeChip("Watched", isOn: showWatched) { showWatched.toggle() }
+            Spacer()
         }
     }
 
@@ -209,12 +242,13 @@ struct LibraryBrowseView: View {
         .buttonStyle(.plain)
     }
 
-    /// Empty-state copy reflecting a search query / active filter (#367/#369).
+    /// Empty-state copy reflecting a search query / active filter / watched state.
     private var emptyMessage: String {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let noun = title.lowercased()
-        if !q.isEmpty { return "No \(noun) match “\(q)”." }
+        if !q.isEmpty { return "No \(noun) match "\(q)"." }
         if onNetflixOnly { return "Nothing new on Netflix right now." }
+        if !showWatched { return "All \(noun) have been watched." }
         if hasActiveFilter { return "No \(noun) match the current filters." }
         return "No \(noun) found across your connected sources."
     }
@@ -253,7 +287,7 @@ struct LibraryBrowseView: View {
                     .pickerStyle(.inline)
                 } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
             }
-            // One Filter menu: Availability (On Netflix) + Genre + Rating + Year.
+            // Filter menu: Availability · Genre · Audio Language · Rating · Year.
             ToolbarItem {
                 Menu {
                     // macOS-exclusive: surface Netflix-only discovery (hidden by
@@ -262,10 +296,47 @@ struct LibraryBrowseView: View {
                         Toggle("On Netflix", isOn: $onNetflixOnly)
                         Divider()
                     }
+                    // Genre — multi-select (#445 parity with iOS).
                     if !genres.isEmpty {
-                        Picker("Genre", selection: $genre) {
-                            Text("All Genres").tag(String?.none)
-                            ForEach(genres, id: \.self) { Text($0).tag(Optional($0)) }
+                        Menu("Genre") {
+                            Button {
+                                selectedGenres = []
+                            } label: {
+                                HStack {
+                                    Text("All Genres")
+                                    if selectedGenres.isEmpty { Image(systemName: "checkmark") }
+                                }
+                            }
+                            if !selectedGenres.isEmpty { Divider() }
+                            ForEach(genres, id: \.self) { g in
+                                Toggle(g, isOn: Binding(
+                                    get: { selectedGenres.contains(g) },
+                                    set: { on in
+                                        if on { selectedGenres.insert(g) } else { selectedGenres.remove(g) }
+                                    }
+                                ))
+                            }
+                        }
+                    }
+                    // Audio language (#295/#445) — lazily loaded, shown only when
+                    // at least one language is available.
+                    if !audioLanguageOptions.isEmpty {
+                        Menu("Audio Language") {
+                            Button {
+                                selectedAudioLanguage = nil
+                            } label: {
+                                HStack {
+                                    Text("All")
+                                    if selectedAudioLanguage == nil { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Divider()
+                            ForEach(audioLanguageOptions) { option in
+                                Toggle(option.displayName, isOn: Binding(
+                                    get: { selectedAudioLanguage == option.code },
+                                    set: { on in selectAudioLanguage(on ? option.code : nil) }
+                                ))
+                            }
                         }
                     }
                     Picker("Minimum Rating", selection: $minRating) {
@@ -309,6 +380,7 @@ struct LibraryBrowseView: View {
             }
         }
         .task(id: session.libraryToken) { await load() }
+        .task(id: session.libraryToken) { await loadAudioLanguageOptions() }
         .task(id: netflixKey) { await loadNetflix() }
     }
 
@@ -362,5 +434,51 @@ struct LibraryBrowseView: View {
             result += await session.watchAvailability.netflixOnlyDiscover(isShow: true, sort: .topRated)
         }
         netflixItems = unowned(result)
+    }
+
+    // MARK: - Audio language (#295/#445)
+
+    /// Load audio-language options (the menu entries) once per source set.
+    /// Membership for a language loads lazily on first pick.
+    private func loadAudioLanguageOptions() async {
+        guard session.hasAnySource else { audioLanguageOptions = []; audioMembership = [:]; return }
+        let library = session.makeLibrary()
+        let options: [AudioLanguageOption]
+        if let kind {
+            options = await library.audioLanguageOptions(kind: kind, locale: session.appLocale)
+        } else {
+            async let moviesTask = library.audioLanguageOptions(kind: .movie, locale: session.appLocale)
+            async let showsTask = library.audioLanguageOptions(kind: .show, locale: session.appLocale)
+            let merged = await moviesTask + (await showsTask)
+            var seen = Set<String>()
+            options = merged.filter { seen.insert($0.code).inserted }
+        }
+        // Only show languages the app is localized into (same filter as iOS).
+        audioLanguageOptions = options.filter { appLanguageCodes.contains($0.code) }
+    }
+
+    private var appLanguageCodes: Set<String> {
+        Set(Bundle.main.localizations.map { AudioLanguage.canonical($0) })
+    }
+
+    private func selectAudioLanguage(_ code: String?) {
+        selectedAudioLanguage = (selectedAudioLanguage == code) ? nil : code
+        guard let language = selectedAudioLanguage, audioMembership[language] == nil else { return }
+        Task { await loadMembership(for: language) }
+    }
+
+    private func loadMembership(for code: String) async {
+        loadingLanguage = code
+        defer { if loadingLanguage == code { loadingLanguage = nil } }
+        let library = session.makeLibrary()
+        let ids: Set<String>
+        if let kind {
+            ids = await library.audioLanguageIDs(kind: kind, language: code)
+        } else {
+            async let moviesTask = library.audioLanguageIDs(kind: .movie, language: code)
+            async let showsTask = library.audioLanguageIDs(kind: .show, language: code)
+            ids = await moviesTask.union(await showsTask)
+        }
+        audioMembership[code] = ids
     }
 }

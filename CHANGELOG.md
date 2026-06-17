@@ -2,9 +2,44 @@
 
 All notable changes to Aether are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] — 2026-06-17 · "Eridanus"
 
 ### Changed
+
+- **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
+  longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
+  straight into a single deduplicated grid of everything, with a **persistent
+  Movies / Series toggle** in the top bar (two independent toggles — both on
+  shows all; turning the last one off snaps both back on). The toggle stays put
+  and just depresses, distinct from the genre / year / rating / audio filters,
+  which still appear as removable chips and vanish when cleared. Browse facets
+  (Genres / Years / Collections / Actors / Directors) sit just above the grid;
+  pull-to-refresh re-fetches the catalog.
+- **Library filter: "Downloaded" (works offline)** (iOS/iPadOS/tvOS/visionOS) — a
+  new Availability filter narrows the grid to downloaded titles, sourced from the
+  local download store so it works with no server connection (replaces the old
+  Downloaded rail).
+- **Library: Watched toggle** (iOS/iPadOS/tvOS/visionOS) — a new persistent
+  **Watched** chip in the filter bar, placed after Movies / Series. Toggling it
+  off hides fully-watched movies and fully-completed series (`unwatchedEpisodeCount
+  == 0`). Client-side, no reload; works in all-kinds and single-kind grids.
+- **Library: browse pills removed** (Genres / Years / Collections / Actors /
+  Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year are now multi-select
+  facets in the Filter sheet, and the remaining pill rail no longer earned its
+  place at the top of the landing. The grid opens straight to the combined poster
+  grid under the Filter / Sort bar.
+- **Library: Genre filter is now multi-select** — picking several genres at once
+  now works (a title matches any selected genre), matching the Year filter.
+- **Poster card titles** — `lineLimit` 1 → 2 for poster cards;
+  `minimumScaleFactor(0.82)` so very long titles shrink rather than hard-truncate;
+  reserved 40 pt minimum title height so all cards in a `LazyVGrid` row have
+  identical total height → artwork tops align.
+
+- **Discover: overlay-style wide hero** (iPad / visionOS) — full-bleed backdrop
+  fills the frame; title + metadata overlaid on a gradient scrim (Netflix / Apple
+  TV+ pattern). Aspect ratio 2.4 → 2.7, title allowance removed → hero ~285 pt
+  instead of ~380 pt. Rails ("New Releases", "Top Rated", "Picked for You") now
+  visible without scrolling on iPad.
 
 - **tvOS: Accounts & Sources redesigned as source tiles** (#441) — the flat list
   (each source spread across account / set-active / sign-out rows, with Sign Out
@@ -16,8 +51,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   moves into a pushed detail screen. Tiles size to their content (no empty boxes)
   and show each source's brand mark — wired via `SourceGlyph`, which prefers the
   `Source{Plex,Jellyfin,Emby}` logo asset and falls back to an SF Symbol when one
-  isn't present. So the index stays calm and the focus engine
-  has real targets to lift.
+  isn't present. So the index stays calm and the focus engine has real targets
+  to lift.
 - **iOS/iPadOS: Account split into Connected Sources + Add Source** (#441) — the
   signed-in services and the not-yet-wired ones are now separate sections, so the
   unconnected ones no longer read as broken alongside live ones. Sign Out in a
@@ -35,51 +70,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   dwarfing the Movies / Series / Filters / Reload controls beside it. Sort now
   sizes to its content like the rest, so the row reads as one even cluster.
 
-- **Library: removed the browse pills above the grid** (Genres / Years /
-  Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
-  are now multi-select facets in the Filter sheet, and the remaining rail no
-  longer earned its place at the top of the landing. The grid opens straight to
-  the combined poster grid under the Filter / Sort bar.
+- **Settings: Add Source simplified to a single CTA** — multiple "Not connected"
+  source rows replaced by a single **Add Source** button that opens a native
+  `confirmationDialog` picker (Plex / Jellyfin / Emby / SMB). Keeps the index
+  calm and makes the first-run flow obvious.
 
-### Fixed
-
-- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
-  narrow portrait width the Movies · Series · Filters · Sort row was compressing
-  the Filters and Sort capsules until their labels wrapped vertically, one letter
-  per line. The bar now wraps whole controls onto a second line instead, and each
-  control holds its natural single-line width.
-- **Library: Genre filter is now multi-select** — picking several genres at once
-  now works (a title matches any selected genre), matching the Year filter. It
-  was previously single-select while Year already allowed multiple.
-
-- **macOS: garbled titlebar + broken Search** (#432) — switching to Search left a
-  stray "Settings" + gear lingering over the window's traffic-light controls
-  (alongside the brand wordmark), and the search field didn't appear. Fixes: the
-  AETHER wordmark is removed from the leading titlebar accessory (it sat in the
-  system-owned traffic-light zone — only the sidebar toggle remains there); each
-  pane has a stable `.id` so switching fully replaces the previous title/toolbar
-  instead of leaving it behind; and **Search is now a field at the top of the
-  sidebar** (Infuse-style) rather than a section — typing surfaces unified
-  results over the current pane. The Search section + its broken in-content field
-  are gone.
-
-## [0.7.9] — 2026-06-17
-
-### Changed
-
-- **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
-  longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
-  straight into a single deduplicated grid of everything, with a **persistent
-  Movies / Series toggle** in the top bar (two independent toggles — both on
-  shows all; turning the last one off snaps both back on). The toggle stays put
-  and just depresses, distinct from the genre / year / rating / audio filters,
-  which still appear as removable chips and vanish when cleared. Browse facets
-  (Genres / Years / Collections / Actors / Directors) sit just above the grid;
-  pull-to-refresh re-fetches the catalog.
-- **Library filter: "Downloaded" (works offline)** (iOS/iPadOS/tvOS/visionOS) — a
-  new Availability filter narrows the grid to downloaded titles, sourced from the
-  local download store so it works with no server connection (replaces the old
-  Downloaded rail).
 - **macOS Library: same combined grid** — the Mac app's Library landing also
   becomes one combined grid with the persistent Movies/Series toggle (was
   separate Movies / TV Shows sections + "See All"). It has no Downloaded filter
@@ -87,6 +82,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   become a Filter ▸ Availability toggle — hidden by default, and when on the grid
   shows Netflix-only discovery (owned titles excluded). Sort + Genre / Year /
   Rating filters and search are retained.
+- **macOS: Search is now a field at the top of the sidebar** (#440) — typing
+  surfaces unified results over the current pane (Infuse-style). The Search
+  section + its broken in-content field are gone.
 
 ### Fixed
 
@@ -99,7 +97,19 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   refresh. The watched write now drops the affected cache + snapshot entries, and
   an `AppSession.libraryRevision` signal (folded into the Library landing's and
   the "See all" grid's reload key) re-reads the fresh server state immediately.
+- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
+  narrow portrait width the Movies · Series · Filters · Sort row was compressing
+  the Filters and Sort capsules until their labels wrapped vertically, one letter
+  per line. The bar now wraps whole controls onto a second line instead, and each
+  control holds its natural single-line width.
 
+- **macOS: garbled titlebar + broken Search** (#432, #440) — switching to Search
+  left a stray "Settings" + gear lingering over the window's traffic-light
+  controls (alongside the brand wordmark), and the search field didn't appear.
+  Fixes: the AETHER wordmark is removed from the leading titlebar accessory (it
+  sat in the system-owned traffic-light zone — only the sidebar toggle remains
+  there); each pane has a stable `.id` so switching fully replaces the previous
+  title/toolbar instead of leaving it behind.
 - **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
   sidebar was collapsed there was no other way to switch Home / Discover /
   Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
@@ -107,8 +117,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   sidebar binds to (hoisted onto `MacSession`), so section switching is always
   reachable regardless of sidebar state. The active section shows a menu
   checkmark. A *macOS navigation* section was added to `DESIGN_PRINCIPLES.md` so
-  this is a rule, not an accident. (Titlebar-chrome polish during Search is
-  tracked separately — pending on-device repro.)
+  this is a rule, not an accident.
 
 - **Player dismiss collided with system controls** (#431, iOS/iPadOS) — the
   custom close ✕ sat on the same top-leading edge AVKit uses for PiP / AirPlay,

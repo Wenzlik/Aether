@@ -27,9 +27,10 @@ struct MacPoster: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             Text(item.title)
                 .font(.callout)
-                .lineLimit(1)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
                 .foregroundStyle(item.isFullyWatched ? .secondary : .primary)
-                .frame(maxWidth: width ?? .infinity, alignment: .leading)
+                .frame(maxWidth: width ?? .infinity, minHeight: 40, alignment: .topLeading)
             if let year = item.year {
                 Text(String(year)).font(.caption2).foregroundStyle(.secondary)
             }
