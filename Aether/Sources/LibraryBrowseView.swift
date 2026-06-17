@@ -40,25 +40,13 @@ struct LibraryBrowseView: View {
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
-    @State private var rails: UnifiedRails = .empty
-    @State private var isLoading = false
-    /// `true` once at least one `load()` has completed. Distinguishes "empty
-    /// because we haven't loaded yet" (→ loading) from "loaded and genuinely
-    /// empty" (→ empty state), so a refresh never flashes the empty state.
-    @State private var hasLoaded = false
-    @State private var loadError: String?
     /// Whether any connected source has **actual** collections — the Collections
-    /// browse entry is gated on this, not just on `supportsCollections`. A
+    /// browse pill is gated on this, not just on `supportsCollections`. A
     /// Plex-only setup whose server has no collections (common) otherwise showed
-    /// a Collections row that led to a dead empty screen (#298/#311).
+    /// a Collections pill that led to a dead empty screen (#298/#311).
     @State private var hasCollections = false
-    /// One automatic retry on an empty result (transient first-load), so the
-    /// library self-heals instead of sticking on an empty state.
-    @State private var autoRetried = false
-    /// Reload (non-destructively) when the app returns to the foreground.
-    @Environment(\.scenePhase) private var scenePhase
 
-    /// When non-empty, the library swaps its rails for unified `MediaSearchResults`.
+    /// When non-empty, the library swaps its grid for unified `MediaSearchResults`.
     @State private var searchQuery = ""
     /// iOS / visionOS: header shows a search *button* by default; the field only
     /// appears once tapped — no permanent search bar (matches Home).
@@ -103,9 +91,8 @@ struct LibraryBrowseView: View {
             .scrollDismissesKeyboard(.immediately)
             #endif
             .aetherScreenBackground()
-            #if !os(tvOS)
-            .refreshable { await load(forceRefresh: true) }
-            #endif
+            // Pull-to-refresh + reload now live in the grid itself; the shell no
+            // longer fetches rails of its own.
             // iPad: brand (leading, flush) + Filter + Search (trailing) on the
             // top tab-bar row instead of a second header band.
             #if os(iOS)
@@ -170,11 +157,7 @@ struct LibraryBrowseView: View {
                 }
             }
         }
-        .task(id: sourcesKey) { await load() }
         .task(id: sourcesKey) { await refreshCollectionsAvailability() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await load() } }
-        }
     }
 
     /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
@@ -202,8 +185,7 @@ struct LibraryBrowseView: View {
             Spacer(minLength: AetherDesign.Spacing.l)
             AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
                 .frame(maxWidth: AetherDesign.headerSearchWidth)
-            AetherTVReloadButton { Task { await load() } }
-                .frame(width: 260)
+            // Reload moved into the grid's bar (it owns loading now).
             #else
             if isSearchActive {
                 AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
@@ -362,50 +344,6 @@ struct LibraryBrowseView: View {
         hasCollections = any
     }
 
-    private func load(forceRefresh: Bool = false) async {
-        loadError = nil
-        defer { hasLoaded = true }
-        guard !connectedSources.isEmpty else {
-            rails = .empty
-            return
-        }
-        isLoading = true
-        defer { isLoading = false }
-        let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
-        let built = await library.homeRails(resumeStore: resumeStore, forceRefresh: forceRefresh)
-        if built.isEmpty, !rails.isEmpty {
-            // A refresh came back empty but we already have content — almost always
-            // a transient source hiccup. Keep the current library on screen instead
-            // of flashing "Library is empty", and retry once.
-            scheduleAutoRetryIfNeeded()
-        } else {
-            rails = built
-            AetherImageCache.shared.prefetch(
-                built.movies.map(\.posterURL) + built.shows.map(\.posterURL)
-            )
-            if built.isEmpty { scheduleAutoRetryIfNeeded() } else { autoRetried = false }
-        }
-        // Stale-while-revalidate (#197): a cold launch paints the persisted
-        // snapshot instantly; refresh silently if it's past the 1-hour window.
-        if !forceRefresh, !built.isEmpty {
-            let staleMovies = await library.isStale(kind: .movie)
-            let staleShows = await library.isStale(kind: .show)
-            if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
-        }
-    }
-
-    /// One automatic retry when a connected source returns empty (often a
-    /// transient first-load), so the library self-heals instead of sticking.
-    /// Bounded by `autoRetried`; pull-to-refresh + foreground reload cover more.
-    private func scheduleAutoRetryIfNeeded() {
-        guard !autoRetried, !connectedSources.isEmpty else { return }
-        autoRetried = true
-        Task {
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled, rails.isEmpty else { return }
-            await load(forceRefresh: true)
-        }
-    }
 }
 
 /// "See all" push target — a full unified grid for one media kind.
@@ -415,29 +353,6 @@ struct UnifiedLibrarySection: Hashable {
 }
 
 private extension View {
-    /// Apply `.focusSection()` on tvOS for predictable D-pad movement between
-    /// rails; no-op elsewhere (the API is tvOS-only).
-    @ViewBuilder
-    func aetherFocusSection() -> some View {
-        #if os(tvOS)
-        self.focusSection()
-        #else
-        self
-        #endif
-    }
-
-    /// Mark a rail's *header row* as its own focus section on tvOS so Up from any
-    /// poster reliably lands on the header's single focusable ("See all"). Same
-    /// shape as `aetherFocusSection()`; no-op elsewhere.
-    @ViewBuilder
-    func aetherHeaderFocusSection() -> some View {
-        #if os(tvOS)
-        self.focusSection()
-        #else
-        self
-        #endif
-    }
-
     /// Tap-to-dismiss the search keyboard — iOS / visionOS only. On tvOS there's
     /// no software keyboard, and a `TapGesture` there would intercept the Select
     /// button and disrupt the focus engine, so it's a no-op.

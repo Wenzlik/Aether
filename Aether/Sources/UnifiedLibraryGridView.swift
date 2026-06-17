@@ -186,6 +186,9 @@ struct UnifiedLibraryGridView: View {
                     typeToggleChips
                     tvOSSortTrigger
                     tvOSFilterTrigger
+                    // tvOS has no pull-to-refresh, so the grid carries its own
+                    // reload control (the shell no longer does).
+                    tvOSReloadTrigger
                 }
                 #else
                 iosFilterSortBar
@@ -666,6 +669,24 @@ struct UnifiedLibraryGridView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Filters")
+    }
+
+    /// tvOS reload — there's no pull-to-refresh on the remote, so the grid carries
+    /// its own force-refresh button (the Library shell no longer fetches rails).
+    private var tvOSReloadTrigger: some View {
+        Button { Task { await load(forceRefresh: true) } } label: {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Image(systemName: "arrow.clockwise")
+                Text("Reload")
+            }
+            .font(AetherDesign.Typography.cardTitle)
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reload")
     }
     #endif
 
