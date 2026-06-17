@@ -6,6 +6,20 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- **tvOS: Accounts & Sources redesigned as source tiles** (#441) — the flat list
+  (each source spread across account / set-active / sign-out rows, with Sign Out
+  on the index and the screen's centre empty) is replaced by large focusable
+  **tiles**. Connected sources show a logo, name, server, and an `Active` badge in
+  a two-column grid; not-connected ones are lighter **Add Source** tiles that
+  start sign-in directly. Per-source management — set active, manage servers, SMB
+  folders/re-match, and the destructive **Sign Out** (now behind a confirmation) —
+  moves into a pushed detail screen, so the index stays calm and the focus engine
+  has real targets to lift.
+- **iOS/iPadOS: Account split into Connected Sources + Add Source** (#441) — the
+  signed-in services and the not-yet-wired ones are now separate sections, so the
+  unconnected ones no longer read as broken alongside live ones. Sign Out in a
+  source's detail sheet is now gated by a confirmation.
+
 - **Library: removed the browse pills above the grid** (Genres / Years /
   Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
   are now multi-select facets in the Filter sheet, and the remaining rail no

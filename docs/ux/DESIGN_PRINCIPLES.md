@@ -153,6 +153,7 @@ Rules that follow from this:
 - **No custom navigation chrome.** No bottom dock, no top capsule, no header account/gear icons — the system tab bar and the Settings tab own all of it. Account status surfaces inside Settings.
 - **Focus is native.** Pressing up from the top of content reaches the tab bar via the system focus engine — no `.defaultFocus` hacks, no pinned headers fighting scroll.
 - **Adding a fifth tab** is a deliberate design discussion — four is the budget.
+- **Settings → Accounts & Sources uses source tiles, not a list.** A flat settings list wastes the 10-foot canvas (full-bleed rows leave the centre empty) and promotes destructive actions to the index. Connected sources are large focusable **tiles** (logo + name + server + an `Active` badge) in a two-column grid; not-connected ones are lighter **Add Source** tiles that start sign-in directly. Per-source management (set active, manage servers, SMB folders, and **Sign Out** behind a confirmation) lives in a pushed detail screen — never on the index. (`SourceTilesView`.) On iOS/iPadOS the list stays but splits into **Connected Sources** + **Add Source**, with Sign Out confirmed.
 
 ### macOS navigation
 

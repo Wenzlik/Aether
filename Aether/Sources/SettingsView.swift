@@ -152,6 +152,12 @@ struct SettingsView: View {
             .navigationDestination(for: SettingsCategory.self) { category in
                 categoryScreen(category)
             }
+            #if os(tvOS)
+            // Per-source detail pushed from a Connected Sources tile (#441).
+            .navigationDestination(for: SourceDetailRoute.self) { route in
+                sourceDetailScreen(route)
+            }
+            #endif
             #if !os(tvOS)
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
