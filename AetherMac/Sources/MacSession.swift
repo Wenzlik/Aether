@@ -60,6 +60,42 @@ final class MacSession {
     /// setting actually switches the theme instead of being forced dark.
     let appearance = AppearancePreferenceStore()
 
+    // MARK: - Navigation (#432)
+
+    /// A top-level section of the app. Single source of truth for both the
+    /// sidebar row labels/symbols and the menu-bar **View** commands, so the two
+    /// can never drift apart.
+    enum Section: String, CaseIterable, Identifiable, Hashable {
+        case home, discover, library, search, settings
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .home:     "Home"
+            case .discover: "Discover"
+            case .library:  "Library"
+            case .search:   "Search"
+            case .settings: "Settings"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .home:     "house"
+            case .discover: "sparkles"
+            case .library:  "square.grid.2x2"
+            case .search:   "magnifyingglass"
+            case .settings: "gearshape"
+            }
+        }
+    }
+
+    /// The selected section. **Hoisted onto the session** (off `ContentView`'s
+    /// former local `@State`) so the menu-bar View commands + ⌘1…⌘5 can switch
+    /// sections even when the sidebar is collapsed — collapsing it used to strand
+    /// the user with no other way to navigate (#432).
+    var section: Section = .home
+
     /// UI language: `"system"`, `"en"`, or `"cs"`. Drives `\.locale` so the user
     /// can switch in-app (Settings), matching iOS. Persisted in UserDefaults.
     var appLanguage: String = UserDefaults.standard.string(forKey: "ui.language") ?? "system" {

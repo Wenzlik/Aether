@@ -6,6 +6,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
+  sidebar was collapsed there was no other way to switch Home / Discover /
+  Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
+  menu now lists every section with **⌘1…⌘5**, driven by the same selection the
+  sidebar binds to (hoisted onto `MacSession`), so section switching is always
+  reachable regardless of sidebar state. The active section shows a menu
+  checkmark. A *macOS navigation* section was added to `DESIGN_PRINCIPLES.md` so
+  this is a rule, not an accident. (Titlebar-chrome polish during Search is
+  tracked separately — pending on-device repro.)
+
 - **Background battery — idle network monitor & carousel ticker** (iOS/iPadOS) —
   two periodic workers kept running while the app was alive behind a playing
   audio session. The SMB reachability `NWPathMonitor` is now paused on

@@ -30,6 +30,11 @@ struct AetherMacApp: App {
             CommandGroup(replacing: .newItem) {
                 FileCommands(recents: recents)
             }
+            // Menu-bar section navigation (#432). Always available — so collapsing
+            // the sidebar can never strand the user with no way to switch sections.
+            CommandMenu("View") {
+                SectionCommands(session: session)
+            }
         }
 
         // Dedicated player window for **ad-hoc local files** opened from disk
@@ -116,5 +121,26 @@ private struct FileCommands: View {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
         openWindow(id: AetherMacApp.localPlayerWindowID, value: url)
+    }
+}
+
+/// The menu-bar **View** menu: one item per section with ⌘1…⌘5, driving the same
+/// `session.section` the sidebar binds to (#432). A `View` (not raw commands) so
+/// it can read the session and stay in sync. Each item is a `Toggle` so the
+/// active section gets a native menu checkmark; the shortcut works regardless of
+/// sidebar state, which is the whole point — a collapsed sidebar never strands.
+private struct SectionCommands: View {
+    @Bindable var session: MacSession
+
+    var body: some View {
+        ForEach(Array(MacSession.Section.allCases.enumerated()), id: \.element) { index, section in
+            Toggle(section.title, isOn: Binding(
+                get: { session.section == section },
+                // Only react to turning *on* — re-pressing the active section's
+                // shortcut is a no-op rather than deselecting into a blank pane.
+                set: { if $0 { session.section = section } }
+            ))
+            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+        }
     }
 }

@@ -13,18 +13,12 @@ struct HomeView: View {
     var appDelegate: MacAppDelegate
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismissWindow
-    @State private var sidebar: SidebarItem? = .home
     @State private var searchText = ""
     /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
     /// player swap** — playback replaces the whole library subtree, so a path
     /// owned by the `NavigationStack` would reset to root on close. Keeping it
     /// here returns the user to the title's Detail after playback (#8).
     @State private var path = NavigationPath()
-
-    enum SidebarItem: Hashable, Identifiable {
-        case home, discover, library, search, settings
-        var id: Self { self }
-    }
 
     var body: some View {
         // The player **replaces** the library in the same window while playing
@@ -93,14 +87,25 @@ struct HomeView: View {
     // MARK: Sidebar
 
     private var sidebarList: some View {
-        List(selection: $sidebar) {
-            Label("Home", systemImage: "house").tag(SidebarItem.home)
-            Label("Discover", systemImage: "sparkles").tag(SidebarItem.discover)
-            Label("Library", systemImage: "square.grid.2x2").tag(SidebarItem.library)
-            Label("Search", systemImage: "magnifyingglass").tag(SidebarItem.search)
-            // Settings opens inside this window (detail pane), not a separate window.
-            Label("Settings", systemImage: "gearshape").tag(SidebarItem.settings)
+        // Rows + selection both derive from `MacSession.Section`, the same source
+        // the menu-bar View commands use — so a ⌘1…⌘5 pick highlights the right
+        // row and vice-versa. (Settings opens in this window's detail pane, not
+        // the separate native Settings window.)
+        List(selection: sectionSelection) {
+            ForEach(MacSession.Section.allCases) { section in
+                Label(section.title, systemImage: section.symbol).tag(section)
+            }
         }
+    }
+
+    /// Bridges the List's optional single-selection to `session.section` (the
+    /// non-optional source of truth). A `nil` from the List — a click in empty
+    /// space — is ignored, so the detail pane never goes blank.
+    private var sectionSelection: Binding<MacSession.Section?> {
+        Binding(
+            get: { session.section },
+            set: { if let new = $0 { session.section = new } }
+        )
     }
 
     // MARK: Detail
@@ -109,12 +114,12 @@ struct HomeView: View {
     private var detail: some View {
         NavigationStack(path: $path) {
             Group {
-                switch sidebar {
-                case .library:  LibraryGridView(session: session)
+                switch session.section {
+                case .home:     DiscoverView(session: session, mode: .home)
                 case .discover: DiscoverView(session: session, mode: .discover)
+                case .library:  LibraryGridView(session: session)
                 case .search:   searchPane
                 case .settings: MacSettingsView(session: session, embedded: true)
-                default:        DiscoverView(session: session, mode: .home)
                 }
             }
             .navigationDestination(for: MediaItem.self) { mediaItem in
