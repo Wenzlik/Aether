@@ -6,6 +6,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- **tvOS: balanced the Library Filter / Sort bar** — the Sort control carried an
+  internal `Spacer()` that made it greedily fill the whole bar width, dwarfing the
+  Movies / Series / Filters / Reload controls beside it. Sort now sizes to its
+  content like the rest, so the row reads as one even cluster.
+- **tvOS: Detail action buttons name themselves on focus** — the circular
+  icon-only actions (Mark Watched, Technical Details, Favorite, …) now reveal their
+  label as a caption beneath the glyph while focused (the Apple TV idiom), so what
+  each does is clear without guessing. Rendered as an overlay, so it never reflows
+  the action row.
+
 - **Library: removed the browse pills above the grid** (Genres / Years /
   Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
   are now multi-select facets in the Filter sheet, and the remaining rail no

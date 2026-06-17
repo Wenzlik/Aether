@@ -68,9 +68,42 @@ public struct AetherIconButton: View {
 
     public var body: some View {
         Button(action: action) {
+            #if os(tvOS)
+            // tvOS: reveal the (otherwise icon-only) action's name as a caption
+            // beneath the glyph while focused — the Apple TV idiom for circular
+            // controls, so a sighted user doesn't have to guess what "eye" / "info"
+            // do. Rendered as an overlay so it never reflows the action row (#441).
             AetherIconCircleLabel(systemImage: systemImage, isActive: isActive)
+                .modifier(IconFocusCaption(label: accessibilityLabel))
+            #else
+            AetherIconCircleLabel(systemImage: systemImage, isActive: isActive)
+            #endif
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
     }
 }
+
+#if os(tvOS)
+/// Floats the button's label beneath the glyph while focused. An overlay (not a
+/// stacked `VStack`) so the caption appearing/disappearing never shifts the row's
+/// layout; only the focused button shows its caption.
+private struct IconFocusCaption: ViewModifier {
+    let label: String
+    @Environment(\.isFocused) private var isFocused
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            Text(label)
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .lineLimit(1)
+                .fixedSize()
+                .opacity(isFocused ? 1 : 0)
+                .offset(y: 26)
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
+        }
+    }
+}
+#endif
