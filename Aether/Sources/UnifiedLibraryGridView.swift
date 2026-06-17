@@ -39,6 +39,9 @@ struct UnifiedLibraryGridView: View {
     /// (an empty type selection would show nothing useful).
     @State private var showMovies = true
     @State private var showShows = true
+    /// Persistent "show watched" toggle. On by default (all titles shown); turning
+    /// it off hides fully-watched titles — whole movies and fully-completed series.
+    @State private var showWatched = true
     /// "Downloaded only" facet — like the other filters it's removable, but it
     /// also works **offline**: it renders the completed downloads straight from
     /// the store even when the server catalog can't be fetched.
@@ -324,6 +327,10 @@ struct UnifiedLibraryGridView: View {
         }
         if !selectedYears.isEmpty {
             result = result.filter { $0.year.map { selectedYears.contains($0) } ?? false }
+        }
+        // Hide fully-watched titles: whole movies + series where every episode is done.
+        if !showWatched {
+            result = result.filter { !$0.isFullyWatched }
         }
         // Title search (#369) — client-side, case/diacritic-insensitive, applied
         // last so it narrows the already-faceted set.
@@ -682,15 +689,15 @@ struct UnifiedLibraryGridView: View {
         }
     }
 
-    /// The two persistent Movies / Series toggles for the top bar (all-kinds mode
-    /// only). Independent and always visible — they depress rather than vanish, so
-    /// they read as a mode switch, not a removable filter.
+    /// The persistent type + watched-state toggles for the top bar. Movies / Series
+    /// only appear in all-kinds mode; Watched is always present.
     @ViewBuilder
     private var typeToggleChips: some View {
         if kind == nil {
             genreChip(label: "Movies", isSelected: showMovies) { toggleType(movies: true) }
             genreChip(label: "Series", isSelected: showShows) { toggleType(movies: false) }
         }
+        genreChip(label: "Watched", isSelected: showWatched) { showWatched.toggle() }
     }
 
     /// Rating filter chips: Any + score buckets (9+/8+/7+/6+) over `communityRating`.
