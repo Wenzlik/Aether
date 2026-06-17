@@ -186,12 +186,11 @@ struct LibraryBrowseView: View {
     /// rails and during search. The empty / no-source / loading / error states
     /// own their own full-screen layout, so the header sits out for those.
     private var shouldShowBrandedChrome: Bool {
+        // Searching → header carries the field; connected → header sits above the
+        // combined grid. Only the no-source / connecting state owns the full
+        // screen (the grid renders its own loading / empty states).
         if isSearching { return true }
-        if connectedSources.isEmpty { return false }
-        if loadError != nil, rails.isEmpty { return false }
-        if isLoading && rails.isEmpty { return false }
-        if rails.isEmpty { return false }
-        return true
+        return !connectedSources.isEmpty
     }
 
     /// Compact nav header (0.6.0): brand mark inline at the leading edge beside
@@ -314,56 +313,32 @@ struct LibraryBrowseView: View {
         if isSearching {
             // Unified search across every connected source (same as Home / Search).
             MediaSearchResults(sources: connectedSources, query: searchQuery)
-        } else if !rails.isEmpty {
-            // Have content → always show it, including while a refresh runs (so a
-            // pull-to-refresh never blanks to an empty/loading state).
-            #if os(tvOS)
-            // tvOS browses by **category** (Movies / TV Shows / …), not poster
-            // rails: Down from Search lands cleanly on the first category instead
-            // of skipping into the middle of a rail, and each category opens the
-            // full grid. The list is data-driven, so a new content group appears
-            // automatically (#266 Detail Phase 1 — tvOS Library nav).
-            categoryListContent
-            #else
-            railsContent
-            #endif
-        } else if connectedSources.isEmpty {
-            // Empty sources: "still connecting" during startup → loading; only
-            // once startup has settled is it genuinely "no source connected".
-            if isConnecting {
-                AetherCenteredScrollState {
-                    AetherLoadingDots(caption: "Loading your library…")
-                }
-            } else {
-                AetherCenteredScrollState {
-                    AetherEmptyState(
-                        glyph: "rectangle.stack",
-                        title: "No library yet",
-                        message: "Connect a source and your Aether library appears here.",
-                        action: .init(label: "Add a source", run: onAddSource)
-                    )
-                }
-            }
-        } else if let loadError {
-            AetherCenteredScrollState {
-                AetherErrorState(
-                    title: "Couldn't load your library",
-                    message: loadError,
-                    retry: .init { Task { await load() } }
-                )
-            }
-        } else if isLoading || !hasLoaded {
-            // Loading, or first load not finished yet → branded loader (never empty).
+        } else if !connectedSources.isEmpty {
+            // Unified Library landing: one combined grid (Movies + TV Shows) with
+            // a persistent Movies/Series toggle, filters, and browse pills — no
+            // more per-kind rails + "See all". Shown whenever a source is
+            // configured, even offline, so the Downloaded filter stays reachable;
+            // the grid owns its own loading / empty / offline states.
+            UnifiedLibraryGridView(
+                title: "Library",
+                kind: nil,
+                connectedSources: connectedSources,
+                downloadStore: downloadStore,
+                isLibraryRoot: true,
+                downloads: downloads,
+                hasCollections: hasCollections
+            )
+        } else if isConnecting {
             AetherCenteredScrollState {
                 AetherLoadingDots(caption: "Loading your library…")
             }
         } else {
-            // Loaded, connected, and genuinely empty — centered + pull-to-refreshable.
             AetherCenteredScrollState {
                 AetherEmptyState(
-                    glyph: "tray",
-                    title: "Library is empty",
-                    message: "Add some movies or shows to a connected source and they'll surface here."
+                    glyph: "rectangle.stack",
+                    title: "No library yet",
+                    message: "Connect a source and your Aether library appears here.",
+                    action: .init(label: "Add a source", run: onAddSource)
                 )
             }
         }
