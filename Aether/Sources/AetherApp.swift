@@ -371,6 +371,15 @@ final class AppSession {
     private(set) var jellyfinSource: JellyfinMediaSource?
     var isJellyfinSignedIn: Bool = false
 
+    // MARK: - Emby
+
+    private(set) var embyConfiguration: EmbyConfiguration?
+    private(set) var embyAuthClient: EmbyAuthClient?
+    private(set) var embyServerStore: EmbyServerStore?
+    var embyServer: EmbyServerRecord?
+    private(set) var embySource: EmbyMediaSource?
+    var isEmbySignedIn: Bool = false
+
     // MARK: - SMB (#214)
 
     private(set) var smbConnectionStore: SMBConnectionStore?
@@ -397,6 +406,7 @@ final class AppSession {
     enum SourceKind: String, Sendable, CaseIterable {
         case plex
         case jellyfin
+        case emby
     }
 
     var activeSourceKind: SourceKind?
@@ -410,6 +420,7 @@ final class AppSession {
     enum SignInTarget: Sendable {
         case plex
         case jellyfin
+        case emby
         case smb
     }
     var signInTarget: SignInTarget = .plex
@@ -489,10 +500,12 @@ final class AppSession {
         // 1. Auth seams for both sources.
         await setUpPlex()
         await setUpJellyfin()
+        await setUpEmby()
 
         // 2. Restore persisted servers — these build the live sources.
         await restorePlexServer()
         await restoreJellyfinServer()
+        await restoreEmbyServer()
         await restoreSMB()
 
         // 3. Pick the active source (persisted choice, else whatever connected).
@@ -583,11 +596,13 @@ final class AppSession {
     private func refreshActiveSource() {
         switch activeSourceKind {
         case .jellyfin:
-            source = jellyfinSource ?? plexSource
+            source = jellyfinSource ?? embySource ?? plexSource
+        case .emby:
+            source = embySource ?? jellyfinSource ?? plexSource
         case .plex:
-            source = plexSource ?? jellyfinSource
+            source = plexSource ?? jellyfinSource ?? embySource
         case nil:
-            source = plexSource ?? jellyfinSource
+            source = plexSource ?? jellyfinSource ?? embySource
         }
     }
 
@@ -602,6 +617,7 @@ final class AppSession {
         // (and Jellyfin/SMB/Local) by shared external ids (#325).
         list.append(contentsOf: plexSources)
         if let jellyfinSource { list.append(jellyfinSource) }
+        if let embySource { list.append(embySource) }
         // SMB is LAN-only — surface it only while the NAS is actually reachable,
         // so off-network it goes dormant (no failed walks, not shown in the
         // Library) and auto-reappears when you're back on the network (#214).
@@ -662,6 +678,7 @@ final class AppSession {
         // No stored choice: default to whatever is connected (Plex wins ties).
         if isPlexSignedIn { return .plex }
         if isJellyfinSignedIn { return .jellyfin }
+        if isEmbySignedIn { return .emby }
         return nil
     }
 
@@ -908,7 +925,9 @@ final class AppSession {
         jellyfinSource = nil
         isJellyfinSignedIn = false
         if activeSourceKind == .jellyfin {
-            setActiveSource(isPlexSignedIn ? .plex : .jellyfin)
+            if isPlexSignedIn { setActiveSource(.plex) }
+            else if isEmbySignedIn { setActiveSource(.emby) }
+            else { setActiveSource(.jellyfin) }
         } else {
             refreshActiveSource()
         }
@@ -917,6 +936,85 @@ final class AppSession {
     func presentSignIn(_ target: SignInTarget = .plex) {
         signInTarget = target
         isSignInPresented = true
+    }
+
+    // MARK: - Emby setup + lifecycle
+
+    private func setUpEmby() async {
+        let deviceID = await ensureEmbyDeviceID()
+        let config = EmbyConfiguration(
+            client: "Aether",
+            version: "0.3.0",
+            deviceName: currentDeviceName,
+            deviceID: deviceID
+        )
+        embyConfiguration = config
+        embyAuthClient = EmbyAuthClient(api: api, configuration: config)
+        embyServerStore = EmbyServerStore(keychain: keychain)
+    }
+
+    private func ensureEmbyDeviceID() async -> String {
+        do {
+            if let existing = try await keychain.string(for: Self.embyDeviceIDKey), !existing.isEmpty {
+                return existing
+            }
+            let new = UUID().uuidString
+            try await keychain.setString(new, for: Self.embyDeviceIDKey)
+            return new
+        } catch {
+            return UUID().uuidString
+        }
+    }
+
+    private func restoreEmbyServer() async {
+        guard let store = embyServerStore else { return }
+        do {
+            guard let record = try await store.read() else { return }
+            embyServer = record
+            embySource = makeEmbySource(from: record)
+            isEmbySignedIn = embySource != nil
+            refreshActiveSource()
+        } catch {
+            // Corrupted record shouldn't break launch — leave Emby disconnected.
+        }
+    }
+
+    private func makeEmbySource(from record: EmbyServerRecord) -> EmbyMediaSource? {
+        guard let config = embyConfiguration, let base = record.baseURL else { return nil }
+        return EmbyMediaSource(
+            serverID: record.baseURLString,
+            displayName: record.serverName,
+            baseURL: base,
+            accessToken: record.accessToken,
+            userID: record.userID,
+            configuration: config,
+            api: api
+        )
+    }
+
+    /// Called by `EmbySignInView` after a successful Quick Connect exchange.
+    func completeEmbySignIn(record: EmbyServerRecord) async {
+        do { try await embyServerStore?.write(record) } catch { }
+        embyServer = record
+        embySource = makeEmbySource(from: record)
+        isEmbySignedIn = embySource != nil
+        if embySource != nil { setActiveSource(.emby) }
+        isSignInPresented = false
+    }
+
+    func signOutOfEmby() async {
+        do { try await embyServerStore?.clear() } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        embyServer = nil
+        embySource = nil
+        isEmbySignedIn = false
+        if activeSourceKind == .emby {
+            if isPlexSignedIn { setActiveSource(.plex) }
+            else if isJellyfinSignedIn { setActiveSource(.jellyfin) }
+            else { setActiveSource(.emby) }
+        } else {
+            refreshActiveSource()
+        }
     }
 
     // MARK: - SMB (#214)
@@ -1014,6 +1112,7 @@ final class AppSession {
     static let plexClientIdentifierKey = "plex.clientIdentifier"
     static let plexTokenKey = "plex.authToken"
     static let jellyfinDeviceIDKey = "jellyfin.deviceID"
+    static let embyDeviceIDKey = "emby.deviceID"
     static let activeSourceKey = "active.source"
 
     // MARK: - Platform identity

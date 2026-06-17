@@ -10,7 +10,7 @@ import Foundation
 /// `fillWidth`/`format=Webp`) lives here — the single source of truth both
 /// connectors build into. Cross-platform (module rule #4).
 public struct ArtworkSource: Sendable, Hashable, Codable {
-    public enum Provider: Sendable, Hashable, Codable { case plex, jellyfin }
+    public enum Provider: Sendable, Hashable, Codable { case plex, jellyfin, emby }
 
     public let provider: Provider
     /// Server base URL (scheme + host + port).
@@ -80,7 +80,7 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
             )
             components?.queryItems = [URLQueryItem(name: "X-Plex-Token", value: token)]
             return components?.url
-        case .jellyfin:
+        case .jellyfin, .emby:
             guard let logoTag else { return nil }
             var components = URLComponents(
                 url: base.appendingPathComponent(logoPath),
@@ -117,8 +117,8 @@ public struct ArtworkSource: Sendable, Hashable, Codable {
             ]
             return components?.url
 
-        case .jellyfin:
-            // Jellyfin needs the image tag; without it there's no image to size.
+        case .jellyfin, .emby:
+            // Jellyfin/Emby needs the image tag; without it there's no image to size.
             guard let tag else { return nil }
             var components = URLComponents(
                 url: base.appendingPathComponent(path),
