@@ -4,6 +4,21 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
+  longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
+  straight into a single deduplicated grid of everything, with a **persistent
+  Movies / Series toggle** in the top bar (two independent toggles — both on
+  shows all; turning the last one off snaps both back on). The toggle stays put
+  and just depresses, distinct from the genre / year / rating / audio filters,
+  which still appear as removable chips and vanish when cleared. Browse facets
+  (Genres / Years / Collections / Actors / Directors) sit just above the grid;
+  pull-to-refresh re-fetches the catalog.
+- **Library filter: "Downloaded" (works offline)** — a new Availability filter
+  narrows the grid to downloaded titles, sourced from the local download store
+  so it works with no server connection (replaces the old Downloaded rail).
+
 ## [0.7.9] — 2026-06-17
 
 ### Fixed
