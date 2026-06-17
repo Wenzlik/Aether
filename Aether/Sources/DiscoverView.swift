@@ -306,26 +306,28 @@ struct DiscoverView: View {
     /// Swipeable paged carousel for touch / spatial platforms. A horizontal drag
     /// pages; a tap opens Detail. A genuine user swipe pauses auto-advance.
     ///
-    /// On a wide layout (iPad regular / visionOS) the hero fills the full content
-    /// width at a cinematic ratio — the height is derived from the measured width
-    /// (`width / heroAspect` + room for the title) rather than a fixed constant,
-    /// so the banner can't shrink to a small centered card on a wide window. On
-    /// iPhone it keeps the original fixed-height 16:9 hero.
+    /// Wide layouts (iPad / visionOS) use `wideHeroSlide` — a full-bleed backdrop
+    /// with title + metadata overlaid on a gradient scrim. Compact (iPhone) keeps
+    /// the standard `AetherCard.hero` with the title block below.
     private var touchFeaturedCarousel: some View {
         let h = resolvedHeroHeight
         return TabView(selection: $heroIndex) {
             ForEach(Array(heroItems.enumerated()), id: \.element.id) { index, item in
                 NavigationLink(value: item) {
-                    AetherCard.hero(
-                        title: item.title,
-                        subtitle: featuredMetaLine(item),
-                        posterURL: item.backdropURL ?? item.posterURL,
-                        progress: heroProgress[item.id],
-                        rating: item.communityRating,
-                        aspectRatio: heroAspect
-                    )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: h)
+                    if isWideHero {
+                        wideHeroSlide(item, height: h)
+                    } else {
+                        AetherCard.hero(
+                            title: item.title,
+                            subtitle: featuredMetaLine(item),
+                            posterURL: item.backdropURL ?? item.posterURL,
+                            progress: heroProgress[item.id],
+                            rating: item.communityRating,
+                            aspectRatio: heroAspect
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: h)
+                    }
                 }
                 .buttonStyle(.plain)
                 .tag(index)
@@ -333,16 +335,82 @@ struct DiscoverView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: h)
-        // Measure the carousel's own width (inside the section padding) so the
-        // cinematic hero height tracks the available width on resize / rotation.
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { heroContentWidth = $0 }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .onChange(of: heroIndex) { _, _ in
-            // Auto-advance moves the page too; only a real user swipe should
-            // pause it (the programmatic move clears the flag without pausing).
             if programmaticAdvance { programmaticAdvance = false }
             else { pauseCountdown = Self.resumeIdleSeconds }
         }
+    }
+
+    /// Full-bleed overlay hero for iPad / visionOS: backdrop image fills the frame,
+    /// title + metadata are overlaid on a gradient scrim at the bottom edge, and a
+    /// thin progress bar runs along the very bottom for in-progress titles.
+    private func wideHeroSlide(_ item: UnifiedMediaItem, height: CGFloat) -> some View {
+        CachedAsyncImage(url: item.backdropURL ?? item.posterURL)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipped()
+            // Bottom gradient scrim + overlaid title / metadata
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
+                    Text(item.title)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+                        .lineLimit(2)
+                    if let meta = featuredMetaLine(item) {
+                        Text(meta)
+                            .font(AetherDesign.Typography.metadata)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                // Extra bottom clearance when the progress bar is visible
+                .padding(.bottom, heroProgress[item.id] != nil
+                         ? AetherDesign.Spacing.m + 7
+                         : AetherDesign.Spacing.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.72)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: height * 0.55)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+            }
+            // Rating badge — top-leading, consistent with AetherCard
+            .overlay(alignment: .topLeading) {
+                if let rating = item.communityRating, rating > 0 {
+                    Text(String(format: "%.1f", rating))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay { Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5) }
+                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                        .padding(AetherDesign.Spacing.xs)
+                }
+            }
+            // Continue-watching bar along the very bottom edge
+            .overlay(alignment: .bottom) {
+                if let fraction = heroProgress[item.id] {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(Color.white.opacity(0.25))
+                            Rectangle()
+                                .fill(AetherDesign.Gradients.progress)
+                                .frame(width: max(4, geo.size.width * CGFloat(fraction)))
+                        }
+                    }
+                    .frame(height: 3)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
     }
 
     /// `true` on the wide layouts (iPad regular width / visionOS) where the hero
@@ -361,34 +429,22 @@ struct DiscoverView: View {
     /// Cinematic ratio for the wide hero so a full-width banner stays a sensible
     /// height; the compact iPhone hero keeps the backdrop's native 16:9.
     private var heroAspect: CGFloat {
-        isWideHero ? 2.4 : 16.0 / 9.0
+        isWideHero ? 2.7 : 16.0 / 9.0
     }
 
-    /// Vertical room reserved below the artwork for the title + subtitle block, so
-    /// the artwork keeps its full cinematic width instead of shrinking to fit.
-    private var heroTitleAllowance: CGFloat {
-        #if os(visionOS)
-        66
-        #else
-        58
-        #endif
-    }
-
-    /// Hero height. Wide layouts derive it from the measured content width
-    /// (`width / aspect` + the title block) so the banner fills the width; iPhone
-    /// keeps the original fixed height.
+    /// Hero height. Wide layouts derive it from the measured content width at the
+    /// cinematic aspect ratio; title + metadata are overlaid so no bottom allowance
+    /// is needed. iPhone keeps the original fixed height.
     private var resolvedHeroHeight: CGFloat {
         guard isWideHero else { return heroHeight }
         guard heroContentWidth > 0 else {
-            // Before the first geometry measurement, fall back to a reasonable
-            // banner height so the carousel doesn't pop from a tiny size.
             #if os(visionOS)
-            return 460
-            #else
             return 360
+            #else
+            return 280
             #endif
         }
-        return (heroContentWidth / heroAspect) + heroTitleAllowance
+        return heroContentWidth / heroAspect
     }
     #endif
 
