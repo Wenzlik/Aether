@@ -1,5 +1,8 @@
 import SwiftUI
 import AetherCore
+#if os(tvOS)
+import UIKit
+#endif
 
 // MARK: - tvOS Accounts & Sources redesign (#441)
 //
@@ -262,7 +265,52 @@ struct SourceTileSpec: Identifiable {
         }
     }
 
+    /// Official brand-logo asset name for this source, used in preference to the
+    /// SF Symbol fallback when the image is present in the catalog. The logos are
+    /// trademarked, so the asset slots ship empty — drop each vendor's official
+    /// mark into `Source{Plex,Jellyfin,Emby}.imageset` and it renders
+    /// automatically (`SourceGlyph` falls back to `symbol` until then). SMB has no
+    /// vendor logo, so it stays on the SF Symbol.
+    var logoAsset: String? {
+        switch route?.rawValue ?? id.replacingOccurrences(of: "add-", with: "") {
+        case "plex":     return "SourcePlex"
+        case "jellyfin": return "SourceJellyfin"
+        case "emby":     return "SourceEmby"
+        default:         return nil
+        }
+    }
+
     var isConnected: Bool { route != nil }
+}
+
+/// The mark inside a source's tinted rounded square: the official brand logo when
+/// its asset is present, otherwise the SF Symbol fallback. Keeps a single render
+/// path so tiles and the detail header stay identical, and so dropping in a logo
+/// later needs no code change. (#441)
+struct SourceGlyph: View {
+    let asset: String?
+    let symbol: String
+    let color: Color
+    /// Container edge length; the symbol renders at ~half, the logo insets a touch.
+    let size: CGFloat
+
+    var body: some View {
+        if let asset, UIImage(named: asset) != nil {
+            // Monochrome brand marks ship as template vectors, so they tint to the
+            // source's brand colour the same way the SF Symbol fallback does.
+            Image(asset)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(color)
+                .padding(size * 0.2)
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.5, weight: .semibold))
+                .foregroundStyle(color)
+        }
+    }
 }
 
 /// One large focusable source tile. Connected tiles are full-strength (logo,
@@ -272,22 +320,29 @@ struct SourceTile: View {
     let spec: SourceTileSpec
 
     var body: some View {
+        // Logo (with an optional Active badge) then the name/subtitle directly
+        // beneath it — grouped at the top-left so the tile sizes to its content
+        // instead of stretching into a big empty box (the original "wastes space"
+        // complaint, recreated in tile form). #441 feedback.
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             HStack(alignment: .top) {
                 ZStack(alignment: .bottomTrailing) {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(spec.tint.opacity(spec.isConnected ? 0.22 : 0.12))
-                        .frame(width: 64, height: 64)
+                        .frame(width: 52, height: 52)
                         .overlay {
-                            Image(systemName: spec.symbol)
-                                .font(.system(size: 30, weight: .semibold))
-                                .foregroundStyle(spec.isConnected ? spec.tint : AetherDesign.Palette.textTertiary)
+                            SourceGlyph(
+                                asset: spec.logoAsset,
+                                symbol: spec.symbol,
+                                color: spec.isConnected ? spec.tint : AetherDesign.Palette.textTertiary,
+                                size: 52
+                            )
                         }
                     if !spec.isConnected {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 22))
+                            .font(.system(size: 20))
                             .foregroundStyle(AetherDesign.Palette.accent, AetherDesign.Palette.surface)
-                            .offset(x: 6, y: 6)
+                            .offset(x: 5, y: 5)
                     }
                 }
                 Spacer(minLength: 0)
@@ -301,19 +356,19 @@ struct SourceTile: View {
                 }
             }
 
-            Spacer(minLength: 0)
-
-            Text(spec.name)
-                .font(AetherDesign.Typography.cardTitle)
-                .foregroundStyle(spec.isConnected ? AetherDesign.Palette.textPrimary : AetherDesign.Palette.textSecondary)
-            Text(spec.subtitle ?? String(localized: "Not connected"))
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(spec.name)
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(spec.isConnected ? AetherDesign.Palette.textPrimary : AetherDesign.Palette.textSecondary)
+                Text(spec.subtitle ?? String(localized: "Not connected"))
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
         .padding(AetherDesign.Spacing.l)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
                 .fill(AetherDesign.Palette.surface.opacity(spec.isConnected ? 1 : 0.55))
@@ -338,21 +393,22 @@ struct SettingsCategoryTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 30, weight: .semibold))
                 .foregroundStyle(AetherDesign.Palette.accent)
-            Spacer(minLength: 0)
-            Text(title)
-                .font(AetherDesign.Typography.cardTitle)
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-            Text(subtitle)
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text(subtitle)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(AetherDesign.Spacing.l)
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
                 .fill(AetherDesign.Palette.surface)
@@ -468,9 +524,7 @@ struct SourceDetailScreen<Extra: View>: View {
                 .fill(spec.tint.opacity(0.22))
                 .frame(width: 76, height: 76)
                 .overlay {
-                    Image(systemName: spec.symbol)
-                        .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(spec.tint)
+                    SourceGlyph(asset: spec.logoAsset, symbol: spec.symbol, color: spec.tint, size: 76)
                 }
             VStack(alignment: .leading, spacing: 4) {
                 Text(spec.name)

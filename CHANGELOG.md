@@ -13,7 +13,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   a two-column grid; not-connected ones are lighter **Add Source** tiles that
   start sign-in directly. Per-source management — set active, manage servers, SMB
   folders/re-match, and the destructive **Sign Out** (now behind a confirmation) —
-  moves into a pushed detail screen, so the index stays calm and the focus engine
+  moves into a pushed detail screen. Tiles size to their content (no empty boxes)
+  and show each source's brand mark — wired via `SourceGlyph`, which prefers the
+  `Source{Plex,Jellyfin,Emby}` logo asset and falls back to an SF Symbol when one
+  isn't present. So the index stays calm and the focus engine
   has real targets to lift.
 - **iOS/iPadOS: Account split into Connected Sources + Add Source** (#441) — the
   signed-in services and the not-yet-wired ones are now separate sections, so the
