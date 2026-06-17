@@ -198,15 +198,45 @@ extension DetailView {
     /// "remember" — the user picks once per download, and the choice is
     /// recorded on the `DownloadJob`.
     private var downloadQualitySelectorList: some View {
-        ForEach(PlaybackQuality.allCases, id: \.self) { quality in
-            AetherSelectionRow(
-                title: quality.displayName,
-                isSelected: false
-            ) {
-                presentedSelector = nil
-                Task { await viewModel.startDownload(quality: quality) }
+        // On visionOS, hide "Original" for containers AVFoundation can't demux
+        // (mkv, …): the only remaining choices all transcode to an mp4, which
+        // the Cinema path (system `AVPlayer` docked into the immersive space)
+        // can play offline. An Original mkv would be unplayable in the theater
+        // offline. See `forcesTranscodeDownload`.
+        let qualities = PlaybackQuality.allCases.filter {
+            !(forcesTranscodeDownload && $0 == .original)
+        }
+        return Group {
+            ForEach(qualities, id: \.self) { quality in
+                AetherSelectionRow(
+                    title: quality.displayName,
+                    isSelected: false
+                ) {
+                    presentedSelector = nil
+                    Task { await viewModel.startDownload(quality: quality) }
+                }
+            }
+            if forcesTranscodeDownload {
+                Text("“Original” isn’t offered here — this title’s format can’t play offline in Cinema on Vision Pro. Pick a quality to download a compatible copy.")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.vertical, AetherDesign.Spacing.s)
             }
         }
+    }
+
+    /// visionOS-only: the item's *original* container is one AVFoundation can't
+    /// demux (mkv, …), so an Original download would be unplayable offline in
+    /// Cinema (which docks the system `AVPlayer`). The download UI then offers
+    /// transcode-only. Other platforms keep Original — their windowed VLCKit
+    /// engine plays the local file fine. `nil` mediaInfo ⇒ don't restrict.
+    private var forcesTranscodeDownload: Bool {
+        #if os(visionOS)
+        return PlaybackEngine.engine(forContainer: current.mediaInfo?.container) == .vlc
+        #else
+        return false
+        #endif
     }
 
     /// Source media info + projected playback mode. The codecs / bitrate /
