@@ -6,6 +6,31 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- **tvOS: Accounts & Sources redesigned as source tiles** (#441) — the flat list
+  (each source spread across account / set-active / sign-out rows, with Sign Out
+  on the index and the screen's centre empty) is replaced by large focusable
+  **tiles**. Connected sources show a logo, name, server, and an `Active` badge in
+  a two-column grid; not-connected ones are lighter **Add Source** tiles that
+  start sign-in directly. Per-source management — set active, manage servers, SMB
+  folders/re-match, and the destructive **Sign Out** (now behind a confirmation) —
+  moves into a pushed detail screen. Tiles size to their content (no empty boxes)
+  and show each source's brand mark — wired via `SourceGlyph`, which prefers the
+  `Source{Plex,Jellyfin,Emby}` logo asset and falls back to an SF Symbol when one
+  isn't present. So the index stays calm and the focus engine
+  has real targets to lift.
+- **iOS/iPadOS: Account split into Connected Sources + Add Source** (#441) — the
+  signed-in services and the not-yet-wired ones are now separate sections, so the
+  unconnected ones no longer read as broken alongside live ones. Sign Out in a
+  source's detail sheet is now gated by a confirmation.
+- **tvOS: Settings landing is now a category tile grid** (#441) — the index (the
+  first screen you see) had the same full-width-row 10-foot waste as the old
+  Accounts list, so its five categories are now tiles, consistent with the source
+  tiles one level down. iOS/iPadOS keep the list. The tvOS "Library & Downloads"
+  category — which compiled down to a single Cache row there — is renamed
+  **Storage**, and the category subtitles no longer promise downloads, local-file
+  import, app-icon, or bug-report flows that don't exist on tvOS. Removed the dead
+  two-column dashboard layout left over from the #289 index refactor.
+
 - **Library: removed the browse pills above the grid** (Genres / Years /
   Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
   are now multi-select facets in the Filter sheet, and the remaining rail no
