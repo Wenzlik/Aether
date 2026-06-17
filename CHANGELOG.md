@@ -6,6 +6,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Background battery — idle network monitor & carousel ticker** (iOS/iPadOS) —
+  two periodic workers kept running while the app was alive behind a playing
+  audio session. The SMB reachability `NWPathMonitor` is now paused on
+  `didEnterBackground` (a network handover no longer fires a 3 s probe +
+  cache-invalidation behind the lock screen) and restarted with an immediate
+  re-probe on foreground; the Discover hero carousel's 1 Hz auto-advance tick is
+  gated to the foreground so it stops waking the CPU for an off-screen carousel.
+  Playback-bound loops (AVPlayer poll, resume-write, VLC ticker) were already
+  suspended on background; this closes the two that weren't.
+
 - **Offline playback of downloads** (#428, all platforms) — downloaded titles
   could fail to play offline with a confusing remote-server error
   (`NSURLErrorDomain -1009`). The player picked its engine from the *server*

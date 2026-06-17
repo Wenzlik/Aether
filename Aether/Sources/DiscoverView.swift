@@ -489,6 +489,10 @@ struct DiscoverView: View {
     /// One 1 Hz tick: count down to the next auto-advance, honouring the pause
     /// window after an interaction and (tvOS) hero focus, and Reduce Motion.
     private func autoAdvanceTick() {
+        // The 1 Hz ticker keeps publishing while the app is alive behind a
+        // playing audio session; don't wake the CPU to advance an off-screen
+        // carousel. It resumes when the app returns to the foreground.
+        guard scenePhase == .active else { return }
         guard heroItems.count > 1, !reduceMotion else { return }
         #if os(tvOS)
         if heroFocused { return }   // pause while the hero has focus (#381)
