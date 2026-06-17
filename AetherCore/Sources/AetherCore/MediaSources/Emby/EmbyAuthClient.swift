@@ -71,7 +71,7 @@ public actor EmbyAuthClient {
 
     private func quickConnectEnabled(baseURL: URL) async throws -> Bool {
         let request = makeRequest(baseURL: baseURL, path: "/QuickConnect/Enabled")
-        guard let data = try? await api.data(for: request) else { return false }
+        guard let (data, _) = try? await api.data(for: request) else { return false }
         let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return text.lowercased() == "true"
     }

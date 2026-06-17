@@ -14,7 +14,7 @@ public enum EmbyAPI {
 
     // MARK: - System
 
-    public struct PublicSystemInfo: Decodable {
+    public struct PublicSystemInfo: Decodable, Sendable {
         public let serverName: String?
         public let version: String?
 
@@ -26,7 +26,7 @@ public enum EmbyAPI {
 
     // MARK: - Quick Connect
 
-    public struct QuickConnectResult: Decodable {
+    public struct QuickConnectResult: Decodable, Sendable {
         /// The short code shown to the user.
         public let code: String
         /// The secret used to poll and authenticate.
@@ -41,7 +41,7 @@ public enum EmbyAPI {
         }
     }
 
-    public struct AuthenticationResult: Decodable {
+    public struct AuthenticationResult: Decodable, Sendable {
         public let accessToken: String
         public let user: UserDto
 
@@ -50,7 +50,7 @@ public enum EmbyAPI {
             case user = "User"
         }
 
-        public struct UserDto: Decodable {
+        public struct UserDto: Decodable, Sendable {
             public let id: String
 
             private enum CodingKeys: String, CodingKey {
@@ -61,7 +61,7 @@ public enum EmbyAPI {
 
     // MARK: - Items
 
-    public struct ItemsResponse: Decodable {
+    public struct ItemsResponse: Decodable, Sendable {
         public let items: [BaseItemDto]
 
         private enum CodingKeys: String, CodingKey {
@@ -71,7 +71,7 @@ public enum EmbyAPI {
 
     // MARK: - BaseItemDto
 
-    public struct BaseItemDto: Decodable {
+    public struct BaseItemDto: Decodable, Sendable {
         public let id: String
         public let name: String?
         public let overview: String?
@@ -134,7 +134,7 @@ public enum EmbyAPI {
             case people = "People"
         }
 
-        public struct UserData: Decodable {
+        public struct UserData: Decodable, Sendable {
             public let played: Bool?
             public let isFavorite: Bool?
             public let playbackPositionTicks: Int64?
@@ -150,7 +150,7 @@ public enum EmbyAPI {
             }
         }
 
-        public struct BaseItemPerson: Decodable {
+        public struct BaseItemPerson: Decodable, Sendable {
             public let id: String?
             public let name: String?
             public let role: String?
@@ -169,7 +169,7 @@ public enum EmbyAPI {
 
     // MARK: - MediaSourceInfo
 
-    public struct MediaSourceInfo: Decodable {
+    public struct MediaSourceInfo: Decodable, Sendable {
         public let id: String?
         public let container: String?
         public let videoType: String?
@@ -185,7 +185,7 @@ public enum EmbyAPI {
 
     // MARK: - MediaStream
 
-    public struct MediaStream: Decodable {
+    public struct MediaStream: Decodable, Sendable {
         public let type: String?
         public let index: Int?
         public let language: String?
@@ -253,12 +253,13 @@ extension EmbyAPI.BaseItemDto {
         return formatter.date(from: string)
     }
 
-    var guids: [String] {
-        guard let ids = providerIds else { return [] }
-        return ids.compactMap { key, value in
+    var guids: MediaGuids {
+        guard let ids = providerIds else { return MediaGuids() }
+        let strings = ids.compactMap { key, value -> String? in
             guard !value.isEmpty else { return nil }
             return "\(key.lowercased())://\(value)"
         }
+        return MediaGuids(guidStrings: strings)
     }
 
     var sourceMediaInfo: MediaInfo? {
@@ -274,46 +275,47 @@ extension EmbyAPI.BaseItemDto {
         let h = videoStream?.height
         let w = videoStream?.width
         let resolution: String? = (w != nil && h != nil) ? "\(w!)x\(h!)" : nil
+        let kbps = videoStream?.bitRate.map { $0 / 1000 }
 
         return MediaInfo(
-            container: containerStr,
             videoCodec: codec,
             audioCodec: audioStream?.codec?.lowercased(),
             videoResolution: resolution,
-            videoBitrate: videoStream?.bitRate,
-            audioBitrate: audioStream?.bitRate,
-            audioChannels: nil,
-            videoRange: videoStream?.videoRange
+            bitrateKbps: kbps,
+            container: containerStr
         )
     }
 
-    var audioTracks: [MediaTrack] {
+    var audioTracks: [MediaAudioTrack] {
         let streams = mediaStreams ?? mediaSources?.first?.mediaStreams ?? []
         return streams
             .filter { $0.type == "Audio" }
-            .compactMap { stream -> MediaTrack? in
+            .compactMap { stream -> MediaAudioTrack? in
                 guard let index = stream.index else { return nil }
-                let label = stream.displayTitle ?? stream.language ?? "Track \(index)"
-                return MediaTrack(
+                let title = stream.displayTitle ?? stream.language ?? "Track \(index)"
+                return MediaAudioTrack(
                     id: String(index),
-                    label: label,
+                    title: title,
                     languageCode: stream.language,
+                    codec: stream.codec,
                     isSelected: stream.isDefault ?? false
                 )
             }
     }
 
-    var subtitleTracks: [MediaTrack] {
+    var subtitleTracks: [MediaSubtitleTrack] {
         let streams = mediaStreams ?? mediaSources?.first?.mediaStreams ?? []
         return streams
             .filter { $0.type == "Subtitle" }
-            .compactMap { stream -> MediaTrack? in
+            .compactMap { stream -> MediaSubtitleTrack? in
                 guard let index = stream.index else { return nil }
-                let label = stream.displayTitle ?? stream.language ?? "Subtitle \(index)"
-                return MediaTrack(
+                let title = stream.displayTitle ?? stream.language ?? "Subtitle \(index)"
+                return MediaSubtitleTrack(
                     id: String(index),
-                    label: label,
+                    title: title,
                     languageCode: stream.language,
+                    codec: stream.codec,
+                    isForced: stream.isExternal ?? false,
                     isSelected: stream.isDefault ?? false
                 )
             }
