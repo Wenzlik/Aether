@@ -70,6 +70,10 @@ public struct AetherCard: View {
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
                     .lineLimit(titleLineLimit)
                     .minimumScaleFactor(0.82)
+                    // Reserve the height of the maximum line count so all poster
+                    // cards in a LazyVGrid row have the same total height and
+                    // artwork tops align across columns.
+                    .frame(minHeight: titleLineLimit > 1 ? 40 : 0, alignment: .topLeading)
 
                 if let subtitle {
                     Text(subtitle)
