@@ -396,6 +396,11 @@ final class AppSession {
     private var smbPathMonitor: NWPathMonitor?
     /// Guards against overlapping probes when path changes arrive in a burst.
     private var isProbingSMB = false
+    /// App-lifecycle observers that pause the path monitor while backgrounded
+    /// (so a network handover during background audio playback can't fire a
+    /// reachability probe behind the lock screen) and restart it on return to
+    /// foreground. Created once, for the lifetime of the session.
+    private var smbLifecycleObservers: [Task<Void, Never>] = []
 
     // MARK: - Active source
 
@@ -1056,6 +1061,7 @@ final class AppSession {
 
     /// Re-probe whenever the network path changes (home ↔ away / Wi-Fi ↔ cellular).
     private func startSMBReachabilityMonitoring() {
+        startSMBLifecycleObserversIfNeeded()
         guard smbPathMonitor == nil else { return }
         let monitor = NWPathMonitor()
         smbPathMonitor = monitor
@@ -1063,6 +1069,37 @@ final class AppSession {
             Task { @MainActor in await self?.refreshSMBReachability() }
         }
         monitor.start(queue: DispatchQueue(label: "cz.zmrhal.aether.smb-reachability"))
+    }
+
+    /// Tear the path monitor down without forgetting that SMB is connected, so
+    /// foregrounding can bring it back. Used on `didEnterBackground`: an idle
+    /// monitor would otherwise keep delivering path-change callbacks (and firing
+    /// 3-second probes + cache invalidations) while the app is alive behind a
+    /// playing audio session.
+    private func pauseSMBReachabilityMonitoring() {
+        smbPathMonitor?.cancel()
+        smbPathMonitor = nil
+    }
+
+    /// Wire the app-lifecycle observers exactly once. They gate the path monitor
+    /// to the foreground; on return they restart it and probe immediately so a
+    /// network change missed while suspended is corrected right away.
+    private func startSMBLifecycleObserversIfNeeded() {
+        guard smbLifecycleObservers.isEmpty else { return }
+        smbLifecycleObservers = [
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: UIApplication.didEnterBackgroundNotification) {
+                    self?.pauseSMBReachabilityMonitoring()
+                }
+            },
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: UIApplication.willEnterForegroundNotification) {
+                    guard let self, self.isSMBConnected else { continue }
+                    self.startSMBReachabilityMonitoring()
+                    await self.refreshSMBReachability()
+                }
+            }
+        ]
     }
 
     /// Probe the configured SMB host; flip `isSMBReachable` (which gates
