@@ -15,9 +15,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   which still appear as removable chips and vanish when cleared. Browse facets
   (Genres / Years / Collections / Actors / Directors) sit just above the grid;
   pull-to-refresh re-fetches the catalog.
-- **Library filter: "Downloaded" (works offline)** — a new Availability filter
-  narrows the grid to downloaded titles, sourced from the local download store
-  so it works with no server connection (replaces the old Downloaded rail).
+- **Library filter: "Downloaded" (works offline)** (iOS/iPadOS/tvOS/visionOS) — a
+  new Availability filter narrows the grid to downloaded titles, sourced from the
+  local download store so it works with no server connection (replaces the old
+  Downloaded rail).
+- **macOS Library: same combined grid** — the Mac app's Library landing also
+  becomes one combined grid with the persistent Movies/Series toggle (was
+  separate Movies / TV Shows sections + "See All"). It has no Downloaded filter
+  (no downloads on macOS); instead the macOS-exclusive **"On Netflix"** sections
+  become a Filter ▸ Availability toggle — hidden by default, and when on the grid
+  shows Netflix-only discovery (owned titles excluded). Sort + Genre / Year /
+  Rating filters and search are retained.
 
 ## [0.7.9] — 2026-06-17
 
