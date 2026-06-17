@@ -120,9 +120,6 @@ struct DiscoverView: View {
                 #if os(iOS)
                 .toolbar {
                     if usesTopBarChrome {
-                        ToolbarItem(placement: .topBarLeading) {
-                            AetherBrandIcon { navigationPath = NavigationPath() }
-                        }
                     }
                 }
                 #endif

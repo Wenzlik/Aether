@@ -231,13 +231,8 @@ struct LibraryBrowseView: View {
     }
 
     #if os(iOS)
-    /// iPad: the brand icon (leading) + Filter + Search (trailing) ride the top
-    /// tab-bar row. Brand is the square app icon; tapping it pops Library to root.
     @ToolbarContentBuilder
     private var libraryTopBarItems: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            AetherBrandIcon { navigationPath = NavigationPath() }
-        }
         // Top-right is Search only (#383) — browse facets live in the pill row in
         // the content, and filtering happens inside each grid.
         if !isSearchActive {
