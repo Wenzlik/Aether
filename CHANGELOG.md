@@ -16,6 +16,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   this is a rule, not an accident. (Titlebar-chrome polish during Search is
   tracked separately — pending on-device repro.)
 
+- **Player dismiss collided with system controls** (#431, iOS/iPadOS) — the
+  custom close ✕ sat on the same top-leading edge AVKit uses for PiP / AirPlay,
+  crowding them, and its own auto-hide timer desynced from AVKit's (staggered
+  flicker). The ✕ over live playback is gone: **swipe-down** (#288) is now the
+  one canonical dismiss, made discoverable by a one-time, auto-fading "Swipe
+  down to close" hint centred away from every AVKit-owned edge. A close ✕ still
+  appears *only while the stream is preparing* (no AVKit chrome on screen yet),
+  so a hung "preparing" can't strand the user on a spinner. tvOS (Menu),
+  visionOS (native Back), and the macOS libmpv player (its own chrome, no system
+  PiP/zoom) were unaffected.
+
 - **Background battery — idle network monitor & carousel ticker** (iOS/iPadOS) —
   two periodic workers kept running while the app was alive behind a playing
   audio session. The SMB reachability `NWPathMonitor` is now paused on
