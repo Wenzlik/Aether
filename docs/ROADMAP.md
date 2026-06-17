@@ -6,8 +6,8 @@ The full source of truth remains `/ROADMAP.md`. This file is the fast, durable s
 
 ## Current Phase
 
-- `0.7.6` stabilization and UX polish
-- `0.7.x` release-quality hardening across Apple platforms
+- `0.8.0` "Eridanus" shipping to TestFlight (2026-06-17)
+- `0.8.x` stabilization and UX polish across all platforms
 
 ## Near-Term Priorities
 
@@ -15,7 +15,7 @@ The full source of truth remains `/ROADMAP.md`. This file is the fast, durable s
 - Playback reliability and consistency
 - visionOS Cinema refinement
 - macOS parity and release polish
-- Unified Library polish
+- Localization tail (#320) and localized artwork (#344, #345)
 
 ## Medium-Term Initiatives
 
