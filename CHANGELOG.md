@@ -19,6 +19,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   picker for containers Cinema's docked AVPlayer can't demux, so the download
   transcodes to a playable mp4.
 
+### Internal
+
+- `SettingsView.swift` split into per-concern files (#415): 1 925 → 712 lines,
+  with Sections and PreferenceSheets each in their own file. Pure mechanical
+  extraction, no behavior change (same playbook as #241).
+
 ## [0.7.8] — 2026-06-17
 
 ### Added
