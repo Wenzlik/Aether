@@ -120,13 +120,7 @@ struct SettingsView: View {
             ZStack {
                 AetherDesign.Gradients.background.ignoresSafeArea()
 
-                // Drive content width off the *measured* viewport so it can never
-                // be proposed wider than the screen. A fixed `maxWidth: 1100`
-                // proposed 1100pt to the width-greedy cards even when the viewport
-                // was narrower (iPad portrait / split view), so the two columns
-                // laid out past the edges and centered off-screen — both columns
-                // clipped (#287, same root cause as the old #248 pannability).
-                // `min(viewport − margins, 1100)`, centered, fits + keeps margins.
+                #if os(tvOS)
                 GeometryReader { geo in
                     ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
@@ -143,6 +137,25 @@ struct SettingsView: View {
                         imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
                     }
                 }
+                #else
+                // iOS 26 sidebar layout reports wrong dimensions to GeometryReader —
+                // use padding + maxWidth so content sizes off the real container.
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                        header
+                        settingsIndex
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
+                    .padding(.top, AetherDesign.Spacing.l)
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                    .frame(maxWidth: isWide ? 1100 : .infinity)
+                    .frame(maxWidth: .infinity)
+                }
+                .task {
+                    await refreshCapacity()
+                    imageCacheBytes = await Task.detached { AetherImageCache.shared.diskUsageBytes() }.value
+                }
+                #endif
             }
             // The root Settings surface carries its own wordmark, so suppress the
             // empty navigation bar; pushed screens (Downloads) show their own.
@@ -321,38 +334,25 @@ struct SettingsView: View {
             }
         }
         #else
-        VStack(spacing: AetherDesign.Spacing.m) {
-            ForEach(SettingsCategory.allCases) { category in
-                NavigationLink(value: category) {
-                    HStack(spacing: AetherDesign.Spacing.m) {
-                        Image(systemName: category.systemImage)
-                            .font(.title3)
-                            .foregroundStyle(AetherDesign.Palette.accent)
-                            .frame(width: 34)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(LocalizedStringKey(category.title))
-                                .font(AetherDesign.Typography.cardTitle)
-                                .foregroundStyle(AetherDesign.Palette.textPrimary)
-                            Text(LocalizedStringKey(category.subtitle))
-                                .font(AetherDesign.Typography.caption)
-                                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AetherDesign.Palette.textTertiary)
-                    }
-                    .padding(AetherDesign.Spacing.m)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                            .fill(AetherDesign.Palette.surface)
-                    )
-                    .premiumFocus()
+        if isWide {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: AetherDesign.Spacing.m),
+                    GridItem(.flexible(), spacing: AetherDesign.Spacing.m),
+                ],
+                spacing: AetherDesign.Spacing.m
+            ) {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) { categoryIndexCard(category) }
+                        .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+            }
+        } else {
+            VStack(spacing: AetherDesign.Spacing.m) {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) { categoryIndexCard(category) }
+                        .buttonStyle(.plain)
+                }
             }
         }
         #endif
@@ -395,9 +395,10 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                         categorySections(category)
                     }
+                    .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
-                    .frame(width: settingsContentWidth(geo.size.width))
+                    .frame(maxWidth: isWide ? 1100 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
                 #endif
@@ -452,6 +453,39 @@ struct SettingsView: View {
     }
 
     // MARK: - Layout
+
+    /// Shared card for both the single-column (iPhone) and two-column grid (iPad/visionOS) index.
+    #if !os(tvOS)
+    private func categoryIndexCard(_ category: SettingsCategory) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            Image(systemName: category.systemImage)
+                .font(.title3)
+                .foregroundStyle(AetherDesign.Palette.accent)
+                .frame(width: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(LocalizedStringKey(category.title))
+                    .font(AetherDesign.Typography.cardTitle)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                Text(LocalizedStringKey(category.subtitle))
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+        }
+        .padding(AetherDesign.Spacing.m)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Palette.surface)
+        )
+        .premiumFocus()
+    }
+    #endif
 
     /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
     /// the two-column dashboard. iPhone (compact) stays single-column.
