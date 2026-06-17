@@ -126,7 +126,7 @@ struct HomeView: View {
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
             .navigationDestination(for: LibraryRoute.self) { route in
-                LibraryBrowseView(session: session, route: route)
+                LibraryBrowseView(session: session, kind: route.kind)
             }
         }
     }
