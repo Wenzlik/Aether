@@ -74,6 +74,19 @@ public actor UnifiedLibrarySnapshotStore {
         persist()
     }
 
+    /// Drop the snapshots for specific keys — e.g. after a watched toggle, so the
+    /// affected kind re-fetches fresh server state on the next cold read instead
+    /// of repainting the stale badge. No-op for keys with nothing captured.
+    public func clear(for keys: [String]) {
+        hydrateIfNeeded()
+        var changed = false
+        for key in keys where store[key] != nil {
+            store[key] = nil
+            changed = true
+        }
+        if changed { persist() }
+    }
+
     /// Drop every snapshot — sign-out or a connected-source change, where
     /// another account's catalog must not linger.
     public func clearAll() {

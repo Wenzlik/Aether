@@ -225,14 +225,18 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Emby is here — connect your Emby server via Quick Connect, the same fast handshake as Jellyfin. Browse, search, and play alongside Plex and Jellyfin.",
-        "New app icon across iPhone, iPad, Apple TV, Apple Vision Pro, and Mac.",
-        "Background efficiency — VLC and AVPlayer idle less aggressively, image prefetching is rate-limited, and the resume loop pauses when Aether isn't in the foreground."
+        "Downloaded titles now play reliably offline — Aether uses the local file and the right player engine instead of falling back to the server.",
+        "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
+        "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
+        "Better battery — background network checks and the Discover carousel now pause while Aether isn't in the foreground.",
+        "macOS — a new View menu with ⌘1…⌘5 jumps between sections even when the sidebar is collapsed."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.7.8", codename: "Draco",
+                    summary: "Emby connector via Quick Connect, a refreshed app icon across every platform, and background performance fixes (VLC/AVPlayer idle, image prefetch, resume loop)."),
         ReleaseNote(version: "0.7.7", codename: "Draco",
                     summary: "A UX polish pass — unified Detail action cluster, rotating Discover carousel, compact Library browse pills, compact source switcher, iPad native sidebar, and a batch of tvOS and iPadOS bug fixes."),
         ReleaseNote(version: "0.7.3", codename: "Draco",
