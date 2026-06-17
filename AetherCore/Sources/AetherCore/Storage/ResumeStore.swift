@@ -234,6 +234,9 @@ private struct WirePoint: Codable {
         case .jellyfin(let serverID):
             kind = "jellyfin"
             param = serverID
+        case .emby(let serverID):
+            kind = "emby"
+            param = serverID
         case .smb(let id):
             kind = "smb"
             param = id
@@ -268,6 +271,9 @@ private struct WirePoint: Codable {
         case "jellyfin":
             guard let param = sourceParam else { return nil }
             source = .jellyfin(serverID: param)
+        case "emby":
+            guard let param = sourceParam else { return nil }
+            source = .emby(serverID: param)
         case "smb":
             guard let param = sourceParam else { return nil }
             source = .smb(id: param)

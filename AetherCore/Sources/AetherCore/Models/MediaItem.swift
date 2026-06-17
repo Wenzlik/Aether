@@ -557,12 +557,13 @@ public struct MediaID: Hashable, Sendable {
     public var key: String { "\(source.stableKey):\(rawValue)" }
 }
 
-/// Identifies which source (mock / Plex / Jellyfin server / SMB share / DLNA
-/// server / on-device Local Library) an item came from.
+/// Identifies which source (mock / Plex / Jellyfin / Emby server / SMB share /
+/// DLNA server / on-device Local Library) an item came from.
 public enum MediaSourceID: Hashable, Sendable {
     case mock
     case plex(serverID: String)
     case jellyfin(serverID: String)
+    case emby(serverID: String)
     /// A configured SMB share, keyed by a stable record UUID (not host) so an
     /// IP/host change doesn't orphan resume state (#214).
     case smb(id: String)
@@ -593,6 +594,8 @@ public enum MediaSourceID: Hashable, Sendable {
             return "plex.\(serverID)"
         case .jellyfin(let serverID):
             return "jellyfin.\(serverID)"
+        case .emby(let serverID):
+            return "emby.\(serverID)"
         case .smb(let id):
             return "smb.\(id)"
         case .dlna(let udn):

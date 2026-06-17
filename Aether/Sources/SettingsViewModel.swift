@@ -124,6 +124,14 @@ final class SettingsViewModel {
         isJellyfinSignedIn ? .connected : .notConnected
     }
 
+    var isEmbySignedIn: Bool { session.isEmbySignedIn }
+
+    var embyServerName: String? { session.embyServer?.serverName }
+
+    var embySourceStatus: AetherStatus {
+        isEmbySignedIn ? .connected : .notConnected
+    }
+
     var isSMBConnected: Bool { session.isSMBConnected }
     /// `false` when off the LAN — the share is dormant (hidden from the Library),
     /// not broken. Surfaced as an "Off network" note rather than an error (#214).
@@ -166,9 +174,9 @@ final class SettingsViewModel {
         session.activeSourceKind == kind
     }
 
-    /// True when both sources are connected, so the UI offers a switch.
+    /// True when more than one primary source is connected, so the UI offers a switch.
     var canSwitchSources: Bool {
-        isPlexSignedIn && isJellyfinSignedIn
+        [isPlexSignedIn, isJellyfinSignedIn, isEmbySignedIn].filter { $0 }.count > 1
     }
 
     func setActive(_ kind: AppSession.SourceKind) {
@@ -290,6 +298,7 @@ final class SettingsViewModel {
             switch source.id {
             case .plex:     kind = "plex"
             case .jellyfin: kind = "jellyfin"
+            case .emby:     kind = "emby"
             case .smb:      kind = "smb"
             case .dlna:     kind = "dlna"
             case .mock:     kind = "mock"
@@ -339,6 +348,15 @@ final class SettingsViewModel {
     /// Open the Jellyfin sign-in flow (server URL + Quick Connect).
     func connectJellyfin() {
         session.presentSignIn(.jellyfin)
+    }
+
+    /// Open the Emby sign-in flow (server URL + Quick Connect).
+    func connectEmby() {
+        session.presentSignIn(.emby)
+    }
+
+    func signOutOfEmby() async {
+        await session.signOutOfEmby()
     }
 
     func connectSMB() {

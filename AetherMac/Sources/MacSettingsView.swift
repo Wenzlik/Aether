@@ -55,7 +55,7 @@ private struct AccountsSettings: View {
     var session: MacSession
     @State private var signIn: SignIn?
 
-    private enum SignIn: String, Identifiable { case plex, jellyfin; var id: String { rawValue } }
+    private enum SignIn: String, Identifiable { case plex, jellyfin, emby; var id: String { rawValue } }
 
     var body: some View {
         Form {
@@ -102,6 +102,17 @@ private struct AccountsSettings: View {
                     Button("Connect Jellyfin…") { signIn = .jellyfin }
                 }
             }
+            Section("Emby") {
+                if let name = session.embyServerName {
+                    LabeledContent("Server", value: name)
+                    Button("Sign Out of Emby", role: .destructive) {
+                        Task { await session.signOutEmby() }
+                    }
+                } else {
+                    LabeledContent("Status", value: "Not connected")
+                    Button("Connect Emby…") { signIn = .emby }
+                }
+            }
             Section("Other Sources") {
                 LabeledContent("SMB / NAS", value: "Coming soon")
                 LabeledContent("Local Library", value: "Set up in General")
@@ -112,6 +123,7 @@ private struct AccountsSettings: View {
             switch which {
             case .plex:     PlexSignInSheet(session: session) { signIn = nil }
             case .jellyfin: JellyfinSignInSheet(session: session) { signIn = nil }
+            case .emby:     EmbySignInSheet(session: session) { signIn = nil }
             }
         }
     }

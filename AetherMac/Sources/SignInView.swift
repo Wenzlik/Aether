@@ -126,6 +126,114 @@ struct JellyfinSignInSheet: View {
     }
 }
 
+/// Emby sign-in via **Quick Connect** — mirrors `JellyfinSignInSheet`.
+struct EmbySignInSheet: View {
+    let session: MacSession
+    let onDone: () -> Void
+    @State private var model: EmbyQuickConnectModel
+
+    init(session: MacSession, onDone: @escaping () -> Void) {
+        self.session = session
+        self.onDone = onDone
+        _model = State(initialValue: EmbyQuickConnectModel(auth: session.embyAuthClient))
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Connect Emby").font(.title2.bold())
+            content
+            Button("Cancel") { onDone() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(40)
+        .frame(width: 440)
+        .onChange(of: model.record) { _, record in
+            if let record {
+                Task { await session.completeEmbySignIn(record); onDone() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.step {
+        case .enterURL:
+            VStack(spacing: 12) {
+                TextField("http://192.168.1.10:8096", text: $model.urlString)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 320)
+                Button("Connect") { model.connect() }
+                    .controlSize(.large)
+                    .disabled(model.urlString.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        case .connecting:
+            ProgressView("Contacting server…")
+        case let .awaiting(code):
+            VStack(spacing: 14) {
+                Text("Approve this code in Emby\n(Dashboard ▸ Quick Connect, or a signed-in client):")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                Text(code)
+                    .font(.system(size: 34, weight: .bold, design: .monospaced))
+                    .textSelection(.enabled)
+                ProgressView().controlSize(.small)
+            }
+        case let .failed(message):
+            VStack(spacing: 12) {
+                Label("Couldn't connect", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(message).font(.caption).foregroundStyle(.secondary)
+                Button("Try Again") { model.step = .enterURL }
+            }
+        }
+    }
+}
+
+/// Drives the Emby Quick Connect handshake against `EmbyAuthClient`.
+@MainActor
+@Observable
+final class EmbyQuickConnectModel {
+    enum Step: Equatable {
+        case enterURL
+        case connecting
+        case awaiting(code: String)
+        case failed(String)
+    }
+
+    var urlString = ""
+    var step: Step = .enterURL
+    var record: EmbyServerRecord?
+
+    private let auth: EmbyAuthClient
+
+    init(auth: EmbyAuthClient) { self.auth = auth }
+
+    func connect() {
+        let raw = urlString.trimmingCharacters(in: .whitespaces)
+        let normalized = raw.contains("://") ? raw : "http://\(raw)"
+        guard let baseURL = URL(string: normalized) else { step = .failed("Invalid URL"); return }
+        step = .connecting
+        Task {
+            do {
+                let info = try await auth.publicInfo(baseURL: baseURL)
+                let qc = try await auth.initiateQuickConnect(baseURL: baseURL)
+                step = .awaiting(code: qc.code)
+                let result = try await auth.pollForAuthentication(baseURL: baseURL, secret: qc.secret)
+                record = EmbyServerRecord(
+                    baseURLString: baseURL.absoluteString,
+                    accessToken: result.accessToken,
+                    userID: result.user.id,
+                    serverName: info.serverName ?? baseURL.host ?? "Emby"
+                )
+            } catch EmbyAuthError.notEnabled {
+                step = .failed("Quick Connect isn't enabled on this server. Enable it in Emby ▸ Dashboard ▸ Quick Connect.")
+            } catch {
+                step = .failed(error.localizedDescription)
+            }
+        }
+    }
+}
+
 /// Drives the Jellyfin Quick Connect handshake against `JellyfinAuthClient`.
 @MainActor
 @Observable
