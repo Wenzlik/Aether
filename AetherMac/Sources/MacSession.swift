@@ -66,7 +66,9 @@ final class MacSession {
     /// sidebar row labels/symbols and the menu-bar **View** commands, so the two
     /// can never drift apart.
     enum Section: String, CaseIterable, Identifiable, Hashable {
-        case home, discover, library, search, settings
+        // Search is intentionally NOT a section — it's a field at the top of the
+        // sidebar (Infuse-style); typing surfaces results over the current pane.
+        case home, discover, library, settings
         var id: Self { self }
 
         var title: String {
@@ -74,7 +76,6 @@ final class MacSession {
             case .home:     "Home"
             case .discover: "Discover"
             case .library:  "Library"
-            case .search:   "Search"
             case .settings: "Settings"
             }
         }
@@ -84,7 +85,6 @@ final class MacSession {
             case .home:     "house"
             case .discover: "sparkles"
             case .library:  "square.grid.2x2"
-            case .search:   "magnifyingglass"
             case .settings: "gearshape"
             }
         }

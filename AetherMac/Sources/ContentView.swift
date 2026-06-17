@@ -87,13 +87,31 @@ struct HomeView: View {
     // MARK: Sidebar
 
     private var sidebarList: some View {
-        // Rows + selection both derive from `MacSession.Section`, the same source
-        // the menu-bar View commands use — so a ⌘1…⌘5 pick highlights the right
-        // row and vice-versa. (Settings opens in this window's detail pane, not
-        // the separate native Settings window.)
-        List(selection: sectionSelection) {
-            ForEach(MacSession.Section.allCases) { section in
-                Label(section.title, systemImage: section.symbol).tag(section)
+        VStack(spacing: 0) {
+            // Infuse-style search field at the top of the sidebar; typing surfaces
+            // results over the current pane (see `detail`). Search is no longer a
+            // section — it lives here, always reachable.
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 4)
+
+            // Rows + selection both derive from `MacSession.Section`, the same
+            // source the menu-bar View commands use — so a ⌘1…⌘4 pick highlights
+            // the right row and vice-versa. (Settings opens in this window's
+            // detail pane, not the separate native Settings window.)
+            List(selection: sectionSelection) {
+                ForEach(MacSession.Section.allCases) { section in
+                    Label(section.title, systemImage: section.symbol).tag(section)
+                }
             }
         }
     }
@@ -114,19 +132,27 @@ struct HomeView: View {
     private var detail: some View {
         NavigationStack(path: $path) {
             Group {
-                switch session.section {
-                case .home:     DiscoverView(session: session, mode: .home)
-                case .discover: DiscoverView(session: session, mode: .discover)
-                case .library:  LibraryGridView(session: session)
-                case .search:   searchPane
-                case .settings: MacSettingsView(session: session, embedded: true)
+                if isSearching {
+                    // Typing in the sidebar field surfaces unified results over
+                    // whatever section is selected.
+                    MacSearchResults(session: session, query: searchText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cinematicBackground()
+                        .navigationTitle("Search")
+                } else {
+                    switch session.section {
+                    case .home:     DiscoverView(session: session, mode: .home)
+                    case .discover: DiscoverView(session: session, mode: .discover)
+                    case .library:  LibraryGridView(session: session)
+                    case .settings: MacSettingsView(session: session, embedded: true)
+                    }
                 }
             }
-            // Give each section a stable identity so switching panes fully
-            // replaces the view — otherwise the previous pane's title/toolbar can
-            // linger in the titlebar (the stray "Settings" + gear over the traffic
-            // lights when switching to Search, #432).
-            .id(session.section)
+            // Stable identity per pane (incl. the search overlay) so switching
+            // fully replaces the view — otherwise the previous pane's
+            // title/toolbar lingers in the titlebar (the stray "Settings" + gear
+            // over the traffic lights, #432).
+            .id(isSearching ? AnyHashable("search") : AnyHashable(session.section))
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
@@ -136,26 +162,9 @@ struct HomeView: View {
         }
     }
 
-    private var searchPane: some View {
-        // The custom in-content field didn't reliably render under the unified
-        // titlebar (#432); use the native search field, which macOS places in the
-        // toolbar and which is always visible.
-        Group {
-            if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-                AetherEmptyState(
-                    glyph: "magnifyingglass",
-                    title: "Search your library",
-                    message: "Find movies and shows across your connected sources."
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                MacSearchResults(session: session, query: searchText)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .cinematicBackground()
-        .navigationTitle("Search")
-        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search your library"))
+    /// Whether the sidebar search field has a query — drives the search overlay.
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     // MARK: Open
