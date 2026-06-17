@@ -327,6 +327,45 @@ struct SourceTile: View {
     }
 }
 
+/// A category tile for the tvOS Settings landing grid — icon, title, subtitle,
+/// the same focus lift as the source tiles so the whole Settings surface reads
+/// consistently (objects/navigation are tiles; value rows stay lists). (#441)
+struct SettingsCategoryTile: View {
+    let systemImage: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(AetherDesign.Palette.accent)
+            Spacer(minLength: 0)
+            Text(title)
+                .font(AetherDesign.Typography.cardTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            Text(subtitle)
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(AetherDesign.Spacing.l)
+        .frame(maxWidth: .infinity, minHeight: 170, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .fill(AetherDesign.Palette.surface)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        .premiumFocus()
+    }
+}
+
 /// The pushed per-source detail screen (tvOS). Pins its own title above a
 /// scroll of management rows, ending in a destructive Sign Out gated by a
 /// confirmation — destructive actions no longer sit on the index.

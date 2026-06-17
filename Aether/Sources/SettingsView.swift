@@ -232,36 +232,95 @@ struct SettingsView: View {
     private enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case accountsSources, playback, libraryDownloads, appearance, supportAbout
         var id: String { rawValue }
+        // Titles / subtitles / icons are platform-aware: tvOS compiles out
+        // downloads, storage, local-file import, app-icon, and the mail-backed
+        // Support flows, so the shared copy ("…and local files", "Downloads,
+        // storage, and cache") would promise things that don't exist there (#441).
         var title: String {
             switch self {
             case .accountsSources: return "Accounts & Sources"
             case .playback: return "Playback"
-            case .libraryDownloads: return "Library & Downloads"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "Storage"
+                #else
+                return "Library & Downloads"
+                #endif
             case .appearance: return "Appearance"
             case .supportAbout: return "Support & About"
             }
         }
         var subtitle: String {
             switch self {
-            case .accountsSources: return "Plex, Jellyfin, SMB, and local files"
+            case .accountsSources:
+                #if os(tvOS)
+                return "Plex, Jellyfin, and SMB"
+                #else
+                return "Plex, Jellyfin, SMB, and local files"
+                #endif
             case .playback: return "Quality, audio & subtitles, skip"
-            case .libraryDownloads: return "Downloads, storage, and cache"
-            case .appearance: return "Theme, app icon, and watched titles"
-            case .supportAbout: return "Report a bug, diagnostics, about"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "Image cache"
+                #else
+                return "Downloads, storage, and cache"
+                #endif
+            case .appearance:
+                #if os(tvOS)
+                return "Theme and watched titles"
+                #else
+                return "Theme, app icon, and watched titles"
+                #endif
+            case .supportAbout:
+                #if os(tvOS)
+                return "Diagnostics and about"
+                #else
+                return "Report a bug, diagnostics, about"
+                #endif
             }
         }
         var systemImage: String {
             switch self {
             case .accountsSources: return "person.2.circle.fill"
             case .playback: return "play.circle.fill"
-            case .libraryDownloads: return "arrow.down.circle.fill"
+            case .libraryDownloads:
+                #if os(tvOS)
+                return "internaldrive.fill"
+                #else
+                return "arrow.down.circle.fill"
+                #endif
             case .appearance: return "paintbrush.fill"
             case .supportAbout: return "questionmark.circle.fill"
             }
         }
     }
 
+    @ViewBuilder
     private var settingsIndex: some View {
+        #if os(tvOS)
+        // tvOS landing is the first thing you see — a full-width row list wastes
+        // the 10-foot canvas exactly like the old Accounts list did, so the index
+        // is a tile grid (consistent with the source tiles one level down, #441).
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+                GridItem(.flexible(), spacing: AetherDesign.Spacing.l),
+            ],
+            spacing: AetherDesign.Spacing.l
+        ) {
+            ForEach(SettingsCategory.allCases) { category in
+                NavigationLink(value: category) {
+                    SettingsCategoryTile(
+                        systemImage: category.systemImage,
+                        title: LocalizedStringKey(category.title),
+                        subtitle: LocalizedStringKey(category.subtitle)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        #else
         VStack(spacing: AetherDesign.Spacing.m) {
             ForEach(SettingsCategory.allCases) { category in
                 NavigationLink(value: category) {
@@ -296,6 +355,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
         }
+        #endif
     }
 
     /// One category's own screen — a single-column scroll of the relevant
@@ -413,70 +473,6 @@ struct SettingsView: View {
         guard viewport > 0 else { return 320 }
         let available = viewport - AetherDesign.Spacing.l * 2
         return isWide ? min(available, 1100) : available
-    }
-
-    /// iPad / tvOS / visionOS: controls on the left, an at-a-glance status
-    /// dashboard (Connected Sources · Storage Summary) on the right — using the
-    /// space instead of centring a phone-width list.
-    private var wideDashboard: some View {
-        HStack(alignment: .top, spacing: AetherDesign.Spacing.xl) {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                leftColumnSections
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-            // tvOS: mark each column a focus section so a Right/Left press jumps
-            // between them.
-            .aetherFocusSection()
-
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                rightColumnSections
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-            .aetherFocusSection()
-        }
-    }
-
-    /// iPhone: a single column — both groups stacked.
-    private var compactColumn: some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-            leftColumnSections
-            rightColumnSections
-        }
-    }
-
-    /// Left column (wide) — the "what to play / from where" configuration.
-    @ViewBuilder
-    private var leftColumnSections: some View {
-        accountSection
-        #if !os(tvOS)
-        localLibrarySection
-        downloadsSection
-        #endif
-        playbackSection
-        #if os(visionOS)
-        cinemaSection
-        #endif
-    }
-
-    /// Right column (wide) — personalization, support/info, and the status +
-    /// cache cards. (Connection state lives on the Account rows; the separate
-    /// "Connected Sources" card and the Sources section were both removed as
-    /// duplicates of Account — #224.)
-    @ViewBuilder
-    private var rightColumnSections: some View {
-        appearanceSection
-        watchedDisplaySection
-        #if !os(tvOS)
-        supportSection
-        #endif
-        aboutSection
-        if developerUnlocked {
-            developerSection
-        }
-        #if !os(tvOS)
-        storageSummaryCard
-        #endif
-        imageCacheCard
     }
 
     #if os(visionOS)
@@ -701,18 +697,5 @@ struct SettingsView: View {
         isSigningOutEmby = true
         await viewModel.signOutOfEmby()
         isSigningOutEmby = false
-    }
-}
-
-private extension View {
-    /// Apply `.focusSection()` on tvOS so the focus engine can move between the
-    /// two dashboard columns; no-op elsewhere (the API is tvOS-only).
-    @ViewBuilder
-    func aetherFocusSection() -> some View {
-        #if os(tvOS)
-        self.focusSection()
-        #else
-        self
-        #endif
     }
 }

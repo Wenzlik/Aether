@@ -19,6 +19,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   signed-in services and the not-yet-wired ones are now separate sections, so the
   unconnected ones no longer read as broken alongside live ones. Sign Out in a
   source's detail sheet is now gated by a confirmation.
+- **tvOS: Settings landing is now a category tile grid** (#441) — the index (the
+  first screen you see) had the same full-width-row 10-foot waste as the old
+  Accounts list, so its five categories are now tiles, consistent with the source
+  tiles one level down. iOS/iPadOS keep the list. The tvOS "Library & Downloads"
+  category — which compiled down to a single Cache row there — is renamed
+  **Storage**, and the category subtitles no longer promise downloads, local-file
+  import, app-icon, or bug-report flows that don't exist on tvOS. Removed the dead
+  two-column dashboard layout left over from the #289 index refactor.
 
 - **Library: removed the browse pills above the grid** (Genres / Years /
   Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
