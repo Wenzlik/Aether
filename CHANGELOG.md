@@ -4,6 +4,21 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **Offline playback of downloads** (#428, all platforms) — downloaded titles
+  could fail to play offline with a confusing remote-server error
+  (`NSURLErrorDomain -1009`). The player picked its engine from the *server*
+  stream URL, so a downloaded mkv was routed to AVPlayer and then fell through
+  to a network resolve while offline; separately, a stale absolute `file://`
+  path (after a restore/migration that changed the data-container UUID) made a
+  present download look missing. The windowed player now prefers the local
+  download and picks the engine from the downloaded file's container, and a new
+  `DownloadStatus.existingLocalURL()` re-bases moved downloads onto the current
+  downloads directory. On visionOS, "Original" is hidden in the download quality
+  picker for containers Cinema's docked AVPlayer can't demux, so the download
+  transcodes to a playable mp4.
+
 ## [0.7.8] — 2026-06-17
 
 ### Added
