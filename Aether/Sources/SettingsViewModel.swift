@@ -225,17 +225,16 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "See where your titles are also on Netflix — plus Netflix-only picks in Discover & Search — with an opt-in toggle and Region in Settings (Aether links out; it never streams Netflix)",
-        "Resume across all your devices through Plex/Jellyfin themselves — Continue Watching now seeds from the server, so you pick up where you left off even on a new device",
-        "Discover, refreshed — New Releases and Top Rated rails, with in-progress titles kept in Continue Watching instead of cluttering Discover",
-        "Library: filter by year, with a quick community rating on each poster",
-        "macOS polish — Resume / Play from Beginning, Mark Watched, Favorite, episode navigation, and a sharper full-screen backdrop",
-        "Multiple Plex servers? Pick which one streams first in Settings ▸ Account ▸ Plex Servers — now on Apple TV and Mac too"
+        "Emby is here — connect your Emby server via Quick Connect, the same fast handshake as Jellyfin. Browse, search, and play alongside Plex and Jellyfin.",
+        "New app icon across iPhone, iPad, Apple TV, Apple Vision Pro, and Mac.",
+        "Background efficiency — VLC and AVPlayer idle less aggressively, image prefetching is rate-limited, and the resume loop pauses when Aether isn't in the foreground."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.7.7", codename: "Draco",
+                    summary: "A UX polish pass — unified Detail action cluster, rotating Discover carousel, compact Library browse pills, compact source switcher, iPad native sidebar, and a batch of tvOS and iPadOS bug fixes."),
         ReleaseNote(version: "0.7.3", codename: "Draco",
                     summary: "Aether for macOS — a native Mac app (Apple Silicon) sharing the whole AetherCore stack, playing through libmpv, distributed as a notarized DMG. Watched marking now syncs across every connected source."),
         ReleaseNote(version: "0.7.0", codename: "Draco",
