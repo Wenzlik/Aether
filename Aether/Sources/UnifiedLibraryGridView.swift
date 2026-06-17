@@ -24,10 +24,28 @@ struct UnifiedLibraryGridView: View {
     /// Present the filter sheet automatically on first appear — set when the
     /// landing's Filter button pushed us, so "Filter" is one tap, not two.
     var autoOpenFilter: Bool = false
+    /// When true this grid **is** the Library tab landing (not a pushed "See
+    /// all"): it shows the browse pills, and leaves search + the navigation title
+    /// to the hosting `LibraryBrowseView` shell (which owns the branded header).
+    var isLibraryRoot: Bool = false
+    /// Completed-download source for the offline "Downloaded" filter. Read
+    /// reactively, so toggling a download in/out updates the grid live; present
+    /// only on the landing (the pushed "See all" grids don't pass it).
+    var downloads: DownloadObserver? = nil
+    /// Whether any connected source actually has collections — gates the
+    /// Collections browse pill (probed by the shell and passed down).
+    var hasCollections: Bool = false
 
-    /// Type facet, only meaningful in all-kinds mode (`kind == nil`).
-    enum KindFilter: Hashable { case all, movies, shows }
-    @State private var kindFilter: KindFilter = .all
+    /// Persistent type toggles (all-kinds mode): independent, **both on = show
+    /// everything**. Unlike the removable facet filters below, these never
+    /// disappear — they just depress. Turning the last one off snaps both back on
+    /// (an empty type selection would show nothing useful).
+    @State private var showMovies = true
+    @State private var showShows = true
+    /// "Downloaded only" facet — like the other filters it's removable, but it
+    /// also works **offline**: it renders the completed downloads straight from
+    /// the store even when the server catalog can't be fetched.
+    @State private var downloadedOnly = false
     /// Ids of the loaded **show** titles, so the Type facet can split the
     /// combined catalog without a per-item kind lookup (we load the two kinds
     /// separately and remember which were shows).
@@ -109,9 +127,14 @@ struct UnifiedLibraryGridView: View {
             .padding(.vertical, AetherDesign.Spacing.l)
         }
         .aetherScreenBackground()
+        // Pull-to-refresh re-fetches the catalog past the cache (the Library
+        // landing no longer has the shell's rail refresh).
         #if !os(tvOS)
-        .navigationTitle(LocalizedStringKey(title))
+        .refreshable { await load(forceRefresh: true) }
         #endif
+        // As the Library landing the shell (`LibraryBrowseView`) owns the branded
+        // header + search, so suppress the grid's own title/search there.
+        .libraryNavTitle(!isLibraryRoot, title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
         #endif
@@ -130,9 +153,7 @@ struct UnifiedLibraryGridView: View {
         // Search *within* the category (#369) — client-side title match over the
         // loaded catalog, the same no-reload model as the facet filters (#319).
         // iOS/iPadOS only; tvOS keeps its existing inline controls unchanged.
-        #if os(iOS)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text("Search your library"))
-        #endif
+        .librarySearchable(!isLibraryRoot, text: $searchText)
         // The grid loads the *full* catalog once per source set — audio + genre
         // are both client-side filters now, so a chip tap never reloads (#319).
         .task(id: reloadKey) { await load() }
@@ -161,18 +182,24 @@ struct UnifiedLibraryGridView: View {
 
     @ViewBuilder
     private var content: some View {
-        if isLoading && items.isEmpty {
+        // Loading only blocks for the server catalog; the Downloaded filter reads
+        // local state, so it stays usable (offline) even before a catalog lands.
+        if isLoading && items.isEmpty && !downloadedOnly {
             AetherLoadingState(.inline)
                 .padding(.top, AetherDesign.Spacing.l)
         } else {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                // Filters (genre / audio / rating) live behind the Filter button
-                // instead of permanent chip rows (#342); the Filter + Sort
-                // buttons sit at the top of the grid content (#383).
+                // Movies/Series toggle + Filter + Sort. Filters (genre / audio /
+                // rating) live behind the Filter button instead of permanent chip
+                // rows (#342); the bar sits at the top of the grid content (#383).
                 #if os(tvOS)
                 HStack(spacing: AetherDesign.Spacing.m) {
+                    typeToggleChips
                     tvOSSortTrigger
                     tvOSFilterTrigger
+                    // tvOS has no pull-to-refresh, so the grid carries its own
+                    // reload control (the shell no longer does).
+                    tvOSReloadTrigger
                 }
                 #else
                 iosFilterSortBar
@@ -184,7 +211,14 @@ struct UnifiedLibraryGridView: View {
                 if hasActiveFilter {
                     activeFiltersRow
                 }
-                if sortedItems.isEmpty {
+                // Browse facets (Genres / Years / Collections / Actors / Directors)
+                // — only on the Library landing, just above the grid.
+                if isLibraryRoot {
+                    browsePillsRow
+                }
+                if downloadedOnly {
+                    downloadedGrid
+                } else if sortedItems.isEmpty {
                     AetherEmptyState(
                         glyph: "tray",
                         title: "Nothing here",
@@ -205,6 +239,94 @@ struct UnifiedLibraryGridView: View {
         }
     }
 
+    // MARK: - Downloaded (offline) grid
+
+    /// Completed downloads, honoring the Movies/Series toggle + title search.
+    /// Built from the local `DownloadObserver` snapshot, so it works offline
+    /// (downloaded movies are `.movie`, downloaded episodes `.episode` → Series).
+    private var downloadedJobs: [DownloadJob] {
+        var jobs = downloads?.snapshot.completed ?? []
+        if kind == nil, showMovies != showShows {
+            jobs = jobs.filter { showMovies ? $0.kind == .movie : $0.kind != .movie }
+        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            jobs = jobs.filter { $0.title.localizedStandardContains(query) }
+        }
+        return jobs
+    }
+
+    @ViewBuilder
+    private var downloadedGrid: some View {
+        if downloadedJobs.isEmpty {
+            AetherEmptyState(
+                glyph: "arrow.down.circle",
+                title: "No downloads",
+                message: "Titles you download for offline viewing show up here."
+            )
+            .padding(.top, AetherDesign.Spacing.l)
+        } else {
+            LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
+                ForEach(downloadedJobs) { job in
+                    NavigationLink(value: downloadedItem(job)) {
+                        AetherCard.poster(title: job.title, posterURL: job.displayPosterURL, isWatched: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// A `MediaItem` reconstructed from a completed download's captured snapshot,
+    /// so the card navigates to Detail (offline playback picks the local file).
+    private func downloadedItem(_ job: DownloadJob) -> MediaItem {
+        MediaItem(
+            id: job.mediaID,
+            title: job.title,
+            kind: job.kind,
+            posterURL: job.displayPosterURL,
+            seriesTitle: job.seriesTitle,
+            seasonNumber: job.seasonNumber,
+            episodeNumber: job.episodeNumber
+        )
+    }
+
+    // MARK: - Browse pills (Library landing)
+
+    /// Horizontal pill row of browse facets, shown above the grid on the landing.
+    /// Each navigates a `LibraryBrowseRoute`, registered by the shell's stack.
+    private var browsePillsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                browsePill("Genres", route: .genres)
+                browsePill("Years", route: .years)
+                if hasCollections {
+                    browsePill("Collections", route: .collections)
+                }
+                if connectedSources.contains(where: { $0.supportsPeople }) {
+                    browsePill("Actors", route: .actors)
+                    browsePill("Directors", route: .directors)
+                }
+            }
+            .padding(.vertical, AetherDesign.Spacing.xxs)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    private func browsePill(_ title: LocalizedStringKey, route: LibraryBrowseRoute) -> some View {
+        NavigationLink(value: route) {
+            Text(title)
+                .font(AetherDesign.Typography.metadata)
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+                .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+        }
+        .buttonStyle(.plain)
+    }
+
     /// Empty-state copy reflects whether a search query or a filter is narrowing
     /// the result.
     private var emptyMessage: String {
@@ -222,14 +344,13 @@ struct UnifiedLibraryGridView: View {
     /// client-side over the loaded catalog, so they apply instantly (#319).
     private var filteredItems: [UnifiedMediaItem] {
         var result = items
-        // Type facet (all-kinds mode only): split the combined catalog by the
-        // remembered show ids.
-        if kind == nil {
-            switch kindFilter {
-            case .all:    break
-            case .movies: result = result.filter { !showIDs.contains($0.id) }
-            case .shows:  result = result.filter { showIDs.contains($0.id) }
-            }
+        // Persistent type toggles (all-kinds mode): one selected (the other off)
+        // restricts the combined catalog by the remembered show ids; both on /
+        // both off (the latter snaps back, see `toggleType`) shows everything.
+        if kind == nil, showMovies != showShows {
+            result = showMovies
+                ? result.filter { !showIDs.contains($0.id) }
+                : result.filter { showIDs.contains($0.id) }
         }
         // Audio language (#319): filter by the lazily-loaded membership set. If
         // the tapped language hasn't loaded yet, leave the set unfiltered so we
@@ -259,7 +380,7 @@ struct UnifiedLibraryGridView: View {
     /// the "Clear" affordance.
     private var hasActiveFilter: Bool {
         selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil
-            || !selectedYears.isEmpty || (kind == nil && kindFilter != .all)
+            || !selectedYears.isEmpty || downloadedOnly
     }
 
     private func clearFilters() {
@@ -267,12 +388,19 @@ struct UnifiedLibraryGridView: View {
         selectedAudioLanguage = nil
         selectedMinRating = nil
         selectedYears = []
-        kindFilter = .all
+        downloadedOnly = false
+        // The Movies/Series toggles are persistent, not "filters" — Clear leaves
+        // them untouched.
     }
 
-    /// Localized label for the active Type facet chip / token.
-    private var kindFilterLabel: String {
-        kindFilter == .movies ? "Movies" : "TV Shows"
+    /// Flip one type toggle; never allow an empty selection (turning the last one
+    /// off snaps both back on, i.e. "show everything").
+    private func toggleType(movies: Bool) {
+        if movies { showMovies.toggle() } else { showShows.toggle() }
+        if !showMovies && !showShows {
+            showMovies = true
+            showShows = true
+        }
     }
 
     // MARK: - Active-filter summary (#367)
@@ -293,8 +421,8 @@ struct UnifiedLibraryGridView: View {
     /// lists its groups (Genre · Audio · Rating · Year).
     private var activeFilterTokens: [FilterToken] {
         var tokens: [FilterToken] = []
-        if kind == nil, kindFilter != .all {
-            tokens.append(.init(id: "type", label: kindFilterLabel) { self.kindFilter = .all })
+        if downloadedOnly {
+            tokens.append(.init(id: "downloaded", label: "Downloaded") { self.downloadedOnly = false })
         }
         if let selectedGenre {
             tokens.append(.init(id: "genre", label: selectedGenre) { self.selectedGenre = nil })
@@ -476,6 +604,8 @@ struct UnifiedLibraryGridView: View {
     /// Search.
     private var iosFilterSortBar: some View {
         HStack(spacing: AetherDesign.Spacing.s) {
+            // Persistent Movies / Series toggles lead the bar in all-kinds mode.
+            typeToggleChips
             Button { isFilterSheetPresented = true } label: {
                 barControl(active: hasActiveFilter) {
                     Image(systemName: "line.3.horizontal.decrease")
@@ -551,18 +681,43 @@ struct UnifiedLibraryGridView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Filters")
     }
+
+    /// tvOS reload — there's no pull-to-refresh on the remote, so the grid carries
+    /// its own force-refresh button (the Library shell no longer fetches rails).
+    private var tvOSReloadTrigger: some View {
+        Button { Task { await load(forceRefresh: true) } } label: {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Image(systemName: "arrow.clockwise")
+                Text("Reload")
+            }
+            .font(AetherDesign.Typography.cardTitle)
+            .padding(.vertical, AetherDesign.Spacing.m)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reload")
+    }
     #endif
 
-    /// Type filter chips (all-kinds mode): All / Movies / TV Shows.
-    private var typeFilterRow: some View {
+    /// Availability filter chips: All / Downloaded only. (Type — Movies / Series
+    /// — moved out of the sheet to the persistent toggle in the top bar.)
+    private var downloadedFilterRow: some View {
         chipContainer {
-            genreChip(label: "All", isSelected: kindFilter == .all) { kindFilter = .all }
-            genreChip(label: "Movies", isSelected: kindFilter == .movies) {
-                kindFilter = (kindFilter == .movies) ? .all : .movies
-            }
-            genreChip(label: "TV Shows", isSelected: kindFilter == .shows) {
-                kindFilter = (kindFilter == .shows) ? .all : .shows
-            }
+            genreChip(label: "All", isSelected: !downloadedOnly) { downloadedOnly = false }
+            genreChip(label: "Downloaded", isSelected: downloadedOnly) { downloadedOnly = true }
+        }
+    }
+
+    /// The two persistent Movies / Series toggles for the top bar (all-kinds mode
+    /// only). Independent and always visible — they depress rather than vanish, so
+    /// they read as a mode switch, not a removable filter.
+    @ViewBuilder
+    private var typeToggleChips: some View {
+        if kind == nil {
+            genreChip(label: "Movies", isSelected: showMovies) { toggleType(movies: true) }
+            genreChip(label: "Series", isSelected: showShows) { toggleType(movies: false) }
         }
     }
 
@@ -605,10 +760,10 @@ struct UnifiedLibraryGridView: View {
                 Text("Filter")
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                // Type facet — only in all-kinds mode (the unified Library grid),
-                // so movies/shows can be picked alongside the other facets.
-                if kind == nil {
-                    filterGroup("Show") { typeFilterRow }
+                // Availability — only when the landing wired the download store.
+                // Lets the user narrow to downloaded titles (works offline).
+                if downloads != nil {
+                    filterGroup("Availability") { downloadedFilterRow }
                 }
                 if !availableGenres.isEmpty {
                     filterGroup("Genre") { genreFilterRow }
@@ -713,7 +868,7 @@ struct UnifiedLibraryGridView: View {
 
     // MARK: - Loading
 
-    private func load() async {
+    private func load(forceRefresh: Bool = false) async {
         guard !connectedSources.isEmpty else {
             items = []
             showIDs = []
@@ -726,14 +881,14 @@ struct UnifiedLibraryGridView: View {
         // Always the full catalog — audio + genre are client-side filters (#319).
         let fetched: [UnifiedMediaItem]
         if let kind {
-            fetched = await library.unifiedItems(kind: kind)
+            fetched = await library.unifiedItems(kind: kind, forceRefresh: forceRefresh)
             guard key == sourcesKey else { return }
             showIDs = []
         } else {
             // All-kinds mode: load Movies + TV Shows and remember which ids are
-            // shows so the Type facet can split them client-side.
-            async let moviesTask = library.unifiedItems(kind: .movie)
-            async let showsTask = library.unifiedItems(kind: .show)
+            // shows so the Type toggle can split them client-side.
+            async let moviesTask = library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
+            async let showsTask = library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
             let movies = await moviesTask
             let shows = await showsTask
             guard key == sourcesKey else { return }
@@ -847,5 +1002,44 @@ private struct FlowLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+// MARK: - Conditional chrome (Library-root vs pushed "See all")
+
+private extension View {
+    /// Apply the grid's own navigation title only when it's a standalone pushed
+    /// grid; as the Library landing the shell owns the branded header. tvOS uses
+    /// an in-scroll heading instead of a nav title, so it's always a no-op there.
+    @ViewBuilder
+    func libraryNavTitle(_ enabled: Bool, _ title: String) -> some View {
+        #if os(tvOS)
+        self
+        #else
+        if enabled {
+            self.navigationTitle(LocalizedStringKey(title))
+        } else {
+            self
+        }
+        #endif
+    }
+
+    /// Apply the grid's own `.searchable` only when standalone (iOS); as the
+    /// Library landing the shell provides search, so a second bar would clash.
+    @ViewBuilder
+    func librarySearchable(_ enabled: Bool, text: Binding<String>) -> some View {
+        #if os(iOS)
+        if enabled {
+            self.searchable(
+                text: text,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: Text("Search your library")
+            )
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

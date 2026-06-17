@@ -225,6 +225,7 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
+        "The Library is now one combined grid — open straight into everything with a persistent Movies / Series toggle, browse facets above the grid, and a new \"Downloaded\" filter that works offline.",
         "Downloaded titles now play reliably offline — Aether uses the local file and the right player engine instead of falling back to the server.",
         "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
         "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
