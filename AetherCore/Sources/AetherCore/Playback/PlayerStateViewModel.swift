@@ -28,6 +28,10 @@ public final class PlayerStateViewModel {
     private var refreshTask: Task<Void, Never>?
     private let refreshInterval: Duration
 
+    private var activePollInterval: Duration {
+        state.status == .paused ? .seconds(5) : refreshInterval
+    }
+
     public init(session: PlaybackSession, refreshInterval: Duration = .milliseconds(500)) {
         self.session = session
         self.refreshInterval = refreshInterval
@@ -103,9 +107,9 @@ public final class PlayerStateViewModel {
 
     private func startRefreshing() {
         refreshTask?.cancel()
-        let interval = refreshInterval
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
+                let interval = self?.activePollInterval ?? .milliseconds(500)
                 try? await Task.sleep(for: interval)
                 await self?.refresh()
             }
