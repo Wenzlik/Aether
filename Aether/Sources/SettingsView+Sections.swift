@@ -23,6 +23,23 @@ extension SettingsView {
             #endif
         }
         .task { await loadSMBMatchSummary() }
+        #if !os(tvOS)
+        .confirmationDialog("Add Source", isPresented: $isAddingSource) {
+            if !viewModel.isPlexSignedIn {
+                Button("Plex") { viewModel.connect() }
+            }
+            if !viewModel.isJellyfinSignedIn {
+                Button("Jellyfin") { viewModel.connectJellyfin() }
+            }
+            if !viewModel.isEmbySignedIn {
+                Button("Emby") { viewModel.connectEmby() }
+            }
+            if !viewModel.isSMBConnected {
+                Button("SMB") { viewModel.connectSMB() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        #endif
     }
 
     private func loadSMBMatchSummary() async {
@@ -240,10 +257,9 @@ extension SettingsView {
     }
     #endif
 
-    /// iOS / iPadOS Account, split into **Connected Sources** (a row per signed-in
-    /// service that drills into its detail) and **Add Source** (the not-yet-wired
-    /// ones, kept out of the connected group so they don't read as broken — #441).
-    /// Each group is omitted when empty.
+    /// iOS / iPadOS Account: connected sources as disclosure rows + a single
+    /// "Add Source" entry that fans out to a confirmation dialog. Unconnected
+    /// services no longer appear as individual "Not connected" rows (#441 follow-up).
     @ViewBuilder
     private var accountSectionCompact: some View {
         if hasConnectedSource {
@@ -271,21 +287,13 @@ extension SettingsView {
                 }
             }
         }
-
         if hasAddableSource {
-            AetherSettingsSection("Add Source") {
-                if !viewModel.isPlexSignedIn {
-                    AetherSettingsRow(label: "Plex", status: .notConnected) { viewModel.connect() }
-                }
-                if !viewModel.isJellyfinSignedIn {
-                    AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
-                }
-                if !viewModel.isEmbySignedIn {
-                    AetherSettingsRow(label: "Emby", status: .notConnected) { viewModel.connectEmby() }
-                }
-                if !viewModel.isSMBConnected {
-                    AetherSettingsRow(label: "SMB", status: .notConnected) { viewModel.connectSMB() }
-                }
+            AetherSettingsSection {
+                AetherSettingsRow(
+                    label: "Add Source",
+                    systemImage: "plus.circle.fill",
+                    actionRole: .primary
+                ) { isAddingSource = true }
             }
         }
     }

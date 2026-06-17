@@ -111,6 +111,8 @@ struct SettingsView: View {
         var id: String { rawValue }
     }
     @State var accountSheet: AccountSheet?
+    /// Triggers the "Add Source" confirmation dialog (non-tvOS).
+    @State var isAddingSource = false
 
     /// Hidden developer mode, unlocked by tapping the wordmark in About.
     @AppStorage("developer.unlocked") var developerUnlocked = false
