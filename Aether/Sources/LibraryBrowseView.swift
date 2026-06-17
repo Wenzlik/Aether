@@ -40,12 +40,6 @@ struct LibraryBrowseView: View {
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
-    /// Whether any connected source has **actual** collections — the Collections
-    /// browse pill is gated on this, not just on `supportsCollections`. A
-    /// Plex-only setup whose server has no collections (common) otherwise showed
-    /// a Collections pill that led to a dead empty screen (#298/#311).
-    @State private var hasCollections = false
-
     /// When non-empty, the library swaps its grid for unified `MediaSearchResults`.
     @State private var searchQuery = ""
     /// iOS / visionOS: header shows a search *button* by default; the field only
@@ -157,12 +151,6 @@ struct LibraryBrowseView: View {
                 }
             }
         }
-        .task(id: sourcesKey) { await refreshCollectionsAvailability() }
-    }
-
-    /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
-    private var sourcesKey: String {
-        connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
     }
 
     /// Show the centered Aether lockup + search field above content on the
@@ -307,8 +295,7 @@ struct LibraryBrowseView: View {
                 connectedSources: connectedSources,
                 downloadStore: downloadStore,
                 isLibraryRoot: true,
-                downloads: downloads,
-                hasCollections: hasCollections
+                downloads: downloads
             )
         } else if isConnecting {
             AetherCenteredScrollState {
@@ -324,24 +311,6 @@ struct LibraryBrowseView: View {
                 )
             }
         }
-    }
-
-    // MARK: - Loading
-
-    /// Decide whether to show the Collections browse entry by checking for
-    /// *actual* collections (not just the `supportsCollections` capability), so a
-    /// Plex-only library with no collections doesn't surface a dead row (#298/#311).
-    private func refreshCollectionsAvailability() async {
-        let sources = connectedSources.filter { $0.supportsCollections }
-        guard !sources.isEmpty else { hasCollections = false; return }
-        var any = false
-        await withTaskGroup(of: Bool.self) { group in
-            for source in sources {
-                group.addTask { !(await source.collections()).isEmpty }
-            }
-            for await nonEmpty in group where nonEmpty { any = true }
-        }
-        hasCollections = any
     }
 
 }

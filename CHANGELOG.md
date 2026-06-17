@@ -4,7 +4,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **Library: removed the browse pills above the grid** (Genres / Years /
+  Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year
+  are now multi-select facets in the Filter sheet, and the remaining rail no
+  longer earned its place at the top of the landing. The grid opens straight to
+  the combined poster grid under the Filter / Sort bar.
+
 ### Fixed
+
+- **Library: Filter / Sort bar no longer garbles on iPhone in portrait** — on a
+  narrow portrait width the Movies · Series · Filters · Sort row was compressing
+  the Filters and Sort capsules until their labels wrapped vertically, one letter
+  per line. The bar now wraps whole controls onto a second line instead, and each
+  control holds its natural single-line width.
+- **Library: Genre filter is now multi-select** — picking several genres at once
+  now works (a title matches any selected genre), matching the Year filter. It
+  was previously single-select while Year already allowed multiple.
 
 - **macOS: garbled titlebar + broken Search** (#432) — switching to Search left a
   stray "Settings" + gear lingering over the window's traffic-light controls

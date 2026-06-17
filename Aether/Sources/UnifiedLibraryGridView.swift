@@ -32,9 +32,6 @@ struct UnifiedLibraryGridView: View {
     /// reactively, so toggling a download in/out updates the grid live; present
     /// only on the landing (the pushed "See all" grids don't pass it).
     var downloads: DownloadObserver? = nil
-    /// Whether any connected source actually has collections — gates the
-    /// Collections browse pill (probed by the shell and passed down).
-    var hasCollections: Bool = false
 
     /// Persistent type toggles (all-kinds mode): independent, **both on = show
     /// everything**. Unlike the removable facet filters below, these never
@@ -66,8 +63,10 @@ struct UnifiedLibraryGridView: View {
     /// `filteredItems` alongside the facet filters — no reload, like #319.
     @State private var searchText = ""
     @State private var sort: LibrarySort = .titleAZ
-    /// Active genre filter — `nil` = All. Driven by the chip row above the grid.
-    @State private var selectedGenre: String?
+    /// Selected genres — **multi-select**, empty = all genres (#351 parity with
+    /// Year). A title matches if it carries *any* selected genre. Driven by the
+    /// chip row in the filter sheet.
+    @State private var selectedGenres: Set<String> = []
     /// Active audio-language filter (canonical code) — `nil` = All (#295/#319).
     /// Applied **client-side** from `audioMembership`.
     @State private var selectedAudioLanguage: String?
@@ -211,11 +210,6 @@ struct UnifiedLibraryGridView: View {
                 if hasActiveFilter {
                     activeFiltersRow
                 }
-                // Browse facets (Genres / Years / Collections / Actors / Directors)
-                // — only on the Library landing, just above the grid.
-                if isLibraryRoot {
-                    browsePillsRow
-                }
                 if downloadedOnly {
                     downloadedGrid
                 } else if sortedItems.isEmpty {
@@ -291,42 +285,6 @@ struct UnifiedLibraryGridView: View {
         )
     }
 
-    // MARK: - Browse pills (Library landing)
-
-    /// Horizontal pill row of browse facets, shown above the grid on the landing.
-    /// Each navigates a `LibraryBrowseRoute`, registered by the shell's stack.
-    private var browsePillsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AetherDesign.Spacing.s) {
-                browsePill("Genres", route: .genres)
-                browsePill("Years", route: .years)
-                if hasCollections {
-                    browsePill("Collections", route: .collections)
-                }
-                if connectedSources.contains(where: { $0.supportsPeople }) {
-                    browsePill("Actors", route: .actors)
-                    browsePill("Directors", route: .directors)
-                }
-            }
-            .padding(.vertical, AetherDesign.Spacing.xxs)
-        }
-        #if os(tvOS)
-        .focusSection()
-        #endif
-    }
-
-    private func browsePill(_ title: LocalizedStringKey, route: LibraryBrowseRoute) -> some View {
-        NavigationLink(value: route) {
-            Text(title)
-                .font(AetherDesign.Typography.metadata)
-                .padding(.horizontal, AetherDesign.Spacing.m)
-                .padding(.vertical, AetherDesign.Spacing.xs)
-                .background(AetherDesign.Palette.surfaceElevated, in: Capsule())
-                .foregroundStyle(AetherDesign.Palette.textPrimary)
-        }
-        .buttonStyle(.plain)
-    }
-
     /// Empty-state copy reflects whether a search query or a filter is narrowing
     /// the result.
     private var emptyMessage: String {
@@ -358,8 +316,8 @@ struct UnifiedLibraryGridView: View {
         if let language = selectedAudioLanguage, let matching = audioMembership[language] {
             result = result.filter { matching.contains($0.id) }
         }
-        if let selectedGenre {
-            result = result.filter { $0.genres.contains(selectedGenre) }
+        if !selectedGenres.isEmpty {
+            result = result.filter { item in item.genres.contains { selectedGenres.contains($0) } }
         }
         if let selectedMinRating {
             result = result.filter { ($0.communityRating ?? 0) >= selectedMinRating }
@@ -379,12 +337,12 @@ struct UnifiedLibraryGridView: View {
     /// Any filter narrowing the grid — drives the Filter button's active dot and
     /// the "Clear" affordance.
     private var hasActiveFilter: Bool {
-        selectedGenre != nil || selectedAudioLanguage != nil || selectedMinRating != nil
+        !selectedGenres.isEmpty || selectedAudioLanguage != nil || selectedMinRating != nil
             || !selectedYears.isEmpty || downloadedOnly
     }
 
     private func clearFilters() {
-        selectedGenre = nil
+        selectedGenres = []
         selectedAudioLanguage = nil
         selectedMinRating = nil
         selectedYears = []
@@ -424,8 +382,8 @@ struct UnifiedLibraryGridView: View {
         if downloadedOnly {
             tokens.append(.init(id: "downloaded", label: "Downloaded") { self.downloadedOnly = false })
         }
-        if let selectedGenre {
-            tokens.append(.init(id: "genre", label: selectedGenre) { self.selectedGenre = nil })
+        for genre in selectedGenres.sorted() {
+            tokens.append(.init(id: "genre-\(genre)", label: genre) { self.selectedGenres.remove(genre) })
         }
         if let selectedAudioLanguage {
             let name = audioLanguageOptions.first { $0.code == selectedAudioLanguage }?.displayName ?? selectedAudioLanguage
@@ -539,14 +497,18 @@ struct UnifiedLibraryGridView: View {
 
     // MARK: - Genre filter
 
-    /// Capsule chips: "All" + each genre. Tapping filters the grid in place.
+    /// Capsule chips: "All" + each genre, **multi-select** (parity with Year).
+    /// Tapping toggles a genre in/out; "All" clears the whole selection.
     private var genreFilterRow: some View {
         chipContainer {
-            genreChip(label: "All", isSelected: selectedGenre == nil) { selectedGenre = nil }
+            genreChip(label: "All", isSelected: selectedGenres.isEmpty) { selectedGenres = [] }
             ForEach(availableGenres, id: \.self) { genre in
-                genreChip(label: genre, isSelected: selectedGenre == genre) {
-                    // Tapping the active genre again clears the filter.
-                    selectedGenre = (selectedGenre == genre) ? nil : genre
+                genreChip(label: genre, isSelected: selectedGenres.contains(genre)) {
+                    if selectedGenres.contains(genre) {
+                        selectedGenres.remove(genre)
+                    } else {
+                        selectedGenres.insert(genre)
+                    }
                 }
             }
         }
@@ -580,9 +542,11 @@ struct UnifiedLibraryGridView: View {
         Button(action: action) {
             // LocalizedStringKey (not the verbatim `Text(String)` overload) so
             // "All" and genre names translate via the catalog (#343/#320); the
-            // filter still keys off the raw `selectedGenre`, not this label.
+            // filter still keys off the raw `selectedGenres`, not this label.
             Text(LocalizedStringKey(label))
                 .font(AetherDesign.Typography.metadata)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, AetherDesign.Spacing.m)
                 .padding(.vertical, AetherDesign.Spacing.xs)
                 .background(
@@ -603,7 +567,13 @@ struct UnifiedLibraryGridView: View {
     /// old top-right toolbar glyphs (#369) so the trailing nav-bar slot is just
     /// Search.
     private var iosFilterSortBar: some View {
-        HStack(spacing: AetherDesign.Spacing.s) {
+        // FlowLayout (not a plain HStack): on a narrow iPhone in portrait the row
+        // — Movies · Series · Filters · Sort — can't fit on one line, and an HStack
+        // would compress the capsules until their labels wrapped character-by-
+        // character (vertical "F/i/l/t/e/r/s"). FlowLayout instead wraps whole
+        // controls onto a second line, and each `barControl` is fixed to its
+        // intrinsic single-line width so a capsule never shrinks below its text.
+        FlowLayout(spacing: AetherDesign.Spacing.s) {
             // Persistent Movies / Series toggles lead the bar in all-kinds mode.
             typeToggleChips
             Button { isFilterSheetPresented = true } label: {
@@ -644,8 +614,6 @@ struct UnifiedLibraryGridView: View {
             }
             .accessibilityLabel("Sort")
             .accessibilityValue(sort.displayName)
-
-            Spacer(minLength: 0)
         }
     }
 
@@ -654,6 +622,7 @@ struct UnifiedLibraryGridView: View {
     private func barControl<Content: View>(active: Bool, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: AetherDesign.Spacing.xs) { content() }
             .font(AetherDesign.Typography.metadata.weight(.medium))
+            .lineLimit(1)
             .padding(.horizontal, AetherDesign.Spacing.m)
             .padding(.vertical, AetherDesign.Spacing.xs)
             .foregroundStyle(active ? Color.white : AetherDesign.Palette.textPrimary)
@@ -661,6 +630,9 @@ struct UnifiedLibraryGridView: View {
                 active ? AnyShapeStyle(AetherDesign.Palette.accent) : AnyShapeStyle(AetherDesign.Palette.surfaceElevated),
                 in: Capsule()
             )
+            // Keep the capsule at its natural single-line width so it wraps as a
+            // whole control inside the bar's FlowLayout rather than compressing.
+            .fixedSize(horizontal: true, vertical: false)
     }
     #else
     /// tvOS inline Filter trigger (toolbar menus don't render on tvOS).
