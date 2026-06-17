@@ -1,6 +1,11 @@
 import Foundation
 import AVFoundation
 import os
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Minimal playback state surfaced to UI.
 ///
@@ -52,6 +57,7 @@ public actor PlaybackSession {
 
     private var avPlayer: AVPlayer?
     private var resumeTask: Task<Void, Never>?
+    private var sceneObservers: [Task<Void, Never>] = []
 
     /// The source that resolves fresh playback URLs. Set on `prepare(...)` and
     /// reused by `recoverOrFail`. `nil` falls back to the item's own
@@ -117,6 +123,7 @@ public actor PlaybackSession {
         self.state = PlaybackState()
         self.resumeStore = resumeStore
         self.resumeWriteInterval = resumeWriteInterval
+        startSceneObserver()
     }
 
     /// Attach the downloads catalogue so prepare can intercept items that
@@ -124,6 +131,36 @@ public actor PlaybackSession {
     /// after the store is initialised.
     public func attachDownloadStore(_ store: DownloadStore) {
         self.downloadStore = store
+    }
+
+    private func startSceneObserver() {
+        #if canImport(UIKit)
+        sceneObservers = [
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: UIApplication.didEnterBackgroundNotification) {
+                    await self?.setActive(false)
+                }
+            },
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: UIApplication.willEnterForegroundNotification) {
+                    await self?.setActive(true)
+                }
+            }
+        ]
+        #elseif canImport(AppKit)
+        sceneObservers = [
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: NSApplication.didResignActiveNotification) {
+                    await self?.setActive(false)
+                }
+            },
+            Task { [weak self] in
+                for await _ in NotificationCenter.default.notifications(named: NSApplication.didBecomeActiveNotification) {
+                    await self?.setActive(true)
+                }
+            }
+        ]
+        #endif
     }
 
     // MARK: - Commands
