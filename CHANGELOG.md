@@ -17,6 +17,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   results over the current pane. The Search section + its broken in-content field
   are gone.
 
+## [0.7.9] — 2026-06-17
+
 ### Changed
 
 - **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
@@ -31,8 +33,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **Library filter: "Downloaded" (works offline)** — a new Availability filter
   narrows the grid to downloaded titles, sourced from the local download store
   so it works with no server connection (replaces the old Downloaded rail).
-
-## [0.7.9] — 2026-06-17
 
 ### Fixed
 
