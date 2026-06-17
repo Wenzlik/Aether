@@ -30,6 +30,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   **Storage**, and the category subtitles no longer promise downloads, local-file
   import, app-icon, or bug-report flows that don't exist on tvOS. Removed the dead
   two-column dashboard layout left over from the #289 index refactor.
+- **tvOS: balanced the Library Filter / Sort bar** (#441) — the Sort control
+  carried an internal `Spacer()` that made it greedily fill the whole bar width,
+  dwarfing the Movies / Series / Filters / Reload controls beside it. Sort now
+  sizes to its content like the rest, so the row reads as one even cluster.
 
 - **Library: removed the browse pills above the grid** (Genres / Years /
   Collections / Actors / Directors, iOS/iPadOS/tvOS/visionOS) — Genre and Year

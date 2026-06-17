@@ -800,7 +800,6 @@ struct UnifiedLibraryGridView: View {
             HStack(spacing: AetherDesign.Spacing.s) {
                 Image(systemName: sort.systemImage)
                 Text("Sort: \(sort.displayName)")
-                Spacer()
                 Image(systemName: "chevron.right")
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
             }
@@ -809,6 +808,10 @@ struct UnifiedLibraryGridView: View {
             .padding(.horizontal, AetherDesign.Spacing.l)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay { Capsule().stroke(AetherDesign.Palette.separator, lineWidth: 1) }
+            // Size to content like the Filters / Reload triggers beside it — the
+            // old `Spacer()` made Sort greedily fill the whole bar width, dwarfing
+            // the other controls (#441 review).
+            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Sort")
