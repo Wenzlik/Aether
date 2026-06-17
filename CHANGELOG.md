@@ -4,6 +4,21 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS: garbled titlebar + broken Search** (#432) — switching to Search left a
+  stray "Settings" + gear lingering over the window's traffic-light controls
+  (alongside the brand wordmark), and the search field didn't appear. Fixes: the
+  AETHER wordmark is removed from the leading titlebar accessory (it sat in the
+  system-owned traffic-light zone — only the sidebar toggle remains there); each
+  pane has a stable `.id` so switching fully replaces the previous title/toolbar
+  instead of leaving it behind; and **Search is now a field at the top of the
+  sidebar** (Infuse-style) rather than a section — typing surfaces unified
+  results over the current pane. The Search section + its broken in-content field
+  are gone.
+
+## [0.7.9] — 2026-06-17
+
 ### Changed
 
 - **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
@@ -26,8 +41,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   become a Filter ▸ Availability toggle — hidden by default, and when on the grid
   shows Netflix-only discovery (owned titles excluded). Sort + Genre / Year /
   Rating filters and search are retained.
-
-## [0.7.9] — 2026-06-17
 
 ### Fixed
 
