@@ -231,6 +231,14 @@ extension MediaSourceID: Codable {
                 )
             }
             self = .jellyfin(serverID: parameter)
+        case "emby":
+            guard let parameter else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .parameter, in: container,
+                    debugDescription: "emby source missing serverID"
+                )
+            }
+            self = .emby(serverID: parameter)
         case "smb":
             guard let parameter else {
                 throw DecodingError.dataCorruptedError(
@@ -275,6 +283,9 @@ extension MediaSourceID: Codable {
             try container.encode(serverID, forKey: .parameter)
         case .jellyfin(let serverID):
             try container.encode("jellyfin", forKey: .kind)
+            try container.encode(serverID, forKey: .parameter)
+        case .emby(let serverID):
+            try container.encode("emby", forKey: .kind)
             try container.encode(serverID, forKey: .parameter)
         case .smb(let id):
             try container.encode("smb", forKey: .kind)

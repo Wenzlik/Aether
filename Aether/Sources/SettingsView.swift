@@ -26,6 +26,7 @@ struct SettingsView: View {
 
     @State private var isSigningOut = false
     @State private var isSigningOutJellyfin = false
+    @State private var isSigningOutEmby = false
     @State private var isWhatsNewPresented = false
     @State private var isImportingLocal = false
     @State private var isRematching = false
@@ -106,7 +107,7 @@ struct SettingsView: View {
     /// row opens it; it holds the server, status, and the (rarely-used,
     /// previously always-exposed) Sign Out action.
     private enum AccountSheet: String, Identifiable {
-        case plex, jellyfin
+        case plex, jellyfin, emby
         var id: String { rawValue }
     }
     @State private var accountSheet: AccountSheet?
@@ -931,6 +932,15 @@ struct SettingsView: View {
                 AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
             }
 
+            if viewModel.isEmbySignedIn {
+                AetherSettingsRow(
+                    label: "Emby",
+                    value: accountRowValue(.emby, serverName: viewModel.embyServerName)
+                ) { accountSheet = .emby }
+            } else {
+                AetherSettingsRow(label: "Emby", status: .notConnected) { viewModel.connectEmby() }
+            }
+
             if viewModel.isSMBConnected {
                 smbDisclosure
             } else {
@@ -975,6 +985,20 @@ struct SettingsView: View {
                 .disabled(isSigningOutJellyfin)
             } else {
                 AetherSettingsRow(label: "Jellyfin", status: .notConnected) { viewModel.connectJellyfin() }
+            }
+
+            if viewModel.isEmbySignedIn {
+                AetherSettingsRow(label: "Emby", value: accountRowValue(.emby, serverName: viewModel.embyServerName))
+                if viewModel.canSwitchSources && !viewModel.isActiveSource(.emby) {
+                    AetherSettingsRow(label: "Set Emby as Active Source", actionRole: .primary) { viewModel.setActive(.emby) }
+                }
+                AetherSettingsRow(
+                    label: isSigningOutEmby ? "Signing out…" : "Sign Out of Emby",
+                    actionRole: .destructive
+                ) { Task { await performSignOutEmby() } }
+                .disabled(isSigningOutEmby)
+            } else {
+                AetherSettingsRow(label: "Emby", status: .notConnected) { viewModel.connectEmby() }
             }
 
             if viewModel.isSMBConnected {
@@ -1032,6 +1056,17 @@ struct SettingsView: View {
                 isSigningOut: isSigningOutJellyfin,
                 onSetActive: { viewModel.setActive(.jellyfin); accountSheet = nil },
                 onSignOut: { Task { await performSignOutJellyfin(); accountSheet = nil } },
+                onClose: { accountSheet = nil }
+            )
+        case .emby:
+            SourceAccountSheet(
+                title: "Emby",
+                serverName: viewModel.embyServerName,
+                status: (viewModel.canSwitchSources && viewModel.isActiveSource(.emby)) ? .neutral("Active") : .connected,
+                canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.emby),
+                isSigningOut: isSigningOutEmby,
+                onSetActive: { viewModel.setActive(.emby); accountSheet = nil },
+                onSignOut: { Task { await performSignOutEmby(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
         }
@@ -1721,6 +1756,12 @@ struct SettingsView: View {
         isSigningOutJellyfin = true
         await viewModel.signOutOfJellyfin()
         isSigningOutJellyfin = false
+    }
+
+    private func performSignOutEmby() async {
+        isSigningOutEmby = true
+        await viewModel.signOutOfEmby()
+        isSigningOutEmby = false
     }
 }
 

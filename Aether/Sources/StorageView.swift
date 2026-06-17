@@ -509,6 +509,7 @@ struct StorageView: View {
         switch source {
         case .plex:     return "Plex"
         case .jellyfin: return "Jellyfin"
+        case .emby:     return "Emby"
         case .smb:      return "SMB"
         case .dlna:     return "DLNA"
         case .mock:     return "Mock"
@@ -521,6 +522,7 @@ struct StorageView: View {
         switch source {
         case .plex:     return "play.circle.fill"
         case .jellyfin: return "rectangle.stack.badge.play.fill"
+        case .emby:     return "server.rack"
         case .smb:      return "externaldrive.connected.to.line.below.fill"
         case .dlna:     return "sparkles.tv.fill"
         case .mock:     return "questionmark.circle.fill"

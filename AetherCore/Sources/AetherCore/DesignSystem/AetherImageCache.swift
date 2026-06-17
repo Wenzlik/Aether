@@ -78,6 +78,7 @@ public final class AetherImageCache: @unchecked Sendable {
     /// Writes since the last disk trim — trims periodically instead of on every
     /// write (guarded by `lock`).
     private var writesSinceTrim = 0
+    private var prefetchTask: Task<Void, Never>?
     private let log = Logger(subsystem: "cz.zmrhal.aether", category: "images")
 
     /// Wraps a `UIImage` so it can cross `Task`/actor boundaries under Swift 6
@@ -132,11 +133,24 @@ public final class AetherImageCache: @unchecked Sendable {
     /// Skips anything already in memory; rides the same de-dup path so it never
     /// duplicates an in-flight request.
     public func prefetch(_ urls: [URL?], maxPixel: CGFloat = AetherImageCache.defaultMaxPixel) {
-        for case let url? in urls where memory.object(forKey: Self.cacheKey(for: url) as NSString) == nil {
-            Task.detached(priority: .background) { [weak self] in
-                _ = await self?.image(for: url, maxPixel: maxPixel)
+        let targets = urls.compactMap { $0 }.filter {
+            memory.object(forKey: Self.cacheKey(for: $0) as NSString) == nil
+        }
+        guard !targets.isEmpty else { return }
+        lock.withLock { prefetchTask?.cancel() }
+        let t = Task.detached(priority: .background) { [weak self] in
+            guard let self else { return }
+            await withTaskGroup(of: Void.self) { group in
+                var inflight = 0
+                for url in targets {
+                    if Task.isCancelled { break }
+                    if inflight >= 4 { await group.next(); inflight -= 1 }
+                    group.addTask { [weak self] in _ = await self?.image(for: url, maxPixel: maxPixel) }
+                    inflight += 1
+                }
             }
         }
+        lock.withLock { prefetchTask = t }
     }
 
     // MARK: - Load pipeline

@@ -4,6 +4,32 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.8] — 2026-06-17
+
+### Added
+
+- **Emby** (#425, all platforms) — connect an Emby server via Quick Connect (same
+  handshake as Jellyfin): open the code on any signed-in Emby client or the
+  Dashboard, and Aether authenticates in seconds. Browse, search, and play your
+  Emby library alongside Plex and Jellyfin. macOS wired in `MacSession` +
+  Settings.
+- **New app icon** (#426, all platforms) — refreshed icon across iOS, tvOS,
+  visionOS, and macOS.
+
+### Changed
+
+- **Background performance** (#416–419, iOS/tvOS/visionOS) — four targeted fixes
+  to reduce CPU/battery when Aether is not in the foreground: VLC ticker suspended
+  while backgrounded, AVPlayer poll slowed from 1 s → 5 s during paused playback,
+  image prefetch rate-limited to 4 concurrent tasks with stale-batch cancellation,
+  and the PlaybackSession resume loop self-gated on app background.
+
+### Internal
+
+- `DetailView.swift` split into per-concern files (#241 inc 4–6): 3 317 → 631
+  lines, with Layouts, Hero, Actions, PlaybackConfig, and SeasonsEpisodes each in
+  their own file.
+
 ## [0.7.7] — 2026-06-16
 
 ### Added

@@ -29,6 +29,7 @@ public enum MediaSourceKind: Int, Comparable, Sendable, Hashable, Codable {
         switch source {
         case .plex:     self = .plex
         case .jellyfin: self = .jellyfin
+        case .emby:     self = .emby
         case .local:    self = .local
         case .smb:      self = .smb
         case .dlna:     self = .dlna

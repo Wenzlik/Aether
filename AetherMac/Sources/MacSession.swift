@@ -13,17 +13,21 @@ final class MacSession {
 
     private let plexConfiguration: PlexConfiguration
     private let jellyfinConfiguration: JellyfinConfiguration
+    private let embyConfiguration: EmbyConfiguration
     let plexAuthClient: PlexAuthClient
     let jellyfinAuthClient: JellyfinAuthClient
+    let embyAuthClient: EmbyAuthClient
     private let plexResourceClient: PlexResourceClient
     private let plexServerStore: PlexServerStore
     private let jellyfinServerStore: JellyfinServerStore
+    private let embyServerStore: EmbyServerStore
 
     private(set) var plexSources: [PlexMediaSource] = []
     /// The enabled Plex servers, primary first — kept so the Settings server
     /// picker can reorder them (#325). Mirrors `plexSources`.
     private(set) var plexServerRecords: [PlexServerRecord] = []
     private(set) var jellyfinSource: JellyfinMediaSource?
+    private(set) var embySource: EmbyMediaSource?
 
     /// User-picked local/network folders scanned into a library, and the source
     /// built from them. Folders persist as paths in UserDefaults.
@@ -44,6 +48,7 @@ final class MacSession {
     /// the main actor synchronously.
     private(set) var plexServerNames: [String] = []
     private(set) var jellyfinServerName: String?
+    private(set) var embyServerName: String?
 
     /// App-wide display + playback defaults, shared with the iOS app's model.
     /// On Mac we wire the ones that affect what's on screen: the watched-poster
@@ -118,13 +123,15 @@ final class MacSession {
 
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
-    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || !localFolders.isEmpty }
+    var isEmbyConnected: Bool { embySource != nil }
+    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected || !localFolders.isEmpty }
 
     /// Every connected source — what `UnifiedLibrary` fans out over.
     var connectedSources: [any MediaSource] {
         var list: [any MediaSource] = []
         list.append(contentsOf: plexSources)
         if let jellyfinSource { list.append(jellyfinSource) }
+        if let embySource { list.append(embySource) }
         if let localSource { list.append(localSource) }
         return list
     }
@@ -187,10 +194,12 @@ final class MacSession {
     private static let plexTokenKey = "plex.authToken"
     private static let plexClientIDKey = "plex.clientIdentifier"
     private static let jellyfinDeviceIDKey = "jellyfin.deviceID"
+    private static let embyDeviceIDKey = "emby.deviceID"
 
     init() {
         let clientID = Self.persistentID(Self.plexClientIDKey)
         let deviceID = Self.persistentID(Self.jellyfinDeviceIDKey)
+        let embyDeviceID = Self.persistentID(Self.embyDeviceIDKey)
         let host = Host.current().localizedName ?? "Mac"
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 
@@ -207,11 +216,16 @@ final class MacSession {
         jellyfinConfiguration = JellyfinConfiguration(
             client: "Aether", version: "0.7.2", deviceName: host, deviceID: deviceID
         )
+        embyConfiguration = EmbyConfiguration(
+            client: "Aether", version: "0.7.2", deviceName: host, deviceID: embyDeviceID
+        )
         plexAuthClient = PlexAuthClient(api: api, configuration: plexConfiguration)
         jellyfinAuthClient = JellyfinAuthClient(api: api, configuration: jellyfinConfiguration)
+        embyAuthClient = EmbyAuthClient(api: api, configuration: embyConfiguration)
         plexResourceClient = PlexResourceClient(api: api, configuration: plexConfiguration)
         plexServerStore = PlexServerStore(keychain: keychain)
         jellyfinServerStore = JellyfinServerStore(keychain: keychain)
+        embyServerStore = EmbyServerStore(keychain: keychain)
     }
 
     // MARK: Restore
@@ -236,6 +250,10 @@ final class MacSession {
         if let record = try? await jellyfinServerStore.read(), let source = makeJellyfinSource(record) {
             jellyfinSource = source
             jellyfinServerName = record.serverName
+        }
+        if let record = try? await embyServerStore.read(), let source = makeEmbySource(record) {
+            embySource = source
+            embyServerName = record.serverName
         }
         // Sources are wired up now — bump the token so any view that ran its
         // initial load before restore finished (Home/Discover race the library
@@ -324,6 +342,35 @@ final class MacSession {
             accessToken: record.accessToken,
             userID: record.userID,
             configuration: jellyfinConfiguration,
+            api: api
+        )
+    }
+
+    // MARK: Emby
+
+    func completeEmbySignIn(_ record: EmbyServerRecord) async {
+        try? await embyServerStore.write(record)
+        embySource = makeEmbySource(record)
+        embyServerName = record.serverName
+        libraryToken &+= 1
+    }
+
+    func signOutEmby() async {
+        try? await embyServerStore.clear()
+        embySource = nil
+        embyServerName = nil
+        libraryToken &+= 1
+    }
+
+    private func makeEmbySource(_ record: EmbyServerRecord) -> EmbyMediaSource? {
+        guard let baseURL = record.baseURL else { return nil }
+        return EmbyMediaSource(
+            serverID: baseURL.host ?? record.baseURLString,
+            displayName: record.serverName,
+            baseURL: baseURL,
+            accessToken: record.accessToken,
+            userID: record.userID,
+            configuration: embyConfiguration,
             api: api
         )
     }

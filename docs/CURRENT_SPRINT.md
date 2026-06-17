@@ -5,8 +5,8 @@ AI-facing snapshot of the current working focus. Update this whenever staging pr
 ## Current Release Train
 
 - Branch baseline: `staging`
-- Marketing version: `0.7.7`
-- Recent shipped scope: UX polish pass — unified Detail action cluster, rotating Discover carousel, compact Library browse pills, compact source switcher pill, iPad sidebarAdaptable nav, tvOS bug fixes (Netflix Back, Settings sticky headers), iPadOS landscape two-column detail, Settings Feature Request email fix
+- Marketing version: `0.7.8`
+- Recent shipped scope: Emby connector (Quick Connect auth), new app icon, background performance fixes (VLC ticker / AVPlayer poll / image prefetch / resume loop), DetailView split (#241)
 
 ## Sprint Goal
 
