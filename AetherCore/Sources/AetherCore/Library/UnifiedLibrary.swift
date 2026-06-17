@@ -298,6 +298,18 @@ public actor UnifiedLibrary {
         default:
             break
         }
+
+        // The server now holds the new watched state, but Home / Library /
+        // Discover / Search all read this title from the shared unified caches,
+        // which still carry the OLD flag — so the poster badge would stay stale
+        // until the 45 s TTL lapsed or a relaunch re-fetched. Drop the affected
+        // entries (both the in-memory cache and the cross-launch snapshot) so the
+        // next `unifiedItems` re-reads the server's fresh state. Movies live under
+        // the `.movie` key; episodes roll up into their show's `.show` key.
+        let invalidatedKinds: [MediaItem.Kind] = played.kind == .movie ? [.movie] : [.show]
+        let keys = invalidatedKinds.map { cacheKey(kind: $0) }
+        await UnifiedLibraryCache.shared.remove(for: keys)
+        await snapshotStore.clear(for: keys)
     }
 
     // MARK: Cross-source Continue Watching removal
@@ -711,6 +723,12 @@ private actor UnifiedLibraryCache {
 
     func set(_ items: [UnifiedMediaItem], for key: String) {
         store[key] = Entry(items: items, at: clock.now)
+    }
+
+    /// Drop specific entries (e.g. after a watched toggle) so the next read
+    /// re-fetches fresh server state instead of serving the stale catalog.
+    func remove(for keys: [String]) {
+        for key in keys { store[key] = nil }
     }
 }
 

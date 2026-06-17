@@ -39,6 +39,10 @@ struct LibraryBrowseView: View {
     let playbackPreferences: PlaybackPreferencesStore?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    /// Optional (injected by `RootTabView`; absent in previews). Its
+    /// `libraryRevision` is folded into the reload key so a watched toggle
+    /// repaints the rails' poster badges instead of leaving them stale.
+    @Environment(AppSession.self) private var appSession: AppSession?
 
     @State private var rails: UnifiedRails = .empty
     @State private var isLoading = false
@@ -170,7 +174,7 @@ struct LibraryBrowseView: View {
                 }
             }
         }
-        .task(id: sourcesKey) { await load() }
+        .task(id: reloadKey) { await load() }
         .task(id: sourcesKey) { await refreshCollectionsAvailability() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load() } }
@@ -180,6 +184,12 @@ struct LibraryBrowseView: View {
     /// Reload key: the connected source ids (so sign-in / sign-out rebuilds).
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    /// `sourcesKey` plus the app's library revision, so marking a title
+    /// watched/unwatched re-fires `load()` and repaints the rails' badges.
+    private var reloadKey: String {
+        "\(sourcesKey)#\(appSession?.libraryRevision ?? 0)"
     }
 
     /// Show the centered Aether lockup + search field above content on the

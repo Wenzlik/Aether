@@ -6,6 +6,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Library watched badge stuck on stale state** (iOS/iPadOS) — marking a title
+  watched/unwatched synced to the server correctly, but the Library kept showing
+  the old badge. `markWatchedEverywhere` updated the server without invalidating
+  the shared unified caches (the 45 s in-memory `UnifiedLibraryCache` and the
+  cross-launch `UnifiedLibrarySnapshotStore`), and the grids only reloaded on a
+  source-set change — so the badge didn't refresh until a relaunch / pull-to-
+  refresh. The watched write now drops the affected cache + snapshot entries, and
+  an `AppSession.libraryRevision` signal (folded into the Library landing's and
+  the "See all" grid's reload key) re-reads the fresh server state immediately.
+
 - **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
   sidebar was collapsed there was no other way to switch Home / Discover /
   Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
