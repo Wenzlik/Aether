@@ -5,8 +5,8 @@ AI-facing snapshot of the current working focus. Update this whenever staging pr
 ## Current Release Train
 
 - Branch baseline: `staging`
-- Marketing version: `0.7.8`
-- Recent shipped scope: Emby connector (Quick Connect auth), new app icon, background performance fixes (VLC ticker / AVPlayer poll / image prefetch / resume loop), DetailView split (#241)
+- Marketing version: `0.7.9`
+- Recent shipped scope: offline-download playback fix (#428), player dismiss swipe-down (#431), macOS View menu ⌘1…⌘5 (#432), Library watched-badge cache invalidation (#435), background battery (idle network monitor + carousel ticker), SettingsView split (#415)
 
 ## Sprint Goal
 

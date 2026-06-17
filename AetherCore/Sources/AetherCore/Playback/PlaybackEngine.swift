@@ -35,4 +35,15 @@ public enum PlaybackEngine: Sendable, Equatable {
         guard let url = item.streamURL else { return .system }
         return engine(for: url)
     }
+
+    /// Engine for a raw container name (e.g. Plex's `Media.container` —
+    /// `"mkv"`, `"mp4"`, …), decided **before** any playback URL exists. Used at
+    /// download time to tell whether the *original* file would need VLCKit: on
+    /// visionOS the Cinema path docks the system `AVPlayer` (it can't play those
+    /// containers locally), so the download UI offers transcode-only for them.
+    /// `nil` / empty ⇒ `.system` (don't restrict on an unknown container).
+    public static func engine(forContainer container: String?) -> PlaybackEngine {
+        guard let container, !container.isEmpty else { return .system }
+        return systemPlayableExtensions.contains(container.lowercased()) ? .system : .vlc
+    }
 }

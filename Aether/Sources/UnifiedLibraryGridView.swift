@@ -40,6 +40,10 @@ struct UnifiedLibraryGridView: View {
     /// not the device's `Locale.current`.
     @Environment(\.locale) private var locale
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    /// Optional — present on iOS/tvOS/visionOS (injected by `RootTabView`), absent
+    /// in isolated previews. Its `libraryRevision` is folded into the reload key so
+    /// marking a title watched/unwatched re-reads the freshly-invalidated catalog.
+    @Environment(AppSession.self) private var appSession: AppSession?
     /// Client-side title search within the category grid (#369). Filters
     /// `filteredItems` alongside the facet filters — no reload, like #319.
     @State private var searchText = ""
@@ -131,7 +135,7 @@ struct UnifiedLibraryGridView: View {
         #endif
         // The grid loads the *full* catalog once per source set — audio + genre
         // are both client-side filters now, so a chip tap never reloads (#319).
-        .task(id: sourcesKey) { await load() }
+        .task(id: reloadKey) { await load() }
         .task(id: sourcesKey) { await loadAudioLanguageOptions() }
         // When the landing's Filter button pushed us, present the filter sheet
         // immediately so "Filter" is one tap. Guarded so it fires only once (not
@@ -146,6 +150,13 @@ struct UnifiedLibraryGridView: View {
 
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    /// Reload key for the catalog `load()`: the source set **plus** the app's
+    /// library revision, so a watched toggle (which bumps the revision and drops
+    /// the stale cache entries) re-fires the load and repaints fresh badges.
+    private var reloadKey: String {
+        "\(sourcesKey)#\(appSession?.libraryRevision ?? 0)"
     }
 
     @ViewBuilder

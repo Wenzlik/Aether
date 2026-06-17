@@ -4,6 +4,70 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-06-17
+
+### Fixed
+
+- **Library watched badge stuck on stale state** (iOS/iPadOS) — marking a title
+  watched/unwatched synced to the server correctly, but the Library kept showing
+  the old badge. `markWatchedEverywhere` updated the server without invalidating
+  the shared unified caches (the 45 s in-memory `UnifiedLibraryCache` and the
+  cross-launch `UnifiedLibrarySnapshotStore`), and the grids only reloaded on a
+  source-set change — so the badge didn't refresh until a relaunch / pull-to-
+  refresh. The watched write now drops the affected cache + snapshot entries, and
+  an `AppSession.libraryRevision` signal (folded into the Library landing's and
+  the "See all" grid's reload key) re-reads the fresh server state immediately.
+
+- **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
+  sidebar was collapsed there was no other way to switch Home / Discover /
+  Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
+  menu now lists every section with **⌘1…⌘5**, driven by the same selection the
+  sidebar binds to (hoisted onto `MacSession`), so section switching is always
+  reachable regardless of sidebar state. The active section shows a menu
+  checkmark. A *macOS navigation* section was added to `DESIGN_PRINCIPLES.md` so
+  this is a rule, not an accident. (Titlebar-chrome polish during Search is
+  tracked separately — pending on-device repro.)
+
+- **Player dismiss collided with system controls** (#431, iOS/iPadOS) — the
+  custom close ✕ sat on the same top-leading edge AVKit uses for PiP / AirPlay,
+  crowding them, and its own auto-hide timer desynced from AVKit's (staggered
+  flicker). The ✕ over live playback is gone: **swipe-down** (#288) is now the
+  one canonical dismiss, made discoverable by a one-time, auto-fading "Swipe
+  down to close" hint centred away from every AVKit-owned edge. A close ✕ still
+  appears *only while the stream is preparing* (no AVKit chrome on screen yet),
+  so a hung "preparing" can't strand the user on a spinner. tvOS (Menu),
+  visionOS (native Back), and the macOS libmpv player (its own chrome, no system
+  PiP/zoom) were unaffected.
+
+- **Background battery — idle network monitor & carousel ticker** (iOS/iPadOS) —
+  two periodic workers kept running while the app was alive behind a playing
+  audio session. The SMB reachability `NWPathMonitor` is now paused on
+  `didEnterBackground` (a network handover no longer fires a 3 s probe +
+  cache-invalidation behind the lock screen) and restarted with an immediate
+  re-probe on foreground; the Discover hero carousel's 1 Hz auto-advance tick is
+  gated to the foreground so it stops waking the CPU for an off-screen carousel.
+  Playback-bound loops (AVPlayer poll, resume-write, VLC ticker) were already
+  suspended on background; this closes the two that weren't.
+
+- **Offline playback of downloads** (#428, all platforms) — downloaded titles
+  could fail to play offline with a confusing remote-server error
+  (`NSURLErrorDomain -1009`). The player picked its engine from the *server*
+  stream URL, so a downloaded mkv was routed to AVPlayer and then fell through
+  to a network resolve while offline; separately, a stale absolute `file://`
+  path (after a restore/migration that changed the data-container UUID) made a
+  present download look missing. The windowed player now prefers the local
+  download and picks the engine from the downloaded file's container, and a new
+  `DownloadStatus.existingLocalURL()` re-bases moved downloads onto the current
+  downloads directory. On visionOS, "Original" is hidden in the download quality
+  picker for containers Cinema's docked AVPlayer can't demux, so the download
+  transcodes to a playable mp4.
+
+### Internal
+
+- `SettingsView.swift` split into per-concern files (#415): 1 925 → 712 lines,
+  with Sections and PreferenceSheets each in their own file. Pure mechanical
+  extraction, no behavior change (same playbook as #241).
+
 ## [0.7.8] — 2026-06-17
 
 ### Added

@@ -5,13 +5,16 @@ import AetherCore
 
 /// Full-screen player. Deliberately bare: `AVPlayerViewController`'s native
 /// transport owns Play/Pause, Seek, and the Audio / Subtitle media-options
-/// picker (HLS renditions for transcode titles), so Aether adds only what the
-/// system doesn't — a Back affordance on iOS — and otherwise gets out of the
-/// way. Primary audio / subtitle selection already happened on Detail.
+/// picker (HLS renditions for transcode titles), and dismissal is the
+/// platform's own gesture/control — swipe-down on iOS, Menu on tvOS, the
+/// native Back action on visionOS — so Aether draws no custom player chrome of
+/// its own. Primary audio / subtitle selection already happened on Detail.
 ///
-/// Chrome auto-hides ~2.5s after the last interaction and reveals on tap, so
-/// when the user isn't touching anything it's 100% content. No permanent
-/// overlays, no floating buttons left behind.
+/// On iOS the old top-leading ✕ was removed (#431): it sat on the very edge
+/// AVKit uses for PiP / AirPlay and collided with them (and its own auto-hide
+/// timer desynced from AVKit's). Swipe-down (#288) is the canonical dismiss;
+/// a one-time, auto-fading hint makes it discoverable without leaving a
+/// permanent overlay behind.
 struct PlayerView: View {
     let item: MediaItem
     /// The source the item came from — resolves a fresh playback URL (new Plex
@@ -45,17 +48,18 @@ struct PlayerView: View {
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
 
-    /// Chrome auto-hide window — short, so controls don't linger over the video.
-    private static let chromeIdleHide: Duration = .milliseconds(2500)
-
     #if os(iOS)
-    @State private var isCloseVisible = true
-    @State private var hideTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Live vertical offset while the user is swiping the player down to dismiss
     /// (#288). 0 when at rest; follows the finger during a deliberate downward
     /// drag, then either commits to dismiss or springs back.
     @State private var dragOffset: CGFloat = 0
+    /// Whether to show the one-time "swipe down to close" discoverability hint
+    /// (#431). Toggled true on the first-ever playback, then back to false after
+    /// a couple of seconds; `hasSeenSwipeDownHint` keeps it one-time forever.
+    @State private var showSwipeHint = false
+    @State private var hintTask: Task<Void, Never>?
+    @AppStorage("player.hasSeenSwipeDownHint") private var hasSeenSwipeDownHint = false
     #endif
 
     /// visionOS only: auto-expand the system player so it docks into an open
@@ -127,18 +131,29 @@ struct PlayerView: View {
             }
 
             #if os(iOS)
-            // iOS-only Back affordance. visionOS dismisses through AVKit's
-            // native `Back` contextual action; tvOS through the Menu button
-            // (`.onExitCommand`) and the native `Done` action — neither needs a
-            // SwiftUI overlay, which would just duplicate system chrome.
-            closeButton
-                .zIndex(20)
-                .opacity(effectiveChromeVisibility ? 1 : 0)
-                .animation(
-                    reduceMotion ? nil : .easeInOut(duration: 0.25),
-                    value: effectiveChromeVisibility
-                )
-                .allowsHitTesting(effectiveChromeVisibility)
+            // Loading-only escape hatch (#431). While the stream is still
+            // preparing there's no AVKit chrome on screen yet (and swipe-down is
+            // bound to the player, which isn't shown), so a hanging "preparing"
+            // would otherwise strand the user on a spinner. This ✕ is gone the
+            // instant playback starts — so it never sits over AVKit's PiP /
+            // AirPlay / zoom. Failure has its own Close in `playbackFailed`.
+            if viewModel.player == nil, viewModel.state.status != .failed {
+                loadingCloseButton
+                    .zIndex(20)
+            }
+
+            // One-time swipe-down discoverability hint (#431). The old top-leading
+            // ✕ used to live here during *playback*, but it collided with AVKit's
+            // PiP / AirPlay on the same edge — swipe-down is now the only dismiss
+            // once playing. The hint sits in the free centre of the frame (never
+            // an AVKit-owned corner: leading = PiP/AirPlay, centre-top = title,
+            // trailing = zoom, bottom = transport) and fades out on its own.
+            if showSwipeHint {
+                swipeDownHint
+                    .zIndex(20)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
             #endif
 
             skipOverlay
@@ -151,18 +166,11 @@ struct PlayerView: View {
             autoSkipIfNeeded()
             updateNextEpisodePrompt()
         }
-        #if os(iOS)
-        // `simultaneousGesture` keeps AVPlayer's own tap-to-toggle-chrome intact
-        // while letting us mirror its visibility on the Back button. Without the
-        // simultaneous variant our tap would consume the touch and the native
-        // transport bar would stop responding.
-        .simultaneousGesture(TapGesture().onEnded { revealChrome() })
-        #endif
         .task {
             await viewModel.open(item, source: source, startAt: startAt)
             await loadNextItem()
             #if os(iOS)
-            if viewModel.player != nil { scheduleChromeHide() }
+            presentSwipeHintIfNeeded()
             #endif
         }
         // Suspend the 500 ms UI-refresh poll while backgrounded (no visible
@@ -187,7 +195,7 @@ struct PlayerView: View {
             // idempotent, so the normal Back / end paths calling it first is fine.
             onDismiss()
             #if os(iOS)
-            hideTask?.cancel()
+            hintTask?.cancel()
             #endif
         }
         // When the movie plays to its end, dismiss — so windowed playback
@@ -409,18 +417,13 @@ struct PlayerView: View {
         }
     }
 
-    // MARK: - iOS chrome (Back only)
+    // MARK: - iOS dismiss (swipe-down + loading escape hatch)
 
     #if os(iOS)
-    /// Visible while loading or on failure (so the user is never stranded), and
-    /// auto-hidden during live playback to mirror AVKit's transport bar.
-    private var effectiveChromeVisibility: Bool {
-        guard viewModel.state.status != .failed else { return true }
-        guard viewModel.player != nil else { return true }
-        return isCloseVisible
-    }
-
-    private var closeButton: some View {
+    /// Top-leading ✕ shown **only while the stream is preparing** (no AVKit chrome
+    /// on screen yet, so nothing to collide with) — the escape hatch for a hung
+    /// "preparing" state. Disappears the moment playback starts (#431).
+    private var loadingCloseButton: some View {
         VStack {
             HStack {
                 Button {
@@ -445,11 +448,50 @@ struct PlayerView: View {
         }
     }
 
-    /// Downward swipe-to-dismiss (#288). Engages only on a clearly vertical,
-    /// downward drag, so a horizontal scrub on AVKit's transport never moves the
-    /// player; pairs with the chrome-reveal tap via `simultaneousGesture` so the
-    /// native controls keep all their touches. Commits only past a high
-    /// threshold (or a fast flick) — a small/accidental drag springs back.
+    /// The one-time discoverability hint for swipe-down-to-dismiss (#431).
+    /// Centred — deliberately away from every AVKit-owned edge — with a downward
+    /// chevron so the gesture reads at a glance. Non-interactive; it only informs.
+    private var swipeDownHint: some View {
+        VStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 22, weight: .semibold))
+            Text("Swipe down to close")
+                .font(.subheadline.weight(.medium))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, AetherDesign.Spacing.l)
+        .padding(.vertical, AetherDesign.Spacing.m)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(radius: 8)
+        .accessibilityLabel("Swipe down to close the player")
+    }
+
+    /// Show the swipe-down hint exactly once, ever, fading it back out after a
+    /// couple of seconds. Gated on real playback (not the loading / failure
+    /// state) so it appears over video, and on `hasSeenSwipeDownHint` so a
+    /// returning user never sees it again.
+    private func presentSwipeHintIfNeeded() {
+        guard !hasSeenSwipeDownHint, viewModel.player != nil else { return }
+        hasSeenSwipeDownHint = true
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+            showSwipeHint = true
+        }
+        hintTask?.cancel()
+        hintTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                showSwipeHint = false
+            }
+        }
+    }
+
+    /// Downward swipe-to-dismiss (#288) — the canonical iOS dismiss (#431).
+    /// Engages only on a clearly vertical, downward drag, so a horizontal scrub
+    /// on AVKit's transport never moves the player; attached to the player via
+    /// `simultaneousGesture` so the native controls keep all their touches.
+    /// Commits only past a high threshold (or a fast flick) — a small/accidental
+    /// drag springs back.
     private var swipeDownDismissGesture: some Gesture {
         DragGesture(minimumDistance: 24)
             .onChanged { value in
@@ -468,19 +510,6 @@ struct PlayerView: View {
             }
     }
 
-    private func revealChrome() {
-        isCloseVisible = true
-        scheduleChromeHide()
-    }
-
-    private func scheduleChromeHide() {
-        hideTask?.cancel()
-        hideTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.chromeIdleHide)
-            guard !Task.isCancelled else { return }
-            isCloseVisible = false
-        }
-    }
     #endif
 
     // MARK: - Dismiss / retry
@@ -495,7 +524,7 @@ struct PlayerView: View {
         showFailureDetails = false
         await viewModel.open(item, source: source, startAt: startAt)
         #if os(iOS)
-        if viewModel.player != nil { scheduleChromeHide() }
+        presentSwipeHintIfNeeded()
         #endif
     }
 

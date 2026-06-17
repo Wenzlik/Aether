@@ -503,6 +503,29 @@ struct DetailView: View {
         await viewModel.ensureConfiguredForPlayback()
         playbackItem = current
 
+        // Prefer a completed local download over any server stream — play the
+        // bytes the user already has (works offline, and saves bandwidth even
+        // when online). Pick the engine from the *downloaded file's* container,
+        // NOT from `current.streamURL`: for an mkv the stream URL is a Plex
+        // transcode/HLS URL with no `.mkv` extension, so routing on it would
+        // hand the local mkv to AVPlayer (which can't demux it), and the
+        // AVPlayer path would then fall through to the server address and fail
+        // offline ("Unable to prepare playback"). The local file's own
+        // extension routes mkv → VLCKit, mp4/m4v → AVPlayer correctly.
+        // `existingLocalURL()` verifies the file is on disk (re-basing a stale
+        // absolute path onto the current downloads dir): if it's genuinely gone,
+        // fall through to streaming instead of mis-playing.
+        if let localURL = downloadStatus.existingLocalURL() {
+            if PlaybackEngine.engine(for: localURL) == .vlc {
+                // Local file — no SMB credentials / caching options needed.
+                vlcPlayback = VLCPlayback(url: localURL)
+                return
+            }
+            // `.system` container (mp4/m4v/…): the windowed AVPlayer path's
+            // `PlaybackSession` already prefers this local file via
+            // `offlinePlayableURL()`, so fall through to it below.
+        }
+
         // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
