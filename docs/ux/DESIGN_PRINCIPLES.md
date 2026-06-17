@@ -154,6 +154,15 @@ Rules that follow from this:
 - **Focus is native.** Pressing up from the top of content reaches the tab bar via the system focus engine — no `.defaultFocus` hacks, no pinned headers fighting scroll.
 - **Adding a fifth tab** is a deliberate design discussion — four is the budget.
 
+### macOS navigation
+
+macOS is **not** the shared `RootTabView`. The Mac app is its own target (`AetherMac`), an Infuse-style **single window**: a `NavigationSplitView` **sidebar** (Home / Discover / Library / Search / Settings) plus an inline libmpv player that *swaps in over the window* when you play something. The sidebar is the Mac-native idiom — we do **not** force the iOS tab bar onto the Mac, and we do **not** convert the sidebar into a tab bar when it collapses (the iPad "collapse → slide-over" model is not the Mac model either).
+
+- **The menu bar is always-available navigation.** A **View** menu lists every section with **⌘1…⌘5**, driven by the same `MacSession.section` the sidebar binds to. This works regardless of sidebar state, so **collapsing the sidebar never strands the user** — there is always another way to switch sections. (`AetherMacApp.commands` → `SectionCommands`.)
+- **The system owns the titlebar / traffic-light zone.** No app-owned control sits in the window's top-leading corner over the traffic lights. The brand wordmark + sidebar toggle ride in a **leading titlebar accessory** (placed *after* the traffic lights by AppKit, never over them) and are **stripped during playback** so nothing floats over full-bleed video (`LibraryTitlebar` / `PlayerTitlebar`).
+- **The active section is always identified** by the highlighted sidebar row, the detail pane's navigation title, and the View-menu checkmark.
+- **Settings opens in the window's detail pane** (a sidebar section), separate from the native **Settings…** window (⌘,). Both exist; the in-window pane is the browsing-flow surface.
+
 ---
 
 ## Component naming

@@ -16,6 +16,27 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   an `AppSession.libraryRevision` signal (folded into the Library landing's and
   the "See all" grid's reload key) re-reads the fresh server state immediately.
 
+- **macOS: collapsed sidebar stranded navigation** (#432) — once the macOS
+  sidebar was collapsed there was no other way to switch Home / Discover /
+  Library / Search / Settings: no menu-bar command, no shortcut. A new **View**
+  menu now lists every section with **⌘1…⌘5**, driven by the same selection the
+  sidebar binds to (hoisted onto `MacSession`), so section switching is always
+  reachable regardless of sidebar state. The active section shows a menu
+  checkmark. A *macOS navigation* section was added to `DESIGN_PRINCIPLES.md` so
+  this is a rule, not an accident. (Titlebar-chrome polish during Search is
+  tracked separately — pending on-device repro.)
+
+- **Player dismiss collided with system controls** (#431, iOS/iPadOS) — the
+  custom close ✕ sat on the same top-leading edge AVKit uses for PiP / AirPlay,
+  crowding them, and its own auto-hide timer desynced from AVKit's (staggered
+  flicker). The ✕ over live playback is gone: **swipe-down** (#288) is now the
+  one canonical dismiss, made discoverable by a one-time, auto-fading "Swipe
+  down to close" hint centred away from every AVKit-owned edge. A close ✕ still
+  appears *only while the stream is preparing* (no AVKit chrome on screen yet),
+  so a hung "preparing" can't strand the user on a spinner. tvOS (Menu),
+  visionOS (native Back), and the macOS libmpv player (its own chrome, no system
+  PiP/zoom) were unaffected.
+
 - **Background battery — idle network monitor & carousel ticker** (iOS/iPadOS) —
   two periodic workers kept running while the app was alive behind a playing
   audio session. The SMB reachability `NWPathMonitor` is now paused on
