@@ -2,7 +2,7 @@ import Foundation
 
 /// A persisted Emby server connection: the base URL, access token, user ID,
 /// and a display name. Stored as JSON in the Keychain by `EmbyServerStore`.
-public struct EmbyServerRecord: Codable, Sendable {
+public struct EmbyServerRecord: Codable, Sendable, Equatable {
     public let baseURLString: String
     public let accessToken: String
     public let userID: String
