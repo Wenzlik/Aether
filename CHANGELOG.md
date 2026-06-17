@@ -4,6 +4,8 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-06-17
+
 ### Fixed
 
 - **Library watched badge stuck on stale state** (iOS/iPadOS) — marking a title
