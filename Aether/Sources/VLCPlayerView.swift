@@ -44,6 +44,7 @@ final class VLCPlaybackController: UIViewController {
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
     private var ticker: Timer?
+    private var backgroundObservers: [NSObjectProtocol] = []
 
     // MARK: - Startup timing instrumentation (#347)
     /// Read in Console.app, subsystem `cz.zmrhal.aether`, category `PlaybackTiming`.
@@ -175,6 +176,25 @@ final class VLCPlaybackController: UIViewController {
         ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        backgroundObservers = [
+            NotificationCenter.default.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.ticker?.invalidate()
+                self?.ticker = nil
+            },
+            NotificationCenter.default.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                guard self?.ticker == nil else { return }
+                self?.ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.tick() }
+                }
+                MainActor.assumeIsolated { self?.tick() }
+            }
+        ]
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -197,6 +217,8 @@ final class VLCPlaybackController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        backgroundObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        backgroundObservers = []
         ticker?.invalidate()
         ticker = nil
         if player.isPlaying { player.stop() }
