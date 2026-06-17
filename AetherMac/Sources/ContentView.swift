@@ -122,6 +122,11 @@ struct HomeView: View {
                 case .settings: MacSettingsView(session: session, embedded: true)
                 }
             }
+            // Give each section a stable identity so switching panes fully
+            // replaces the view — otherwise the previous pane's title/toolbar can
+            // linger in the titlebar (the stray "Settings" + gear over the traffic
+            // lights when switching to Search, #432).
+            .id(session.section)
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
@@ -132,22 +137,10 @@ struct HomeView: View {
     }
 
     private var searchPane: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search your library", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.title3)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                }
-            }
-            .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-
+        // The custom in-content field didn't reliably render under the unified
+        // titlebar (#432); use the native search field, which macOS places in the
+        // toolbar and which is always visible.
+        Group {
             if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                 AetherEmptyState(
                     glyph: "magnifyingglass",
@@ -159,9 +152,10 @@ struct HomeView: View {
                 MacSearchResults(session: session, query: searchText)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .cinematicBackground()
         .navigationTitle("Search")
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search your library"))
     }
 
     // MARK: Open
@@ -194,17 +188,15 @@ struct HomeView: View {
 ///
 private let aetherTitlebarAccessoryID = NSUserInterfaceItemIdentifier("AetherTitlebarLeading")
 
-/// Builds the leading logo + sidebar-toggle titlebar accessory (no button
-/// background). Sized to the wordmark's natural aspect — a fixed width squished
-/// "AETHER" horizontally, which read as a broken/blurry logo.
+/// Builds the leading sidebar-toggle titlebar accessory (no button background).
+/// The AETHER wordmark was removed from here (#432): a leading accessory sits in
+/// the zone the window's traffic-light controls own, so the brand mark collided /
+/// garbled with them. Only the sidebar toggle — a control that belongs by the
+/// traffic lights — remains.
 private func makeAetherTitlebarAccessory() -> NSTitlebarAccessoryViewController {
-    let content = HStack(spacing: 8) {
-        Image("AetherBrandMark").resizable().interpolation(.high).scaledToFit()
-            .frame(height: 20)
-        SidebarToggleButton()
-    }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
+    let content = SidebarToggleButton()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     let host = NSHostingController(rootView: content)
     host.view.frame.size = host.view.fittingSize
     let accessory = NSTitlebarAccessoryViewController()

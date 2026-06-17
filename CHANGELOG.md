@@ -4,6 +4,19 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS: garbled titlebar + missing search field on Search** (#432) — switching
+  to Search left a stray "Settings" + gear lingering over the window's
+  traffic-light controls (alongside the brand wordmark), and the search field
+  didn't appear. Three fixes: the AETHER wordmark is removed from the leading
+  titlebar accessory (it sat in the system-owned traffic-light zone — only the
+  sidebar toggle remains there); each sidebar section now has a stable `.id` so
+  switching panes fully replaces the previous title/toolbar instead of leaving it
+  behind; and Search uses the native `.searchable` field (always visible in the
+  toolbar) instead of a custom in-content field that didn't render under the
+  unified titlebar.
+
 ### Changed
 
 - **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
