@@ -123,7 +123,7 @@ public actor PlaybackSession {
         self.state = PlaybackState()
         self.resumeStore = resumeStore
         self.resumeWriteInterval = resumeWriteInterval
-        Task { self.startSceneObserver() }
+        Task { await self.startSceneObserver() }
     }
 
     /// Attach the downloads catalogue so prepare can intercept items that
