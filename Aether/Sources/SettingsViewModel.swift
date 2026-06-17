@@ -298,6 +298,7 @@ final class SettingsViewModel {
             switch source.id {
             case .plex:     kind = "plex"
             case .jellyfin: kind = "jellyfin"
+            case .emby:     kind = "emby"
             case .smb:      kind = "smb"
             case .dlna:     kind = "dlna"
             case .mock:     kind = "mock"
