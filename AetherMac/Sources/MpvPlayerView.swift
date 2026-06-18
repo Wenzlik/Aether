@@ -50,7 +50,10 @@ struct MpvPlayerScreen: View {
             model.load(url, session: session, item: item)
             scheduleHide()
         }
-        .onDisappear { model.stop() }
+        .onDisappear {
+            model.stop()
+            NSCursor.setHiddenUntilMouseMoves(false)   // restore cursor if it was hidden
+        }
         .onChange(of: url) { _, newURL in model.load(newURL, session: session, item: item) }
         .contentShape(Rectangle())
         // Double-click toggles full-screen (standard player gesture).
@@ -247,7 +250,17 @@ struct MpvPlayerScreen: View {
 
     private func scheduleHide() {
         hideWorkItem?.cancel()
-        let work = DispatchWorkItem { controlsVisible = false }
+        let work = DispatchWorkItem {
+            controlsVisible = false
+            // In full-screen there's nothing on screen but the picture, so a
+            // stationary cursor just sits over the video. Hide it along with the
+            // chrome; it reappears on the next mouse move (which also fires
+            // onContinuousHover(.active) → reveal()). Gated to full-screen so we
+            // never steal the pointer while it's over another window.
+            if NSApp.keyWindow?.styleMask.contains(.fullScreen) == true {
+                NSCursor.setHiddenUntilMouseMoves(true)
+            }
+        }
         hideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
     }
