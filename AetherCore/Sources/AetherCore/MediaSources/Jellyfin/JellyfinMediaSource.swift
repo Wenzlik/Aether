@@ -68,7 +68,10 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "ParentId", value: libraryID.rawValue),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating,People"),
+            // People is omitted here — 410-item responses with full cast data
+            // bloat the payload and cause 30+ second loads. Cast is fetched
+            // lazily in the detail view via item(for:) which keeps People.
+            URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
             // Per Jellyfin docs, play state (UserData.Played) comes via this flag,
             // not a `Fields` value — it's the watched-checkmark source.
             URLQueryItem(name: "enableUserData", value: "true"),
