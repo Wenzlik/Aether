@@ -443,7 +443,7 @@ private struct AboutSettings: View {
     /// A Support row that opens the user's mail client (mailto). `recipient`
     /// defaults to support@ but "Contact the Creator" passes the creator address.
     /// Bug/Diagnostics rows append a short diagnostics block (no account details).
-    private func supportButton(_ title: String, systemImage: String, subject: String, includeDiagnostics: Bool, recipient: String = supportEmail) -> some View {
+    private func supportButton(_ title: LocalizedStringKey, systemImage: String, subject: String, includeDiagnostics: Bool, recipient: String = supportEmail) -> some View {
         Button {
             var body = ""
             if includeDiagnostics {

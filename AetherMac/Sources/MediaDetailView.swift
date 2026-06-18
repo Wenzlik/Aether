@@ -247,7 +247,7 @@ struct MediaDetailView: View {
     /// (Apple TV / Infuse presentation), so it's taller, wider, and bolder than a
     /// standard control.
     @ViewBuilder
-    private func bigButton(_ title: String, systemImage: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+    private func bigButton(_ title: LocalizedStringKey, systemImage: String, prominent: Bool, action: @escaping () -> Void) -> some View {
         let label = Label(title, systemImage: systemImage)
             .font(prominent ? .title2.weight(.bold) : .title3.weight(.semibold))
             .frame(minWidth: prominent ? 340 : 170)

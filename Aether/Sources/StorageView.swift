@@ -262,7 +262,7 @@ struct StorageView: View {
         }
     }
 
-    private func rowActionButton(_ title: String, _ action: @escaping () async -> Void) -> some View {
+    private func rowActionButton(_ title: LocalizedStringKey, _ action: @escaping () async -> Void) -> some View {
         Button(title) { Task { await action() } }
             .buttonStyle(.plain)
             .font(AetherDesign.Typography.metadata)
@@ -419,7 +419,7 @@ struct StorageView: View {
 
     /// Section header styled like the app's other uppercase rail labels,
     /// minus List's default inset/casing.
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(AetherDesign.Typography.caption)
             .tracking(0.6)
