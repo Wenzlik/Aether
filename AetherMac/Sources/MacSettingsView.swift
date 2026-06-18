@@ -32,6 +32,7 @@ struct MacSettingsView: View {
 private struct AccountsSettings: View {
     var session: MacSession
     @State private var signIn: SignIn?
+    @State private var showPlexPicker = false
 
     private enum SignIn: String, Identifiable { case plex, jellyfin, emby; var id: String { rawValue } }
 
@@ -53,6 +54,9 @@ private struct AccountsSettings: View {
 
             if isPlexConnected {
                 Section("Plex") {
+                    ForEach(session.plexServerRecords, id: \.clientIdentifier) { record in
+                        LabeledContent(record.name, value: connectionLabel(record))
+                    }
                     if session.plexServerRecords.count > 1 {
                         Picker("Primary Server", selection: Binding(
                             get: { session.primaryPlexServerID ?? "" },
@@ -68,11 +72,8 @@ private struct AccountsSettings: View {
                         }
                         Text("The primary server streams first when a title is on more than one of your servers.")
                             .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(session.plexServerNames, id: \.self) { name in
-                            LabeledContent("Server", value: name)
-                        }
                     }
+                    Button("Manage Servers…") { showPlexPicker = true }
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }
                     }
@@ -127,6 +128,17 @@ private struct AccountsSettings: View {
             case .emby:     EmbySignInSheet(session: session) { signIn = nil }
             }
         }
+        .sheet(isPresented: $showPlexPicker) {
+            MacPlexServerPickerSheet(session: session)
+        }
+    }
+
+    /// "On your network" / "Remote" / "Relay" from the best-ranked connection.
+    private func connectionLabel(_ record: PlexServerRecord) -> String {
+        guard let best = record.connections.first else { return "Server" }
+        if best.isLocal { return "On your network" }
+        if best.isRelay { return "Relay" }
+        return "Remote"
     }
 }
 

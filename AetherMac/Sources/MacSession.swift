@@ -430,6 +430,34 @@ final class MacSession {
         libraryToken &+= 1
     }
 
+    /// Fetch every Plex server reachable on the signed-in account, ranked
+    /// best-first by `PlexServerSelector`. Returns `nil` on network / auth
+    /// failure so the caller can distinguish "error" from "no servers found".
+    func loadReachablePlexServers() async -> [PlexServerRecord]? {
+        guard let token = try? await keychain.string(for: Self.plexTokenKey) else { return nil }
+        guard let resources = try? await plexResourceClient.resources(token: token) else { return nil }
+        return PlexServerSelector().rankedSelections(from: resources).map { $0.makeRecord() }
+    }
+
+    /// Add or remove `record` from the active streaming set. At least one server
+    /// must remain enabled — disabling the last one is a no-op (sign out is the
+    /// way to disconnect). Enabling an already-enabled server is also a no-op.
+    func setPlexServerEnabled(_ record: PlexServerRecord, enabled: Bool) async {
+        var records = plexServerRecords
+        if enabled {
+            guard !records.contains(where: { $0.clientIdentifier == record.clientIdentifier }) else { return }
+            records.append(record)
+        } else {
+            guard records.count > 1 else { return }
+            records.removeAll { $0.clientIdentifier == record.clientIdentifier }
+        }
+        try? await plexServerStore.writeAll(records)
+        plexServerRecords = records
+        plexSources = records.map(makePlexSource)
+        plexServerNames = records.map(\.name)
+        libraryToken &+= 1
+    }
+
     private func makePlexSource(_ record: PlexServerRecord) -> PlexMediaSource {
         PlexMediaSource(
             serverID: record.clientIdentifier,
