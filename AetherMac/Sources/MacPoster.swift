@@ -12,6 +12,7 @@ struct MacPoster: View {
     /// resizes instead of clipping fixed-width posters.
     var width: CGFloat? = nil
     @Environment(\.watchedDisplay) private var watchedDisplay
+    @Environment(\.posterRatingSource) private var posterRatingSource
     /// Netflix-availability badge (#360); optional so previews still render.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
@@ -40,7 +41,7 @@ struct MacPoster: View {
 
     @ViewBuilder
     private var ratingBadge: some View {
-        if let rating = item.communityRating, rating > 0 {
+        if let rating = item.posterRating(source: posterRatingSource), rating > 0 {
             Text(String(format: "%.1f", rating))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)

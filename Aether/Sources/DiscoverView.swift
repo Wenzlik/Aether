@@ -37,6 +37,7 @@ struct DiscoverView: View {
     /// Netflix availability (#360): badges on owned posters + the Netflix-only
     /// discovery rails.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @Environment(\.posterRatingSource) private var posterRatingSource
 
     /// The featured carousel (#381): 3–7 slides, in-progress titles first
     /// (most-recently-active), then top-rated, then random picks — a rotating
@@ -322,7 +323,7 @@ struct DiscoverView: View {
                             subtitle: featuredMetaLine(item),
                             posterURL: item.backdropURL ?? item.posterURL,
                             progress: heroProgress[item.id],
-                            rating: item.communityRating,
+                            rating: item.posterRating(source: posterRatingSource),
                             aspectRatio: heroAspect
                         )
                         .frame(maxWidth: .infinity)
@@ -384,7 +385,7 @@ struct DiscoverView: View {
             }
             // Rating badge — top-leading, consistent with AetherCard
             .overlay(alignment: .topLeading) {
-                if let rating = item.communityRating, rating > 0 {
+                if let rating = item.posterRating(source: posterRatingSource), rating > 0 {
                     Text(String(format: "%.1f", rating))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white)

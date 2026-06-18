@@ -10,14 +10,17 @@ public struct TMDbMetadata: Sendable, Equatable, Hashable, Codable {
     public let overview: String?
     public let posterURL: URL?
     public let backdropURL: URL?
+    /// TMDb `vote_average` (0–10), or `nil` when the result didn't carry one.
+    public let rating: Double?
 
-    public init(tmdbID: Int, title: String, year: Int?, overview: String?, posterURL: URL?, backdropURL: URL?) {
+    public init(tmdbID: Int, title: String, year: Int?, overview: String?, posterURL: URL?, backdropURL: URL?, rating: Double? = nil) {
         self.tmdbID = tmdbID
         self.title = title
         self.year = year
         self.overview = overview
         self.posterURL = posterURL
         self.backdropURL = backdropURL
+        self.rating = rating
     }
 }
 
@@ -108,7 +111,8 @@ public struct TMDbClient: Sendable {
                 year: matchedYear,
                 overview: result.overview?.nonEmptyTrimmed,
                 posterURL: Self.imageURL(result.posterPath, size: "w500"),
-                backdropURL: Self.imageURL(result.backdropPath, size: "w1280")
+                backdropURL: Self.imageURL(result.backdropPath, size: "w1280"),
+                rating: result.voteAverage
             )
         }
     }
@@ -167,6 +171,33 @@ public struct TMDbClient: Sendable {
     static func imageURL(_ path: String?, size: String) -> URL? {
         guard let path, !path.isEmpty else { return nil }
         return URL(string: imageBase + size + path)
+    }
+
+    // MARK: - Detail by ID
+
+    /// Fetch title details directly by TMDb ID — used to get `vote_average` for
+    /// Plex / Jellyfin items that already carry a `guids.tmdb` ID but whose
+    /// server metadata didn't supply a TMDb rating. Best-effort + non-throwing:
+    /// `nil` on any failure (no key, network, no result).
+    public func details(tmdbID: Int, type: MediaType) async -> TMDbMetadata? {
+        guard isConfigured, let request = simpleRequest(path: "/\(type.path)/\(tmdbID)") else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let result = try? await api.decode(DetailsResponse.self, from: request, decoder: decoder) else {
+            return nil
+        }
+        let date = result.releaseDate ?? result.firstAirDate
+        return TMDbMetadata(
+            tmdbID: tmdbID,
+            title: result.title ?? result.name ?? "",
+            year: date.flatMap { Int($0.prefix(4)) },
+            overview: result.overview?.nonEmptyTrimmed,
+            posterURL: Self.imageURL(result.posterPath, size: "w500"),
+            backdropURL: Self.imageURL(result.backdropPath, size: "w1280"),
+            rating: result.voteAverage
+        )
     }
 
     // MARK: - Watch providers + discovery (#360)
@@ -247,7 +278,8 @@ public struct TMDbClient: Sendable {
                 year: year,
                 overview: result.overview?.nonEmptyTrimmed,
                 posterURL: Self.imageURL(result.posterPath, size: "w500"),
-                backdropURL: Self.imageURL(result.backdropPath, size: "w1280")
+                backdropURL: Self.imageURL(result.backdropPath, size: "w1280"),
+                rating: result.voteAverage
             )
         }
     }
@@ -288,6 +320,21 @@ public struct TMDbClient: Sendable {
         let overview: String?
         let posterPath: String?
         let backdropPath: String?
+        let voteAverage: Double?
+    }
+
+    /// `/movie/{id}` or `/tv/{id}` response — same shape as a search result but
+    /// fetched directly by known TMDb id, so we can pick up `vote_average` for
+    /// Plex / Jellyfin items without searching by title.
+    private struct DetailsResponse: Decodable, Sendable {
+        let title: String?
+        let name: String?
+        let releaseDate: String?
+        let firstAirDate: String?
+        let overview: String?
+        let posterPath: String?
+        let backdropPath: String?
+        let voteAverage: Double?
     }
 
     /// `/watch/providers` response: per-region buckets of provider lists.

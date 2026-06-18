@@ -535,6 +535,14 @@ extension SettingsView {
             )
 
             AetherDisclosureRow(
+                label: "Poster Rating",
+                description: "Which rating badge appears on poster cards.",
+                value: viewModel.playbackPreferences.posterRatingSource.displayName
+            ) {
+                openPicker = .posterRatingSource
+            }
+
+            AetherDisclosureRow(
                 label: "Watched Dimming",
                 value: viewModel.playbackPreferences.watchedDimming.displayName
             ) {

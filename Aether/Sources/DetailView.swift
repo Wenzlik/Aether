@@ -98,6 +98,9 @@ struct DetailView: View {
     /// switch, scene re-activation) can't relaunch the player after the user has
     /// already dismissed it.
     @State private var didAutoplay = false
+    /// TMDb `vote_average` fetched lazily for Plex/Jellyfin items — `nil` until
+    /// the fetch completes or when the item has no TMDb ID / no API key.
+    @State var tmdbRating: Double?
 
     // MARK: - DetailViewModel forwarders (#241 inc 1)
     // Same-named computed forwarders so the section builders and load / mutate
@@ -422,6 +425,22 @@ struct DetailView: View {
         // endpoint, not the library list) and when the user switches source.
         .task(id: current.logoURL()) {
             await viewModel.loadHeroLogo()
+        }
+        // TMDb rating — fetched lazily for Plex/Jellyfin items that carry a
+        // TMDb GUID but whose server community rating may differ. Uses the
+        // already-populated `tmdbRating` when the Local Library set it.
+        .task(id: item.id) {
+            if let preloaded = item.tmdbRating {
+                tmdbRating = preloaded
+                return
+            }
+            guard appSession.isTMDbConfigured,
+                  let rawID = item.guids.tmdb,
+                  let tmdbID = Int(rawID) else { return }
+            let type: TMDbClient.MediaType = item.kind == .show ? .tv : .movie
+            let meta = await TMDbClient(apiKey: appSession.tmdbAPIKey, api: appSession.api)
+                .details(tmdbID: tmdbID, type: type)
+            tmdbRating = meta?.rating
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
         .sheet(item: $presentedSelector) { selector in

@@ -69,6 +69,7 @@ struct SettingsView: View {
     /// `.sheet(item:)` so the picker contents reflect the row tapped.
     enum PrefPicker: String, Identifiable {
         case quality, audio, subtitles, appearance, language, skipIntro, skipCredits, autoPlayNext, countdown, watchedDimming, watchedLabelOpacity
+        case posterRatingSource
         case netflixRegion
         #if os(iOS)
         case appIcon
