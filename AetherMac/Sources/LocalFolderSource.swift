@@ -18,6 +18,8 @@ actor LocalFolderSource: MediaSource {
     private let tmdb: TMDbClient?
     private var scanned: Scan?
 
+    private static let overridesKey = "localLibrary.tmdbOverrides"
+
     private static let videoExtensions: Set<String> = [
         "mkv", "mp4", "m4v", "mov", "avi", "ts", "m2ts", "webm", "flv", "wmv", "mpg", "mpeg"
     ]
@@ -160,17 +162,30 @@ actor LocalFolderSource: MediaSource {
 
     /// Build movie `MediaItem`s, looking up TMDb metadata in batches of 8.
     private func matched(_ raws: [RawMovie]) async -> [MediaItem] {
+        let overrides = Self.loadOverrides()
         var out: [MediaItem] = []
         for chunk in raws.chunked(8) {
             let items = await withTaskGroup(of: MediaItem.self) { group in
                 for r in chunk {
                     group.addTask { [tmdb, id] in
-                        let meta = await tmdb?.match(title: r.title, year: r.year, isEpisode: false)
+                        let meta: TMDbMetadata?
+                        if let override = overrides[r.path] {
+                            meta = override
+                        } else {
+                            meta = await tmdb?.match(title: r.title, year: r.year, isEpisode: false)
+                        }
                         return MediaItem(
                             id: .init(source: id, rawValue: r.path),
-                            title: r.title, kind: .movie, year: r.year,
-                            summary: meta?.overview, posterURL: meta?.posterURL,
-                            backdropURL: meta?.backdropURL, streamURL: r.url
+                            title: meta?.title ?? r.title,
+                            kind: .movie,
+                            year: meta?.year ?? r.year,
+                            summary: meta?.overview,
+                            posterURL: meta?.posterURL,
+                            backdropURL: meta?.backdropURL,
+                            streamURL: r.url,
+                            mediaInfo: Self.buildMediaInfo(url: r.url, path: r.path),
+                            guids: MediaGuids(tmdb: meta.map { "\($0.tmdbID)" }),
+                            communityRating: meta?.rating
                         )
                     }
                 }
@@ -181,6 +196,66 @@ actor LocalFolderSource: MediaSource {
             out.append(contentsOf: items)
         }
         return out.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    /// Update in-memory scan cache and persist override so it survives rescans.
+    func applyTMDbOverride(_ meta: TMDbMetadata, for id: MediaID) {
+        guard var scan = scanned, let existing = scan.byID[id.rawValue] else { return }
+        let updated = MediaItem(
+            id: existing.id,
+            title: meta.title,
+            kind: existing.kind,
+            year: meta.year ?? existing.year,
+            summary: meta.overview,
+            posterURL: meta.posterURL,
+            backdropURL: meta.backdropURL,
+            streamURL: existing.streamURL,
+            mediaInfo: existing.mediaInfo,
+            guids: MediaGuids(tmdb: "\(meta.tmdbID)"),
+            communityRating: meta.rating
+        )
+        scan.byID[id.rawValue] = updated
+        scan.movies = scan.movies.map { $0.id == id ? updated : $0 }
+        scanned = scan
+        var overrides = Self.loadOverrides()
+        overrides[id.rawValue] = meta
+        Self.saveOverrides(overrides)
+    }
+
+    private static func buildMediaInfo(url: URL, path: String) -> MediaInfo? {
+        let ext = url.pathExtension.lowercased()
+        let fromName = MediaInfo.fromFilename(url.lastPathComponent, container: ext.isEmpty ? nil : ext)
+        let size: Int64? = {
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                  let v = attrs[.size] else { return nil }
+            if let i = v as? Int64 { return i }
+            if let n = v as? NSNumber { return n.int64Value }
+            return nil
+        }()
+        guard fromName != nil || size != nil else { return nil }
+        return MediaInfo(
+            videoCodec: fromName?.videoCodec,
+            audioCodec: fromName?.audioCodec,
+            audioChannels: fromName?.audioChannels,
+            videoResolution: fromName?.videoResolution,
+            bitrateKbps: fromName?.bitrateKbps,
+            isHDR: fromName?.isHDR ?? false,
+            isDolbyVision: fromName?.isDolbyVision ?? false,
+            container: fromName?.container ?? (ext.isEmpty ? nil : ext),
+            fileSizeBytes: size
+        )
+    }
+
+    private static func loadOverrides() -> [String: TMDbMetadata] {
+        guard let data = UserDefaults.standard.data(forKey: overridesKey),
+              let decoded = try? JSONDecoder().decode([String: TMDbMetadata].self, from: data) else { return [:] }
+        return decoded
+    }
+
+    private static func saveOverrides(_ overrides: [String: TMDbMetadata]) {
+        if let data = try? JSONEncoder().encode(overrides) {
+            UserDefaults.standard.set(data, forKey: overridesKey)
+        }
     }
 
     /// One show container per series, with a TMDb (TV) poster when matched.

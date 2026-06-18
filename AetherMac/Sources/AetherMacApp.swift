@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AetherCore
 
 /// Native macOS Aether (#232) — player-first. A single Infuse-style window:
 /// sidebar (Home / Discover / Library / Search / Settings) plus an inline
@@ -73,6 +74,19 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.isColdLaunch = false
+        }
+    }
+
+    /// Forward background URLSession completion events to the download bridge so
+    /// `URLSessionEventBridge.urlSessionDidFinishEvents(forBackgroundURLSession:)`
+    /// can flush the OS-side completion handler — same pattern as iOS AppDelegate.
+    func application(
+        _ application: NSApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping @Sendable () -> Void
+    ) {
+        Task { @MainActor in
+            BackgroundDownloadCompletions.shared.storeHandler(completionHandler, identifier: identifier)
         }
     }
 }

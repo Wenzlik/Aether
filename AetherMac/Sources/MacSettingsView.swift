@@ -8,11 +8,6 @@ import AetherCore
 /// preference set on either platform carries over.
 struct MacSettingsView: View {
     var session: MacSession
-    /// `true` when shown inside the main window's detail pane (sidebar → Settings)
-    /// rather than the standalone Settings scene — then it fills the pane and the
-    /// app-level dark/tint/locale already apply, so we don't re-set them or pin a
-    /// window-sized frame.
-    var embedded = false
 
     var body: some View {
         TabView {
@@ -27,27 +22,10 @@ struct MacSettingsView: View {
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .modifier(SettingsChrome(embedded: embedded, locale: session.appLocale,
-                                 colorScheme: session.appearance.preference.colorScheme))
-    }
-}
-
-/// Window-only chrome for the standalone Settings scene; in-pane it inherits the
-/// app's appearance and fills.
-private struct SettingsChrome: ViewModifier {
-    let embedded: Bool
-    let locale: Locale
-    let colorScheme: ColorScheme?
-    func body(content: Content) -> some View {
-        if embedded {
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            content
-                .frame(width: 520, height: 440)
-                .tint(AetherMacTheme.accent)
-                .preferredColorScheme(colorScheme)
-                .environment(\.locale, locale)
-        }
+        .frame(width: 640, height: 580)
+        .tint(AetherMacTheme.accent)
+        .preferredColorScheme(session.appearance.preference.colorScheme)
+        .environment(\.locale, session.appLocale)
     }
 }
 
@@ -57,13 +35,25 @@ private struct AccountsSettings: View {
 
     private enum SignIn: String, Identifiable { case plex, jellyfin, emby; var id: String { rawValue } }
 
+    private var isPlexConnected: Bool { session.isPlexConnected }
+    private var isJellyfinConnected: Bool { session.jellyfinServerName != nil }
+    private var isEmbyConnected: Bool { session.embyServerName != nil }
+
+    private var hasConnectedSource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected }
+    private var hasAddableSource: Bool { !isPlexConnected || !isJellyfinConnected || !isEmbyConnected }
+
     var body: some View {
         Form {
-            Section("Plex") {
-                if session.isPlexConnected {
+            if !hasConnectedSource {
+                Section {
+                    Text("No sources connected yet. Add Plex, Jellyfin, or Emby to start browsing your library.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if isPlexConnected {
+                Section("Plex") {
                     if session.plexServerRecords.count > 1 {
-                        // Multiple servers (#325) — choose which streams first when
-                        // a title is on more than one.
                         Picker("Primary Server", selection: Binding(
                             get: { session.primaryPlexServerID ?? "" },
                             set: { id in
@@ -86,35 +76,46 @@ private struct AccountsSettings: View {
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }
                     }
-                } else {
-                    LabeledContent("Status", value: "Not connected")
-                    Button("Connect Plex…") { signIn = .plex }
                 }
             }
-            Section("Jellyfin") {
-                if let name = session.jellyfinServerName {
+
+            if let name = session.jellyfinServerName {
+                Section("Jellyfin") {
                     LabeledContent("Server", value: name)
                     Button("Sign Out of Jellyfin", role: .destructive) {
                         Task { await session.signOutJellyfin() }
                     }
-                } else {
-                    LabeledContent("Status", value: "Not connected")
-                    Button("Connect Jellyfin…") { signIn = .jellyfin }
                 }
             }
-            Section("Emby") {
-                if let name = session.embyServerName {
+
+            if let name = session.embyServerName {
+                Section("Emby") {
                     LabeledContent("Server", value: name)
                     Button("Sign Out of Emby", role: .destructive) {
                         Task { await session.signOutEmby() }
                     }
-                } else {
-                    LabeledContent("Status", value: "Not connected")
-                    Button("Connect Emby…") { signIn = .emby }
                 }
             }
+
+            if hasAddableSource {
+                Section {
+                    Menu {
+                        if !isPlexConnected {
+                            Button("Plex") { signIn = .plex }
+                        }
+                        if !isJellyfinConnected {
+                            Button("Jellyfin") { signIn = .jellyfin }
+                        }
+                        if !isEmbyConnected {
+                            Button("Emby") { signIn = .emby }
+                        }
+                    } label: {
+                        Label("Add Source", systemImage: "plus")
+                    }
+                }
+            }
+
             Section("Other Sources") {
-                LabeledContent("SMB / NAS", value: "Coming soon")
                 LabeledContent("Local Library", value: "Set up in General")
             }
         }

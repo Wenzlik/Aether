@@ -27,6 +27,7 @@ struct DiscoverView: View {
     /// While > 0 the carousel is paused after a manual interaction.
     @State private var pauseCountdown = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private static let autoAdvanceInterval = 6
     private static let resumeIdleSeconds = 3
@@ -61,8 +62,9 @@ struct DiscoverView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .cinematicBackground()
-        .navigationTitle(mode == .home ? "Home" : "Discover")
+        .scrollContentBackground(.hidden)
+        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+        .navigationTitle("")
         .toolbar {
             ToolbarItem {
                 if session.isLoadingRails { ProgressView().controlSize(.small) }

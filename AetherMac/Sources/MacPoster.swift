@@ -37,7 +37,7 @@ struct MacPoster: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.82)
                 .foregroundStyle(item.isFullyWatched ? .secondary : .primary)
-                .frame(maxWidth: width ?? .infinity, minHeight: 40, alignment: .topLeading)
+                .frame(maxWidth: width ?? .infinity, alignment: .topLeading)
             if let year = item.year {
                 Text(String(year)).font(.caption2).foregroundStyle(.secondary)
             }
