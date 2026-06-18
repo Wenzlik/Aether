@@ -85,8 +85,8 @@ struct MediaDetailView: View {
                     blurRadius: backdrop != nil ? 0 : 40
                 )
                 LinearGradient(
-                    colors: [.black.opacity(0.92), .black.opacity(0.7),
-                             .black.opacity(0.3), .clear],
+                    colors: [.black.opacity(0.80), .black.opacity(0.60),
+                             .black.opacity(0.20), .clear],
                     startPoint: .leading, endPoint: .trailing
                 )
                 LinearGradient(

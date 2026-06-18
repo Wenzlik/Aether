@@ -43,7 +43,7 @@ private struct SettingsChrome: ViewModifier {
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             content
-                .frame(width: 480, height: 380)
+                .frame(width: 520, height: 440)
                 .tint(AetherMacTheme.accent)
                 .preferredColorScheme(colorScheme)
                 .environment(\.locale, locale)

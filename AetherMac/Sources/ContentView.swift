@@ -133,7 +133,19 @@ struct HomeView: View {
                     Label(section.title, systemImage: section.symbol).tag(section)
                 }
             }
+            // Explicit tint on the List ensures the selected-row pill renders in
+            // Aether Blue even when the user's macOS system accent is a different
+            // colour — `.tint()` on the parent Group doesn't always propagate
+            // through NavigationSplitView to the NSTableView-backed sidebar row.
+            .tint(AetherMacTheme.accent)
         }
+        // Explicit sidebar vibrancy: .behindWindow blending so the sidebar
+        // translucency shows the desktop (or other windows) through it regardless
+        // of the user's wallpaper. SwiftUI sets this on NavigationSplitView's
+        // sidebar column automatically, but naming it explicitly here ensures the
+        // NSVisualEffectView is always `.active` and uses the `.sidebar` material
+        // rather than defaulting to `.windowBackground` on some macOS versions.
+        .background(SidebarVibrancyBackground())
     }
 
     /// Bridges the List's optional single-selection to `session.section` (the
@@ -386,4 +398,18 @@ private extension NSView {
         }
         return nil
     }
+}
+
+/// An NSVisualEffectView with `.sidebar` material and `.behindWindow` blending
+/// used as the sidebar column background — ensures translucency against the
+/// desktop / behind-window content regardless of the macOS version.
+private struct SidebarVibrancyBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = .sidebar
+        v.blendingMode = .behindWindow
+        v.state = .active
+        return v
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

@@ -52,6 +52,7 @@ struct AetherMacApp: App {
         // Native Settings window — "Aether ▸ Settings…" (⌘,).
         Settings {
             MacSettingsView(session: session)
+                .tint(AetherMacTheme.accent)
                 .environmentObject(updater)   // About ▸ auto-update toggle (#405)
         }
     }
