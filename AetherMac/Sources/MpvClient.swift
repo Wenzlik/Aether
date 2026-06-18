@@ -42,6 +42,11 @@ final class MpvClient {
         mpv_set_option_string(handle, "keep-open", "yes")
         // Reasonable OSD/seek behaviour for a GUI front-end.
         mpv_set_option_string(handle, "force-seekable", "yes")
+        // Allow the software volume slider to go up to 150% — movies are often
+        // mastered at a lower level than streaming services; this extra headroom
+        // lets users compensate without clipping (mpv applies soft-clipping above
+        // 100). Default stays at 100 (unity gain).
+        mpv_set_option_string(handle, "volume-max", "150")
 
         mpv_initialize(handle)
 

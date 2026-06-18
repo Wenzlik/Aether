@@ -118,7 +118,8 @@ struct MpvPlayerScreen: View {
                 // Volume
                 HStack(spacing: 6) {
                     Image(systemName: "speaker.fill").foregroundStyle(.secondary)
-                    Slider(value: $model.volume, in: 0...100).frame(width: 90)
+                    Slider(value: $model.volume, in: 0...150).frame(width: 90)
+                        .help("Volume (\(Int(model.volume))%)")
                 }
 
                 trackMenu(systemImage: "waveform", tracks: model.audioTracks, currentID: model.currentAudioID) { model.selectAudio(id: $0) }
