@@ -436,7 +436,8 @@ final class MacSession {
     func loadReachablePlexServers() async -> [PlexServerRecord]? {
         guard let token = try? await keychain.string(for: Self.plexTokenKey) else { return nil }
         guard let resources = try? await plexResourceClient.resources(token: token) else { return nil }
-        return PlexServerSelector().rankedSelections(from: resources).map { $0.makeRecord() }
+        let selected = PlexServerSelector().rankedSelections(from: resources)
+        return selected.map { $0.makeRecord() }
     }
 
     /// Add or remove `record` from the active streaming set. At least one server
