@@ -377,6 +377,11 @@ private struct AppearanceSettings: View {
                 Text("Recently Added, Recently Released, and Top Rated show what's still ahead. Your Library always shows everything.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Poster Cards") {
+                Picker("Rating Badge", selection: $prefs.posterRatingSource) {
+                    ForEach(PosterRatingSource.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+            }
             Section("Watched Titles") {
                 Picker("Dimming", selection: $prefs.watchedDimming) {
                     ForEach(WatchedDimming.allCases, id: \.self) { Text($0.displayName).tag($0) }

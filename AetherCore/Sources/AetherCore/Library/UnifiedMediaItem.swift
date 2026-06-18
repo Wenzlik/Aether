@@ -106,6 +106,8 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
     public let genres: [String]
     /// Community / audience rating (≈0–10) — Discover "Top Rated", Library sort.
     public let communityRating: Double?
+    /// TMDb `vote_average` (0–10) when available — from `lead.tmdbRating`.
+    public let tmdbRating: Double?
     /// Original release / premiere date — Home "Recently Released".
     public let releaseDate: Date?
     /// When the title was added to the library — Home "Recently Added".
@@ -123,6 +125,7 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         artwork: ArtworkSource? = nil,
         genres: [String] = [],
         communityRating: Double? = nil,
+        tmdbRating: Double? = nil,
         releaseDate: Date? = nil,
         dateAdded: Date? = nil
     ) {
@@ -137,8 +140,19 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         self.sources = sources
         self.genres = genres
         self.communityRating = communityRating
+        self.tmdbRating = tmdbRating
         self.releaseDate = releaseDate
         self.dateAdded = dateAdded
+    }
+
+    /// The rating to show on a poster badge given the user's `PosterRatingSource`
+    /// preference. `.tmdb` falls back to `communityRating` when `tmdbRating` is nil.
+    public func posterRating(source: PosterRatingSource) -> Double? {
+        switch source {
+        case .communityRating: return communityRating
+        case .tmdb:            return tmdbRating ?? communityRating
+        case .none:            return nil
+        }
     }
 
     /// A server-resized poster URL at the given tier, minted from the pinned

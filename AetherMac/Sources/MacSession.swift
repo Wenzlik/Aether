@@ -131,6 +131,13 @@ final class MacSession {
         await TMDbClient(apiKey: key.trimmingCharacters(in: .whitespacesAndNewlines), api: api).validate()
     }
 
+    /// Fetch TMDb `vote_average` by ID — used by Detail to show the TMDb rating
+    /// alongside the server community rating. Best-effort: `nil` on any failure.
+    func fetchTMDbRating(tmdbID: Int, type: TMDbClient.MediaType) async -> Double? {
+        guard let client = makeTMDbClient() else { return nil }
+        return await client.details(tmdbID: tmdbID, type: type)?.rating
+    }
+
     // MARK: - Netflix availability (#360)
 
     /// Opt-in Netflix-availability prefs (toggle + region), shared store with iOS.

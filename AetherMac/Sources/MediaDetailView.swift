@@ -27,6 +27,7 @@ struct MediaDetailView: View {
     @State private var parentSeason: MediaItem?
     @State private var parentShow: MediaItem?
     @State private var isLoading = false
+    @State private var tmdbRating: Double?
     /// Cast rail collapses to the top billing until "Show All" (point 5).
     @State private var showAllCast = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
@@ -107,6 +108,15 @@ struct MediaDetailView: View {
             guard !item.kind.isContainer else { return }
             resumeAt = await session.savedResumeSeconds(for: item)
         }
+        .task(id: item.id) {
+            if let preloaded = item.tmdbRating {
+                tmdbRating = preloaded
+                return
+            }
+            guard let rawID = item.guids.tmdb, let tmdbID = Int(rawID) else { return }
+            let type: TMDbClient.MediaType = item.kind == .show ? .tv : .movie
+            tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
+        }
     }
 
     // MARK: Breadcrumb (episode → season → show)
@@ -158,6 +168,9 @@ struct MediaDetailView: View {
                 if let rating = current.contentRating { Text(rating) }
                 if let community = current.communityRating {
                     Label(String(format: "%.1f", community), systemImage: "star.fill")
+                }
+                if let tmdb = tmdbRating ?? current.tmdbRating, tmdb > 0 {
+                    Label("TMDb \(String(format: "%.1f", tmdb))", systemImage: "tv")
                 }
             }
             .font(.title2)

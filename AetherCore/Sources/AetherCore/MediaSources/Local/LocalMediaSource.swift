@@ -90,6 +90,7 @@ public actor LocalMediaSource: MediaSource {
             posterURL: store.artworkURL(for: item) ?? item.metadata?.posterURL,
             backdropURL: item.metadata?.backdropURL,
             streamURL: store.fileURL(for: item),
+            tmdbRating: item.metadata?.rating,
             dateAdded: item.addedAt
         )
     }
@@ -108,6 +109,7 @@ public actor LocalMediaSource: MediaSource {
             summary: episodes.compactMap(\.effectiveOverview).first,
             posterURL: poster,
             backdropURL: episodes.compactMap { $0.metadata?.backdropURL }.first,
+            tmdbRating: episodes.compactMap { $0.metadata?.rating }.first,
             dateAdded: episodes.map(\.addedAt).max(),
             seasonCount: seasons.isEmpty ? nil : seasons.count,
             episodeCount: episodes.count

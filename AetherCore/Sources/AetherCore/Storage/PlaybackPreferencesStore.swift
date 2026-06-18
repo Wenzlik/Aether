@@ -142,6 +142,11 @@ public final class PlaybackPreferencesStore {
     public static let minLabelOpacity: Double = 0.15
     static func clampOpacity(_ value: Double) -> Double { min(1.0, max(minLabelOpacity, value)) }
 
+    /// Which rating source the poster badge shows. Default `.communityRating`.
+    public var posterRatingSource: PosterRatingSource {
+        didSet { defaults.set(posterRatingSource.rawValue, forKey: Keys.posterRatingSource) }
+    }
+
     /// Bundled into the value injected as `\.watchedDisplay`.
     public var watchedDisplayConfig: WatchedDisplayConfig {
         WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel, labelOpacity: watchedLabelOpacity)
@@ -164,6 +169,7 @@ public final class PlaybackPreferencesStore {
         static let watchedLabelOpacity = "display.watchedLabelOpacity"
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
+        static let posterRatingSource = "display.posterRatingSource"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -192,6 +198,7 @@ public final class PlaybackPreferencesStore {
         // `object(forKey:) as? Double` so a missing key (or the old string enum
         // value from a prior build) cleanly falls back to the 0.8 default.
         self.watchedLabelOpacity = (defaults.object(forKey: Keys.watchedLabelOpacity) as? Double).map(Self.clampOpacity) ?? 0.8
+        self.posterRatingSource = defaults.string(forKey: Keys.posterRatingSource).flatMap(PosterRatingSource.init) ?? .communityRating
     }
 }
 

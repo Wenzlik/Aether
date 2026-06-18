@@ -67,6 +67,7 @@ struct HomeView: View {
         // probe; the player strips them again via PlayerTitlebar.)
         .background(LibraryTitlebar())
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
+        .environment(\.posterRatingSource, session.playbackPrefs.posterRatingSource)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
         // On a *launch* open (app was closed), drop this auto-created library

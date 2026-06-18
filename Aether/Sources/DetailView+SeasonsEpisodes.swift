@@ -551,7 +551,10 @@ extension DetailView {
             rows.append((label: "Genres", value: show.genres.joined(separator: ", ")))
         }
         if let rating = show.communityRating {
-            rows.append((label: "Rating", value: String(format: "%.1f", rating)))
+            rows.append((label: "Community", value: String(format: "%.1f", rating)))
+        }
+        if let rating = tmdbRating ?? show.tmdbRating {
+            rows.append((label: "TMDb", value: String(format: "%.1f", rating)))
         }
         if let aired = firstAiredText(show) {
             rows.append((label: "First Aired", value: aired))
