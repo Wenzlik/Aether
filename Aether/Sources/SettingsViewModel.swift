@@ -233,7 +233,7 @@ final class SettingsViewModel {
         "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
         "Downloaded titles now play reliably offline — Aether picks the local file and the right engine instead of falling back to the server.",
         "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
-        "macOS: light and dark mode now adapt correctly; a Downloads panel in the sidebar tracks active downloads; local library items can be matched to TMDb directly in the app."
+        "macOS: light and dark mode now adapt correctly; a Downloads panel tracks active downloads; local library items can be matched to TMDb; and Plex multi-server management is now available in Settings."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
