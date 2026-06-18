@@ -14,7 +14,7 @@ struct MacSearchResults: View {
     @State private var netflixResults: [UnifiedMediaItem] = []
     @State private var isLoading = false
 
-    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 162, maximum: 220), spacing: 24)]
 
     private var results: [UnifiedMediaItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,11 +40,25 @@ struct MacSearchResults: View {
                 ContentUnavailableView.search(text: query)
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 20) {
+                    LazyVGrid(columns: columns, spacing: 24) {
                         ForEach(results) { item in
                             if let base = item.preferredSource?.item ?? item.sources.first?.item {
                                 NavigationLink(value: base) { MacPoster(item: item) }
                                     .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button { Task { await session.play(base) } } label: {
+                                            Label("Play", systemImage: "play.fill")
+                                        }
+                                        Divider()
+                                        Button {
+                                            Task { await session.markWatched(base, watched: !item.isFullyWatched) }
+                                        } label: {
+                                            Label(
+                                                item.isFullyWatched ? "Mark as Unwatched" : "Mark as Watched",
+                                                systemImage: item.isFullyWatched ? "circle" : "checkmark.circle"
+                                            )
+                                        }
+                                    }
                             } else {
                                 MacPoster(item: item)
                             }

@@ -14,6 +14,13 @@ struct HomeView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismissWindow
     @State private var searchText = ""
+    /// Drives sidebar collapse state — SwiftUI writes this when the split view
+    /// collapses the sidebar column (e.g. sidebar toggle or window resize).
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var showDownloads = false
+    @Environment(\.colorScheme) private var colorScheme
+    /// True when the sidebar is fully hidden (no column visible).
+    private var sidebarCollapsed: Bool { columnVisibility == .detailOnly }
     /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
     /// player swap** — playback replaces the whole library subtree, so a path
     /// owned by the `NavigationStack` would reset to root on close. Keeping it
@@ -35,7 +42,11 @@ struct HomeView: View {
                     onClose: { session.stopPlayback() }
                 )
                 .id(url)                       // fresh player per title
-                .ignoresSafeArea()
+                // No .ignoresSafeArea() here — Color.black and MpvVideoView
+                // inside the ZStack each carry their own .ignoresSafeArea() and
+                // fill the full window. Keeping the safe-area context on the
+                // outer view means the VStack with the back button starts below
+                // the macOS titlebar instead of under the traffic lights.
                 // Player is in the window now → strip the title + leading
                 // accessory so they don't float over the full-bleed video.
                 .background(PlayerTitlebar())
@@ -49,7 +60,7 @@ struct HomeView: View {
     }
 
     private var library: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230)
                 // Drop the system's automatic sidebar toggle — it drifted to the
@@ -66,6 +77,45 @@ struct HomeView: View {
         // present and the title visible. (Reliably attaches, unlike a Group-level
         // probe; the player strips them again via PlayerTitlebar.)
         .background(LibraryTitlebar())
+        // When the sidebar is collapsed the user has no visible navigation — show
+        // compact icon+label tabs in the toolbar as a replacement. Fades in/out
+        // with the sidebar so there's never a moment with no navigation at all.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if sidebarCollapsed {
+                    SectionTabBar(session: session)
+                        .transition(.opacity.combined(with: .scale(0.92)))
+                }
+            }
+            // Downloads button — trailing side of the toolbar. Badge shows the
+            // count of in-progress jobs so the user sees activity at a glance.
+            ToolbarItem(placement: .automatic) {
+                let snapshot = session.downloadObserver?.snapshot ?? .empty
+                let hasAny = !snapshot.inProgress.isEmpty || !snapshot.completed.isEmpty
+                if hasAny {
+                    Button {
+                        showDownloads.toggle()
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 14, weight: .medium))
+                            if !snapshot.inProgress.isEmpty {
+                                Circle()
+                                    .fill(AetherMacTheme.accent)
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Downloads")
+                    .popover(isPresented: $showDownloads, arrowEdge: .top) {
+                        DownloadsView(session: session)
+                    }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: sidebarCollapsed)
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .environment(\.posterRatingSource, session.playbackPrefs.posterRatingSource)
         .task { await session.restore() }
@@ -114,7 +164,19 @@ struct HomeView: View {
                     Label(section.title, systemImage: section.symbol).tag(section)
                 }
             }
+            // Explicit tint on the List ensures the selected-row pill renders in
+            // Aether Blue even when the user's macOS system accent is a different
+            // colour — `.tint()` on the parent Group doesn't always propagate
+            // through NavigationSplitView to the NSTableView-backed sidebar row.
+            .tint(AetherMacTheme.accent)
         }
+        // Explicit sidebar vibrancy: .behindWindow blending so the sidebar
+        // translucency shows the desktop (or other windows) through it regardless
+        // of the user's wallpaper. SwiftUI sets this on NavigationSplitView's
+        // sidebar column automatically, but naming it explicitly here ensures the
+        // NSVisualEffectView is always `.active` and uses the `.sidebar` material
+        // rather than defaulting to `.windowBackground` on some macOS versions.
+        .background(SidebarVibrancyBackground())
     }
 
     /// Bridges the List's optional single-selection to `session.section` (the
@@ -138,14 +200,14 @@ struct HomeView: View {
                     // whatever section is selected.
                     MacSearchResults(session: session, query: searchText)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .cinematicBackground()
+                        .scrollContentBackground(.hidden)
+                        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
                         .navigationTitle("Search")
                 } else {
                     switch session.section {
                     case .home:     DiscoverView(session: session, mode: .home)
                     case .discover: DiscoverView(session: session, mode: .discover)
                     case .library:  LibraryGridView(session: session)
-                    case .settings: MacSettingsView(session: session, embedded: true)
                     }
                 }
             }
@@ -226,7 +288,14 @@ private struct LibraryTitlebar: NSViewRepresentable {
         DispatchQueue.main.async {
             guard let window = probe.window else { return }
             window.titleVisibility = .visible
-            window.titlebarSeparatorStyle = .automatic
+            window.titlebarSeparatorStyle = .none
+            window.title = "Aether"
+            // fullSizeContentView extends the sidebar under the titlebar so it
+            // reads as one seamless surface — the defining signal of a modern Mac
+            // app (Infuse, Linear, Bear all use this). Transparent titlebar lets
+            // the sidebar material show through the traffic-light zone.
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
             if !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == aetherTitlebarAccessoryID }) {
                 window.addTitlebarAccessoryViewController(makeAetherTitlebarAccessory())
             }
@@ -274,4 +343,62 @@ private struct SidebarToggleButton: View {
         .buttonStyle(.plain)
         .help("Toggle Sidebar")
     }
+}
+
+/// Compact navigation shown in the toolbar when the sidebar is collapsed.
+/// Sidebar toggle on the left, then icon+label tabs for the 3 sections.
+private struct SectionTabBar: View {
+    var session: MacSession
+
+    var body: some View {
+        HStack(spacing: 4) {
+            // Sidebar re-open toggle.
+            Button {
+                NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+            } label: {
+                Image(systemName: "sidebar.leading")
+                    .font(.system(size: 13, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Show Sidebar")
+
+            Divider().frame(height: 18).padding(.horizontal, 2)
+
+            // Text-only pill tabs — no icons.
+            ForEach(MacSession.Section.allCases) { section in
+                Button { session.section = section } label: {
+                    Text(section.title)
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .foregroundStyle(session.section == section ? .white : Color.primary)
+                        .background(
+                            session.section == section ? AetherMacTheme.accent : Color.clear,
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(section.title)
+            }
+        }
+        .padding(5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+/// An NSVisualEffectView with `.sidebar` material and `.behindWindow` blending
+/// used as the sidebar column background — ensures translucency against the
+/// desktop / behind-window content regardless of the macOS version.
+private struct SidebarVibrancyBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = .sidebar
+        v.blendingMode = .behindWindow
+        v.state = .active
+        return v
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

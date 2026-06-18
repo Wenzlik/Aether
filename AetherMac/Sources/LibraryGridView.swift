@@ -57,11 +57,14 @@ struct LibraryBrowseView: View {
     /// Persistent "show watched" toggle — on by default; turning it off hides
     /// fully-watched titles (iOS/iPadOS parity, #445).
     @State private var showWatched = true
+    /// When on, the grid shows only titles with a completed local download.
+    @State private var downloadedOnly = false
     /// Availability: when on, the grid shows **Netflix-only** titles instead of
     /// your owned library (the old "On Netflix" sections, now a filter). Hidden by
     /// default; only meaningful when Netflix availability is enabled in Settings.
     @State private var onNetflixOnly = false
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var sort: LibrarySort = .titleAZ
     /// Multi-select genres (#445 parity with iOS) — empty = all genres.
     @State private var selectedGenres: Set<String> = []
@@ -81,7 +84,7 @@ struct LibraryBrowseView: View {
     @State private var audioMembership: [String: Set<String>] = [:]
     @State private var loadingLanguage: String?
 
-    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 162, maximum: 220), spacing: 24)]
     private let ratingBuckets: [Double] = [9, 8, 7, 6]
 
     private var title: String {
@@ -126,7 +129,7 @@ struct LibraryBrowseView: View {
     }
     private var hasActiveFilter: Bool {
         !selectedGenres.isEmpty || selectedAudioLanguage != nil || !selectedYears.isEmpty
-            || minRating != nil || onNetflixOnly
+            || minRating != nil || onNetflixOnly || downloadedOnly
     }
     private var shown: [UnifiedMediaItem] {
         var filtered = typeFiltered
@@ -141,6 +144,15 @@ struct LibraryBrowseView: View {
         }
         if let minRating { filtered = filtered.filter { ($0.communityRating ?? 0) >= minRating } }
         if !showWatched { filtered = filtered.filter { !$0.isFullyWatched } }
+        if downloadedOnly {
+            // UnifiedMediaItem.id is a String; DownloadJob.mediaID is MediaID.
+            // Match via sources: a unified item is "downloaded" if any of its
+            // backing source entries has a MediaItem.id in the completed set.
+            let completedIDs = Set((session.downloadObserver?.snapshot.completed ?? []).map(\.mediaID))
+            filtered = filtered.filter { unified in
+                unified.sources.contains { completedIDs.contains($0.item.id) }
+            }
+        }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !q.isEmpty { filtered = filtered.filter { $0.title.localizedStandardContains(q) } }
         return sort.sorted(filtered)
@@ -228,6 +240,11 @@ struct LibraryBrowseView: View {
                 typeChip("Series", isOn: showShows) { toggleType(movies: false) }
             }
             typeChip("Watched", isOn: showWatched) { showWatched.toggle() }
+            // Only show the Downloaded chip when the download manager is active
+            // (i.e. at least one source capable of downloading is connected).
+            if session.downloadManager != nil {
+                typeChip("Downloaded", isOn: downloadedOnly) { downloadedOnly.toggle() }
+            }
             Spacer()
         }
     }
@@ -240,6 +257,24 @@ struct LibraryBrowseView: View {
                 .foregroundStyle(isOn ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func libraryContextMenu(_ item: UnifiedMediaItem) -> some View {
+        if let base = item.preferredSource?.item ?? item.sources.first?.item {
+            Button { Task { await session.play(base) } } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+            Divider()
+            Button {
+                Task { await session.markWatched(base, watched: !item.isFullyWatched) }
+            } label: {
+                Label(
+                    item.isFullyWatched ? "Mark as Unwatched" : "Mark as Watched",
+                    systemImage: item.isFullyWatched ? "circle" : "checkmark.circle"
+                )
+            }
+        }
     }
 
     /// Empty-state copy reflecting a search query / active filter / watched state.
@@ -259,22 +294,39 @@ struct LibraryBrowseView: View {
                 AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    typeToggleChips
                     if hasActiveFilter { activeFiltersRow }
                     if shown.isEmpty {
                         AetherEmptyState(glyph: "tray", title: "Nothing here", message: emptyMessage)
                             .frame(maxWidth: .infinity).padding(.top, 24)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(shown) { posterLink($0) }
+                        LazyVGrid(columns: columns, spacing: 24) {
+                            ForEach(shown) { item in
+                                posterLink(item)
+                                    .contextMenu { libraryContextMenu(item) }
+                            }
                         }
                     }
                 }
                 .padding(24)
             }
         }
-        .cinematicBackground()
-        .navigationTitle(LocalizedStringKey(title))
+        // Type chips (Movies / Series / Watched) sit above the scroll area so
+        // the grid top-edge aligns with every other tab — placing them inside
+        // the scroll content pushed the grid ~60 pt lower than Discover/Home.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                typeToggleChips
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                Divider()
+            }
+            .background(.ultraThinMaterial)
+        }
+        .scrollContentBackground(.hidden)
+        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+        // Root landing (kind == nil): sidebar/tabbar shows where you are, no title needed.
+        // Drill-down (Movies / TV Shows): keep the title for the back-button label.
+        .navigationTitle(kind == nil ? "" : LocalizedStringKey(title))
         .searchable(text: $query, prompt: Text("Search your library"))
         .toolbar {
             ToolbarItem {
