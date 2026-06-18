@@ -227,12 +227,13 @@ final class SettingsViewModel {
     let whatsNewBullets: [String] = [
         "The Library is now one combined grid — open straight into everything with a persistent Movies / Series toggle, browse facets above the grid, and a new \"Downloaded\" filter that works offline.",
         "A new Watched chip hides fully-completed movies and series from the Library grid — useful for revisiting what's still in progress.",
+        "Poster cards now show a community rating badge — star + score from TMDb, Plex, or Jellyfin (your choice in Settings → Playback).",
         "tvOS: Accounts & Sources are now large focusable tiles with brand logos; Settings opens to a category tile grid instead of a long list.",
         "Discover shows a wide, full-bleed overlay hero on iPad and visionOS — title and metadata sit over the art on a gradient scrim.",
         "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
         "Downloaded titles now play reliably offline — Aether picks the local file and the right engine instead of falling back to the server.",
         "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
-        "macOS: Search is now a field at the top of the sidebar; a new View menu with ⌘1…⌘5 reaches every section even when the sidebar is collapsed."
+        "macOS: light and dark mode now adapt correctly; a Downloads panel in the sidebar tracks active downloads; local library items can be matched to TMDb directly in the app."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
