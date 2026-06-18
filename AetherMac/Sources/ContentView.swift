@@ -219,6 +219,14 @@ struct HomeView: View {
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
+            .navigationDestination(for: UnifiedMediaItem.self) { unified in
+                let base = unified.preferredSource?.item ?? unified.sources.first!.item
+                MediaDetailView(
+                    session: session, item: base,
+                    allSources: unified.sources,
+                    onPlay: playServerItem
+                )
+            }
             .navigationDestination(for: LibraryRoute.self) { route in
                 LibraryBrowseView(session: session, kind: route.kind)
             }
