@@ -130,9 +130,10 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var content: some View {
-        LazyVStack(alignment: .leading, spacing: 32) {
+        LazyVStack(alignment: .leading, spacing: 40) {
             switch mode {
             case .home:
+                homeHeroSection
                 continueWatchingRail
                 rail("Recently Added", filtered(rails.recentlyAdded))
                 rail("Recently Released", filtered(rails.recentlyReleased))
@@ -290,21 +291,122 @@ struct DiscoverView: View {
         advanceCountdown = Self.autoAdvanceInterval
     }
 
+    // MARK: - Home hero (home mode)
+
+    /// Full-width featured card for the top Continue Watching title. Gives Home a
+    /// cinematic first impression instead of jumping straight into a dense rail —
+    /// same pattern Apple TV app and Netflix use (active content above discovery).
+    @ViewBuilder
+    private var homeHeroSection: some View {
+        if let entry = rails.continueWatching.first {
+            let item = entry.item
+            NavigationLink(value: item) {
+                ZStack(alignment: .bottomLeading) {
+                    CachedAsyncImage(
+                        url: item.backdropURL ?? item.posterURL,
+                        aspectRatio: 16.0 / 9.0
+                    )
+                    .overlay(
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.15), .black.opacity(0.82)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .overlay(alignment: .bottom) {
+                        // Resume progress bar — same design as ContinueWatchingCard.
+                        let progress = heroResumeProgress(entry)
+                        if progress > 0 {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Rectangle().fill(.white.opacity(0.22))
+                                    Rectangle()
+                                        .fill(AetherMacTheme.accent)
+                                        .frame(width: geo.size.width * progress)
+                                }
+                                .frame(height: 4)
+                            }
+                            .frame(height: 4)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Continue Watching")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text(DetailFormatting.continueWatchingLabel(item))
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
+                        Label("Resume", systemImage: "play.fill")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(AetherMacTheme.accent, in: Capsule())
+                            .padding(.top, 4)
+                    }
+                    .padding(28)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(maxWidth: 1100)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .contextMenu {
+                Button {
+                    Task { await session.play(item) }
+                } label: {
+                    Label("Resume", systemImage: "play.fill")
+                }
+                Divider()
+                Button {
+                    Task {
+                        await session.markWatched(item, watched: true)
+                        await session.clearResume(for: item)
+                    }
+                } label: {
+                    Label("Mark as Watched", systemImage: "checkmark.circle")
+                }
+                Button(role: .destructive) {
+                    Task { await session.removeFromContinueWatching(item) }
+                } label: {
+                    Label("Remove from Continue Watching", systemImage: "minus.circle")
+                }
+            }
+        }
+    }
+
+    private func heroResumeProgress(_ entry: HomeFeed.ContinueWatchingEntry) -> Double {
+        guard let runtime = entry.item.runtime else { return 0 }
+        let total = DetailFormatting.seconds(runtime)
+        guard total > 0 else { return 0 }
+        return min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
+    }
+
     // MARK: - Continue Watching rail (home mode)
 
+    /// Secondary rail: remaining in-progress items after the hero. Hidden when
+    /// there's only one item (the hero already shows it).
     @ViewBuilder
     private var continueWatchingRail: some View {
-        if !rails.continueWatching.isEmpty {
+        let remaining = Array(rails.continueWatching.dropFirst())
+        if !remaining.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 AetherSectionHeader(title: "Continue Watching").padding(.horizontal, 24)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: 18) {
-                        ForEach(rails.continueWatching) { entry in
+                        ForEach(remaining) { entry in
                             NavigationLink(value: entry.item) {
                                 ContinueWatchingCard(entry: entry)
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                Button {
+                                    Task { await session.play(entry.item) }
+                                } label: {
+                                    Label("Resume", systemImage: "play.fill")
+                                }
+                                Divider()
                                 Button {
                                     Task {
                                         await session.markWatched(entry.item, watched: true)
@@ -382,13 +484,14 @@ struct DiscoverView: View {
             VStack(alignment: .leading, spacing: 12) {
                 AetherSectionHeader(title: title).padding(.horizontal, 24)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: 18) {
+                    LazyHStack(alignment: .top, spacing: 20) {
                         ForEach(items) { item in
                             if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                                NavigationLink(value: base) { MacPoster(item: item, width: 150) }
+                                NavigationLink(value: base) { MacPoster(item: item, width: 170) }
                                     .buttonStyle(.plain)
+                                    .contextMenu { railContextMenu(item, base: base) }
                             } else {
-                                MacPoster(item: item, width: 150)
+                                MacPoster(item: item, width: 170)
                             }
                         }
                     }
@@ -397,13 +500,30 @@ struct DiscoverView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func railContextMenu(_ item: UnifiedMediaItem, base: MediaItem) -> some View {
+        Button { Task { await session.play(base) } } label: {
+            Label("Play", systemImage: "play.fill")
+        }
+        Divider()
+        Button {
+            Task { await session.markWatched(base, watched: !item.isFullyWatched) }
+        } label: {
+            Label(
+                item.isFullyWatched ? "Mark as Unwatched" : "Mark as Watched",
+                systemImage: item.isFullyWatched ? "circle" : "checkmark.circle"
+            )
+        }
+    }
 }
 
 /// A landscape Continue Watching card: backdrop still, a resume progress bar,
 /// and a title line that names the episode (`Show · S1E2 · …`) when relevant.
 private struct ContinueWatchingCard: View {
     let entry: HomeFeed.ContinueWatchingEntry
-    private let width: CGFloat = 240
+    private let width: CGFloat = 264
+    @State private var isHovered = false
 
     private var progress: Double {
         guard let runtime = entry.item.runtime else { return 0 }
@@ -437,5 +557,8 @@ private struct ContinueWatchingCard: View {
                 .font(.callout).lineLimit(1)
                 .frame(width: width, alignment: .leading)
         }
+        .scaleEffect(isHovered ? 1.04 : 1.0, anchor: .bottom)
+        .animation(.spring(response: 0.22, dampingFraction: 0.82), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }

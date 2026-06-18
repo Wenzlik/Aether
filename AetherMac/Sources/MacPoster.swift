@@ -15,6 +15,7 @@ struct MacPoster: View {
     @Environment(\.posterRatingSource) private var posterRatingSource
     /// Netflix-availability badge (#360); optional so previews still render.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @State private var isHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -26,6 +27,11 @@ struct MacPoster: View {
                 .overlay(alignment: .topLeading) { ratingBadge }
                 .overlay(alignment: .topTrailing) { netflixBadge }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(
+                    color: .black.opacity(isHovered ? 0.40 : 0),
+                    radius: isHovered ? 14 : 0,
+                    y: isHovered ? 7 : 0
+                )
             Text(item.title)
                 .font(.callout)
                 .lineLimit(2)
@@ -37,6 +43,11 @@ struct MacPoster: View {
             }
         }
         .frame(width: width)
+        // Scale up from the bottom so posters in a row lift without reflowing
+        // the text beneath them or crowding adjacent cards.
+        .scaleEffect(isHovered ? 1.045 : 1.0, anchor: .bottom)
+        .animation(.spring(response: 0.22, dampingFraction: 0.82), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 
     @ViewBuilder

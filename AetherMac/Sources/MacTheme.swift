@@ -24,10 +24,10 @@ enum AetherMacTheme {
 }
 
 extension View {
-    /// Place the cinematic gradient behind a scrollable content view and hide
-    /// the system's opaque scroll background so it shows through.
+    /// Place the cinematic gradient (with atmospheric blue/purple blooms) behind
+    /// a scrollable content view and hide the system's opaque scroll background.
     func cinematicBackground() -> some View {
         scrollContentBackground(.hidden)
-            .background(AetherMacTheme.background.ignoresSafeArea())
+            .aetherScreenBackground()
     }
 }

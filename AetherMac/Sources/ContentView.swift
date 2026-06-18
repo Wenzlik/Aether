@@ -14,6 +14,9 @@ struct HomeView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismissWindow
     @State private var searchText = ""
+    /// Tracks whether the NavigationSplitView sidebar column is collapsed so we
+    /// can show navigation tabs in the toolbar as a replacement.
+    @State private var sidebarCollapsed = false
     /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
     /// player swap** — playback replaces the whole library subtree, so a path
     /// owned by the `NavigationStack` would reset to root on close. Keeping it
@@ -66,6 +69,18 @@ struct HomeView: View {
         // present and the title visible. (Reliably attaches, unlike a Group-level
         // probe; the player strips them again via PlayerTitlebar.)
         .background(LibraryTitlebar())
+        // When the sidebar is collapsed the user has no visible navigation — show
+        // compact icon+label tabs in the toolbar as a replacement. Fades in/out
+        // with the sidebar so there's never a moment with no navigation at all.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if sidebarCollapsed {
+                    SectionTabBar(session: session)
+                        .transition(.opacity.combined(with: .scale(0.92)))
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: sidebarCollapsed)
         .environment(\.watchedDisplay, session.playbackPrefs.watchedDisplayConfig)
         .environment(\.posterRatingSource, session.playbackPrefs.posterRatingSource)
         .task { await session.restore() }
@@ -89,6 +104,10 @@ struct HomeView: View {
 
     private var sidebarList: some View {
         VStack(spacing: 0) {
+            // Invisible probe: notifies us when the NSSplitView collapses the
+            // sidebar column so the toolbar tab bar can appear as a replacement.
+            SidebarStateProbe(isCollapsed: $sidebarCollapsed)
+                .frame(width: 0, height: 0)
             // Infuse-style search field at the top of the sidebar; typing surfaces
             // results over the current pane (see `detail`). Search is no longer a
             // section — it lives here, always reachable.
@@ -226,7 +245,13 @@ private struct LibraryTitlebar: NSViewRepresentable {
         DispatchQueue.main.async {
             guard let window = probe.window else { return }
             window.titleVisibility = .visible
-            window.titlebarSeparatorStyle = .automatic
+            window.titlebarSeparatorStyle = .none
+            // fullSizeContentView extends the sidebar under the titlebar so it
+            // reads as one seamless surface — the defining signal of a modern Mac
+            // app (Infuse, Linear, Bear all use this). Transparent titlebar lets
+            // the sidebar material show through the traffic-light zone.
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
             if !window.titlebarAccessoryViewControllers.contains(where: { $0.identifier == aetherTitlebarAccessoryID }) {
                 window.addTitlebarAccessoryViewController(makeAetherTitlebarAccessory())
             }
@@ -273,5 +298,92 @@ private struct SidebarToggleButton: View {
         }
         .buttonStyle(.plain)
         .help("Toggle Sidebar")
+    }
+}
+
+/// Compact icon+label navigation tabs shown in the toolbar when the sidebar is
+/// collapsed. Each tab highlights in Aether Blue when its section is active.
+private struct SectionTabBar: View {
+    var session: MacSession
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(MacSession.Section.allCases) { section in
+                Button { session.section = section } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: section.symbol)
+                            .font(.system(size: 13, weight: .medium))
+                        Text(section.title)
+                            .font(.system(size: 9.5, weight: .medium))
+                    }
+                    .frame(width: 58, height: 38)
+                    .foregroundStyle(session.section == section
+                                     ? AetherMacTheme.accent
+                                     : Color.secondary)
+                    .background(
+                        session.section == section
+                            ? AetherMacTheme.accent.opacity(0.13)
+                            : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(section.title)
+            }
+        }
+        .padding(4)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// An invisible NSViewRepresentable that subscribes to `NSSplitView` resize
+/// notifications and reports whether the sidebar (subview at index 0) is
+/// collapsed. Placed inside the sidebar column so it's always near the right
+/// split view in the hierarchy.
+private struct SidebarStateProbe: NSViewRepresentable {
+    @Binding var isCollapsed: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let probe = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let sv = probe.ancestorSplitView else { return }
+            context.coordinator.observe(sv, binding: $isCollapsed)
+        }
+        return probe
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject {
+        private var observer: NSObjectProtocol?
+
+        func observe(_ splitView: NSSplitView, binding: Binding<Bool>) {
+            observer = NotificationCenter.default.addObserver(
+                forName: NSSplitView.didResizeSubviewsNotification,
+                object: splitView,
+                queue: .main
+            ) { _ in
+                guard splitView.subviews.indices.contains(0) else { return }
+                binding.wrappedValue = splitView.isSubviewCollapsed(splitView.subviews[0])
+            }
+        }
+
+        deinit {
+            if let obs = observer { NotificationCenter.default.removeObserver(obs) }
+        }
+    }
+}
+
+private extension NSView {
+    /// Walk the view hierarchy upward looking for the first NSSplitView, which
+    /// is the NavigationSplitView's backing split view.
+    var ancestorSplitView: NSSplitView? {
+        var v: NSView? = superview
+        while let view = v {
+            if let sv = view as? NSSplitView { return sv }
+            v = view.superview
+        }
+        return nil
     }
 }

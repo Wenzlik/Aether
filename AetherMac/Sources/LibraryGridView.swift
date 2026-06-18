@@ -81,7 +81,7 @@ struct LibraryBrowseView: View {
     @State private var audioMembership: [String: Set<String>] = [:]
     @State private var loadingLanguage: String?
 
-    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 190), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: 162, maximum: 220), spacing: 24)]
     private let ratingBuckets: [Double] = [9, 8, 7, 6]
 
     private var title: String {
@@ -242,6 +242,24 @@ struct LibraryBrowseView: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
+    private func libraryContextMenu(_ item: UnifiedMediaItem) -> some View {
+        if let base = item.preferredSource?.item ?? item.sources.first?.item {
+            Button { Task { await session.play(base) } } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+            Divider()
+            Button {
+                Task { await session.markWatched(base, watched: !item.isFullyWatched) }
+            } label: {
+                Label(
+                    item.isFullyWatched ? "Mark as Unwatched" : "Mark as Watched",
+                    systemImage: item.isFullyWatched ? "circle" : "checkmark.circle"
+                )
+            }
+        }
+    }
+
     /// Empty-state copy reflecting a search query / active filter / watched state.
     private var emptyMessage: String {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,8 +283,11 @@ struct LibraryBrowseView: View {
                         AetherEmptyState(glyph: "tray", title: "Nothing here", message: emptyMessage)
                             .frame(maxWidth: .infinity).padding(.top, 24)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(shown) { posterLink($0) }
+                        LazyVGrid(columns: columns, spacing: 24) {
+                            ForEach(shown) { item in
+                                posterLink(item)
+                                    .contextMenu { libraryContextMenu(item) }
+                            }
                         }
                     }
                 }
