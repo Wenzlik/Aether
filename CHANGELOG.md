@@ -6,6 +6,18 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- **macOS: Plex multi-server management** (#452) — Settings ▸ Accounts ▸ Plex
+  ▸ **Manage Servers…** opens a sheet listing every reachable server on the
+  account with enable/disable toggles (mirrors the iOS picker from #325). At
+  least one server must stay enabled; sign out is the disconnect path. A
+  **Primary server** picker appears when multiple servers are enabled. Each
+  enabled server now shows its name + connection type (On your network / Remote
+  / Relay) as a labelled row in the Accounts tab.
+- **macOS: volume headroom** (#452) — the mpv volume slider now goes to 150 %
+  (was 100 %) so quiet movie content mastered below streaming-service levels
+  can be amplified without leaving the app. Default stays at 100 (unity gain);
+  the tooltip shows the exact percentage.
+
 - **TMDb community ratings on posters and Detail** (#449, all platforms) — a
   star + score badge appears on poster cards when a rating is available; Detail
   shows the same rating inline. In Settings → Playback a new **Rating Source**

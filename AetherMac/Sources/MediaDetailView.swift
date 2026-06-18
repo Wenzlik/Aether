@@ -12,6 +12,9 @@ import AetherCore
 struct MediaDetailView: View {
     let session: MacSession
     let item: MediaItem
+    /// All available sources for this title (Plex, Jellyfin, …). Non-empty only
+    /// when opened from the Library grid which has the full UnifiedMediaItem.
+    var allSources: [UnifiedSource] = []
     /// Resolve + open a player window for a playable (non-container) item.
     let onPlay: (MediaItem) -> Void
     @Environment(\.watchedDisplay) private var watchedDisplay
@@ -36,9 +39,14 @@ struct MediaDetailView: View {
     @State private var watchedOverride: Bool?
     @State private var favoriteOverride: Bool?
     @State private var showFixMatch = false
+    /// Non-nil when the user has picked a different source via the switcher.
+    @State private var overrideItem: MediaItem?
 
+    /// The base item for loading/hydration — either the user's chosen source or the
+    /// original item passed in.
+    private var baseItem: MediaItem { overrideItem ?? item }
     /// The item the screen renders + plays: the hydrated copy once loaded.
-    private var current: MediaItem { working ?? item }
+    private var current: MediaItem { working ?? baseItem }
 
     private var isWatched: Bool { watchedOverride ?? current.isFullyWatched }
     private var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
@@ -102,21 +110,21 @@ struct MediaDetailView: View {
         // Reload on watched changes too (libraryToken bumps on mark watched), so
         // a season's episode rows + the show's Next Up reflect freshly-marked
         // state instead of a stale fetch.
-        .task(id: "\(item.id.rawValue)-\(session.libraryToken)") { await load() }
+        .task(id: "\(baseItem.id.rawValue)-\(session.libraryToken)") { await load() }
         // Refresh the Resume position after the player closes (it bumps
         // resumeRevision on every write), so the button reflects where you
         // stopped — and the screen we return to after playback (#8) stays current.
         .task(id: session.resumeRevision) {
-            guard !item.kind.isContainer else { return }
-            resumeAt = await session.savedResumeSeconds(for: item)
+            guard !baseItem.kind.isContainer else { return }
+            resumeAt = await session.savedResumeSeconds(for: baseItem)
         }
-        .task(id: item.id) {
-            if let preloaded = item.tmdbRating {
+        .task(id: baseItem.id) {
+            if let preloaded = baseItem.tmdbRating {
                 tmdbRating = preloaded
                 return
             }
-            guard let rawID = item.guids.tmdb, let tmdbID = Int(rawID) else { return }
-            let type: TMDbClient.MediaType = item.kind == .show ? .tv : .movie
+            guard let rawID = baseItem.guids.tmdb, let tmdbID = Int(rawID) else { return }
+            let type: TMDbClient.MediaType = baseItem.kind == .show ? .tv : .movie
             tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
         }
     }
@@ -258,8 +266,56 @@ struct MediaDetailView: View {
 
     /// Secondary controls from the other platforms: Mark Watched/Unwatched,
     /// Favorite, and Download (where the source supports it).
+    /// Source switcher pill — shown when the title is on multiple servers.
+    private var sourceSwitcher: some View {
+        Menu {
+            ForEach(allSources) { src in
+                Button {
+                    guard src.item.id != baseItem.id else { return }
+                    overrideItem = src.item
+                    working = nil
+                    watchedOverride = nil
+                    favoriteOverride = nil
+                    resumeAt = nil
+                } label: {
+                    let isActive = src.item.id == baseItem.id
+                    let isPreferred = src.item.id == item.id
+                    let name = src.serverName ?? src.kind.displayName
+                    let quality = src.quality
+                    let label = quality.map { "\(name) · \($0)" } ?? name
+                    Label {
+                        Text(verbatim: isPreferred ? "\(label) · \(String(localized: "Preferred"))" : label)
+                    } icon: {
+                        Image(systemName: isActive ? "checkmark" : "externaldrive")
+                    }
+                }
+                .disabled(!src.playable)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "externaldrive")
+                    .font(.caption)
+                let active = allSources.first { $0.item.id == baseItem.id }
+                Text(verbatim: active?.serverName ?? active?.kind.displayName ?? "Source")
+                    .font(.subheadline)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.quaternary, in: Capsule())
+            .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var controlsRow: some View {
         HStack(spacing: 12) {
+            if allSources.count > 1 {
+                sourceSwitcher
+                Divider().frame(height: 20)
+            }
             Button {
                 let next = !isWatched
                 watchedOverride = next
@@ -706,16 +762,16 @@ struct MediaDetailView: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-        if item.kind.isContainer {
-            children = await session.children(of: item)
-            if item.kind == .show {
-                nextUp = await session.onDeckEpisode(forShow: item)
+        if baseItem.kind.isContainer {
+            children = await session.children(of: baseItem)
+            if baseItem.kind == .show {
+                nextUp = await session.onDeckEpisode(forShow: baseItem)
             }
         } else {
-            working = await session.hydratedItem(for: item)
-            resumeAt = await session.savedResumeSeconds(for: item)
-            if item.kind == .episode {
-                let parents = await session.parents(of: item)
+            working = await session.hydratedItem(for: baseItem)
+            resumeAt = await session.savedResumeSeconds(for: baseItem)
+            if baseItem.kind == .episode {
+                let parents = await session.parents(of: baseItem)
                 parentSeason = parents.season
                 parentShow = parents.show
             }

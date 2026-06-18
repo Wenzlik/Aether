@@ -21,11 +21,11 @@ struct LibraryGridView: View {
 /// browse grids).
 @MainActor @ViewBuilder
 func posterLink(_ item: UnifiedMediaItem) -> some View {
-    if let base = item.preferredSource?.item ?? item.sources.first?.item {
-        NavigationLink(value: base) { MacPoster(item: item) }
-            .buttonStyle(.plain)
-    } else {
+    if item.sources.isEmpty {
         MacPoster(item: item)
+    } else {
+        NavigationLink(value: item) { MacPoster(item: item) }
+            .buttonStyle(.plain)
     }
 }
 

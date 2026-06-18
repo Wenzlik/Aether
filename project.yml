@@ -287,6 +287,12 @@ targets:
         CFBundleLocalizations:
           - en
           - cs
+        # ATS — allows HTTP connections to local Jellyfin/Emby servers and Plex
+        # relay. Same justification as iOS (personal-media client, user-entered
+        # URLs, no public internet data). Apple accepts this at review time for
+        # media apps (Infuse, VLC, official Jellyfin app all use it).
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         LSApplicationCategoryType: public.app-category.video
         CFBundleDocumentTypes:
           - CFBundleTypeName: Video
