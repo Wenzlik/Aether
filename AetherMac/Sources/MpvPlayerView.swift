@@ -21,6 +21,10 @@ struct MpvPlayerScreen: View {
             Color.black.ignoresSafeArea()
             MpvVideoView(client: model.mpv).ignoresSafeArea()
 
+            // Top bar + control bar fade together on inactivity. Inside the
+            // ZStack so they inherit the safe-area context and the back button
+            // clears the macOS traffic-light buttons rather than sitting under
+            // them (which the .overlay(alignment:.top) approach caused).
             if controlsVisible {
                 VStack(spacing: 0) {
                     topBar

@@ -691,6 +691,7 @@ public actor UnifiedLibrary {
             artwork: pinnedArtwork,
             genres: lead.genres,
             communityRating: lead.communityRating,
+            tmdbRating: lead.tmdbRating,
             releaseDate: lead.releaseDate,
             // Prefer any source that reports an add date (the lead's library may
             // not), so "Recently Added" still works when only one server dates it.

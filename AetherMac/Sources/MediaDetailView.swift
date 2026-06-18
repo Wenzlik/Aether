@@ -27,6 +27,7 @@ struct MediaDetailView: View {
     @State private var parentSeason: MediaItem?
     @State private var parentShow: MediaItem?
     @State private var isLoading = false
+    @State private var tmdbRating: Double?
     /// Cast rail collapses to the top billing until "Show All" (point 5).
     @State private var showAllCast = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
@@ -34,6 +35,7 @@ struct MediaDetailView: View {
     /// Optimistic watched/favorite overrides so the buttons flip instantly.
     @State private var watchedOverride: Bool?
     @State private var favoriteOverride: Bool?
+    @State private var showFixMatch = false
 
     /// The item the screen renders + plays: the hydrated copy once loaded.
     private var current: MediaItem { working ?? item }
@@ -84,8 +86,8 @@ struct MediaDetailView: View {
                     blurRadius: backdrop != nil ? 0 : 40
                 )
                 LinearGradient(
-                    colors: [.black.opacity(0.92), .black.opacity(0.7),
-                             .black.opacity(0.3), .clear],
+                    colors: [.black.opacity(0.80), .black.opacity(0.60),
+                             .black.opacity(0.20), .clear],
                     startPoint: .leading, endPoint: .trailing
                 )
                 LinearGradient(
@@ -95,6 +97,7 @@ struct MediaDetailView: View {
             }
             .ignoresSafeArea()
         }
+        .environment(\.colorScheme, .dark)
         .navigationTitle(item.title)
         // Reload on watched changes too (libraryToken bumps on mark watched), so
         // a season's episode rows + the show's Next Up reflect freshly-marked
@@ -106,6 +109,15 @@ struct MediaDetailView: View {
         .task(id: session.resumeRevision) {
             guard !item.kind.isContainer else { return }
             resumeAt = await session.savedResumeSeconds(for: item)
+        }
+        .task(id: item.id) {
+            if let preloaded = item.tmdbRating {
+                tmdbRating = preloaded
+                return
+            }
+            guard let rawID = item.guids.tmdb, let tmdbID = Int(rawID) else { return }
+            let type: TMDbClient.MediaType = item.kind == .show ? .tv : .movie
+            tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
         }
     }
 
@@ -158,6 +170,9 @@ struct MediaDetailView: View {
                 if let rating = current.contentRating { Text(rating) }
                 if let community = current.communityRating {
                     Label(String(format: "%.1f", community), systemImage: "star.fill")
+                }
+                if let tmdb = tmdbRating ?? current.tmdbRating, tmdb > 0 {
+                    Label("TMDb \(String(format: "%.1f", tmdb))", systemImage: "tv")
                 }
             }
             .font(.title2)
@@ -241,8 +256,8 @@ struct MediaDetailView: View {
         }
     }
 
-    /// Secondary controls from the other platforms: Mark Watched/Unwatched and
-    /// (where the source supports it) Favorite. Optimistic so they flip on tap.
+    /// Secondary controls from the other platforms: Mark Watched/Unwatched,
+    /// Favorite, and Download (where the source supports it).
     private var controlsRow: some View {
         HStack(spacing: 12) {
             Button {
@@ -266,8 +281,109 @@ struct MediaDetailView: View {
                 }
                 .buttonStyle(.bordered)
             }
+
+            if session.canDownload(current) {
+                downloadButton
+            }
+
+            // Fix Match — manual TMDb re-assignment for local library items that
+            // didn't match or matched the wrong title at scan time.
+            if case .local = item.id.source {
+                Button {
+                    showFixMatch = true
+                } label: {
+                    Label("Fix Match", systemImage: "pencil.and.list.clipboard")
+                }
+                .buttonStyle(.bordered)
+                .sheet(isPresented: $showFixMatch) {
+                    LocalFixMatchSheet(item: current, session: session) { meta in
+                        working = MediaItem(
+                            id: current.id,
+                            title: meta.title,
+                            kind: current.kind,
+                            year: meta.year ?? current.year,
+                            summary: meta.overview,
+                            posterURL: meta.posterURL,
+                            backdropURL: meta.backdropURL,
+                            streamURL: current.streamURL,
+                            mediaInfo: current.mediaInfo,
+                            guids: MediaGuids(tmdb: "\(meta.tmdbID)"),
+                            communityRating: meta.rating
+                        )
+                        // Kick off a fresh TMDb detail fetch with the new ID.
+                        if let tmdbID = meta.tmdbID as Int? {
+                            Task {
+                                let type: TMDbClient.MediaType = item.kind == .show ? .tv : .movie
+                                tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .controlSize(.large)
+    }
+
+    private var downloadButton: some View {
+        let status = session.downloadStatus(for: current)
+        let job = session.downloadObserver?.job(for: current.id)
+        return Group {
+            switch status {
+            case .notDownloaded, .expired:
+                Menu {
+                    ForEach(PlaybackQuality.allCases, id: \.self) { q in
+                        Button(q.displayName) { session.download(current, quality: q) }
+                    }
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+
+            case .queued:
+                Button { if let j = job { session.cancelDownload(j.id) } } label: {
+                    Label("Queued", systemImage: "arrow.down.circle.dotted")
+                }
+                .buttonStyle(.bordered)
+
+            case .downloading(let fraction):
+                Menu {
+                    if let j = job {
+                        Button("Pause") { session.pauseDownload(j.id) }
+                        Button("Cancel", role: .destructive) { session.cancelDownload(j.id) }
+                    }
+                } label: {
+                    Label(String(format: "Downloading %.0f%%", fraction * 100),
+                          systemImage: "arrow.down.circle.dotted")
+                }
+                .buttonStyle(.bordered)
+
+            case .paused:
+                Menu {
+                    if let j = job {
+                        Button("Resume") { session.resumeDownload(j.id) }
+                        Button("Cancel", role: .destructive) { session.cancelDownload(j.id) }
+                    }
+                } label: {
+                    Label("Paused", systemImage: "pause.circle")
+                }
+                .buttonStyle(.bordered)
+
+            case .completed:
+                Button(role: .destructive) { if let j = job { session.removeDownload(j.id) } } label: {
+                    Label("Downloaded", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+
+            case .failed:
+                Button { if let j = job { session.cancelDownload(j.id) }
+                         session.download(current, quality: .original) } label: {
+                    Label("Failed — Retry", systemImage: "exclamationmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+        }
     }
 
     private func timecode(_ seconds: Double) -> String {
@@ -324,7 +440,13 @@ struct MediaDetailView: View {
 
     @ViewBuilder
     private var playbackOptionsSection: some View {
-        if working == nil && !item.kind.isContainer && isLoading {
+        // Local items: libmpv discovers and switches tracks natively during
+        // playback, so there's nothing to pre-select here.
+        if case .local = item.id.source {
+            Label("Track selection available during playback", systemImage: "info.circle")
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.55))
+        } else if working == nil && !item.kind.isContainer && isLoading {
             ProgressView().controlSize(.small)
         } else if let work = working {
             DisclosureGroup("Playback Options") {
@@ -432,15 +554,8 @@ struct MediaDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.black.opacity(0.45))
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.white.opacity(0.12))
-            )
+            .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.15)))
         }
     }
 

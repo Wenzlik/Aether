@@ -98,6 +98,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// Community / audience rating (≈0–10) when the source provides one — for
     /// "Top Rated". `nil` when unknown.
     public let communityRating: Double?
+    /// TMDb `vote_average` (0–10) when available. Populated for Local Library
+    /// items via `TMDbMetadata.rating`; for Plex/Jellyfin items it is fetched
+    /// lazily in Detail and is `nil` in the list view unless pre-populated.
+    public let tmdbRating: Double?
     /// Age / content classification as the source labels it — Plex
     /// `contentRating` / Jellyfin `OfficialRating` (e.g. "PG-13", "TV-MA",
     /// "15"). Rendered as a boxed badge in the Detail metadata line. `nil`
@@ -159,6 +163,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         genres: [String] = [],
         cast: [CastMember] = [],
         communityRating: Double? = nil,
+        tmdbRating: Double? = nil,
         contentRating: String? = nil,
         releaseDate: Date? = nil,
         dateAdded: Date? = nil,
@@ -197,6 +202,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.genres = genres
         self.cast = cast
         self.communityRating = communityRating
+        self.tmdbRating = tmdbRating
         self.contentRating = contentRating
         self.releaseDate = releaseDate
         self.dateAdded = dateAdded
@@ -254,6 +260,17 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         artwork?.logoURL(tier)
     }
 
+    /// The rating to show on a poster badge given the user's `PosterRatingSource`
+    /// preference. `.tmdb` falls back to `communityRating` when `tmdbRating` is
+    /// nil (server items whose TMDb rating is fetched lazily in Detail only).
+    public func posterRating(source: PosterRatingSource) -> Double? {
+        switch source {
+        case .communityRating: return communityRating
+        case .tmdb:            return tmdbRating ?? communityRating
+        case .none:            return nil
+        }
+    }
+
     /// Copy preserving every field except those explicitly overridden. Keeps
     /// the selection transforms below from drifting as new fields are added.
     private func copy(
@@ -293,6 +310,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
             genres: genres,
             cast: cast,
             communityRating: communityRating,
+            tmdbRating: tmdbRating,
             contentRating: contentRating,
             releaseDate: releaseDate,
             dateAdded: dateAdded,

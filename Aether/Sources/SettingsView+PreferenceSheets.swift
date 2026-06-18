@@ -20,6 +20,7 @@ extension SettingsView {
         case .countdown:      countdownPickerSheet
         case .watchedDimming: watchedDimmingPickerSheet
         case .watchedLabelOpacity: watchedLabelOpacityPickerSheet
+        case .posterRatingSource: posterRatingSourcePickerSheet
         case .netflixRegion: netflixRegionPickerSheet
         #if os(iOS)
         case .appIcon: appIconPickerSheet
@@ -88,6 +89,20 @@ extension SettingsView {
                     isSelected: viewModel.playbackPreferences.watchedDimming == level
                 ) {
                     viewModel.playbackPreferences.watchedDimming = level
+                    openPicker = nil
+                }
+            }
+        }
+    }
+
+    private var posterRatingSourcePickerSheet: some View {
+        PreferencePickerSheet(title: "Poster Rating") {
+            ForEach(PosterRatingSource.allCases, id: \.self) { source in
+                AetherSelectionRow(
+                    title: source.displayName,
+                    isSelected: viewModel.playbackPreferences.posterRatingSource == source
+                ) {
+                    viewModel.playbackPreferences.posterRatingSource = source
                     openPicker = nil
                 }
             }

@@ -6496,6 +6496,86 @@
           }
         }
       }
+    },
+    "Poster Rating": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hodnocení na posterech"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рейтинг на постерах"
+          }
+        }
+      }
+    },
+    "Server Rating": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hodnocení serveru"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рейтинг сервера"
+          }
+        }
+      }
+    },
+    "Hide": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrýt"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сховати"
+          }
+        }
+      }
+    },
+    "Community": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Komunita"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спільнота"
+          }
+        }
+      }
+    },
+    "Which rating badge appears on poster cards.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Které hodnocení se zobrazuje na posterech."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Який значок рейтингу відображається на постерах."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

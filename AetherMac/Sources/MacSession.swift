@@ -60,6 +60,63 @@ final class MacSession {
     /// setting actually switches the theme instead of being forced dark.
     let appearance = AppearancePreferenceStore()
 
+    // MARK: - Downloads
+
+    /// Persistent job store. Created async (loads from disk) in `restore()`.
+    private var downloadStore: DownloadStore?
+
+    /// URLSession-backed download engine. Created in `restore()` after the store
+    /// is ready. `nil` until then — views check `downloadManager != nil` before
+    /// showing download controls. Uses `~/Movies/Aether/` as the save directory.
+    private(set) var downloadManager: DownloadManager?
+
+    /// SwiftUI mirror of the store. `nil` until `restore()` initialises the store;
+    /// once set it is permanent for the lifetime of the session.
+    private(set) var downloadObserver: DownloadObserver?
+
+    /// `~/Movies/Aether/` — user-visible, survives uninstall, easy to browse in
+    /// Finder. Uses `.moviesDirectory` which resolves to the user's Movies folder.
+    static func downloadsDirectory() -> URL {
+        let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Movies")
+        return movies.appendingPathComponent("Aether", isDirectory: true)
+    }
+
+    /// Whether this item can be downloaded (source connected + source supports it).
+    func canDownload(_ item: MediaItem) -> Bool {
+        guard downloadManager != nil else { return false }
+        return source(for: item)?.supportsDownloads == true
+    }
+
+    /// The current download status for an item — `.notDownloaded` when the
+    /// observer isn't ready yet (before `restore()` completes).
+    func downloadStatus(for item: MediaItem) -> DownloadStatus {
+        downloadObserver?.status(for: item.id) ?? .notDownloaded
+    }
+
+    /// Enqueue a download. No-op if the source doesn't support downloads or the
+    /// manager hasn't initialised yet.
+    func download(_ item: MediaItem, quality: PlaybackQuality) {
+        guard let manager = downloadManager, let src = source(for: item) else { return }
+        Task { try? await manager.enqueue(item: item, source: src, quality: quality) }
+    }
+
+    func pauseDownload(_ jobID: UUID) {
+        Task { await downloadManager?.pause(jobID) }
+    }
+
+    func resumeDownload(_ jobID: UUID) {
+        Task { await downloadManager?.resume(jobID) }
+    }
+
+    func cancelDownload(_ jobID: UUID) {
+        Task { await downloadManager?.cancel(jobID) }
+    }
+
+    func removeDownload(_ jobID: UUID) {
+        Task { await downloadManager?.remove(jobID) }
+    }
+
     // MARK: - Navigation (#432)
 
     /// A top-level section of the app. Single source of truth for both the
@@ -68,7 +125,7 @@ final class MacSession {
     enum Section: String, CaseIterable, Identifiable, Hashable {
         // Search is intentionally NOT a section — it's a field at the top of the
         // sidebar (Infuse-style); typing surfaces results over the current pane.
-        case home, discover, library, settings
+        case home, discover, library
         var id: Self { self }
 
         var title: String {
@@ -76,7 +133,6 @@ final class MacSession {
             case .home:     "Home"
             case .discover: "Discover"
             case .library:  "Library"
-            case .settings: "Settings"
             }
         }
 
@@ -85,7 +141,6 @@ final class MacSession {
             case .home:     "house"
             case .discover: "sparkles"
             case .library:  "square.grid.2x2"
-            case .settings: "gearshape"
             }
         }
     }
@@ -129,6 +184,27 @@ final class MacSession {
     /// Settings can confirm it's valid and only then store + hide it.
     func validateTMDbKey(_ key: String) async -> TMDbClient.ValidationResult {
         await TMDbClient(apiKey: key.trimmingCharacters(in: .whitespacesAndNewlines), api: api).validate()
+    }
+
+    /// Fetch TMDb `vote_average` by ID — used by Detail to show the TMDb rating
+    /// alongside the server community rating. Best-effort: `nil` on any failure.
+    func fetchTMDbRating(tmdbID: Int, type: TMDbClient.MediaType) async -> Double? {
+        guard let client = makeTMDbClient() else { return nil }
+        return await client.details(tmdbID: tmdbID, type: type)?.rating
+    }
+
+    /// Search TMDb candidates by title — used by the Fix Match sheet to let the
+    /// user correct a wrong or missing automatic match for a local library item.
+    func searchTMDb(title: String, year: Int?, isEpisode: Bool) async -> [TMDbMetadata] {
+        guard let client = makeTMDbClient() else { return [] }
+        return await client.searchCandidates(title: title, year: year, isEpisode: isEpisode)
+    }
+
+    /// Persist a manual TMDb match for a local library item and refresh the
+    /// library token so all views reload with the new metadata.
+    func applyLocalTMDbMatch(_ meta: TMDbMetadata, to item: MediaItem) async {
+        await localSource?.applyTMDbOverride(meta, for: item.id)
+        libraryToken &+= 1
     }
 
     // MARK: - Netflix availability (#360)
@@ -295,6 +371,18 @@ final class MacSession {
         // initial load before restore finished (Home/Discover race the library
         // window's `.task`) reloads against the freshly restored sources.
         libraryToken &+= 1
+        // Spin up the download stack (store → observer → manager). Done after
+        // sources are restored so recovered URLSession tasks can be attributed to
+        // the now-live sources. Guard prevents re-init on player close/reopen.
+        if downloadStore == nil {
+            let store = await DownloadStore()
+            downloadObserver = DownloadObserver(store: store)
+            downloadManager = await DownloadManager(
+                store: store,
+                downloadsDirectory: MacSession.downloadsDirectory()
+            )
+            downloadStore = store
+        }
     }
 
     // MARK: Plex
@@ -446,6 +534,15 @@ final class MacSession {
     /// `nil` resumes from where the user left off.
     func play(_ item: MediaItem, startAt: Double? = nil) async {
         startOverride = startAt
+        // Downloaded files take absolute priority — play from disk even when
+        // online, so the user always gets the fastest start and offline works.
+        if let status = downloadObserver?.status(for: item.id),
+           case .completed(let localURL, _) = status,
+           FileManager.default.fileExists(atPath: localURL.path) {
+            playbackContext[localURL] = item
+            playbackURL = localURL
+            return
+        }
         if let url = await beginPlayback(for: item) { playbackURL = url }
     }
 

@@ -47,6 +47,7 @@ struct AetherApp: App {
                 .environment(\.locale, session.language.resolvedLocale)
                 .tint(AetherDesign.Palette.accent)
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
+                .environment(\.posterRatingSource, session.playbackPreferences.posterRatingSource)
                 .task { await session.start() }
                 .environment(session)
                 .environment(session.watchAvailability)
@@ -63,6 +64,7 @@ struct AetherApp: App {
                 .environment(\.locale, session.language.resolvedLocale)
                 .tint(AetherDesign.Palette.accent)
                 .environment(\.watchedDisplay, session.playbackPreferences.watchedDisplayConfig)
+                .environment(\.posterRatingSource, session.playbackPreferences.posterRatingSource)
                 .task { await session.start() }
                 .environment(session)
                 .environment(session.watchAvailability)

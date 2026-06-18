@@ -12,8 +12,10 @@ struct MacPoster: View {
     /// resizes instead of clipping fixed-width posters.
     var width: CGFloat? = nil
     @Environment(\.watchedDisplay) private var watchedDisplay
+    @Environment(\.posterRatingSource) private var posterRatingSource
     /// Netflix-availability badge (#360); optional so previews still render.
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @State private var isHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -25,22 +27,32 @@ struct MacPoster: View {
                 .overlay(alignment: .topLeading) { ratingBadge }
                 .overlay(alignment: .topTrailing) { netflixBadge }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(
+                    color: .black.opacity(isHovered ? 0.40 : 0),
+                    radius: isHovered ? 14 : 0,
+                    y: isHovered ? 7 : 0
+                )
             Text(item.title)
                 .font(.callout)
                 .lineLimit(2)
                 .minimumScaleFactor(0.82)
                 .foregroundStyle(item.isFullyWatched ? .secondary : .primary)
-                .frame(maxWidth: width ?? .infinity, minHeight: 40, alignment: .topLeading)
+                .frame(maxWidth: width ?? .infinity, alignment: .topLeading)
             if let year = item.year {
                 Text(String(year)).font(.caption2).foregroundStyle(.secondary)
             }
         }
         .frame(width: width)
+        // Scale up from the bottom so posters in a row lift without reflowing
+        // the text beneath them or crowding adjacent cards.
+        .scaleEffect(isHovered ? 1.045 : 1.0, anchor: .bottom)
+        .animation(.spring(response: 0.22, dampingFraction: 0.82), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 
     @ViewBuilder
     private var ratingBadge: some View {
-        if let rating = item.communityRating, rating > 0 {
+        if let rating = item.posterRating(source: posterRatingSource), rating > 0 {
             Text(String(format: "%.1f", rating))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)

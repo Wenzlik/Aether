@@ -62,6 +62,7 @@ struct UnifiedLibraryGridView: View {
     /// in isolated previews. Its `libraryRevision` is folded into the reload key so
     /// marking a title watched/unwatched re-reads the freshly-invalidated catalog.
     @Environment(AppSession.self) private var appSession: AppSession?
+    @Environment(\.posterRatingSource) private var posterRatingSource
     /// Client-side title search within the category grid (#369). Filters
     /// `filteredItems` alongside the facet filters — no reload, like #319.
     @State private var searchText = ""
@@ -226,7 +227,7 @@ struct UnifiedLibraryGridView: View {
                     LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
                         ForEach(sortedItems) { item in
                             NavigationLink(value: item) {
-                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.communityRating, netflixLogoURL: availability?.netflixLogoURL(for: item))
+                                AetherCard.poster(title: item.title, posterURL: item.posterURL, isWatched: item.isFullyWatched, rating: item.posterRating(source: posterRatingSource), netflixLogoURL: availability?.netflixLogoURL(for: item))
                             }
                             .buttonStyle(.plain)
                         }

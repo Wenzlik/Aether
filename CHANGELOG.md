@@ -4,6 +4,40 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **TMDb community ratings on posters and Detail** (#449, all platforms) — a
+  star + score badge appears on poster cards when a rating is available; Detail
+  shows the same rating inline. In Settings → Playback a new **Rating Source**
+  picker lets you choose between TMDb (community), Plex, and Jellyfin — the
+  selected source is used everywhere, with automatic fallback when unavailable.
+
+### Changed
+
+- **macOS: light and dark mode now adapt correctly** (#450) — `Color(light:dark:)`
+  was hardwired to the dark variant; it now uses `NSColor(name:dynamicProvider:)`
+  so all palette tokens (backgrounds, text) respond to the window appearance.
+  Home / Discover / Library / Search now use explicit SwiftUI `colorScheme`
+  instead of AppKit `windowBackgroundColor`; the Technical Details card replaces
+  `ultraThinMaterial` (rendered light in light windows) with a solid
+  `black.opacity(0.65)`.
+- **macOS: Downloads panel** (#450) — a Downloads button appears in the sidebar
+  (hidden when nothing has been downloaded; blue badge while a download is
+  active) and opens a popover with storage used, path, and per-item actions.
+- **macOS: SectionTabBar** (#450) — text-only pill strip that appears when the
+  sidebar is collapsed, so every section stays reachable without a sidebar.
+- **macOS: offline-first playback** (#450) — `MacSession.play()` checks for a
+  completed local download and uses it before hitting the network (mirrors the
+  iOS path).
+- **macOS: Local library Fix Match** (#450) — a new **Fix Match** sheet lets you
+  search TMDb and pick the correct title for any local-library item; the override
+  persists across rescans via `UserDefaults`.
+
+### Fixed
+
+- **macOS: Library empty-state message build error** (#448) — unescaped quotes
+  in a string literal caused a compile failure on the macOS target.
+
 ## [0.8.0] — 2026-06-17 · "Eridanus"
 
 ### Changed

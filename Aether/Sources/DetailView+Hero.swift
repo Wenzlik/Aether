@@ -163,6 +163,8 @@ extension DetailView {
     /// DTS-HD MA 5.1" — runtime/date, the content-rating badge, then resolution +
     /// audio folded inline (they replace the old separate chip strip). The tech
     /// tail fills in when `mediaInfo` hydrates; the line reflows once, harmlessly.
+    /// Community rating and TMDb rating are appended for movies/episodes (shows
+    /// surface them in `seriesDetailsSection` instead).
     var metadataRow: some View {
         HStack(spacing: AetherDesign.Spacing.xs) {
             Text(metadataParts.joined(separator: " • "))
@@ -172,6 +174,16 @@ extension DetailView {
                 metadataDot
                 contentRatingBadge(rating)
             }
+            if !item.kind.isContainer, !isShow {
+                if let community = current.communityRating, community > 0 {
+                    metadataDot
+                    ratingChip(label: nil, value: community, systemImage: "star.fill")
+                }
+                if let tmdb = tmdbRating, tmdb > 0 {
+                    metadataDot
+                    ratingChip(label: "TMDb", value: tmdb, systemImage: nil)
+                }
+            }
             if !inlineTechParts.isEmpty {
                 metadataDot
                 Text(inlineTechParts.joined(separator: " • "))
@@ -180,6 +192,22 @@ extension DetailView {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Compact rating chip — star + value for community, label + value for TMDb.
+    private func ratingChip(label: String?, value: Double, systemImage: String?) -> some View {
+        HStack(spacing: 2) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .imageScale(.small)
+            }
+            if let label {
+                Text(label)
+            }
+            Text(String(format: "%.1f", value))
+        }
+        .font(AetherDesign.Typography.metadata)
+        .foregroundStyle(AetherDesign.Palette.textSecondary)
     }
 
     /// The "•" separator used to splice the badge / tech tail into the line.
