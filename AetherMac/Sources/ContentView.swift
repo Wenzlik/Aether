@@ -57,6 +57,8 @@ struct HomeView: View {
         .tint(AetherMacTheme.accent)
         .preferredColorScheme(session.appearance.preference.colorScheme)
         .environment(\.locale, session.appLocale)
+        // Infuse-style animated mark on cold launch (shown once per process).
+        .macLaunchSplash()
     }
 
     private var library: some View {
