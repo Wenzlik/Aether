@@ -47,6 +47,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **macOS: prevent display sleep during video playback** — asserts
+  `IOPMAssertionID` while the player is active so the screen stays on during
+  long movies, matching the behaviour of iOS (`AVPlayer` handles this
+  automatically on iOS/tvOS).
 - **macOS: Library empty-state message build error** (#448) — unescaped quotes
   in a string literal caused a compile failure on the macOS target.
 

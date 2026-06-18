@@ -1,5 +1,6 @@
 import SwiftUI
 import AetherCore
+import IOKit.pwr_mgt
 
 /// One audio / subtitle track choice. `id` is mpv's track id (the value `aid` /
 /// `sid` take); `-1` means Disable ("no").
@@ -17,8 +18,9 @@ struct TrackOption: Identifiable, Hashable {
 @Observable
 final class MacPlayerModel {
     @ObservationIgnored let mpv = MpvClient()
+    @ObservationIgnored private var sleepAssertionID: IOPMAssertionID = 0
 
-    private(set) var isPlaying = false
+    private(set) var isPlaying = false { didSet { updateSleepAssertion() } }
     /// 0…1 playhead. Bound to the scrubber; while the user drags, `isScrubbing`
     /// suspends time-driven updates.
     var position: Double = 0
@@ -127,6 +129,24 @@ final class MacPlayerModel {
 
     func selectAudio(id: Int) { mpv.setProperty("aid", id < 0 ? "no" : String(id)) }
     func selectSubtitle(id: Int) { mpv.setProperty("sid", id < 0 ? "no" : String(id)) }
+
+    // MARK: Display sleep prevention
+
+    private func updateSleepAssertion() {
+        if isPlaying {
+            guard sleepAssertionID == 0 else { return }
+            IOPMAssertionCreateWithName(
+                kIOPMAssertionTypeNoDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "Aether video playback" as CFString,
+                &sleepAssertionID
+            )
+        } else {
+            guard sleepAssertionID != 0 else { return }
+            IOPMAssertionRelease(sleepAssertionID)
+            sleepAssertionID = 0
+        }
+    }
 
     // MARK: Property changes (from mpv, on main)
 
