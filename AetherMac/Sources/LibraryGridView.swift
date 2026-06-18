@@ -246,7 +246,7 @@ struct LibraryBrowseView: View {
     private var emptyMessage: String {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let noun = title.lowercased()
-        if !q.isEmpty { return "No \(noun) match "\(q)"." }
+        if !q.isEmpty { return "No \(noun) match \"\(q)\"." }
         if onNetflixOnly { return "Nothing new on Netflix right now." }
         if !showWatched { return "All \(noun) have been watched." }
         if hasActiveFilter { return "No \(noun) match the current filters." }
