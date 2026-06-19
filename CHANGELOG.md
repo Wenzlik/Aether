@@ -4,8 +4,26 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-### Added
+## [0.8.1] — 2026-06-19
 
+### What's New
+
+- **macOS: animated launch splash** (#456) — on cold launch the app glyph
+  scales in over the cinematic background with a soft brand-blue glow, holds
+  briefly, then fades to reveal the library (~1.3 s total). The mark is the
+  live app icon so it always matches the installed icon variant.
+- **macOS: glass pass** (#460) — Library, Discover/Home, and the search overlay
+  now use `cinematicBackground()` so the glass sidebar, glass toolbar, and
+  atmospheric content read as one unified surface. The Library **Sort + Filter**
+  controls are grouped into a single Liquid Glass capsule; **Reload** is split
+  into its own pill. The full-width Continue Watching hero on Home is replaced
+  with a standard section rail to reduce visual weight.
+- **macOS: AETHER wordmark centred header** (#460) — Home and Discover show a
+  centred AETHER wordmark above the content rail instead of the old titlebar
+  placement.
+- **macOS: source switcher in Detail** — the Detail view gains a source picker
+  (mirrors iOS/tvOS) so you can switch between Plex and Jellyfin without leaving
+  the Detail screen.
 - **macOS: Plex multi-server management** (#452) — Settings ▸ Accounts ▸ Plex
   ▸ **Manage Servers…** opens a sheet listing every reachable server on the
   account with enable/disable toggles (mirrors the iOS picker from #325). At
@@ -17,22 +35,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   (was 100 %) so quiet movie content mastered below streaming-service levels
   can be amplified without leaving the app. Default stays at 100 (unity gain);
   the tooltip shows the exact percentage.
-
-- **TMDb community ratings on posters and Detail** (#449, all platforms) — a
-  star + score badge appears on poster cards when a rating is available; Detail
-  shows the same rating inline. In Settings → Playback a new **Rating Source**
-  picker lets you choose between TMDb (community), Plex, and Jellyfin — the
-  selected source is used everywhere, with automatic fallback when unavailable.
-
-### Changed
-
-- **macOS: light and dark mode now adapt correctly** (#450) — `Color(light:dark:)`
-  was hardwired to the dark variant; it now uses `NSColor(name:dynamicProvider:)`
-  so all palette tokens (backgrounds, text) respond to the window appearance.
-  Home / Discover / Library / Search now use explicit SwiftUI `colorScheme`
-  instead of AppKit `windowBackgroundColor`; the Technical Details card replaces
-  `ultraThinMaterial` (rendered light in light windows) with a solid
-  `black.opacity(0.65)`.
 - **macOS: Downloads panel** (#450) — a Downloads button appears in the sidebar
   (hidden when nothing has been downloaded; blue badge while a download is
   active) and opens a popover with storage used, path, and per-item actions.
@@ -44,19 +46,42 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **macOS: Local library Fix Match** (#450) — a new **Fix Match** sheet lets you
   search TMDb and pick the correct title for any local-library item; the override
   persists across rescans via `UserDefaults`.
+- **macOS: light and dark mode now adapt correctly** (#450) — `Color(light:dark:)`
+  was hardwired to the dark variant; it now uses `NSColor(name:dynamicProvider:)`
+  so all palette tokens (backgrounds, text) respond to the window appearance.
+  Home / Discover / Library / Search now use explicit SwiftUI `colorScheme`
+  instead of AppKit `windowBackgroundColor`; the Technical Details card replaces
+  `ultraThinMaterial` (rendered light in light windows) with a solid
+  `black.opacity(0.65)`.
+- **TMDb community ratings on posters and Detail** (#449, all platforms) — a
+  star + score badge appears on poster cards when a rating is available; Detail
+  shows the same rating inline. In Settings → Playback a new **Rating Source**
+  picker lets you choose between TMDb (community), Plex, and Jellyfin — the
+  selected source is used everywhere, with automatic fallback when unavailable.
+- **Czech localization: macOS catalog complete** (#457) — five verbatim view
+  helpers (`sectionHeader`, `rowAction`, …) now use `LocalizedStringKey` so
+  strings route through the catalog at runtime; macOS Czech coverage raised from
+  75 % to 100 %.
 
 ### Fixed
 
+- **macOS: hide cursor in full-screen playback** (#459) — when the floating
+  controls auto-hide after 3 s of inactivity, the mouse cursor now hides too
+  (`NSCursor.setHiddenUntilMouseMoves(true)`). Any mouse move restores both the
+  cursor and the controls simultaneously.
 - **macOS: prevent display sleep during video playback** — asserts
   `IOPMAssertionID` while the player is active so the screen stays on during
   long movies, matching the behaviour of iOS (`AVPlayer` handles this
   automatically on iOS/tvOS).
+- **macOS: Jellyfin ATS — allow HTTP connections** — adds
+  `NSAllowsArbitraryLoads` to the AetherMac target so Jellyfin servers running
+  plain HTTP work without a manual Info.plist override.
 - **macOS: Library empty-state message build error** (#448) — unescaped quotes
   in a string literal caused a compile failure on the macOS target.
 
 ## [0.8.0] — 2026-06-17 · "Eridanus"
 
-### Changed
+### What's New
 
 - **Library: Watched toggle** (iOS/iPadOS/tvOS/visionOS) — a new persistent
   **Watched** chip in the filter bar, placed after Movies / Series. Toggling it
@@ -140,7 +165,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.9] — 2026-06-17
 
-### Changed
+### What's New
 
 - **Library is one combined grid** (iOS/iPadOS/tvOS/visionOS) — the landing no
   longer splits into a Movies rail + a TV Shows rail behind "See all". It opens
@@ -219,7 +244,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.8] — 2026-06-17
 
-### Added
+### What's New
 
 - **Emby** (#425, all platforms) — connect an Emby server via Quick Connect (same
   handshake as Jellyfin): open the code on any signed-in Emby client or the
@@ -229,7 +254,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **New app icon** (#426, all platforms) — refreshed icon across iOS, tvOS,
   visionOS, and macOS.
 
-### Changed
 
 - **Background performance** (#416–419, iOS/tvOS/visionOS) — four targeted fixes
   to reduce CPU/battery when Aether is not in the foreground: VLC ticker suspended
@@ -245,13 +269,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.7] — 2026-06-16
 
-### Added
+### What's New
 
 - **iPad: sidebar navigation** (#391) — the root tab bar now uses `.sidebarAdaptable`
   on iPad. The user can toggle between the compact top tab bar and a left sidebar
   (their choice persists). iPhone and tvOS/visionOS are unchanged.
 
-### Changed
 
 - **Detail: unified action cluster** (#382) — the primary pill row and separate
   tertiary icon row are collapsed into a single Infuse-style cluster. `AetherIconButton`
@@ -289,7 +312,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.6] — 2026-06-15
 
-### Added
+### What's New
 
 - **Library: active-filter summary** (#367, all platforms) — once you narrow a
   category grid, a row of **removable chips** above the grid shows exactly which
@@ -309,7 +332,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   server playhead (Plex On Deck / Jellyfin Resume) so it stays gone across
   devices and survives the next server re-seed, rather than reappearing.
 
-### Changed
 
 - **iPad top chrome** (#370) — Home / Library / Discover now show the **app-icon
   brand mark** in the top tab-bar leading slot (tap it to pop the tab to its
@@ -333,7 +355,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.5] — 2026-06-15 · "Draco"
 
-### Added
+### What's New
 
 - **Primary Plex server** (#325 follow-up, all platforms incl. Apple TV) — with
   more than one Plex server connected, choose which one **streams first** when a
@@ -363,7 +385,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   Deck / Jellyfin Resume, #354). This gives macOS cross-device resume despite
   having no iCloud (Developer ID build), and works across non-Apple clients too.
 
-### Changed — macOS parity & polish
 
 - Detail now offers **Resume / Play from Beginning**, **Mark as Watched**, and
   **Favorite**; after playback you return to the **title's Detail**, not Home.
@@ -385,7 +406,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.3] — 2026-06-14
 
-### Added
+### What's New
 
 - **Aether for macOS** (#232) — a native Mac app (Apple Silicon), sharing the
   whole `AetherCore` stack with iOS/tvOS/visionOS. A single Infuse-style window:
@@ -413,7 +434,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   - **Self-contained distribution** — a Release build bundles libmpv + its ffmpeg
     dependency tree into the `.app`, so it runs without Homebrew.
 
-### Changed
 
 - **Watched marking now syncs across every source on all platforms** (#232) —
   iOS, iPadOS, tvOS, and visionOS adopt `markWatchedEverywhere`: finishing
@@ -423,7 +443,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [0.7.2] — 2026-06-13 · "Draco"
 
-### Added
+### What's New
 
 - **Connect multiple Plex servers from one account** (#325) — enable several
   servers at once; their libraries merge into one deduplicated Library (no
@@ -434,7 +454,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   it appeared in Settings ▸ Language with no code change, the first language
   added purely by translating the catalog.
 
-### Changed
 
 - **More of the UI is Czech** (#320) — settings, Detail, Home, Discover, Search,
   empty/error states, the support flow, and the new multi-server picker now
@@ -464,7 +483,7 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
 0.7.0 on-device testing.
 
-### Added
+### What's New
 
 - **Czech localization** (#312) — the app follows the device language, with an
   in-app **Language** switcher (Settings ▸ Appearance) that also covers System /
@@ -473,7 +492,6 @@ Codename **Draco**. Czech localization plus a round of SMB / tvOS fixes from
 - **Edit SMB folders after sign-in** (#214) — the multi-folder picker is now
   reachable from Settings ▸ SMB ▸ Folders, not only at sign-in.
 
-### Changed
 
 - **SMB goes dormant off-network** (#214) — it's LAN-only, so off your home
   network it drops out of the Library (no failed walks, no errors) and
@@ -510,7 +528,7 @@ Codename **Draco**. SMB grows up — a native browse/auth rewrite with downloads
 poster matching, and a real player — plus Library/Search enhancements and a
 Settings consistency pass.
 
-### Added
+### What's New
 
 - **Native SMB** (#214) — browse + auth rewritten on the pure-Swift
   `SMBClient` (Network-framework based), replacing VLC's opaque `libsmb2`
@@ -538,7 +556,6 @@ Settings consistency pass.
 - **Personal TMDb token** in Settings ▸ Metadata — used instead of the built-in
   key, validated against TMDb before saving.
 
-### Changed
 
 - **Plex collections** (#298) now load via `…/all?type=18` (the old `/collections`
   path returned empty).
@@ -562,7 +579,7 @@ Settings consistency pass.
 
 A new source type (SMB) plus Detail/watched polish.
 
-### Added
+### What's New
 
 - **SMB network shares as a source** (#214) — connect to a NAS by host (+ optional
   folder and credentials) in Settings ▸ Account ▸ SMB. Files are browsed over
@@ -576,7 +593,6 @@ A new source type (SMB) plus Detail/watched polish.
 - **Watched poster controls** (#280) — Settings ▸ Playback gains a **Watched
   Dimming** level (Subtle / Medium / Strong) and a **Show "Watched" Label** toggle.
 
-### Changed
 
 - **Bolder watched posters** (#280) — a bigger, bolder centered "WATCHED" tag and
   stronger default dimming so finished titles read at a glance across the room.
@@ -591,7 +607,7 @@ A new source type (SMB) plus Detail/watched polish.
 A richer Season Detail on tvOS (#267) — the page had a dead bottom half, no
 actors, and episodes that carried only a number and a date.
 
-### Added
+### What's New
 
 - **Episode preview while browsing** (tvOS) — focusing an episode still reads it
   out below the rail: ordinal title, runtime • air date • Resume/Watched, and a
@@ -614,7 +630,6 @@ actors, and episodes that carried only a number and a date.
   iPhone / iPad / Vision Pro; rows appear only when a connected source supports
   the facet.
 
-### Changed
 
 - **Cleaner season header** — the metadata line no longer repeats "Season N"
   under the title (kept only for named seasons like "Asylum") and gains watch
@@ -632,7 +647,7 @@ actors, and episodes that carried only a number and a date.
 A tvOS-led pass toward the Infuse-style Detail + a richer Library, plus an iPhone
 Settings fix. (All builds green on iOS / tvOS / visionOS.)
 
-### Added
+### What's New
 
 - **Library browsing by Genre and Year** (#266, tvOS) — alongside Movies and TV
   Shows, the Library now offers **Genres** and **Years** entries that list every
@@ -646,7 +661,6 @@ Settings fix. (All builds green on iOS / tvOS / visionOS.)
 - **Episode still rail** (#266, tvOS) — a season's episodes browse as a horizontal
   rail of 16:9 stills with ordinal "N. Title" labels, instead of a vertical list.
 
-### Changed
 
 - **Redesigned Detail hero + metadata** (#266) — an episode now leads with the
   **series name** and an "S1 • E2 — Title" line; one **dense metadata row**
@@ -675,7 +689,7 @@ Settings fix. (All builds green on iOS / tvOS / visionOS.)
 
 ## [0.6.5] — 2026-06-11
 
-### Added
+### What's New
 
 - **Local Library: manual metadata & artwork editing** (#211) — correct or
   override what auto-matching got wrong. Tap the **pencil** on a local movie or
@@ -749,7 +763,6 @@ Settings fix. (All builds green on iOS / tvOS / visionOS.)
   button, and a focusable "More Like This" title on Detail — so Up from *any*
   poster (even one scrolled far right) lands on it. iOS/iPadOS/visionOS unchanged.
 
-### Changed
 
 - **Cast & Crew moved lower on Detail, and the rail uses full width on tvOS**
   (#247) — Cast now sits below the primary actions, overview, sources and
@@ -777,7 +790,7 @@ Settings fix. (All builds green on iOS / tvOS / visionOS.)
   device with >100 GB free) instead of the real device free space. Both now read
   `volumeAvailableCapacityForImportantUsage`, matching the figure iOS shows.
 
-### Changed
+### What's New
 
 - **Diagnostics no longer appears twice** (#224) — it lived under both Support →
   Send Diagnostics and About → Diagnostics. About → Diagnostics is now shown only
@@ -800,7 +813,6 @@ Settings fix. (All builds green on iOS / tvOS / visionOS.)
   About → Version row. Removed the Support duplicate; the About "Version x.y.z
   (build) → What's New" row is now the single place it lives.
 
-### Added
 
 - **Local Library** (#173, v1) — play media that lives on the device, with no
   Plex / Jellyfin server needed. Import video files from Files (Settings → Local
@@ -832,7 +844,7 @@ Detail-screen redesign, **layout & UX pass** — a smaller, platform-aware hero
 and a more efficient reading order, especially on iPhone. Pure presentation; no
 new data.
 
-### Changed
+### What's New
 
 - **Settings refresh** (0.6.3 build 4) — a calmer, less "admin panel" Settings:
   - **Account** is now one compact row per service (`Plex — DS418`); tapping opens
@@ -858,7 +870,6 @@ new data.
 - **Available Sources** reads as a first-class section (Unified Library framing),
   showing which connected source is playing and letting you switch.
 
-### Added
 
 - **Favorite** — a heart in the Detail action row toggles the title's favorite
   state on the server, synced across clients. Available on Jellyfin
@@ -928,7 +939,7 @@ Aether's cinematic identity. Built in phases; this build ships **Phase 1**
 (action hierarchy + information architecture) and **Phase 3** (technical details
 + new data plumbing).
 
-### Added
+### What's New
 
 - **Content rating** — the source's age classification (PG-13, TV-MA, 15, …)
   now appears as a thin-bordered badge in the Detail metadata line, on both Plex
@@ -941,7 +952,6 @@ Aether's cinematic identity. Built in phases; this build ships **Phase 1**
   already had. Jellyfin's `MediaStreams` (and file `Size`) are mapped into the
   shared `MediaInfo` (previously Plex-only).
 
-### Changed
 
 - **Action hierarchy on Detail** — instead of a stack of equal-weight buttons,
   there's now **one dominant primary** (Resume or Play), a lighter **Restart**
@@ -970,7 +980,7 @@ Aether's cinematic identity. Built in phases; this build ships **Phase 1**
 Settings & product-experience polish — Settings grows from a configuration
 screen toward a complete product hub. Refinement, not a redesign.
 
-### Added
+### What's New
 
 - **Recent searches** (#190) — the Search tab now remembers your recent queries
   and shows them as tappable chips before you type; tap one to re-run it, or
@@ -1047,7 +1057,7 @@ screen toward a complete product hub. Refinement, not a redesign.
 Coordinated UX/UI refresh across iOS, iPadOS, tvOS and visionOS — a premium,
 cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
 
-### Changed
+### What's New
 
 - **New brand colour** — the accent moves from violet to a premium blue
   (`#6A8BFF`); purple is now a subtle secondary. Everything interactive —
@@ -1088,7 +1098,7 @@ cinematic identity. See `docs/next-steps/ux-refresh-060.md`.
 Artwork bandwidth — phase 2 of the artwork review: per-call-site size tiers and
 offline poster persistence.
 
-### Added
+### What's New
 
 - **Per-call-site artwork tiers.** A new `ArtworkSource` value type mints a
   server-resized URL at any `ArtworkTier` on demand (rather than baking one
@@ -1102,7 +1112,6 @@ offline poster persistence.
   so artwork still renders when the server is unreachable or the token has
   expired. Cleaned up alongside the media file when a download is removed.
 
-### Changed
 
 - **Unified artwork is pinned to one source.** A unified title's poster/backdrop
   now resolves from the first source (in priority order) that carries artwork,
@@ -1115,7 +1124,7 @@ offline poster persistence.
 
 Artwork bandwidth — server-side resized posters (phase 1 of the artwork review).
 
-### Changed
+### What's New
 
 - **Posters & backdrops are now resized by the server**, not downloaded at full
   resolution and shrunk locally. Plex uses its photo transcoder
@@ -1142,7 +1151,7 @@ Medium / Large / IMAX / Wall is in place; each size's actual look + the literal
 floor video reflection arrive when the per-size environments are authored in
 Reality Composer Pro (the size + reflection live inside each `.usda`).
 
-### Added
+### What's New
 
 - **Screen-size preset machinery (visionOS).** A default-size picker in
   Settings → Cinema (persisted via `CinemaPreferencesStore`); the cinema opens
@@ -1161,7 +1170,7 @@ Reality Composer Pro (the size + reflection live inside each `.usda`).
 
 Enhanced Cinema (visionOS).
 
-### Added
+### What's New
 
 - **Enhanced Cinema environment (visionOS).** The Dark Theater is now a premium
   screening room instead of a placeholder: image-based lighting from a
@@ -1177,14 +1186,13 @@ Enhanced Cinema (visionOS).
     Medium/Large/IMAX docking-size presets and a literal moving-video floor
     reflection — see `docs/next-steps/visionos-cinema.md`.
 
-### Changed
 
 - **CI now also compiles visionOS + tvOS** (build-only), so platform-gated code
   can't pass the iOS-only test job and then break the Xcode Cloud archive.
 
 ## [0.5.1] — Unreleased · "Boötes"
 
-### Added
+### What's New
 
 - **Build identifier in About.** Settings → About now shows the short git commit
   the build was cut from (e.g. "Version 0.5.1 (a1b2c3d)"), stamped into the
@@ -1237,7 +1245,7 @@ Enhanced Cinema (visionOS).
 A dedicated TV-show experience and a clearer Home / Library / Discover split,
 built on richer metadata plumbed end-to-end.
 
-### Added
+### What's New
 
 - **Home, Library & Discover, redefined** — each tab now has a distinct job:
   - **Home** is *watch now*: Continue Watching, **Recently Added**, **Recently
@@ -1275,7 +1283,7 @@ built on richer metadata plumbed end-to-end.
 
 ## [0.4.4] — Unreleased · "Andromeda"
 
-### Added
+### What's New
 
 - **Responsive Movie Detail** — wide layouts (tvOS, iPad/iPhone landscape, wide
   visionOS windows) now use an Apple-TV / Infuse-style **hero-background**: the
@@ -1294,7 +1302,7 @@ built on richer metadata plumbed end-to-end.
 
 Performance + control: artwork loads fast again and you can pull to refresh.
 
-### Added
+### What's New
 
 - **Artwork caching pipeline** — `AetherImageCache`: a real two-tier
   (memory + disk) cache with on-disk persistence, in-flight de-duplication
@@ -1305,14 +1313,13 @@ Performance + control: artwork loads fast again and you can pull to refresh.
 - **Pull-to-refresh** on Home, Library, and Discover — re-fetches and re-runs
   the unified aggregation without clearing the (still valid) artwork cache.
 
-### Changed
 
 - **Faster Home/Library first paint** — the unified aggregation now fans out
   across sources/libraries in parallel instead of sequentially.
 
 ## [0.4.2] — "Andromeda"
 
-### Added
+### What's New
 
 - **Tab pop-to-root** — re-selecting the active tab resets its navigation stack
   to the root, so tapping Home / Library / Discover / Search while drilled in
@@ -1332,7 +1339,7 @@ every browse surface, the spatial Cinema lands on Vision Pro, navigation is
 reworked into Home · Library · Discover · Search · Settings with a dashboard-
 style Settings, and a round of tvOS focus/navigation fixes.
 
-### Added
+### What's New
 
 - **Vision Pro Cinema (V1)** — a "Dark Theater" immersive space; the native
   `AVPlayerViewController` docks into it via a single-source-of-truth
@@ -1354,7 +1361,6 @@ style Settings, and a round of tvOS focus/navigation fixes.
 - **Jellyfin offline downloads** — `supportsDownloads` + download URLs (parity
   with Plex).
 
-### Changed
 
 - **Storage tab removed** — the download manager now lives at
   **Settings → Downloads** (downloads are an offline *source*, not a separate
@@ -1380,7 +1386,7 @@ follow the user across every title, the brand mark anchors a
 centred header on Home and Library, and **Apple TV gets a dedicated
 Discover tab** in place of the Storage tab that didn't belong there.
 
-### Added
+### What's New
 
 - **`PlaybackPreferencesStore`** — app-wide defaults for Quality,
   Audio Language, and Subtitle Language. `@Observable`, UserDefaults
@@ -1424,7 +1430,6 @@ Discover tab** in place of the Storage tab that didn't belong there.
   left, bullets always-on right) because vertical scroll-off
   hides expanded disclosure content on the leanback surface.
 
-### Changed
 
 - **Settings header** — centred `AetherWordmark(.large)` replaces
   the leading-padded wordmark + "Settings" page title + "Manage
@@ -1469,7 +1474,7 @@ Discover tab** in place of the Storage tab that didn't belong there.
 
 Brand identity refresh and the in-app polish that came with it.
 
-### Added
+### What's New
 
 - **New brand artwork.** Three designer-supplied PNGs replace the
   previous icon set: a square symbol-only mark for iOS / iPadOS /
@@ -1490,7 +1495,6 @@ Brand identity refresh and the in-app polish that came with it.
   `isSearching` swap to `MediaSearchResults`, so the search code
   path is unchanged.
 
-### Changed
 
 - **Brand mark is now image-backed, not code-composed.**
   `AetherWordmark` previously composed the icon and the wordmark in
@@ -1536,7 +1540,7 @@ Brand identity refresh and the in-app polish that came with it.
 Download management hardening on top of 0.3.0, plus a tvOS build
 fix that unblocked Xcode Cloud.
 
-### Added
+### What's New
 
 - **Swipe-left to delete** any download row — in-progress or
   completed — on iOS / visionOS. tvOS gets an explicit trash
@@ -1583,7 +1587,7 @@ fix that unblocked Xcode Cloud.
 Phase 2 — offline downloads and a top-level Storage manager. Aether
 becomes useful on the plane.
 
-### Added
+### What's New
 
 - **Offline downloads — start to finish.** A new Download button on
   movie / episode Detail kicks off a background `URLSession` job
@@ -1844,7 +1848,6 @@ becomes useful on the plane.
   player's failure message is now calm (no raw host / `NSURLErrorDomain`); the
   technical detail sits behind a **Details** disclosure.
 
-### Changed
 
 - **Tab bar reshuffle — `Home · Library · Storage · Settings`.** Search
   moves out of the tab bar and into a `.searchable` modifier on both
@@ -1933,7 +1936,6 @@ becomes useful on the plane.
     treatment (`aetherFocusRow`), and `AetherSelectionRow` (the shared audio /
     subtitle picker row). Settings rows gained focus + status styles.
 
-### Added
 
 - **Subtitle track model + selection.** `MediaItem` now carries
   `subtitleTracks` / `selectedSubtitleTrackID` and a `selectingSubtitleTrack(_:)`
@@ -2050,7 +2052,6 @@ becomes useful on the plane.
   tvOS the dismiss surface moves into the native chrome itself as a
   `Done` contextual action — the Menu button remains the primary path.
 
-### Added
 
 - **TV shows are now browsable.** A show is a container, not a playable item —
   opening one used to dead-end at "Unavailable." Now Detail drills into the
@@ -2060,7 +2061,6 @@ becomes useful on the plane.
   (`GET /library/metadata/{ratingKey}/children` on Plex) and a `.season`
   media kind. Navigation recurses within the existing `NavigationStack`.
 
-### Changed
 
 - **Native video player.** Replaced SwiftUI's prototype `VideoPlayer` with
   `AVPlayerViewController` (wrapped as `SystemVideoPlayer`). This brings device
@@ -2071,7 +2071,6 @@ becomes useful on the plane.
   the ring/silent switch on, and continues for PiP / background. Added the
   `audio` background mode to the iOS Info.plist.
 
-### Added
 
 - **Transcode fallback so incompatible files play.** Direct play only works
   for containers AVPlayer opens natively (mp4 / m4v / mov). Anything else —
@@ -2094,7 +2093,6 @@ becomes useful on the plane.
   relay) with a short 4s timeout. The home screen gained a "Try again" that
   drops the cached connection and re-probes — useful after switching networks.
 
-### Changed
 
 - **Removed the mock library from the running app.** It was 0.1 scaffolding
   before real connectors existed; now it only confused things (it appeared as
