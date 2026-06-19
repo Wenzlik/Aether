@@ -64,7 +64,6 @@ struct LibraryBrowseView: View {
     /// default; only meaningful when Netflix availability is enabled in Settings.
     @State private var onNetflixOnly = false
 
-    @Environment(\.colorScheme) private var colorScheme
     @State private var sort: LibrarySort = .titleAZ
     /// Multi-select genres (#445 parity with iOS) — empty = all genres.
     @State private var selectedGenres: Set<String> = []
@@ -322,14 +321,17 @@ struct LibraryBrowseView: View {
             }
             .background(.ultraThinMaterial)
         }
-        .scrollContentBackground(.hidden)
-        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+        .cinematicBackground()
         // Root landing (kind == nil): sidebar/tabbar shows where you are, no title needed.
         // Drill-down (Movies / TV Shows): keep the title for the back-button label.
         .navigationTitle(kind == nil ? "" : LocalizedStringKey(title))
         .searchable(text: $query, prompt: Text("Search your library"))
         .toolbar {
-            ToolbarItem {
+            // Sort + Filter share one glass capsule — both shape what's in the
+            // grid. Reload is a data action, split off into its own pill by a
+            // ToolbarSpacer (macOS 26 merges adjacent group items into one
+            // Liquid Glass background).
+            ToolbarItemGroup {
                 Menu {
                     Picker("Sort", selection: $sort) {
                         ForEach(LibrarySort.allCases, id: \.self) { s in
@@ -338,9 +340,7 @@ struct LibraryBrowseView: View {
                     }
                     .pickerStyle(.inline)
                 } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
-            }
-            // Filter menu: Availability · Genre · Audio Language · Rating · Year.
-            ToolbarItem {
+                // Filter menu: Availability · Genre · Audio Language · Rating · Year.
                 Menu {
                     // macOS-exclusive: surface Netflix-only discovery (hidden by
                     // default). Only when the availability feature is enabled.
@@ -421,6 +421,7 @@ struct LibraryBrowseView: View {
                           : "line.3.horizontal.decrease.circle")
                 }
             }
+            ToolbarSpacer(.fixed)
             ToolbarItem {
                 if isLoading {
                     ProgressView().controlSize(.small)
