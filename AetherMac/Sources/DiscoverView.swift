@@ -131,6 +131,7 @@ struct DiscoverView: View {
     @ViewBuilder
     private var content: some View {
         LazyVStack(alignment: .leading, spacing: 40) {
+            brandHeader
             switch mode {
             case .home:
                 continueWatchingRail
@@ -150,6 +151,23 @@ struct DiscoverView: View {
             }
         }
         .padding(.vertical, 24)
+    }
+
+    // MARK: - Brand header
+
+    /// Centred AETHER wordmark at the top of Home / Discover. The main window has
+    /// no wordmark in its chrome (the titlebar carries only the sidebar toggle,
+    /// #432), so the brand mark lives here — and it gives the rails room to
+    /// breathe instead of starting hard against the toolbar. Only drawn on the
+    /// rails path (loading / empty states own their own full-screen layout).
+    private var brandHeader: some View {
+        Image("AetherBrandMark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 52)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 8)
+            .accessibilityLabel("Aether")
     }
 
     // MARK: - Rotating carousel (#381 macOS parity)
