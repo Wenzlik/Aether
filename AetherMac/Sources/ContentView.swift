@@ -18,7 +18,6 @@ struct HomeView: View {
     /// collapses the sidebar column (e.g. sidebar toggle or window resize).
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var showDownloads = false
-    @Environment(\.colorScheme) private var colorScheme
     /// True when the sidebar is fully hidden (no column visible).
     private var sidebarCollapsed: Bool { columnVisibility == .detailOnly }
     /// The detail-pane navigation path, lifted to `HomeView` so it **survives the
@@ -202,8 +201,7 @@ struct HomeView: View {
                     // whatever section is selected.
                     MacSearchResults(session: session, query: searchText)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .scrollContentBackground(.hidden)
-                        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+                        .cinematicBackground()
                         .navigationTitle("Search")
                 } else {
                     switch session.section {

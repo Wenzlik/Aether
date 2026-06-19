@@ -27,7 +27,6 @@ struct DiscoverView: View {
     /// While > 0 the carousel is paused after a manual interaction.
     @State private var pauseCountdown = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
     private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private static let autoAdvanceInterval = 6
     private static let resumeIdleSeconds = 3
@@ -62,8 +61,7 @@ struct DiscoverView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+        .cinematicBackground()
         .navigationTitle("")
         .toolbar {
             ToolbarItem {
@@ -133,9 +131,9 @@ struct DiscoverView: View {
     @ViewBuilder
     private var content: some View {
         LazyVStack(alignment: .leading, spacing: 40) {
+            brandHeader
             switch mode {
             case .home:
-                homeHeroSection
                 continueWatchingRail
                 rail("Recently Added", filtered(rails.recentlyAdded))
                 rail("Recently Released", filtered(rails.recentlyReleased))
@@ -153,6 +151,23 @@ struct DiscoverView: View {
             }
         }
         .padding(.vertical, 24)
+    }
+
+    // MARK: - Brand header
+
+    /// Centred AETHER wordmark at the top of Home / Discover. The main window has
+    /// no wordmark in its chrome (the titlebar carries only the sidebar toggle,
+    /// #432), so the brand mark lives here — and it gives the rails room to
+    /// breathe instead of starting hard against the toolbar. Only drawn on the
+    /// rails path (loading / empty states own their own full-screen layout).
+    private var brandHeader: some View {
+        Image("AetherBrandMark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 52)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 8)
+            .accessibilityLabel("Aether")
     }
 
     // MARK: - Rotating carousel (#381 macOS parity)
@@ -293,105 +308,13 @@ struct DiscoverView: View {
         advanceCountdown = Self.autoAdvanceInterval
     }
 
-    // MARK: - Home hero (home mode)
-
-    /// Full-width featured card for the top Continue Watching title. Gives Home a
-    /// cinematic first impression instead of jumping straight into a dense rail —
-    /// same pattern Apple TV app and Netflix use (active content above discovery).
-    @ViewBuilder
-    private var homeHeroSection: some View {
-        if let entry = rails.continueWatching.first {
-            let item = entry.item
-            NavigationLink(value: item) {
-                ZStack(alignment: .bottomLeading) {
-                    CachedAsyncImage(
-                        url: item.backdropURL ?? item.posterURL,
-                        aspectRatio: 16.0 / 9.0
-                    )
-                    .overlay(
-                        LinearGradient(
-                            colors: [.clear, .black.opacity(0.15), .black.opacity(0.82)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                    .overlay(alignment: .bottom) {
-                        // Resume progress bar — same design as ContinueWatchingCard.
-                        let progress = heroResumeProgress(entry)
-                        if progress > 0 {
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Rectangle().fill(.white.opacity(0.22))
-                                    Rectangle()
-                                        .fill(AetherMacTheme.accent)
-                                        .frame(width: geo.size.width * progress)
-                                }
-                                .frame(height: 4)
-                            }
-                            .frame(height: 4)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Continue Watching")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(DetailFormatting.continueWatchingLabel(item))
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
-                        Label("Resume", systemImage: "play.fill")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(AetherMacTheme.accent, in: Capsule())
-                            .padding(.top, 4)
-                    }
-                    .padding(28)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .frame(maxWidth: 1100)
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 24)
-            .contextMenu {
-                Button {
-                    Task { await session.play(item) }
-                } label: {
-                    Label("Resume", systemImage: "play.fill")
-                }
-                Divider()
-                Button {
-                    Task {
-                        await session.markWatched(item, watched: true)
-                        await session.clearResume(for: item)
-                    }
-                } label: {
-                    Label("Mark as Watched", systemImage: "checkmark.circle")
-                }
-                Button(role: .destructive) {
-                    Task { await session.removeFromContinueWatching(item) }
-                } label: {
-                    Label("Remove from Continue Watching", systemImage: "minus.circle")
-                }
-            }
-        }
-    }
-
-    private func heroResumeProgress(_ entry: HomeFeed.ContinueWatchingEntry) -> Double {
-        guard let runtime = entry.item.runtime else { return 0 }
-        let total = DetailFormatting.seconds(runtime)
-        guard total > 0 else { return 0 }
-        return min(1, max(0, DetailFormatting.seconds(entry.resume.position) / total))
-    }
-
     // MARK: - Continue Watching rail (home mode)
 
-    /// Secondary rail: remaining in-progress items after the hero. Hidden when
-    /// there's only one item (the hero already shows it).
+    /// Continue Watching rail — every in-progress title, most recently active
+    /// first. Hidden when there's nothing in progress.
     @ViewBuilder
     private var continueWatchingRail: some View {
-        let remaining = Array(rails.continueWatching.dropFirst())
+        let remaining = rails.continueWatching
         if !remaining.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 AetherSectionHeader(title: "Continue Watching").padding(.horizontal, 24)
