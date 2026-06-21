@@ -152,9 +152,9 @@ struct PlexServerPickerSheet: View {
     /// already-ranked) connection so the user can tell a LAN server from a WAN one.
     private func connectionDetail(_ server: PlexServerRecord) -> String? {
         guard let best = server.connections.first else { return nil }
-        if best.isLocal { return "On your network" }
-        if best.isRelay { return "Relay" }
-        return "Remote"
+        if best.isLocal { return String(localized: "On your network") }
+        if best.isRelay { return String(localized: "Relay") }
+        return String(localized: "Remote")
     }
 
     private func refresh() async {

@@ -258,9 +258,9 @@ struct SendDiagnosticsSheet: View {
 /// A consistent sheet shell for the Support forms — title, subtitle, the form
 /// fields, and a primary submit + Cancel, over the app's cinematic background.
 private struct SupportFormScaffold<Content: View>: View {
-    let title: String
-    let subtitle: String
-    let submitTitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let submitTitle: LocalizedStringKey
     let canSubmit: Bool
     let onSubmit: () -> Void
     let onClose: () -> Void
@@ -301,14 +301,14 @@ private struct SupportFormScaffold<Content: View>: View {
 
 /// A labelled text input styled to match the Settings cards.
 private struct SupportField: View {
-    let label: String
+    let label: LocalizedStringKey
     @Binding var text: String
-    let prompt: String
+    let prompt: LocalizedStringKey
     var multiline: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text(label.uppercased())
+            Text(label).textCase(.uppercase)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)
@@ -335,12 +335,12 @@ private struct SupportField: View {
 
 /// A labelled container for an inline control (e.g. the category Picker).
 private struct SupportPickerField<Content: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text(label.uppercased())
+            Text(label).textCase(.uppercase)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)
