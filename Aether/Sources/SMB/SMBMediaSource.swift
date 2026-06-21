@@ -139,9 +139,24 @@ actor SMBMediaSource: CustomDownloadSource {
             : movieItem(file)
     }
 
-    // `resolvePlayback` uses the protocol default → returns `streamURL` for
-    // direct play. PlaybackEngine routes the smb:// URL to VLCKit.
-    //
+    // MARK: - Playback resolution (#213)
+
+    /// Override the default so mp4/m4v files on an SMB share route through the
+    /// localhost range proxy and land in AVPlayer — `smb://` can't be opened by
+    /// AVFoundation at all. mkv / avi etc. still go to VLCKit (via the proxy URL
+    /// in `DetailView.presentPlayer`; `resolvePlayback` is not called for those).
+    func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
+        guard let url = request.directPlayURL else {
+            throw PlaybackResolveError.noPlayableStream
+        }
+        guard url.scheme == "smb",
+              let proxyURL = await SMBRangeProxy.shared.register(connection: connection, smbURL: url)
+        else {
+            return ResolvedPlayback(url: url, isServerTranscode: false)
+        }
+        return ResolvedPlayback(url: proxyURL, isServerTranscode: false)
+    }
+
     // Downloads run through `CustomDownloadSource` (not URLSession — `smb://`
     // isn't an HTTP URL): the DownloadManager calls `performDownload` to stream
     // the file's bytes to disk via SMBClient. Always "original" — SMB is a raw
@@ -289,6 +304,19 @@ actor SMBMediaSource: CustomDownloadSource {
         cachedFiles = nil
         lastStats = nil
         await SMBMetadataStore.shared.clearMisses()
+        await SMBRangeProxy.shared.unregisterAll(connectionID: connection.id)
+    }
+
+    // MARK: - HTTP range proxy (#213/#347)
+
+    /// Register an SMB file with the localhost range proxy and return an HTTP
+    /// URL for VLCKit / AVPlayer.
+    ///
+    /// Called by `DetailView.presentPlayer` just before playback starts.
+    /// Returns `nil` if the proxy server failed to bind — callers should then
+    /// fall back to the raw `smb://` URL + `vlcMediaOptions`.
+    func proxyURL(for smbURL: URL) async -> URL? {
+        await SMBRangeProxy.shared.register(connection: connection, smbURL: smbURL)
     }
 
     /// The user's current title/year correction for an item (its stream URL),
