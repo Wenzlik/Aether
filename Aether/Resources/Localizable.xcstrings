@@ -4923,6 +4923,22 @@
         }
       }
     },
+    "Reset to Detected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obnovit na zjištěné"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скинути на виявлене"
+          }
+        }
+      }
+    },
     "Reset to Match / Inferred": {
       "localizations": {
         "cs": {
@@ -5115,6 +5131,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Зберегти"
+          }
+        }
+      }
+    },
+    "Save & Re-match": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uložit a znovu porovnat"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зберегти та повторно зіставити"
           }
         }
       }

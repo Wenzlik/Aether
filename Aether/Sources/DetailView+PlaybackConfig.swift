@@ -305,7 +305,7 @@ extension DetailView {
                 }
             } label: {
                 HStack(spacing: AetherDesign.Spacing.xs) {
-                    Text("Technical Details".uppercased())
+                    Text("Technical Details").textCase(.uppercase)
                         .font(AetherDesign.Typography.caption)
                         .foregroundStyle(AetherDesign.Palette.textTertiary)
                         .tracking(0.6)
