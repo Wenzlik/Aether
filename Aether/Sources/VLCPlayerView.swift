@@ -9,7 +9,8 @@ import os
 /// scrubbing, skip ±10s, double-tap seek, playback speed, fill-mode toggle,
 /// audio & subtitle track selection, time readouts, and an auto-hiding overlay.
 /// Lock screen / AirPods controls (MPRemoteCommandCenter) work on all platforms.
-/// tvOS keeps a leaner overlay but gains remote-based seeking via the Siri Remote.
+/// tvOS has a leaner overlay with remote-based seeking and a swipe-down info
+/// panel for audio/subtitle/speed selection.
 struct VLCPlayerView: UIViewControllerRepresentable {
     let url: URL
     /// VLCKit media options applied before play — carries SMB credentials
@@ -85,6 +86,9 @@ final class VLCPlaybackController: UIViewController {
     private let doneButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .large)
     private static let skipInterval: Double = 10
+    /// Current playback rate — shared across platforms so `updateNowPlayingInfo`
+    /// can reflect speed changes from both the iOS speed menu and the tvOS panel.
+    private var currentRate: Float = 1.0
 
     // MARK: - Total duration (shared — used by lock screen info on all platforms)
 
@@ -99,6 +103,7 @@ final class VLCPlaybackController: UIViewController {
 
     #if os(tvOS)
     private let progress = UIProgressView(progressViewStyle: .default)
+    private var infoPanel: VLCInfoPanelController?
     #else
     // Rich controls (iOS / visionOS). The overlay passes taps in its empty
     // areas through to the video (so the tap-to-toggle gesture always fires),
@@ -119,7 +124,6 @@ final class VLCPlaybackController: UIViewController {
     private var hideWorkItem: DispatchWorkItem?
     private var lastAudioCount = -1
     private var lastTextCount = -1
-    private var currentRate: Float = 1.0
     private var videoFillEnabled = false
     #endif
 
@@ -360,11 +364,7 @@ final class VLCPlaybackController: UIViewController {
     private func updateNowPlayingInfo() {
         let totalSec = totalMilliseconds / 1000.0
         let elapsedSec = Double(player.time.intValue) / 1000.0
-        #if !os(tvOS)
         let playbackRate = player.isPlaying ? Double(currentRate) : 0.0
-        #else
-        let playbackRate = player.isPlaying ? 1.0 : 0.0
-        #endif
         var info: [String: Any] = [
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
             MPNowPlayingInfoPropertyIsLiveStream: false,
@@ -398,6 +398,11 @@ final class VLCPlaybackController: UIViewController {
             progress.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
             progress.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
         ])
+
+        // Swipe down on the Siri Remote touch surface → info/settings panel.
+        let swipeDown = UISwipeGestureRecognizer(target: self, action: #selector(showInfoPanel))
+        swipeDown.direction = .down
+        view.addGestureRecognizer(swipeDown)
     }
 
     private func tick() {
@@ -409,8 +414,11 @@ final class VLCPlaybackController: UIViewController {
         updateNowPlayingInfo()
     }
 
-    /// Siri Remote seeking: swipe/press left = −10s, right = +10s.
+    /// Siri Remote seeking: left/right swipe/press = ±10s.
+    /// Seeking is suppressed while the info panel is open — the d-pad navigates
+    /// the panel's focusable rows instead.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard infoPanel == nil else { super.pressesBegan(presses, with: event); return }
         var handled = false
         for press in presses where !handled {
             switch press.type {
@@ -424,6 +432,50 @@ final class VLCPlaybackController: UIViewController {
             }
         }
         if !handled { super.pressesBegan(presses, with: event) }
+    }
+
+    // MARK: Info panel (tvOS)
+
+    @objc private func showInfoPanel() {
+        guard infoPanel == nil else { return }
+        let panel = VLCInfoPanelController(
+            player: player,
+            title: mediaTitle,
+            currentRate: currentRate,
+            onRateChange: { [weak self] rate in self?.currentRate = rate },
+            onDismiss: { [weak self] in
+                self?.infoPanel = nil
+                self?.setNeedsFocusUpdate()
+                self?.updateFocusIfNeeded()
+            }
+        )
+        infoPanel = panel
+        addChild(panel)
+        panel.view.alpha = 0
+        panel.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(panel.view)
+        NSLayoutConstraint.activate([
+            panel.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            panel.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            panel.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            panel.view.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.48),
+        ])
+        panel.didMove(toParent: self)
+        view.layoutIfNeeded()
+
+        panel.view.transform = CGAffineTransform(translationX: 0, y: panel.view.bounds.height)
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9,
+                       initialSpringVelocity: 0, options: .curveEaseOut) {
+            panel.view.alpha = 1
+            panel.view.transform = .identity
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let panel = infoPanel { return [panel] }
+        return super.preferredFocusEnvironments
     }
 
     #else
@@ -757,6 +809,209 @@ extension VLCPlaybackController: @preconcurrency VLCMediaPlayerDelegate {
         Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
     }
 }
+
+// MARK: - tvOS info/settings panel
+
+#if os(tvOS)
+/// Slides up from the bottom of the player on a Siri Remote swipe-down. Shows
+/// audio track, subtitle, and speed selection in a three-column layout.
+/// Menu button dismisses; d-pad navigates between items naturally via tvOS focus.
+final class VLCInfoPanelController: UIViewController {
+    private let player: VLCMediaPlayer
+    private let mediaTitle: String
+    private var currentRate: Float
+    private let onRateChange: (Float) -> Void
+    private let onDismiss: () -> Void
+
+    private let columnsStack = UIStackView()
+
+    init(
+        player: VLCMediaPlayer,
+        title: String,
+        currentRate: Float,
+        onRateChange: @escaping (Float) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.player = player
+        self.mediaTitle = title
+        self.currentRate = currentRate
+        self.onRateChange = onRateChange
+        self.onDismiss = onDismiss
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(blur)
+
+        // Thin separator line at the top of the panel
+        let separator = UIView()
+        separator.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(separator)
+
+        let titleLabel = UILabel()
+        titleLabel.text = mediaTitle
+        titleLabel.font = UIFont.systemFont(ofSize: 28, weight: .semibold)
+        titleLabel.textColor = .white
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(titleLabel)
+
+        columnsStack.axis = .horizontal
+        columnsStack.distribution = .fillEqually
+        columnsStack.alignment = .top
+        columnsStack.spacing = 60
+        columnsStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(columnsStack)
+
+        NSLayoutConstraint.activate([
+            blur.topAnchor.constraint(equalTo: view.topAnchor),
+            blur.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            blur.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            separator.topAnchor.constraint(equalTo: view.topAnchor),
+            separator.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+
+            titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 44),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
+
+            columnsStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 28),
+            columnsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+            columnsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
+        ])
+
+        buildColumns()
+    }
+
+    private func buildColumns() {
+        columnsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        let audioTracks = player.audioTracks
+        if !audioTracks.isEmpty {
+            let items: [(String, Bool, () -> Void)] = audioTracks.map { track in
+                (Self.trackLabel(track), track.isSelected, { [weak self] in
+                    track.isSelectedExclusively = true
+                    self?.buildColumns()
+                })
+            }
+            columnsStack.addArrangedSubview(buildColumn(
+                header: String(localized: "Audio"),
+                items: items
+            ))
+        }
+
+        let subtitleTracks = player.textTracks
+        if !subtitleTracks.isEmpty {
+            let offSelected = subtitleTracks.allSatisfy { !$0.isSelected }
+            var items: [(String, Bool, () -> Void)] = [
+                (String(localized: "Off"), offSelected, { [weak self] in
+                    self?.player.deselectAllTextTracks()
+                    self?.buildColumns()
+                })
+            ]
+            items += subtitleTracks.map { track in
+                (Self.trackLabel(track), track.isSelected, { [weak self] in
+                    track.isSelectedExclusively = true
+                    self?.buildColumns()
+                })
+            }
+            columnsStack.addArrangedSubview(buildColumn(
+                header: String(localized: "Subtitles"),
+                items: items
+            ))
+        }
+
+        let speeds: [(Float, String)] = [
+            (0.5, "0.5×"), (0.75, "0.75×"), (1.0, "1×"),
+            (1.25, "1.25×"), (1.5, "1.5×"), (2.0, "2×")
+        ]
+        let speedItems: [(String, Bool, () -> Void)] = speeds.map { speed, label in
+            (label, abs(currentRate - speed) < 0.01, { [weak self] in
+                guard let self else { return }
+                self.currentRate = speed
+                self.player.rate = speed
+                self.onRateChange(speed)
+                self.buildColumns()
+            })
+        }
+        columnsStack.addArrangedSubview(buildColumn(
+            header: String(localized: "Speed"),
+            items: speedItems
+        ))
+    }
+
+    private func buildColumn(header: String, items: [(String, Bool, () -> Void)]) -> UIView {
+        let col = UIStackView()
+        col.axis = .vertical
+        col.spacing = 2
+        col.alignment = .leading
+
+        let headerLabel = UILabel()
+        headerLabel.text = header.uppercased()
+        headerLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        headerLabel.textColor = UIColor.white.withAlphaComponent(0.45)
+        col.addArrangedSubview(headerLabel)
+        col.setCustomSpacing(14, after: headerLabel)
+
+        for (title, selected, action) in items {
+            col.addArrangedSubview(makeItemButton(title: title, selected: selected, action: action))
+        }
+        return col
+    }
+
+    private func makeItemButton(title: String, selected: Bool, action: @escaping () -> Void) -> UIButton {
+        var config = UIButton.Configuration.plain()
+        config.title = title
+        config.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
+        config.imagePlacement = .leading
+        config.imagePadding = 10
+        config.baseForegroundColor = selected ? .white : UIColor.white.withAlphaComponent(0.55)
+        let btn = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
+        btn.contentHorizontalAlignment = .leading
+        return btn
+    }
+
+    private static func trackLabel(_ track: VLCMediaPlayer.Track) -> String {
+        let name = track.trackName
+        if !name.isEmpty { return name }
+        if let lang = track.language, !lang.isEmpty { return lang }
+        return "Track"
+    }
+
+    /// Menu button dismisses the panel; all other presses fall through to the
+    /// focus system so d-pad navigation between column buttons works normally.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses where press.type == .menu {
+            animatedDismiss()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    func animatedDismiss() {
+        UIView.animate(withDuration: 0.25, animations: {
+            self.view.transform = CGAffineTransform(translationX: 0, y: self.view.bounds.height)
+            self.view.alpha = 0
+        }) { _ in
+            self.willMove(toParent: nil)
+            self.view.removeFromSuperview()
+            self.removeFromParent()
+            self.onDismiss()
+        }
+    }
+}
+#endif
 
 #if !os(tvOS)
 /// A control overlay that only captures touches landing on an actual control
