@@ -644,20 +644,19 @@ public actor PlexMediaSource: MediaSource {
         return PlexDecision(from: response)
     }
 
-    /// Query items shared by the decision call and the start.m3u8 call. The
-    /// decision endpoint uses the same params so the server's verdict matches
-    /// what we'd actually request — no surprises when start.m3u8 fires.
+    /// Query items for the decision call.
     ///
-    /// `directPlay` is hard-wired to `0` here even for `.original` — see the
-    /// Tron: Ares incident. Plex Web sends a detailed
-    /// `X-Plex-Client-Profile-Extra` capability profile when asking for
-    /// direct play; without it Plex returns HTTP 400 from the decision
-    /// endpoint instead of saying "directplay not possible." Asking for
-    /// `directStream=1` covers the "preserve original quality" intent —
-    /// Plex remuxes the container without re-encoding when codecs match,
-    /// which is lossless. True client-side direct play for mp4/mov/m4v
-    /// files is handled separately in `streamURL(for:)` mapping, which
-    /// surfaces a file URL on the MediaItem and never reaches this code path.
+    /// For `.original` quality we now send `directPlay=1` alongside
+    /// `X-Plex-Client-Profile-Extra` — a capability profile that tells Plex
+    /// exactly which containers and codecs Aether handles natively (VLCKit on
+    /// iOS/tvOS, libmpv on macOS). This unlocks true direct play for MKV/HEVC/DTS
+    /// files: Plex serves the raw file, no server CPU spent on remuxing.
+    ///
+    /// For all other qualities `directPlay=0` is kept — those requests have a
+    /// bitrate or resolution cap in mind, so transcoding is intentional.
+    ///
+    /// `start.m3u8` always stays `directPlay=0` regardless (see
+    /// `transcodeStartURL` — direct play is a file URL, not a transcoder path).
     private func decisionQueryItems(
         ratingKey: String,
         audioStreamID: String?,
@@ -672,7 +671,7 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "hasMDE", value: "1"),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
-            URLQueryItem(name: "directPlay", value: "0"),
+            URLQueryItem(name: "directPlay", value: quality.allowsDirectPlay ? "1" : "0"),
             URLQueryItem(name: "directStream", value: "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             URLQueryItem(name: "videoQuality", value: "100"),
@@ -683,6 +682,12 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
             URLQueryItem(name: "X-Plex-Token", value: accessToken)
         ]
+        if quality.allowsDirectPlay {
+            items.append(URLQueryItem(
+                name: "X-Plex-Client-Profile-Extra",
+                value: configuration.clientProfileExtra
+            ))
+        }
         if let maxKbps = quality.maxVideoBitrateKbps {
             items.append(URLQueryItem(name: "maxVideoBitrate", value: String(maxKbps)))
         }
