@@ -73,9 +73,9 @@ struct SMBMetadataEditSheet: View {
         }
     }
 
-    private func field(_ label: String, text: Binding<String>, prompt: String, numeric: Bool = false) -> some View {
+    private func field(_ label: LocalizedStringKey, text: Binding<String>, prompt: LocalizedStringKey, numeric: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text(label.uppercased())
+            Text(label).textCase(.uppercase)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)
