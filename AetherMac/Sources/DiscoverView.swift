@@ -230,7 +230,7 @@ struct DiscoverView: View {
                             Label("Play", systemImage: "play.fill").frame(width: 110)
                         }
                         .buttonStyle(.borderedProminent).controlSize(.large)
-                        NavigationLink(value: base) {
+                        NavigationLink(value: item) {
                             Label("More Info", systemImage: "info.circle")
                         }
                         .buttonStyle(.bordered).controlSize(.large)
@@ -412,7 +412,7 @@ struct DiscoverView: View {
                     LazyHStack(alignment: .top, spacing: 20) {
                         ForEach(items) { item in
                             if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                                NavigationLink(value: base) { MacPoster(item: item, width: 170) }
+                                NavigationLink(value: item) { MacPoster(item: item, width: 170) }
                                     .buttonStyle(.plain)
                                     .contextMenu { railContextMenu(item, base: base) }
                             } else {
