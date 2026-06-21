@@ -82,7 +82,9 @@ private struct SMBFolderLevelView: View {
                 folderRows
             }
         }
+        #if os(iOS)
         .listStyle(.insetGrouped)
+        #endif
         .navigationTitle(levelTitle)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

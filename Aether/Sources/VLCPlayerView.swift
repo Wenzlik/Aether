@@ -477,7 +477,7 @@ final class VLCPlaybackController: UIViewController {
         updateFocusIfNeeded()
     }
 
-    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+    override var preferredFocusEnvironments: [any UIFocusEnvironment] {
         if let panel = infoPanel { return [panel] }
         return super.preferredFocusEnvironments
     }
