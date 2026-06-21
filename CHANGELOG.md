@@ -4,10 +4,28 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.8.1] — 2026-06-19
+## [0.8.1] — 2026-06-21
 
 ### What's New
 
+- **SMB: HTTP range proxy for fast seeking** (#463) — MKV files on SMB servers
+  now stream through a local HTTP proxy instead of VLC's built-in libsmb2. Seeks
+  that previously stalled 1–2 s drop to near-Plex levels; AVPlayer gains PiP and
+  AirPlay support over SMB for the first time. Proxy caps individual reads at
+  8 MB and caches file size so each range request costs one SMB handshake, not
+  two.
+- **iOS/iPadOS/visionOS: "Open In Aether"** (#464) — video files from Files,
+  Safari, or any share-sheet can be opened directly in Aether. A full-screen
+  player launches immediately; the file is cleaned up from the inbox on dismiss.
+- **Player: lock screen controls, speed, fill, double-tap seek** (#468) — the
+  VLCKit player registers with Now Playing so the lock screen and Control Centre
+  show artwork + title and respond to play/pause/seek. A **Speed** button cycles
+  ×0.75 / ×1 / ×1.25 / ×1.5 / ×2. **Fill** toggles between aspect-fit and
+  aspect-fill. Double-tapping the left or right edge skips ±15 s. tvOS gains the
+  same double-tap skip.
+- **tvOS: swipe-down info panel** (#468) — swiping down on the Siri Remote
+  while playing opens an overlay showing the active audio track, subtitle track,
+  and playback speed. Dismiss with swipe-up or Back.
 - **macOS: animated launch splash** (#456) — on cold launch the app glyph
   scales in over the cinematic background with a soft brand-blue glow, holds
   briefly, then fades to reveal the library (~1.3 s total). The mark is the
@@ -78,6 +96,18 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   plain HTTP work without a manual Info.plist override.
 - **macOS: Library empty-state message build error** (#448) — unescaped quotes
   in a string literal caused a compile failure on the macOS target.
+- **Plex: "Original" quality no longer returns HTTP 400** — `directPlay=1` caused
+  the Plex decision endpoint to return `400` on many server configurations.
+  `directPlay` is now hardwired to `0`; `directStream=1` covers the same intent
+  (Plex remuxes the container without re-encoding when codec compatibility
+  allows, so quality is identical to a true direct-play stream).
+- **SMB folder picker: navigation no longer pops back immediately** — a
+  `navigationDestination` modifier was declared on every level of the folder
+  tree, triggering a SwiftUI "declared earlier on the stack" conflict and an
+  immediate pop-back. The modifier now lives once on the root `NavigationStack`.
+- **l10n: LocalMetadataEditSheet and SMBMetadataEditSheet fully translated**
+  (#465, #466) — Czech and Ukrainian strings were missing across both sheets;
+  `en / cs / uk` coverage is now 100 %.
 
 ## [0.8.0] — 2026-06-17 · "Eridanus"
 

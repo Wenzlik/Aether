@@ -29,6 +29,9 @@ struct SMBFolderPickerView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .navigationDestination(for: SMBFolderLevelView.Location.self) { loc in
+                SMBFolderLevelView(connection: connection, location: loc, selectedRoots: $selectedRoots)
+            }
         }
     }
 }
@@ -79,13 +82,13 @@ private struct SMBFolderLevelView: View {
                 folderRows
             }
         }
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        #endif
         .navigationTitle(levelTitle)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .navigationDestination(for: Location.self) { loc in
-            SMBFolderLevelView(connection: connection, location: loc, selectedRoots: $selectedRoots)
-        }
         .task { await load() }
     }
 

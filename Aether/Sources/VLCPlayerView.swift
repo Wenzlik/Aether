@@ -1,18 +1,23 @@
 import SwiftUI
 import AetherCore
 import VLCKit
+import MediaPlayer
 import os
 
 /// VLCKit-backed player for files AVFoundation can't open (mkv, avi, …) and for
-/// SMB streaming (#173/#214). On iOS / visionOS it now has a full control layer
-/// — scrubbing, skip ±10s, audio & subtitle track selection, time readouts, and
-/// an auto-hiding overlay — so SMB/MKV playback isn't a bare video surface.
-/// tvOS keeps the minimal play/pause + progress controls (no `UISlider` there).
+/// SMB streaming (#173/#214). On iOS / visionOS it has a full control layer —
+/// scrubbing, skip ±10s, double-tap seek, playback speed, fill-mode toggle,
+/// audio & subtitle track selection, time readouts, and an auto-hiding overlay.
+/// Lock screen / AirPods controls (MPRemoteCommandCenter) work on all platforms.
+/// tvOS has a leaner overlay with remote-based seeking and a swipe-down info
+/// panel for audio/subtitle/speed selection.
 struct VLCPlayerView: UIViewControllerRepresentable {
     let url: URL
     /// VLCKit media options applied before play — carries SMB credentials
     /// (`:smb-user=` / `:smb-pwd=` / `:smb-domain=`) and tuned caching (#214).
     var options: [String] = []
+    /// Shown on the lock screen / Control Center while playing.
+    var mediaTitle: String = ""
     /// Preferred audio / subtitle **language** (the app's playback defaults).
     /// SMB files carry no track list before playback, so instead of a Detail
     /// picker we auto-select the matching track the moment VLC parses them — the
@@ -26,6 +31,7 @@ struct VLCPlayerView: UIViewControllerRepresentable {
         VLCPlaybackController(
             url: url,
             options: options,
+            mediaTitle: mediaTitle,
             preferredAudioLanguage: preferredAudioLanguage,
             preferredSubtitleLanguage: preferredSubtitleLanguage,
             onDismiss: onDismiss
@@ -37,6 +43,7 @@ struct VLCPlayerView: UIViewControllerRepresentable {
 final class VLCPlaybackController: UIViewController {
     private let url: URL
     private let options: [String]
+    private let mediaTitle: String
     private let preferredAudioLanguage: String?
     private let preferredSubtitleLanguage: String?
     private var appliedPreferredTracks = false
@@ -44,7 +51,7 @@ final class VLCPlaybackController: UIViewController {
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
     private var ticker: Timer?
-    private var backgroundObservers: [NSObjectProtocol] = []
+    private var backgroundObservers: [any NSObjectProtocol] = []
 
     // MARK: - Startup timing instrumentation (#347)
     /// Read in Console.app, subsystem `cz.zmrhal.aether`, category `PlaybackTiming`.
@@ -73,13 +80,30 @@ final class VLCPlaybackController: UIViewController {
         return "default"
     }
 
-    // Shared controls
+    // MARK: - Shared controls / state
+
     private let playPauseButton = UIButton(type: .system)
     private let doneButton = UIButton(type: .system)
-
     private let spinner = UIActivityIndicatorView(style: .large)
+    private static let skipInterval: Double = 10
+    /// Current playback rate — shared across platforms so `updateNowPlayingInfo`
+    /// can reflect speed changes from both the iOS speed menu and the tvOS panel.
+    private var currentRate: Float = 1.0
+
+    // MARK: - Total duration (shared — used by lock screen info on all platforms)
+
+    /// Total duration as a `VLCTime` — `media.length` once parsed, else derived
+    /// from elapsed + remaining (VLC often knows remaining before the full parse).
+    private var totalTime: VLCTime? {
+        if let length = player.media?.length, length.intValue > 0 { return length }
+        let total = player.time.intValue + abs(player.remainingTime?.intValue ?? 0)
+        return total > 0 ? VLCTime(int: total) : nil
+    }
+    private var totalMilliseconds: Double { Double(totalTime?.intValue ?? 0) }
+
     #if os(tvOS)
     private let progress = UIProgressView(progressViewStyle: .default)
+    private var infoPanel: VLCInfoPanelController?
     #else
     // Rich controls (iOS / visionOS). The overlay passes taps in its empty
     // areas through to the video (so the tap-to-toggle gesture always fires),
@@ -88,7 +112,10 @@ final class VLCPlaybackController: UIViewController {
     private let scrim = UIView()
     private let skipBackButton = UIButton(type: .system)
     private let skipForwardButton = UIButton(type: .system)
+    /// Combined tracks + speed menu button.
     private let tracksButton = UIButton(type: .system)
+    /// Fill / fit toggle — forces the display's aspect ratio to crop black bars.
+    private let fillButton = UIButton(type: .system)
     private let slider = UISlider()
     private let elapsedLabel = UILabel()
     private let totalLabel = UILabel()
@@ -97,18 +124,20 @@ final class VLCPlaybackController: UIViewController {
     private var hideWorkItem: DispatchWorkItem?
     private var lastAudioCount = -1
     private var lastTextCount = -1
-    private static let skipInterval: Double = 10
+    private var videoFillEnabled = false
     #endif
 
     init(
         url: URL,
         options: [String] = [],
+        mediaTitle: String = "",
         preferredAudioLanguage: String? = nil,
         preferredSubtitleLanguage: String? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.url = url
         self.options = options
+        self.mediaTitle = mediaTitle
         self.preferredAudioLanguage = preferredAudioLanguage
         self.preferredSubtitleLanguage = preferredSubtitleLanguage
         self.onDismiss = onDismiss
@@ -141,6 +170,7 @@ final class VLCPlaybackController: UIViewController {
         playPauseButton.translatesAutoresizingMaskIntoConstraints = false
 
         setupControls()
+        setupNowPlaying()
 
         // Loading indicator while the stream connects + buffers — SMB can take a
         // few seconds, and a blank black screen with no spinner reads as frozen.
@@ -181,18 +211,22 @@ final class VLCPlaybackController: UIViewController {
                 forName: UIApplication.didEnterBackgroundNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                self?.ticker?.invalidate()
-                self?.ticker = nil
+                MainActor.assumeIsolated {
+                    self?.ticker?.invalidate()
+                    self?.ticker = nil
+                }
             },
             NotificationCenter.default.addObserver(
                 forName: UIApplication.willEnterForegroundNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                guard self?.ticker == nil else { return }
-                self?.ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.tick() }
+                MainActor.assumeIsolated {
+                    guard self?.ticker == nil else { return }
+                    self?.ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.tick() }
+                    }
+                    self?.tick()
                 }
-                MainActor.assumeIsolated { self?.tick() }
             }
         ]
     }
@@ -222,6 +256,7 @@ final class VLCPlaybackController: UIViewController {
         ticker?.invalidate()
         ticker = nil
         if player.isPlaying { player.stop() }
+        teardownNowPlaying()
     }
 
     /// Show the buffering spinner until frames are actually flowing (playing, or
@@ -275,6 +310,79 @@ final class VLCPlaybackController: UIViewController {
         onDismiss()
     }
 
+    // MARK: - Lock screen / Now Playing (all platforms)
+
+    private func setupNowPlaying() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback)
+        try? session.setActive(true)
+
+        let cc = MPRemoteCommandCenter.shared()
+
+        cc.togglePlayPauseCommand.isEnabled = true
+        cc.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.togglePlay(); return .success
+        }
+        cc.playCommand.isEnabled = true
+        cc.playCommand.addTarget { [weak self] _ in
+            self?.player.play(); return .success
+        }
+        cc.pauseCommand.isEnabled = true
+        cc.pauseCommand.addTarget { [weak self] _ in
+            self?.player.pause(); return .success
+        }
+        cc.skipForwardCommand.isEnabled = true
+        cc.skipForwardCommand.preferredIntervals = [NSNumber(value: Self.skipInterval)]
+        cc.skipForwardCommand.addTarget { [weak self] _ in
+            self?.player.jumpForward(Self.skipInterval); return .success
+        }
+        cc.skipBackwardCommand.isEnabled = true
+        cc.skipBackwardCommand.preferredIntervals = [NSNumber(value: Self.skipInterval)]
+        cc.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.player.jumpBackward(Self.skipInterval); return .success
+        }
+        cc.changePlaybackPositionCommand.isEnabled = true
+        cc.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self, let e = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            let totalSec = self.totalMilliseconds / 1000.0
+            guard totalSec > 0 else { return .commandFailed }
+            self.player.position = e.positionTime / totalSec
+            return .success
+        }
+    }
+
+    private func teardownNowPlaying() {
+        let cc = MPRemoteCommandCenter.shared()
+        cc.togglePlayPauseCommand.removeTarget(nil)
+        cc.playCommand.removeTarget(nil)
+        cc.pauseCommand.removeTarget(nil)
+        cc.skipForwardCommand.removeTarget(nil)
+        cc.skipBackwardCommand.removeTarget(nil)
+        cc.changePlaybackPositionCommand.removeTarget(nil)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func updateNowPlayingInfo() {
+        let totalSec = totalMilliseconds / 1000.0
+        let elapsedSec = Double(player.time.intValue) / 1000.0
+        let playbackRate = player.isPlaying ? Double(currentRate) : 0.0
+        var info: [String: Any] = [
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyIsLiveStream: false,
+            MPMediaItemPropertyTitle: mediaTitle,
+            MPNowPlayingInfoPropertyPlaybackRate: playbackRate,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
+        ]
+        if totalSec > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = totalSec
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsedSec
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
     // MARK: - Platform controls
 
     #if os(tvOS)
@@ -294,6 +402,11 @@ final class VLCPlaybackController: UIViewController {
             progress.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
             progress.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
         ])
+
+        // Swipe down on the Siri Remote touch surface → info/settings panel.
+        let swipeDown = UISwipeGestureRecognizer(target: self, action: #selector(showInfoPanel))
+        swipeDown.direction = .down
+        view.addGestureRecognizer(swipeDown)
     }
 
     private func tick() {
@@ -302,6 +415,71 @@ final class VLCPlaybackController: UIViewController {
         progress.setProgress(Float(player.position), animated: false)
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
         playPauseButton.setImage(UIImage(systemName: glyph), for: .normal)
+        updateNowPlayingInfo()
+    }
+
+    /// Siri Remote seeking: left/right swipe/press = ±10s.
+    /// Seeking is suppressed while the info panel is open — the d-pad navigates
+    /// the panel's focusable rows instead.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard infoPanel == nil else { super.pressesBegan(presses, with: event); return }
+        var handled = false
+        for press in presses where !handled {
+            switch press.type {
+            case .leftArrow:
+                player.jumpBackward(Self.skipInterval)
+                handled = true
+            case .rightArrow:
+                player.jumpForward(Self.skipInterval)
+                handled = true
+            default: break
+            }
+        }
+        if !handled { super.pressesBegan(presses, with: event) }
+    }
+
+    // MARK: Info panel (tvOS)
+
+    @objc private func showInfoPanel() {
+        guard infoPanel == nil else { return }
+        let panel = VLCInfoPanelController(
+            player: player,
+            title: mediaTitle,
+            currentRate: currentRate,
+            onRateChange: { [weak self] rate in self?.currentRate = rate },
+            onDismiss: { [weak self] in
+                self?.infoPanel = nil
+                self?.setNeedsFocusUpdate()
+                self?.updateFocusIfNeeded()
+            }
+        )
+        infoPanel = panel
+        addChild(panel)
+        panel.view.alpha = 0
+        panel.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(panel.view)
+        NSLayoutConstraint.activate([
+            panel.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            panel.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            panel.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            panel.view.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.48),
+        ])
+        panel.didMove(toParent: self)
+        view.layoutIfNeeded()
+
+        panel.view.transform = CGAffineTransform(translationX: 0, y: panel.view.bounds.height)
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9,
+                       initialSpringVelocity: 0, options: .curveEaseOut) {
+            panel.view.alpha = 1
+            panel.view.transform = .identity
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    override var preferredFocusEnvironments: [any UIFocusEnvironment] {
+        if let panel = infoPanel { return [panel] }
+        return super.preferredFocusEnvironments
     }
 
     #else
@@ -333,11 +511,18 @@ final class VLCPlaybackController: UIViewController {
 
         playPauseButton.setPreferredSymbolConfiguration(largeGlyph, forImageIn: .normal)
 
+        // Combined tracks + speed button. Icon changed to ⋯ since it now holds
+        // more than captions (the captions.bubble icon would be misleading).
         tracksButton.tintColor = .white
-        tracksButton.setImage(UIImage(systemName: "captions.bubble"), for: .normal)
+        tracksButton.setImage(UIImage(systemName: "ellipsis.circle"), for: .normal)
         tracksButton.showsMenuAsPrimaryAction = true
         tracksButton.translatesAutoresizingMaskIntoConstraints = false
-        rebuildTracksMenu()   // seed an empty-state menu so the button works immediately
+        rebuildTracksMenu()   // seed the menu so the button works immediately
+
+        fillButton.tintColor = .white
+        fillButton.setImage(UIImage(systemName: "arrow.up.left.and.arrow.down.right"), for: .normal)
+        fillButton.addTarget(self, action: #selector(toggleFillMode), for: .primaryActionTriggered)
+        fillButton.translatesAutoresizingMaskIntoConstraints = false
 
         slider.minimumValue = 0
         slider.maximumValue = 1
@@ -357,9 +542,21 @@ final class VLCPlaybackController: UIViewController {
         totalLabel.text = "0:00"
         totalLabel.textAlignment = .right
 
-        for control in [doneButton, tracksButton, skipBackButton, playPauseButton, skipForwardButton, slider, elapsedLabel, totalLabel] {
+        for control in [doneButton, fillButton, tracksButton, skipBackButton,
+                        playPauseButton, skipForwardButton, slider, elapsedLabel, totalLabel] {
             controlsOverlay.addSubview(control)
         }
+
+        // Double-tap left/right half to seek ±10s; single-tap toggles controls.
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        view.addGestureRecognizer(doubleTap)
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(toggleControls))
+        // Single-tap only fires after the double-tap window expires, preventing
+        // the first tap of a double-tap from hiding/showing the controls.
+        tap.require(toFail: doubleTap)
+        view.addGestureRecognizer(tap)
 
         NSLayoutConstraint.activate([
             scrim.topAnchor.constraint(equalTo: view.topAnchor),
@@ -375,8 +572,11 @@ final class VLCPlaybackController: UIViewController {
             doneButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             doneButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
 
+            // Top-right: [fillButton] [tracksButton]
             tracksButton.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
             tracksButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            fillButton.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
+            fillButton.trailingAnchor.constraint(equalTo: tracksButton.leadingAnchor, constant: -20),
 
             // Center transport cluster
             playPauseButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -398,9 +598,6 @@ final class VLCPlaybackController: UIViewController {
             totalLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 44)
         ])
 
-        // Tap the video to toggle the controls.
-        let tap = UITapGestureRecognizer(target: self, action: #selector(toggleControls))
-        view.addGestureRecognizer(tap)
         scheduleAutoHide()
     }
 
@@ -418,17 +615,8 @@ final class VLCPlaybackController: UIViewController {
         // Auto-select the preferred audio/subtitle once tracks parse; refresh the
         // menu so the new selection's checkmarks show.
         if applyPreferredTracksIfNeeded() { rebuildTracksMenu() }
+        updateNowPlayingInfo()
     }
-
-    /// Total duration as a `VLCTime` — `media.length` once parsed, else derived
-    /// from elapsed + remaining (which VLC knows sooner for some streams).
-    private var totalTime: VLCTime? {
-        if let length = player.media?.length, length.intValue > 0 { return length }
-        let total = player.time.intValue + abs(player.remainingTime?.intValue ?? 0)
-        return total > 0 ? VLCTime(int: total) : nil
-    }
-
-    private var totalMilliseconds: Double { Double(totalTime?.intValue ?? 0) }
 
     // MARK: Scrubbing
 
@@ -459,10 +647,24 @@ final class VLCPlaybackController: UIViewController {
         scheduleAutoHide()
     }
 
-    // MARK: Track selection
+    // MARK: Double-tap seek
 
-    /// Rebuild the audio/subtitle menu only when the available track counts
-    /// change (tracks appear a moment after playback starts as VLC parses).
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: view)
+        if location.x < view.bounds.midX {
+            player.jumpBackward(Self.skipInterval)
+        } else {
+            player.jumpForward(Self.skipInterval)
+        }
+        // Ensure controls surface briefly so the updated position is visible.
+        setControls(visible: true)
+        scheduleAutoHide()
+    }
+
+    // MARK: Track + Speed selection
+
+    /// Rebuild the audio/subtitle/speed menu only when track counts change
+    /// (tracks appear a moment after playback starts as VLC parses).
     private func refreshTracksMenuIfNeeded() {
         let audio = player.audioTracks
         let text = player.textTracks
@@ -474,6 +676,7 @@ final class VLCPlaybackController: UIViewController {
 
     private func rebuildTracksMenu() {
         var sections: [UIMenuElement] = []
+
         let audio = player.audioTracks
         if !audio.isEmpty {
             let items = audio.map { track in
@@ -484,6 +687,7 @@ final class VLCPlaybackController: UIViewController {
             }
             sections.append(UIMenu(title: "Audio", options: .displayInline, children: items))
         }
+
         let text = player.textTracks
         if !text.isEmpty {
             let off = UIAction(title: "Off", state: text.allSatisfy { !$0.isSelected } ? .on : .off) { [weak self] _ in
@@ -498,13 +702,24 @@ final class VLCPlaybackController: UIViewController {
             }
             sections.append(UIMenu(title: "Subtitles", options: .displayInline, children: [off] + items))
         }
-        // Keep the button tappable even before tracks parse (SMB negotiation can
-        // lag) — an empty-state item so a tap gives feedback rather than nothing;
-        // the 0.5s ticker rebuilds it the moment VLC reports tracks.
-        if sections.isEmpty {
-            let placeholder = UIAction(title: "No alternate tracks yet…", attributes: .disabled) { _ in }
-            sections.append(placeholder)
+
+        let speeds: [(Float, String)] = [
+            (0.5, "0.5×"), (0.75, "0.75×"), (1.0, "1×"),
+            (1.25, "1.25×"), (1.5, "1.5×"), (2.0, "2×")
+        ]
+        let speedItems = speeds.map { speed, label -> UIAction in
+            UIAction(title: label, state: abs(currentRate - speed) < 0.01 ? .on : .off) { [weak self] _ in
+                self?.currentRate = speed
+                self?.player.rate = speed
+                self?.rebuildTracksMenu()
+            }
         }
+        sections.append(UIMenu(
+            title: String(localized: "Speed"),
+            options: .displayInline,
+            children: speedItems
+        ))
+
         tracksButton.menu = UIMenu(title: "", children: sections)
     }
 
@@ -513,6 +728,33 @@ final class VLCPlaybackController: UIViewController {
         if !name.isEmpty { return name }
         if let language = track.language, !language.isEmpty { return language }
         return "Track"
+    }
+
+    // MARK: Fill mode
+
+    /// Toggles between fit (letterboxed, default) and fill (crops to display
+    /// aspect ratio, no black bars). Fill forces `videoAspectRatio` to the
+    /// screen's ratio — VLC zooms and crops the video to match.
+    @objc private func toggleFillMode() {
+        videoFillEnabled.toggle()
+        if videoFillEnabled {
+            let w = Int(view.bounds.width)
+            let h = Int(view.bounds.height)
+            guard w > 0, h > 0 else { videoFillEnabled = false; return }
+            let g = Self.gcd(w, h)
+            player.videoAspectRatio = "\(w / g):\(h / g)"
+        } else {
+            player.videoAspectRatio = nil
+        }
+        let icon = videoFillEnabled
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
+        fillButton.setImage(UIImage(systemName: icon), for: .normal)
+        scheduleAutoHide()
+    }
+
+    private static func gcd(_ a: Int, _ b: Int) -> Int {
+        b == 0 ? a : gcd(b, a % b)
     }
 
     // MARK: Controls visibility
@@ -571,6 +813,209 @@ extension VLCPlaybackController: @preconcurrency VLCMediaPlayerDelegate {
         Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
     }
 }
+
+// MARK: - tvOS info/settings panel
+
+#if os(tvOS)
+/// Slides up from the bottom of the player on a Siri Remote swipe-down. Shows
+/// audio track, subtitle, and speed selection in a three-column layout.
+/// Menu button dismisses; d-pad navigates between items naturally via tvOS focus.
+final class VLCInfoPanelController: UIViewController {
+    private let player: VLCMediaPlayer
+    private let mediaTitle: String
+    private var currentRate: Float
+    private let onRateChange: (Float) -> Void
+    private let onDismiss: () -> Void
+
+    private let columnsStack = UIStackView()
+
+    init(
+        player: VLCMediaPlayer,
+        title: String,
+        currentRate: Float,
+        onRateChange: @escaping (Float) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.player = player
+        self.mediaTitle = title
+        self.currentRate = currentRate
+        self.onRateChange = onRateChange
+        self.onDismiss = onDismiss
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(blur)
+
+        // Thin separator line at the top of the panel
+        let separator = UIView()
+        separator.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(separator)
+
+        let titleLabel = UILabel()
+        titleLabel.text = mediaTitle
+        titleLabel.font = UIFont.systemFont(ofSize: 28, weight: .semibold)
+        titleLabel.textColor = .white
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(titleLabel)
+
+        columnsStack.axis = .horizontal
+        columnsStack.distribution = .fillEqually
+        columnsStack.alignment = .top
+        columnsStack.spacing = 60
+        columnsStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(columnsStack)
+
+        NSLayoutConstraint.activate([
+            blur.topAnchor.constraint(equalTo: view.topAnchor),
+            blur.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            blur.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            separator.topAnchor.constraint(equalTo: view.topAnchor),
+            separator.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+
+            titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 44),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
+
+            columnsStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 28),
+            columnsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+            columnsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
+        ])
+
+        buildColumns()
+    }
+
+    private func buildColumns() {
+        columnsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        let audioTracks = player.audioTracks
+        if !audioTracks.isEmpty {
+            let items: [(String, Bool, () -> Void)] = audioTracks.map { track in
+                (Self.trackLabel(track), track.isSelected, { [weak self] in
+                    track.isSelectedExclusively = true
+                    self?.buildColumns()
+                })
+            }
+            columnsStack.addArrangedSubview(buildColumn(
+                header: String(localized: "Audio"),
+                items: items
+            ))
+        }
+
+        let subtitleTracks = player.textTracks
+        if !subtitleTracks.isEmpty {
+            let offSelected = subtitleTracks.allSatisfy { !$0.isSelected }
+            var items: [(String, Bool, () -> Void)] = [
+                (String(localized: "Off"), offSelected, { [weak self] in
+                    self?.player.deselectAllTextTracks()
+                    self?.buildColumns()
+                })
+            ]
+            items += subtitleTracks.map { track in
+                (Self.trackLabel(track), track.isSelected, { [weak self] in
+                    track.isSelectedExclusively = true
+                    self?.buildColumns()
+                })
+            }
+            columnsStack.addArrangedSubview(buildColumn(
+                header: String(localized: "Subtitles"),
+                items: items
+            ))
+        }
+
+        let speeds: [(Float, String)] = [
+            (0.5, "0.5×"), (0.75, "0.75×"), (1.0, "1×"),
+            (1.25, "1.25×"), (1.5, "1.5×"), (2.0, "2×")
+        ]
+        let speedItems: [(String, Bool, () -> Void)] = speeds.map { speed, label in
+            (label, abs(currentRate - speed) < 0.01, { [weak self] in
+                guard let self else { return }
+                self.currentRate = speed
+                self.player.rate = speed
+                self.onRateChange(speed)
+                self.buildColumns()
+            })
+        }
+        columnsStack.addArrangedSubview(buildColumn(
+            header: String(localized: "Speed"),
+            items: speedItems
+        ))
+    }
+
+    private func buildColumn(header: String, items: [(String, Bool, () -> Void)]) -> UIView {
+        let col = UIStackView()
+        col.axis = .vertical
+        col.spacing = 2
+        col.alignment = .leading
+
+        let headerLabel = UILabel()
+        headerLabel.text = header.uppercased()
+        headerLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        headerLabel.textColor = UIColor.white.withAlphaComponent(0.45)
+        col.addArrangedSubview(headerLabel)
+        col.setCustomSpacing(14, after: headerLabel)
+
+        for (title, selected, action) in items {
+            col.addArrangedSubview(makeItemButton(title: title, selected: selected, action: action))
+        }
+        return col
+    }
+
+    private func makeItemButton(title: String, selected: Bool, action: @escaping () -> Void) -> UIButton {
+        var config = UIButton.Configuration.plain()
+        config.title = title
+        config.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
+        config.imagePlacement = .leading
+        config.imagePadding = 10
+        config.baseForegroundColor = selected ? .white : UIColor.white.withAlphaComponent(0.55)
+        let btn = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
+        btn.contentHorizontalAlignment = .leading
+        return btn
+    }
+
+    private static func trackLabel(_ track: VLCMediaPlayer.Track) -> String {
+        let name = track.trackName
+        if !name.isEmpty { return name }
+        if let lang = track.language, !lang.isEmpty { return lang }
+        return "Track"
+    }
+
+    /// Menu button dismisses the panel; all other presses fall through to the
+    /// focus system so d-pad navigation between column buttons works normally.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses where press.type == .menu {
+            animatedDismiss()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    func animatedDismiss() {
+        UIView.animate(withDuration: 0.25, animations: {
+            self.view.transform = CGAffineTransform(translationX: 0, y: self.view.bounds.height)
+            self.view.alpha = 0
+        }) { _ in
+            self.willMove(toParent: nil)
+            self.view.removeFromSuperview()
+            self.removeFromParent()
+            self.onDismiss()
+        }
+    }
+}
+#endif
 
 #if !os(tvOS)
 /// A control overlay that only captures touches landing on an actual control

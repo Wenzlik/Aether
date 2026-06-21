@@ -125,6 +125,57 @@ struct SMBSession: Sendable {
         }
     }
 
+    // MARK: - Range proxy helpers (#213)
+
+    /// File size for a single file. Used by `SMBRangeProxy` to serve HEAD
+    /// requests and build `Content-Range` headers without a full read.
+    func fileSize(share: String, path: String) async throws -> UInt64 {
+        let client = try await loggedIn()
+        try await client.connectShare(share)
+        let reader = client.fileReader(path: Self.relative(path))
+        do {
+            let size = try await reader.fileSize
+            try? await reader.close()
+            return size
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+    }
+
+    /// Fetch file size AND read `length` bytes in a single SMB session — used by
+    /// `SMBRangeProxy` so each HTTP range request pays one SMB handshake, not two.
+    func fileSizeAndRead(share: String, path: String, offset: UInt64, length: UInt32) async throws -> (fileSize: UInt64, data: Data) {
+        let client = try await loggedIn()
+        try await client.connectShare(share)
+        let reader = client.fileReader(path: Self.relative(path))
+        do {
+            let fileSize = try await reader.fileSize
+            let data = try await reader.read(offset: offset, length: length)
+            try? await reader.close()
+            return (fileSize, data)
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+    }
+
+    /// Read `length` bytes starting at `offset`. Used by `SMBRangeProxy` to
+    /// serve HTTP range requests.
+    func read(share: String, path: String, offset: UInt64, length: UInt32) async throws -> Data {
+        let client = try await loggedIn()
+        try await client.connectShare(share)
+        let reader = client.fileReader(path: Self.relative(path))
+        do {
+            let data = try await reader.read(offset: offset, length: length)
+            try? await reader.close()
+            return data
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+    }
+
     /// Split an `smb://host/share/sub/file.mkv` stream URL into the SMB **share**
     /// (first path component) and the **share-relative path** (the rest). Used to
     /// turn a stored item's `streamURL` back into download coordinates.

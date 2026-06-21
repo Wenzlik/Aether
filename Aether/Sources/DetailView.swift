@@ -462,6 +462,7 @@ struct DetailView: View {
             VLCPlayerView(
                 url: playback.url,
                 options: playback.options,
+                mediaTitle: current.title,
                 preferredAudioLanguage: playbackPreferences?.defaultAudioLanguage,
                 preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
             ) { vlcPlayback = nil }
@@ -548,11 +549,33 @@ struct DetailView: View {
         // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
-        if let url = current.streamURL, PlaybackEngine.engine(for: url) == .vlc {
-            // SMB needs its credentials passed to VLCKit as media options (the
-            // URL stays credential-free) — empty for local files (#214).
-            let options = (source as? SMBMediaSource)?.vlcMediaOptions ?? []
-            vlcPlayback = VLCPlayback(url: url, options: options)
+        if let rawURL = current.streamURL, PlaybackEngine.engine(for: rawURL) == .vlc {
+            // SMB: route through the localhost HTTP range proxy (#213/#347) so
+            // VLCKit / AVPlayer use clean HTTP range requests instead of the
+            // slow libsmb2 path (each seek re-established an SMB session).
+            // mp4/m4v over SMB will now resolve to .system via the proxy URL's
+            // extension and fall through to the AVPlayer path below.
+            if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
+                if let proxyURL = await smbSource.proxyURL(for: rawURL) {
+                    if PlaybackEngine.engine(for: proxyURL) == .vlc {
+                        // mkv / avi / ts — still needs VLCKit, but over HTTP now.
+                        vlcPlayback = VLCPlayback(url: proxyURL)
+                        return
+                    }
+                    // mp4 / m4v over SMB → AVPlayer via proxy (fast path).
+                    playbackStartAt = fromStart ? 0 : nil
+                    launchingInCinema = false
+                    withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
+                        isPlayerPresented = true
+                    }
+                    return
+                }
+                // Proxy failed — fall back to direct smb:// with credentials.
+                vlcPlayback = VLCPlayback(url: rawURL, options: smbSource.vlcMediaOptions)
+                return
+            }
+            // Local files (non-SMB smb-scheme files don't exist, but guard anyway).
+            vlcPlayback = VLCPlayback(url: rawURL)
             return
         }
 

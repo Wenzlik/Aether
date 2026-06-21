@@ -1,0 +1,345 @@
+import Foundation
+import Network
+import os
+
+/// Localhost HTTP range-proxy for SMB playback (#213/#347).
+///
+/// VLCKit reads `smb://` via its internal libsmb2 module — every random-access
+/// seek re-establishes an SMB session (negotiate + auth + tree-connect), adding
+/// hundreds of ms of latency per seek. Routing VLC through a `127.0.0.1` HTTP
+/// server gives it clean HTTP/1.1 range requests; the proxy translates those
+/// into `SMBSession.read(share:path:offset:length:)` byte-range reads over the
+/// existing pure-Swift SMB stack. MKV seeks that previously stalled 1–2 s over
+/// SMB direct drop to near AVPlayer / Plex levels.
+///
+/// AVPlayer also benefits: `smb://` can't be opened by AVPlayer at all, but an
+/// HTTP proxy URL with a `.mp4` extension plays natively with PiP and AirPlay.
+///
+/// **Lifecycle:** starts lazily on the first `register` call, runs for the
+/// app's lifetime. Tokens are stable per SMB URL — replays reuse the same proxy
+/// URL. Entries persist until `unregister` or `unregisterAll` is called.
+///
+/// **Security:** localhost-only listener + 32-char random hex token per URL;
+/// no credentials appear in the HTTP URL.
+actor SMBRangeProxy {
+    static let shared = SMBRangeProxy()
+    private init() {}
+
+    // MARK: - Types
+
+    struct Entry: Sendable {
+        let connection: SMBConnection
+        let share: String  // SMB share name, no slashes
+        let path: String   // share-relative path, no leading slash
+    }
+
+    // MARK: - State
+
+    private var tokensByURL:   [String: String] = [:]  // smbURL.absoluteString → token
+    private var entries:       [String: Entry]  = [:]  // token → Entry
+    private var fileSizeCache: [String: UInt64] = [:]  // token → cached file size
+    private var listener: NWListener?
+    private(set) var port: UInt16 = 0
+
+    // Accessible from nonisolated static helpers because Logger is Sendable and
+    // static let is not isolated to the actor executor.
+    static let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb-proxy")
+
+    // MARK: - Registration
+
+    /// Register an SMB file and return a stable `http://127.0.0.1:<port>/<token>/<name>` URL.
+    ///
+    /// The token is stable per `smbURL`, so the same proxy URL is reused across
+    /// replays. Returns `nil` only if the TCP listener failed to bind.
+    func register(connection: SMBConnection, smbURL: URL) async -> URL? {
+        let urlKey = smbURL.absoluteString
+        let (share, path) = SMBSession.shareAndPath(from: smbURL)
+        guard !share.isEmpty else { return nil }
+
+        let token: String
+        if let existing = tokensByURL[urlKey] {
+            token = existing
+        } else {
+            token = Self.randomToken()
+            tokensByURL[urlKey] = token
+        }
+        entries[token] = Entry(connection: connection, share: share, path: path)
+
+        if listener == nil { await startListening() }
+        guard port > 0 else { return nil }
+
+        let name = smbURL.lastPathComponent
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? smbURL.lastPathComponent
+        return URL(string: "http://127.0.0.1:\(port)/\(token)/\(name)")
+    }
+
+    /// Remove the proxy entry for one SMB URL (e.g. when an item is deleted).
+    func unregister(smbURL: URL) {
+        guard let token = tokensByURL.removeValue(forKey: smbURL.absoluteString) else { return }
+        entries.removeValue(forKey: token)
+        fileSizeCache.removeValue(forKey: token)
+    }
+
+    /// Remove all entries belonging to a connection (called when the user
+    /// deletes an SMB server from Settings).
+    func unregisterAll(connectionID: String) {
+        let dead = entries.filter { $0.value.connection.id == connectionID }.map(\.key)
+        dead.forEach {
+            entries.removeValue(forKey: $0)
+            fileSizeCache.removeValue(forKey: $0)
+        }
+        tokensByURL = tokensByURL.filter { entries[$0.value] != nil }
+    }
+
+    /// Look up the entry and cached file size for a token.
+    func lookup(token: String) -> (entry: Entry, cachedSize: UInt64?)? {
+        guard let entry = entries[token] else { return nil }
+        return (entry, fileSizeCache[token])
+    }
+
+    /// Cache the file size after a successful HEAD or first GET.
+    func cacheFileSize(_ size: UInt64, for token: String) {
+        fileSizeCache[token] = size
+    }
+
+    // MARK: - Server lifecycle
+
+    private func startListening() async {
+        let params = NWParameters.tcp
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: 0)
+        guard let l = try? NWListener(using: params) else {
+            Self.log.error("SMB proxy: NWListener init failed"); return
+        }
+        self.listener = l
+
+        // AsyncStream gives Swift 6-safe "wait until ready" without a mutable
+        // captured var (which would be flagged as a data race in Swift 6 mode).
+        let (portStream, portCont) = AsyncStream<UInt16>.makeStream()
+        l.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                if let raw = l.port?.rawValue { portCont.yield(raw) }
+                portCont.finish()
+            case .failed(let err):
+                Self.log.error("SMB proxy: listener failed: \(err, privacy: .public)")
+                portCont.finish()
+            default: break
+            }
+        }
+        l.newConnectionHandler = { [weak self] conn in
+            guard let self else { return }
+            Task.detached { await Self.handle(conn, proxy: self) }
+        }
+        l.start(queue: .global(qos: .utility))
+
+        if let raw = await portStream.first(where: { _ in true }) {
+            port = raw
+            Self.log.info("SMB proxy on 127.0.0.1:\(raw, privacy: .public)")
+        }
+    }
+
+    private static func randomToken() -> String {
+        (0..<4).map { _ in String(format: "%08x", UInt32.random(in: 0...UInt32.max)) }.joined()
+    }
+
+    // MARK: - Request handling (static/nonisolated — runs fully concurrently)
+
+    /// Handle one HTTP connection outside the actor so concurrent range requests
+    /// from VLCKit never block each other on the actor's executor.
+    nonisolated private static func handle(_ conn: NWConnection, proxy: SMBRangeProxy) async {
+        conn.start(queue: .global(qos: .utility))
+        defer { conn.cancel() }
+
+        guard let data = await recv(conn), !data.isEmpty,
+              let req = SMBHTTPRequest(rawData: data)
+        else { await reply(conn, .init(status: 400)); return }
+
+        // Path format: /<token>/<filename> — token is the first component.
+        let token = req.path
+            .split(separator: "/", maxSplits: 2, omittingEmptySubsequences: true)
+            .first.map(String.init) ?? ""
+
+        guard let result = await proxy.lookup(token: token) else {
+            await reply(conn, .init(status: 404)); return
+        }
+        await serve(result.entry, cachedFileSize: result.cachedSize,
+                    token: token, proxy: proxy, request: req, on: conn)
+    }
+
+    // Cap per SMB read to avoid OOM on open-ended Range requests (e.g. bytes=0-)
+    // for large MKV files. VLCKit handles 206 + Content-Range and issues follow-ups.
+    private static let maxChunkBytes: UInt64 = 8 * 1024 * 1024
+
+    nonisolated private static func serve(
+        _ entry: Entry,
+        cachedFileSize: UInt64?,
+        token: String,
+        proxy: SMBRangeProxy,
+        request: SMBHTTPRequest,
+        on conn: NWConnection
+    ) async {
+        let session = SMBSession(connection: entry.connection)
+
+        // HEAD: return file size. Use the cache to avoid a full SMB handshake on
+        // every VLCKit probe — VLCKit typically sends HEAD before the first GET.
+        if request.method == "HEAD" {
+            let fileSize: UInt64
+            if let cached = cachedFileSize {
+                fileSize = cached
+            } else {
+                do {
+                    fileSize = try await session.fileSize(share: entry.share, path: entry.path)
+                    await proxy.cacheFileSize(fileSize, for: token)
+                } catch {
+                    log.error("SMB proxy HEAD fileSize: \(error, privacy: .public)")
+                    await reply(conn, .init(status: 503)); return
+                }
+            }
+            var r = SMBHTTPResponse(status: 200)
+            r["Content-Length"] = "\(fileSize)"
+            r["Accept-Ranges"] = "bytes"
+            r["Content-Type"] = "application/octet-stream"
+            await reply(conn, r); return
+        }
+
+        // GET: one SMB session covers both fileSize (if not cached) and the read.
+        // This halves SMB handshakes vs. calling fileSize() then read() separately.
+        if let cached = cachedFileSize {
+            // File size known — skip the extra fileSize round-trip, read directly.
+            let (start, rawEnd) = request.range(fileSize: cached)
+            let cappedEnd = min(rawEnd, start + maxChunkBytes - 1)
+            let length = UInt32(clamping: cappedEnd - start + 1)
+            do {
+                let body = try await session.read(share: entry.share, path: entry.path,
+                                                  offset: start, length: length)
+                await sendRangeResponse(body: body, start: start, fileSize: cached,
+                                        on: conn)
+            } catch {
+                log.error("SMB proxy read: \(error, privacy: .public)")
+                await reply(conn, .init(status: 500))
+            }
+        } else {
+            // File size unknown — one session fetches both.
+            do {
+                // Probe range with a placeholder size first; fileSizeAndRead gives us
+                // the real size and the chunk in a single SMB session.
+                let probe = request.range(fileSize: UInt64.max)
+                let cappedEnd = min(probe.1, probe.0 + maxChunkBytes - 1)
+                let length = UInt32(clamping: cappedEnd - probe.0 + 1)
+                let (fileSize, body) = try await session.fileSizeAndRead(
+                    share: entry.share, path: entry.path, offset: probe.0, length: length)
+                await proxy.cacheFileSize(fileSize, for: token)
+                await sendRangeResponse(body: body, start: probe.0, fileSize: fileSize,
+                                        on: conn)
+            } catch {
+                log.error("SMB proxy fileSizeAndRead: \(error, privacy: .public)")
+                await reply(conn, .init(status: 500))
+            }
+        }
+    }
+
+    nonisolated private static func sendRangeResponse(
+        body: Data, start: UInt64, fileSize: UInt64, on conn: NWConnection
+    ) async {
+        let actualEnd = start + UInt64(body.count) - 1
+        let isComplete = start == 0 && actualEnd == fileSize - 1
+        var r = SMBHTTPResponse(status: isComplete ? 200 : 206, body: body)
+        r["Content-Length"] = "\(body.count)"
+        r["Content-Range"] = "bytes \(start)-\(actualEnd)/\(fileSize)"
+        r["Accept-Ranges"] = "bytes"
+        r["Content-Type"] = "application/octet-stream"
+        await reply(conn, r)
+    }
+
+    // MARK: - Low-level I/O
+
+    nonisolated private static func recv(_ conn: NWConnection) async -> Data? {
+        await withCheckedContinuation { cont in
+            conn.receive(minimumIncompleteLength: 4, maximumLength: 16_384) { data, _, _, _ in
+                cont.resume(returning: data)
+            }
+        }
+    }
+
+    nonisolated private static func reply(_ conn: NWConnection, _ r: SMBHTTPResponse) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            conn.send(content: r.bytes, completion: .contentProcessed { _ in cont.resume() })
+        }
+    }
+}
+
+// MARK: - SMBHTTPRequest
+
+/// Minimal HTTP/1.1 request parser — covers GET/HEAD + Range headers as
+/// emitted by VLCKit and AVPlayer for range-based playback.
+struct SMBHTTPRequest {
+    let method: String  // "GET" or "HEAD"
+    let path: String    // percent-encoded, e.g. "/abc123/Movie.mkv"
+    private let rawRange: String?
+
+    init?(rawData: Data) {
+        guard let text = String(data: rawData, encoding: .utf8) else { return nil }
+        let lines = text.components(separatedBy: "\r\n")
+        guard let requestLine = lines.first else { return nil }
+        let parts = requestLine.components(separatedBy: " ")
+        guard parts.count >= 2 else { return nil }
+        method = parts[0].uppercased()
+        path = parts[1]
+        rawRange = lines.dropFirst().compactMap { line -> String? in
+            guard line.lowercased().hasPrefix("range:") else { return nil }
+            return line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+        }.first
+    }
+
+    var hasRangeHeader: Bool { rawRange != nil }
+
+    /// Byte range from `Range: bytes=<start>-<end>`.
+    /// Defaults to the full file when no Range header is present.
+    func range(fileSize: UInt64) -> (start: UInt64, end: UInt64) {
+        guard fileSize > 0 else { return (0, 0) }
+        guard let raw = rawRange, raw.lowercased().hasPrefix("bytes=") else {
+            return (0, fileSize - 1)
+        }
+        let spec = raw.dropFirst(6)  // strip "bytes="
+        let parts = spec.split(separator: "-", maxSplits: 1).map(String.init)
+        let start = parts.first.flatMap(UInt64.init) ?? 0
+        let end   = parts.dropFirst().first.flatMap(UInt64.init) ?? (fileSize - 1)
+        return (min(start, fileSize - 1), min(end, fileSize - 1))
+    }
+}
+
+// MARK: - SMBHTTPResponse
+
+/// Minimal HTTP/1.1 response builder.
+struct SMBHTTPResponse {
+    let status: Int
+    private var headers: [String: String] = [:]
+    let body: Data?
+
+    init(status: Int, body: Data? = nil) { self.status = status; self.body = body }
+
+    subscript(key: String) -> String? {
+        get { headers[key] }
+        set { headers[key] = newValue }
+    }
+
+    var bytes: Data {
+        let phrase: String
+        switch status {
+        case 200: phrase = "OK"
+        case 206: phrase = "Partial Content"
+        case 400: phrase = "Bad Request"
+        case 404: phrase = "Not Found"
+        case 500: phrase = "Internal Server Error"
+        case 503: phrase = "Service Unavailable"
+        default:  phrase = "Unknown"
+        }
+        var text = "HTTP/1.1 \(status) \(phrase)\r\n"
+        headers.forEach { text += "\($0): \($1)\r\n" }
+        text += "\r\n"
+        var data = Data(text.utf8)
+        if let body { data.append(body) }
+        return data
+    }
+}

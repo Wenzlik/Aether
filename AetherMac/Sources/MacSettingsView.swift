@@ -135,10 +135,10 @@ private struct AccountsSettings: View {
 
     /// "On your network" / "Remote" / "Relay" from the best-ranked connection.
     private func connectionLabel(_ record: PlexServerRecord) -> String {
-        guard let best = record.connections.first else { return "Server" }
-        if best.isLocal { return "On your network" }
-        if best.isRelay { return "Relay" }
-        return "Remote"
+        guard let best = record.connections.first else { return String(localized: "Server") }
+        if best.isLocal { return String(localized: "On your network") }
+        if best.isRelay { return String(localized: "Relay") }
+        return String(localized: "Remote")
     }
 }
 
