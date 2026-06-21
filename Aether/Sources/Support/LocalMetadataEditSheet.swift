@@ -92,9 +92,15 @@ struct LocalMetadataEditSheet: View {
                     .frame(width: 80, height: 120)
                     .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-                    Text(pickedArtwork != nil ? "New poster selected" : "Choose a custom poster from your files.")
-                        .font(AetherDesign.Typography.caption)
-                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    Group {
+                        if pickedArtwork != nil {
+                            Text("New poster selected")
+                        } else {
+                            Text("Choose a custom poster from your files.")
+                        }
+                    }
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
                     Button("Choose Poster…") { isImportingArtwork = true }
                         .font(AetherDesign.Typography.body)
                         .foregroundStyle(AetherDesign.Palette.accent)
@@ -225,9 +231,9 @@ struct LocalMetadataEditSheet: View {
         }
     }
 
-    private func field(_ label: String, text: Binding<String>, prompt: String, numeric: Bool = false, multiline: Bool = false) -> some View {
+    private func field(_ label: LocalizedStringKey, text: Binding<String>, prompt: LocalizedStringKey, numeric: Bool = false, multiline: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
-            Text(label.uppercased())
+            Text(label).textCase(.uppercase)
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
                 .tracking(0.6)
