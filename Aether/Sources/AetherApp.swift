@@ -52,6 +52,8 @@ struct AetherApp: App {
                 .environment(session)
                 .environment(session.watchAvailability)
                 .environment(cinema)
+                // "Open In Aether" from Files / share sheet on visionOS.
+                .onOpenURL { url in Task { await session.importOpenedFile(url) } }
         }
         #else
         WindowGroup {
@@ -68,6 +70,11 @@ struct AetherApp: App {
                 .task { await session.start() }
                 .environment(session)
                 .environment(session.watchAvailability)
+                // "Open In Aether" from Files app / share sheet on iOS + iPadOS.
+                // tvOS has no Files app — onOpenURL is iOS/iPadOS-only here.
+                #if !os(tvOS)
+                .onOpenURL { url in Task { await session.importOpenedFile(url) } }
+                #endif
         }
         #endif
 
@@ -169,6 +176,16 @@ final class AppSession {
     /// Re-read the imported-file count (after an import or removal).
     func refreshLocalLibrary() async {
         localItemCount = await localLibraryStore.count()
+    }
+
+    /// Import a file delivered by iOS "Open In" / share sheet. Mirrors
+    /// `SettingsViewModel.importLocalMedia` but for a single URL so it can be
+    /// called from the app-level `onOpenURL` handler.
+    func importOpenedFile(_ url: URL) async {
+        if let item = try? await localLibraryStore.importFile(at: url) {
+            await matchLocalMetadata(for: item)
+        }
+        await refreshLocalLibrary()
     }
 
     private static let userTMDbTokenKey = "tmdb.userToken"

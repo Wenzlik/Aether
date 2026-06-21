@@ -171,6 +171,28 @@ targets:
         # at review time.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Register Aether as a video viewer for iOS/iPadOS/visionOS so "Open In
+        # Aether" appears in the Files app and share sheets. Rank "Alternate" so
+        # Aether doesn't hijack the default player — it's an option, not the owner.
+        # mkv has no built-in UTI so we import it as conforming to public.movie.
+        # tvOS ignores CFBundleDocumentTypes (no Files app / share sheet on tvOS).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Video
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.movie
+              - public.video
+              - public.audiovisual-content
+              - org.matroska.mkv
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.matroska.mkv
+            UTTypeDescription: Matroska Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - mkv
     # iCloud Key-Value Store — used by ResumeStore for cross-device resume
     # point sync (iPhone / iPad / Apple TV / Vision Pro share state via the
     # user's iCloud account). The entitlement identifier defaults to the team
