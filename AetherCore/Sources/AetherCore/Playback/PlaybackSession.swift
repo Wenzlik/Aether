@@ -68,6 +68,11 @@ public actor PlaybackSession {
     /// it on teardown / after a track switch. `nil` for direct play.
     private var activeTranscodeSessionID: String?
 
+    /// Decision mode from the last resolved playback — `.directPlay` means we
+    /// can switch tracks live via `AVMediaSelection`; transcode/directStream
+    /// requires a stream restart to rebake the track selection.
+    private var currentDecision: PlaybackDecisionMode?
+
     // MARK: - Diagnostics
 
     /// Structured playback-lifecycle logging — to settle whether failures live
@@ -258,6 +263,7 @@ public actor PlaybackSession {
         }
 
         activeTranscodeSessionID = resolved.transcodeSessionID
+        currentDecision = resolved.decision
         let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
         let (player, itemID) = await MainActor.run { () -> (AVPlayer, String) in
@@ -378,6 +384,43 @@ public actor PlaybackSession {
             avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
         state.position = .seconds(target)
+    }
+
+    // MARK: - Track switching
+
+    /// Switch to a different audio track during playback.
+    ///
+    /// - DirectPlay (AVPlayer): applies `AVMediaSelectionOption` live — no
+    ///   stream restart needed.
+    /// - Transcode / DirectStream: restarts the HLS stream at the current
+    ///   position with the new track baked into the URL.
+    public func switchAudioTrack(_ track: MediaAudioTrack) async {
+        guard let item = state.item else { return }
+        let position = await currentPositionSeconds()
+        let newItem = item.selectingAudioTrack(track)
+        if currentDecision == .directPlay, let avPlayer {
+            state.item = newItem
+            applyClientSideTrackSelection(item: newItem, player: avPlayer)
+            return
+        }
+        await prepare(item: newItem, source: source, startAt: position, isRecovery: true)
+        if state.status != .failed { await play() }
+    }
+
+    /// Switch to a different subtitle track (or turn subtitles off with `nil`).
+    ///
+    /// Uses the same directPlay / restart logic as `switchAudioTrack`.
+    public func switchSubtitleTrack(_ track: MediaSubtitleTrack?) async {
+        guard let item = state.item else { return }
+        let position = await currentPositionSeconds()
+        let newItem = item.selectingSubtitleTrack(track)
+        if currentDecision == .directPlay, let avPlayer {
+            state.item = newItem
+            applyClientSideTrackSelection(item: newItem, player: avPlayer)
+            return
+        }
+        await prepare(item: newItem, source: source, startAt: position, isRecovery: true)
+        if state.status != .failed { await play() }
     }
 
     /// The live absolute content position in seconds — fresh on demand (the
