@@ -1548,14 +1548,12 @@ struct PlexMediaSourceLibrariesTests {
         #expect(decision.url?.path == "/video/:/transcode/universal/decision")
         let decComps = try #require(URLComponents(url: decision.url!, resolvingAgainstBaseURL: false))
         #expect(decComps.queryItems?.first { $0.name == "path" }?.value == "/library/metadata/42")
-        // The 400 fix: decision endpoint never gets `directPlay=1` from us.
-        // Plex Web pairs `directPlay=1` with `X-Plex-Client-Profile-Extra`
-        // describing exact codec/container support — without that profile
-        // Plex returns HTTP 400 instead of just saying "no directplay".
-        // We rely on `directStream=1` to preserve original quality via
-        // container remux when codecs are compatible.
-        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
+        // Original quality sends directPlay=1 + X-Plex-Client-Profile-Extra so
+        // the server can approve direct play for MKV/HEVC/DTS without 400-ing.
+        // directStream=1 stays as the fallback (lossless remux when DP isn't possible).
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "1")
         #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
+        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
         #expect(decComps.queryItems?.first { $0.name == "audioStreamID" }?.value == "41619")
         #expect(decComps.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "41621")
         #expect(decComps.queryItems?.contains { $0.name == "session" } == true)
@@ -1622,16 +1620,13 @@ struct PlexMediaSourceLibrariesTests {
         #expect(resolved.transcodeSessionID == nil)
     }
 
-    @Test("Original quality NEVER sends directPlay=1 — the Tron: Ares 400 fix")
-    func originalQualityNeverSendsDirectPlayOne() async throws {
-        // The actual bug surfaced in the field: the **decision** call with
-        // `directPlay=1` returns HTTP 400, because Plex requires
-        // `X-Plex-Client-Profile-Extra` to evaluate direct play and we don't
-        // send one. Convert Automatically works because it sends
-        // `directPlay=0` to the decision endpoint. Original must now do the
-        // same; the "preserve original quality" intent is carried by
-        // `directStream=1` (lossless container remux when codecs match) plus
-        // the absence of a bitrate / resolution cap.
+    @Test("Original quality sends directPlay=1 + client profile, non-original stays directPlay=0")
+    func originalQualitySendsDirectPlayWithProfile() async throws {
+        // Original quality now sends directPlay=1 alongside X-Plex-Client-Profile-Extra
+        // so the server can evaluate direct play for MKV/HEVC/DTS. Non-original
+        // qualities (Convert Automatically, bitrate caps) keep directPlay=0 — those
+        // have a transcode goal in mind. start.m3u8 always stays directPlay=0
+        // regardless (direct play is a file URL, not a transcoder path).
         let api = RecordingAPIClient()
         await enqueueReachable(api)
         await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
@@ -1647,7 +1642,7 @@ struct PlexMediaSourceLibrariesTests {
             mode: .transcode,
             partID: "17905",
             audioStreamID: "41619",
-            quality: .original,                       // <- the previously failing case
+            quality: .original,
             startTime: .seconds(120)
         )
         let resolved = try await source.resolvePlayback(request)
@@ -1655,15 +1650,14 @@ struct PlexMediaSourceLibrariesTests {
         let recorded = await api.requests
         try #require(recorded.count == 4)   // identity + PUT + decision + warm-up
 
-        // Decision call: directPlay=0 (the 400 fix), directStream=1 keeps
-        // remux available to preserve original codec when possible.
+        // Decision: original sends directPlay=1 + profile, directStream=1 as fallback.
         let decisionURL = try #require(recorded[2].url)
         let decComps = try #require(URLComponents(url: decisionURL, resolvingAgainstBaseURL: false))
-        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "1")
         #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
+        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
 
-        // start.m3u8 also stays directPlay=0 (it always does — see the
-        // separate `transcodeStartURLParams` test for that pin).
+        // start.m3u8 always stays directPlay=0 (direct play = file URL, not transcoder).
         let startURL = try #require(recorded[3].url)
         let startComps = try #require(URLComponents(url: startURL, resolvingAgainstBaseURL: false))
         #expect(startComps.path == "/video/:/transcode/universal/start.m3u8")
@@ -1682,12 +1676,12 @@ struct PlexMediaSourceLibrariesTests {
         #expect(resolved.baseOffsetSeconds == 120)
     }
 
-    @Test("Original matches Convert Automatically on both decision AND start.m3u8 params")
-    func originalMatchesConvertAutomaticallyOnDecisionAndStart() async throws {
-        // The user's reference implementation: Convert Automatically works.
-        // After the fix, Original must hit *both* the decision call and the
-        // start.m3u8 call with the same critical params CA does — that's why
-        // CA plays Tron: Ares and Original used to 400.
+    @Test("Original sends directPlay=1+profile; Convert Automatically sends directPlay=0; start.m3u8 always directPlay=0")
+    func originalVsConvertAutomaticallyDecisionDifference() async throws {
+        // Original now asks for direct play (directPlay=1 + profile). Convert
+        // Automatically keeps directPlay=0 — it has a transcode goal in mind.
+        // Both must produce start.m3u8 with directPlay=0 (the transcoder path
+        // never gets directPlay=1 regardless of the decision request).
         struct Trace { let decision: URLComponents; let start: URLComponents }
         func runQuality(_ quality: PlaybackQuality) async throws -> Trace {
             let api = RecordingAPIClient()
@@ -1716,28 +1710,27 @@ struct PlexMediaSourceLibrariesTests {
             comps.queryItems?.first { $0.name == name }?.value
         }
 
-        // Decision call — both qualities now ask the same question, just
-        // labelled differently in the UI. directPlay=0 + directStream=1.
-        #expect(value(original.decision, "directPlay") == "0")
+        // Decision: original asks for direct play; CA does not.
+        #expect(value(original.decision, "directPlay") == "1")
+        #expect(value(original.decision, "directStream") == "1")
+        #expect(original.decision.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
         #expect(value(auto.decision, "directPlay") == "0")
-        #expect(value(original.decision, "directStream") == value(auto.decision, "directStream"))
+        #expect(auto.decision.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == false)
 
-        // start.m3u8 — same critical params: directPlay, directStream, audio
-        // stream id, no bitrate / resolution cap.
-        #expect(value(original.start, "directPlay") == value(auto.start, "directPlay"))
-        #expect(value(original.start, "directStream") == value(auto.start, "directStream"))
-        #expect(value(original.start, "audioStreamID") == value(auto.start, "audioStreamID"))
-        #expect(original.start.queryItems?.contains { $0.name == "maxVideoBitrate" } ==
-                auto.start.queryItems?.contains { $0.name == "maxVideoBitrate" })
+        // start.m3u8: always directPlay=0 for both.
+        #expect(value(original.start, "directPlay") == "0")
+        #expect(value(auto.start, "directPlay") == "0")
+        // Neither has a bitrate/resolution cap at these qualities.
+        #expect(original.start.queryItems?.contains { $0.name == "maxVideoBitrate" } == false)
+        #expect(auto.start.queryItems?.contains { $0.name == "maxVideoBitrate" } == false)
     }
 
-    @Test("If Plex still returns directplay (despite our directPlay=0 ask) we honour the file URL")
-    func decisionDirectPlayHonouredEvenWhenAskedDirectPlayZero() async throws {
-        // We always send `directPlay=0` to avoid the 400. But in practice
-        // Plex may still answer `decision: "directplay"` for some files
-        // (e.g. the universal-transcoder optimisation path). This defensive
-        // branch keeps that working: when the response surfaces a file key,
-        // we open it directly instead of pointlessly transcoding.
+    @Test("Plex directplay verdict with a file key is honoured — client opens the file directly")
+    func decisionDirectPlayHonouredWhenServerReturnsFileKey() async throws {
+        // When Plex answers `decision: "directplay"` and surfaces a file key,
+        // we open the file directly (no HLS transcoder involved).
+        // Covered separately from the main decision test to pin the direct-play
+        // URL-building + ResolvedPlayback fields explicitly.
         let api = RecordingAPIClient()
         await enqueueReachable(api)
         await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
