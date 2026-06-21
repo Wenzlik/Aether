@@ -5788,6 +5788,22 @@
         }
       }
     },
+    "Speed": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rychlost"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Швидкість"
+          }
+        }
+      }
+    },
     "Source default": {
       "localizations": {
         "cs": {

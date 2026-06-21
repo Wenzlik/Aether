@@ -462,6 +462,7 @@ struct DetailView: View {
             VLCPlayerView(
                 url: playback.url,
                 options: playback.options,
+                mediaTitle: current.title,
                 preferredAudioLanguage: playbackPreferences?.defaultAudioLanguage,
                 preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
             ) { vlcPlayback = nil }
