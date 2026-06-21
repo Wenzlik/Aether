@@ -1548,12 +1548,11 @@ struct PlexMediaSourceLibrariesTests {
         #expect(decision.url?.path == "/video/:/transcode/universal/decision")
         let decComps = try #require(URLComponents(url: decision.url!, resolvingAgainstBaseURL: false))
         #expect(decComps.queryItems?.first { $0.name == "path" }?.value == "/library/metadata/42")
-        // Original quality sends directPlay=1 + X-Plex-Client-Profile-Extra so
-        // the server can approve direct play for MKV/HEVC/DTS without 400-ing.
-        // directStream=1 stays as the fallback (lossless remux when DP isn't possible).
-        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "1")
+        // directPlay is always "0" — sending 1 causes HTTP 400 on many Plex server
+        // configs. directStream=1 covers the lossless-remux intent instead.
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
         #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
-        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
+        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == false)
         #expect(decComps.queryItems?.first { $0.name == "audioStreamID" }?.value == "41619")
         #expect(decComps.queryItems?.first { $0.name == "subtitleStreamID" }?.value == "41621")
         #expect(decComps.queryItems?.contains { $0.name == "session" } == true)
@@ -1620,13 +1619,11 @@ struct PlexMediaSourceLibrariesTests {
         #expect(resolved.transcodeSessionID == nil)
     }
 
-    @Test("Original quality sends directPlay=1 + client profile, non-original stays directPlay=0")
+    @Test("Original quality sends directPlay=0 (same as non-original); directStream=1; no client profile")
     func originalQualitySendsDirectPlayWithProfile() async throws {
-        // Original quality now sends directPlay=1 alongside X-Plex-Client-Profile-Extra
-        // so the server can evaluate direct play for MKV/HEVC/DTS. Non-original
-        // qualities (Convert Automatically, bitrate caps) keep directPlay=0 — those
-        // have a transcode goal in mind. start.m3u8 always stays directPlay=0
-        // regardless (direct play is a file URL, not a transcoder path).
+        // directPlay is always "0" regardless of quality — sending 1 causes HTTP 400
+        // on many Plex server configs. directStream=1 is the lossless-remux signal.
+        // X-Plex-Client-Profile-Extra is not sent. start.m3u8 also stays directPlay=0.
         let api = RecordingAPIClient()
         await enqueueReachable(api)
         await api.enqueue(.init(data: Data("{}".utf8), statusCode: 200, headers: [:])) // PUT
@@ -1650,12 +1647,12 @@ struct PlexMediaSourceLibrariesTests {
         let recorded = await api.requests
         try #require(recorded.count == 4)   // identity + PUT + decision + warm-up
 
-        // Decision: original sends directPlay=1 + profile, directStream=1 as fallback.
+        // Decision: directPlay=0 always; directStream=1; no X-Plex-Client-Profile-Extra.
         let decisionURL = try #require(recorded[2].url)
         let decComps = try #require(URLComponents(url: decisionURL, resolvingAgainstBaseURL: false))
-        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "1")
+        #expect(decComps.queryItems?.first { $0.name == "directPlay" }?.value == "0")
         #expect(decComps.queryItems?.first { $0.name == "directStream" }?.value == "1")
-        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
+        #expect(decComps.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == false)
 
         // start.m3u8 always stays directPlay=0 (direct play = file URL, not transcoder).
         let startURL = try #require(recorded[3].url)
@@ -1676,12 +1673,10 @@ struct PlexMediaSourceLibrariesTests {
         #expect(resolved.baseOffsetSeconds == 120)
     }
 
-    @Test("Original sends directPlay=1+profile; Convert Automatically sends directPlay=0; start.m3u8 always directPlay=0")
+    @Test("Original and Convert Automatically both send directPlay=0; start.m3u8 always directPlay=0")
     func originalVsConvertAutomaticallyDecisionDifference() async throws {
-        // Original now asks for direct play (directPlay=1 + profile). Convert
-        // Automatically keeps directPlay=0 — it has a transcode goal in mind.
-        // Both must produce start.m3u8 with directPlay=0 (the transcoder path
-        // never gets directPlay=1 regardless of the decision request).
+        // directPlay=0 for every quality — sending 1 causes HTTP 400 on many Plex
+        // server configs. Both qualities must produce start.m3u8 with directPlay=0.
         struct Trace { let decision: URLComponents; let start: URLComponents }
         func runQuality(_ quality: PlaybackQuality) async throws -> Trace {
             let api = RecordingAPIClient()
@@ -1710,10 +1705,10 @@ struct PlexMediaSourceLibrariesTests {
             comps.queryItems?.first { $0.name == name }?.value
         }
 
-        // Decision: original asks for direct play; CA does not.
-        #expect(value(original.decision, "directPlay") == "1")
+        // Decision: both qualities send directPlay=0 and no X-Plex-Client-Profile-Extra.
+        #expect(value(original.decision, "directPlay") == "0")
         #expect(value(original.decision, "directStream") == "1")
-        #expect(original.decision.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == true)
+        #expect(original.decision.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == false)
         #expect(value(auto.decision, "directPlay") == "0")
         #expect(auto.decision.queryItems?.contains { $0.name == "X-Plex-Client-Profile-Extra" } == false)
 
