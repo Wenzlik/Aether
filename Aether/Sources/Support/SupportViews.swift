@@ -260,7 +260,7 @@ struct SendDiagnosticsSheet: View {
 private struct SupportFormScaffold<Content: View>: View {
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey
-    let submitTitle: LocalizedStringKey
+    let submitTitle: String
     let canSubmit: Bool
     let onSubmit: () -> Void
     let onClose: () -> Void

@@ -176,6 +176,7 @@ targets:
         # Aether doesn't hijack the default player — it's an option, not the owner.
         # mkv has no built-in UTI so we import it as conforming to public.movie.
         # tvOS ignores CFBundleDocumentTypes (no Files app / share sheet on tvOS).
+        LSSupportsOpeningDocumentsInPlace: true
         CFBundleDocumentTypes:
           - CFBundleTypeName: Video
             CFBundleTypeRole: Viewer

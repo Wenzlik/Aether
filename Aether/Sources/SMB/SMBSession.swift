@@ -133,8 +133,31 @@ struct SMBSession: Sendable {
         let client = try await loggedIn()
         try await client.connectShare(share)
         let reader = client.fileReader(path: Self.relative(path))
-        defer { Task { try? await reader.close() } }
-        return try await reader.fileSize
+        do {
+            let size = try await reader.fileSize
+            try? await reader.close()
+            return size
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+    }
+
+    /// Fetch file size AND read `length` bytes in a single SMB session — used by
+    /// `SMBRangeProxy` so each HTTP range request pays one SMB handshake, not two.
+    func fileSizeAndRead(share: String, path: String, offset: UInt64, length: UInt32) async throws -> (fileSize: UInt64, data: Data) {
+        let client = try await loggedIn()
+        try await client.connectShare(share)
+        let reader = client.fileReader(path: Self.relative(path))
+        do {
+            let fileSize = try await reader.fileSize
+            let data = try await reader.read(offset: offset, length: length)
+            try? await reader.close()
+            return (fileSize, data)
+        } catch {
+            try? await reader.close()
+            throw error
+        }
     }
 
     /// Read `length` bytes starting at `offset`. Used by `SMBRangeProxy` to

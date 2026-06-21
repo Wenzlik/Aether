@@ -671,7 +671,7 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "hasMDE", value: "1"),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
-            URLQueryItem(name: "directPlay", value: quality.allowsDirectPlay ? "1" : "0"),
+            URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             URLQueryItem(name: "videoQuality", value: "100"),
@@ -682,12 +682,12 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "X-Plex-Platform", value: configuration.platform),
             URLQueryItem(name: "X-Plex-Token", value: accessToken)
         ]
-        if quality.allowsDirectPlay {
-            items.append(URLQueryItem(
-                name: "X-Plex-Client-Profile-Extra",
-                value: configuration.clientProfileExtra
-            ))
-        }
+        // directPlay is intentionally hard-wired to 0 even for .original quality.
+        // Sending directPlay=1 causes Plex to return HTTP 400 from the decision
+        // endpoint on many server configs. directStream=1 covers the "original
+        // quality" intent: Plex remuxes without re-encoding when codecs match,
+        // which is lossless. True file-URL direct play is handled via
+        // directPlayURL() after a successful directplay decision.
         if let maxKbps = quality.maxVideoBitrateKbps {
             items.append(URLQueryItem(name: "maxVideoBitrate", value: String(maxKbps)))
         }

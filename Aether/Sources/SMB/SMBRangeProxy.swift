@@ -35,8 +35,9 @@ actor SMBRangeProxy {
 
     // MARK: - State
 
-    private var tokensByURL: [String: String] = [:]  // smbURL.absoluteString → token
-    private var entries:     [String: Entry]   = [:]  // token → Entry
+    private var tokensByURL:   [String: String] = [:]  // smbURL.absoluteString → token
+    private var entries:       [String: Entry]  = [:]  // token → Entry
+    private var fileSizeCache: [String: UInt64] = [:]  // token → cached file size
     private var listener: NWListener?
     private(set) var port: UInt16 = 0
 
@@ -77,18 +78,30 @@ actor SMBRangeProxy {
     func unregister(smbURL: URL) {
         guard let token = tokensByURL.removeValue(forKey: smbURL.absoluteString) else { return }
         entries.removeValue(forKey: token)
+        fileSizeCache.removeValue(forKey: token)
     }
 
     /// Remove all entries belonging to a connection (called when the user
     /// deletes an SMB server from Settings).
     func unregisterAll(connectionID: String) {
         let dead = entries.filter { $0.value.connection.id == connectionID }.map(\.key)
-        dead.forEach { entries.removeValue(forKey: $0) }
+        dead.forEach {
+            entries.removeValue(forKey: $0)
+            fileSizeCache.removeValue(forKey: $0)
+        }
         tokensByURL = tokensByURL.filter { entries[$0.value] != nil }
     }
 
-    /// Look up the entry for a token — one cheap actor hop from the static handler.
-    func entry(for token: String) -> Entry? { entries[token] }
+    /// Look up the entry and cached file size for a token.
+    func lookup(token: String) -> (entry: Entry, cachedSize: UInt64?)? {
+        guard let entry = entries[token] else { return nil }
+        return (entry, fileSizeCache[token])
+    }
+
+    /// Cache the file size after a successful HEAD or first GET.
+    func cacheFileSize(_ size: UInt64, for token: String) {
+        fileSizeCache[token] = size
+    }
 
     // MARK: - Server lifecycle
 
@@ -147,27 +160,42 @@ actor SMBRangeProxy {
             .split(separator: "/", maxSplits: 2, omittingEmptySubsequences: true)
             .first.map(String.init) ?? ""
 
-        guard let entry = await proxy.entry(for: token) else {
+        guard let result = await proxy.lookup(token: token) else {
             await reply(conn, .init(status: 404)); return
         }
-        await serve(entry, request: req, on: conn)
+        await serve(result.entry, cachedFileSize: result.cachedSize,
+                    token: token, proxy: proxy, request: req, on: conn)
     }
 
+    // Cap per SMB read to avoid OOM on open-ended Range requests (e.g. bytes=0-)
+    // for large MKV files. VLCKit handles 206 + Content-Range and issues follow-ups.
+    private static let maxChunkBytes: UInt64 = 8 * 1024 * 1024
+
     nonisolated private static func serve(
-        _ entry: Entry, request: SMBHTTPRequest, on conn: NWConnection
+        _ entry: Entry,
+        cachedFileSize: UInt64?,
+        token: String,
+        proxy: SMBRangeProxy,
+        request: SMBHTTPRequest,
+        on conn: NWConnection
     ) async {
-        // Fresh SMBSession per request — SMBClient is non-Sendable and must
-        // not be shared across concurrent tasks.
         let session = SMBSession(connection: entry.connection)
 
-        let fileSize: UInt64
-        do { fileSize = try await session.fileSize(share: entry.share, path: entry.path) }
-        catch {
-            log.error("SMB proxy: fileSize: \(error, privacy: .public)")
-            await reply(conn, .init(status: 503)); return
-        }
-
+        // HEAD: return file size. Use the cache to avoid a full SMB handshake on
+        // every VLCKit probe — VLCKit typically sends HEAD before the first GET.
         if request.method == "HEAD" {
+            let fileSize: UInt64
+            if let cached = cachedFileSize {
+                fileSize = cached
+            } else {
+                do {
+                    fileSize = try await session.fileSize(share: entry.share, path: entry.path)
+                    await proxy.cacheFileSize(fileSize, for: token)
+                } catch {
+                    log.error("SMB proxy HEAD fileSize: \(error, privacy: .public)")
+                    await reply(conn, .init(status: 503)); return
+                }
+            }
             var r = SMBHTTPResponse(status: 200)
             r["Content-Length"] = "\(fileSize)"
             r["Accept-Ranges"] = "bytes"
@@ -175,24 +203,53 @@ actor SMBRangeProxy {
             await reply(conn, r); return
         }
 
-        let (start, end) = request.range(fileSize: fileSize)
-        let length = UInt32(clamping: end - start + 1)
-
-        do {
-            let body = try await session.read(share: entry.share, path: entry.path,
-                                              offset: start, length: length)
-            let actualEnd = start + UInt64(body.count) - 1
-            let isPartial = request.hasRangeHeader
-            var r = SMBHTTPResponse(status: isPartial ? 206 : 200, body: body)
-            r["Content-Length"] = "\(body.count)"
-            r["Content-Range"] = "bytes \(start)-\(actualEnd)/\(fileSize)"
-            r["Accept-Ranges"] = "bytes"
-            r["Content-Type"] = "application/octet-stream"
-            await reply(conn, r)
-        } catch {
-            log.error("SMB proxy: read off=\(start, privacy: .public) len=\(length, privacy: .public): \(error, privacy: .public)")
-            await reply(conn, .init(status: 500))
+        // GET: one SMB session covers both fileSize (if not cached) and the read.
+        // This halves SMB handshakes vs. calling fileSize() then read() separately.
+        if let cached = cachedFileSize {
+            // File size known — skip the extra fileSize round-trip, read directly.
+            let (start, rawEnd) = request.range(fileSize: cached)
+            let cappedEnd = min(rawEnd, start + maxChunkBytes - 1)
+            let length = UInt32(clamping: cappedEnd - start + 1)
+            do {
+                let body = try await session.read(share: entry.share, path: entry.path,
+                                                  offset: start, length: length)
+                await sendRangeResponse(body: body, start: start, fileSize: cached,
+                                        on: conn)
+            } catch {
+                log.error("SMB proxy read: \(error, privacy: .public)")
+                await reply(conn, .init(status: 500))
+            }
+        } else {
+            // File size unknown — one session fetches both.
+            do {
+                // Probe range with a placeholder size first; fileSizeAndRead gives us
+                // the real size and the chunk in a single SMB session.
+                let probe = request.range(fileSize: UInt64.max)
+                let cappedEnd = min(probe.1, probe.0 + maxChunkBytes - 1)
+                let length = UInt32(clamping: cappedEnd - probe.0 + 1)
+                let (fileSize, body) = try await session.fileSizeAndRead(
+                    share: entry.share, path: entry.path, offset: probe.0, length: length)
+                await proxy.cacheFileSize(fileSize, for: token)
+                await sendRangeResponse(body: body, start: probe.0, fileSize: fileSize,
+                                        on: conn)
+            } catch {
+                log.error("SMB proxy fileSizeAndRead: \(error, privacy: .public)")
+                await reply(conn, .init(status: 500))
+            }
         }
+    }
+
+    nonisolated private static func sendRangeResponse(
+        body: Data, start: UInt64, fileSize: UInt64, on conn: NWConnection
+    ) async {
+        let actualEnd = start + UInt64(body.count) - 1
+        let isComplete = start == 0 && actualEnd == fileSize - 1
+        var r = SMBHTTPResponse(status: isComplete ? 200 : 206, body: body)
+        r["Content-Length"] = "\(body.count)"
+        r["Content-Range"] = "bytes \(start)-\(actualEnd)/\(fileSize)"
+        r["Accept-Ranges"] = "bytes"
+        r["Content-Type"] = "application/octet-stream"
+        await reply(conn, r)
     }
 
     // MARK: - Low-level I/O
