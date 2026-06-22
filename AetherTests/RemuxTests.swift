@@ -224,3 +224,73 @@ struct MatroskaDemuxerTests {
         }
     }
 }
+
+@Suite("AetherCore — codec identity + decodability (#476)")
+struct MediaCodecTests {
+
+    @Test("Matroska CodecID → video codec + decodability")
+    func videoCodecs() {
+        #expect(VideoCodec(matroskaCodecID: "V_MPEG4/ISO/AVC") == .h264)
+        #expect(VideoCodec(matroskaCodecID: "V_MPEGH/ISO/HEVC") == .hevc)
+        #expect(VideoCodec(matroskaCodecID: "V_MPEG4/ISO/ASP") == .other("V_MPEG4/ISO/ASP"))
+        #expect(VideoCodec.h264.isAVFoundationDecodable)
+        #expect(VideoCodec.hevc.isAVFoundationDecodable)
+        #expect(!VideoCodec(matroskaCodecID: "V_VP9").isAVFoundationDecodable)
+    }
+
+    @Test("Matroska CodecID → audio codec + decodability")
+    func audioCodecs() {
+        #expect(AudioCodec(matroskaCodecID: "A_AAC") == .aac)
+        #expect(AudioCodec(matroskaCodecID: "A_AAC/MPEG4/LC") == .aac)
+        #expect(AudioCodec(matroskaCodecID: "A_AC3") == .ac3)
+        #expect(AudioCodec(matroskaCodecID: "A_PCM/INT/LIT") == .pcm)
+        #expect(AudioCodec(matroskaCodecID: "A_DTS") == .other("A_DTS"))
+        #expect(AudioCodec.aac.isAVFoundationDecodable)
+        #expect(!AudioCodec(matroskaCodecID: "A_DTS").isAVFoundationDecodable)
+        #expect(!AudioCodec(matroskaCodecID: "A_TRUEHD").isAVFoundationDecodable)
+    }
+}
+
+@Suite("AetherCore — RemuxEngine routing (#476 Tier 1)")
+struct RemuxEngineRoutingTests {
+    private let resolver = VideoEngineResolver.standard
+
+    @Test("MKV with H.264 + AAC routes to the remux shim")
+    func decodableMKVtoRemux() {
+        let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [.aac])
+        #expect(RemuxEngine().canPlay(d))
+        #expect(resolver.resolve(d) == .remux)
+    }
+
+    @Test("MKV with an undecodable codec (DTS) falls past remux to VLC")
+    func undecodableMKVtoVLC() {
+        let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [.dtsLike])
+        #expect(!RemuxEngine().canPlay(d))
+        #expect(resolver.resolve(d) == .vlc)
+    }
+
+    @Test("MKV with unknown codecs (un-probed) stays on VLC — today's behaviour")
+    func unprobedMKVtoVLC() {
+        let d = MediaDescriptor(container: "mkv")   // no codecs yet
+        #expect(!RemuxEngine().canPlay(d))
+        #expect(resolver.resolve(d) == .vlc)
+    }
+
+    @Test("mp4 stays on AVFoundation (tier 0 wins; remux never claims it)")
+    func mp4StaysTier0() {
+        let d = MediaDescriptor(container: "mp4", videoCodec: .h264, audioCodecs: [.aac])
+        #expect(!RemuxEngine().canPlay(d))
+        #expect(resolver.resolve(d) == .avFoundation)
+    }
+
+    @Test("HEVC-only MKV (no audio) still remuxes")
+    func videoOnlyRemux() {
+        let d = MediaDescriptor(container: "mkv", videoCodec: .hevc)
+        #expect(resolver.resolve(d) == .remux)
+    }
+}
+
+private extension AudioCodec {
+    /// An undecodable audio codec for routing tests.
+    static var dtsLike: AudioCodec { .other("A_DTS") }
+}

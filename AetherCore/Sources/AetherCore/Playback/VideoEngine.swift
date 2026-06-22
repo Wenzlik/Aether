@@ -24,6 +24,10 @@ public enum VideoEngineKind: Sendable, Equatable {
     /// `AVPlayer` / `AVPlayerViewController` — native controls, PiP, AirPlay,
     /// HDR, hardware decode. The default and the only App-Store-clean engine.
     case avFoundation
+    /// Remux-to-fMP4 shim — rewrites a non-AVFoundation container (mkv, …)
+    /// wrapping Apple-decodable codecs into fragmented MP4 on the fly, no
+    /// re-encode, then plays it via AVFoundation (#476, Tier 1).
+    case remux
     /// VLCKit — handles containers/codecs AVFoundation can't (mkv, avi, …).
     /// **Temporary**: removed once the AVFoundation-first cut ships (#476 P3).
     case vlc
@@ -43,14 +47,27 @@ public struct MediaDescriptor: Sendable, Equatable {
     /// an extension-less URL (a transcode/HLS URL) or an unknown container —
     /// both of which default to AVFoundation.
     public var container: String?
+    /// Video codec, when known (from a Matroska probe or `MediaInfo`). `nil`
+    /// before a probe — Tier 1 can't promise playback without it.
+    public var videoCodec: VideoCodec?
+    /// Audio codecs present, when known. Empty before a probe.
+    public var audioCodecs: [AudioCodec]
 
-    public init(scheme: String? = nil, container: String? = nil) {
+    public init(
+        scheme: String? = nil,
+        container: String? = nil,
+        videoCodec: VideoCodec? = nil,
+        audioCodecs: [AudioCodec] = []
+    ) {
         self.scheme = scheme?.lowercased()
         let c = container?.lowercased()
         self.container = (c?.isEmpty == true) ? nil : c
+        self.videoCodec = videoCodec
+        self.audioCodecs = audioCodecs
     }
 
-    /// Describe a resolved playback URL: scheme + path extension.
+    /// Describe a resolved playback URL: scheme + path extension. Codecs are
+    /// unknown from a URL alone (fill them from a probe / `MediaInfo`).
     public init(url: URL) {
         let ext = url.pathExtension.lowercased()
         self.init(scheme: url.scheme, container: ext.isEmpty ? nil : ext)
@@ -131,9 +148,11 @@ public struct VideoEngineResolver: Sendable {
     }
 
     /// The engines Aether ships on the iOS family today: AVFoundation first,
-    /// VLCKit as the temporary fallback.
+    /// the remux shim for decodable codecs in unsupported containers, VLCKit as
+    /// the temporary last-resort fallback.
     public static let installedEngines: [any VideoEngine] = [
         AVFoundationEngine(),
+        RemuxEngine(),
         VLCEngine()
     ]
 
