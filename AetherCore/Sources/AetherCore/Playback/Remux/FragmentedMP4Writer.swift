@@ -131,7 +131,11 @@ struct FragmentedMP4Writer {
         w.u32(0)                 // duration
         w.u32(0); w.u32(0)       // reserved
         w.u16(0)                 // layer
-        w.u16(0)                 // alternate_group
+        // alternate_group puts tracks of the same media type into a selectable
+        // set — without it, AVFoundation builds no audible media-selection group
+        // and the player's audio menu is empty (audio still plays). 1 = audio,
+        // 0 = video. (Subtitles → 2 when added.)
+        w.u16(track.kind == .audio ? 1 : 0)  // alternate_group
         w.u16(track.kind == .audio ? 0x0100 : 0)  // volume
         w.u16(0)                 // reserved
         appendIdentityMatrix(&w)
