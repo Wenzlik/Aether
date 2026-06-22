@@ -251,21 +251,26 @@ struct FragmentedMP4Writer {
         w.u16(0)                         // pre_defined
         w.u16(0)                         // reserved
         w.u32(track.sampleRate << 16)    // samplerate 16.16
-        w.append(esds(asc: track.codecConfig))
+        w.append(esds(asc: track.codecConfig, esID: UInt16(truncatingIfNeeded: track.trackID)))
         return MP4Box.box("mp4a", w.bytes)
     }
 
-    /// Minimal `esds` carrying the AAC AudioSpecificConfig (configs are < 128
-    /// bytes, so single-byte descriptor lengths suffice).
-    private func esds(asc: [UInt8]) -> [UInt8] {
-        let dsi: [UInt8] = [0x05, UInt8(asc.count)] + asc                  // DecoderSpecificInfo
+    /// `esds` carrying the AAC AudioSpecificConfig. Mirrors the form AVFoundation
+    /// emits (and expects for its media-selection grouping): the canonical 4-byte
+    /// descriptor length encoding (`80 80 80 NN`) and a non-zero ES_ID. A minimal
+    /// single-byte-length esds still *decodes*, but AVFoundation wouldn't expose
+    /// the track as a selectable audible group.
+    private func esds(asc: [UInt8], esID: UInt16) -> [UInt8] {
+        func descriptor(_ tag: UInt8, _ payload: [UInt8]) -> [UInt8] {
+            [tag, 0x80, 0x80, 0x80, UInt8(payload.count)] + payload
+        }
+        let dsi = descriptor(0x05, asc)                                    // DecoderSpecificInfo
         // DecoderConfigDescriptor: objType 0x40 (AAC), streamType 0x15 (audio),
-        // bufferSizeDB(3) + maxBitrate(4) + avgBitrate(4) all zero, then dsi.
-        let dcdPayload: [UInt8] = [0x40, 0x15] + [UInt8](repeating: 0, count: 11) + dsi
-        let dcd: [UInt8] = [0x04, UInt8(dcdPayload.count)] + dcdPayload
-        let sl: [UInt8] = [0x06, 0x01, 0x02]                               // SLConfigDescriptor
-        let esPayload: [UInt8] = [0x00, 0x00, 0x00] + dcd + sl             // ES_ID(2) + flags(1)
-        let es: [UInt8] = [0x03, UInt8(esPayload.count)] + esPayload
+        // bufferSizeDB(3) + maxBitrate(4) + avgBitrate(4), then the DSI.
+        let dcd = descriptor(0x04, [0x40, 0x15] + [UInt8](repeating: 0, count: 11) + dsi)
+        let sl = descriptor(0x06, [0x02])                                  // SLConfigDescriptor
+        // ES_Descriptor: ES_ID (2) + flags (1), then the config + SL descriptors.
+        let es = descriptor(0x03, [UInt8(esID >> 8), UInt8(esID & 0xFF), 0x00] + dcd + sl)
         return MP4Box.fullBox("esds", version: 0, flags: 0, es)
     }
 
