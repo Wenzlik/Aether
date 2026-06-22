@@ -43,7 +43,7 @@ struct MacSearchResults: View {
                     LazyVGrid(columns: columns, spacing: 24) {
                         ForEach(results) { item in
                             if let base = item.preferredSource?.item ?? item.sources.first?.item {
-                                NavigationLink(value: base) { MacPoster(item: item) }
+                                NavigationLink(value: item) { MacPoster(item: item) }
                                     .buttonStyle(.plain)
                                     .contextMenu {
                                         Button { Task { await session.play(base) } } label: {

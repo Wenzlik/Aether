@@ -36,7 +36,13 @@ final class MpvClient {
         guard let handle else { return }
         // Use the render API for video output; hardware-decode via VideoToolbox.
         mpv_set_option_string(handle, "vo", "libmpv")
-        mpv_set_option_string(handle, "hwdec", "videotoolbox")
+        // `videotoolbox-copy` is the correct hwdec mode for the SW render API
+        // (`MPV_RENDER_API_TYPE_SW`): decoded frames are copied from GPU (IOSurface)
+        // to a CPU buffer that `mpv_render_context_render` can hand back to us.
+        // `videotoolbox` (non-copy) keeps frames as CVPixelBuffers on the GPU and
+        // was never intended for the SW path — newer mpv 0.41+ is strict about this
+        // and would stall instead of silently falling back to software decode.
+        mpv_set_option_string(handle, "hwdec", "videotoolbox-copy")
         // Keep the player alive at end-of-file so we can read final state and
         // the window controls don't blank out; we tear down explicitly.
         mpv_set_option_string(handle, "keep-open", "yes")
