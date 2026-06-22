@@ -795,7 +795,11 @@ private struct TrackPickerOverlay: View {
                         }
                     }
                 }
+                #if os(tvOS)
+                .listStyle(.plain)
+                #else
                 .listStyle(.insetGrouped)
+                #endif
                 .frame(maxHeight: 400)
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
