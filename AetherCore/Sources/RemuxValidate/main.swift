@@ -65,6 +65,16 @@ let playable = (try? await asset.load(.isPlayable)) ?? false
 let duration = (try? await asset.load(.duration)).map { CMTimeGetSeconds($0) } ?? -1
 print("AVFoundation: isPlayable=\(playable) duration=\(String(format: "%.2f", duration))s")
 
+// What AVPlayer's UI sees for audio/subtitle selection.
+for characteristic in [AVMediaCharacteristic.audible, .legible] {
+    if let group = try? await asset.loadMediaSelectionGroup(for: characteristic) {
+        let opts = group.options.map { "\($0.displayName) [\($0.extendedLanguageTag ?? "?")]" }
+        print("  selection \(characteristic.rawValue): \(opts.isEmpty ? "(none)" : opts.joined(separator: ", "))")
+    } else {
+        print("  selection \(characteristic.rawValue): (no group)")
+    }
+}
+
 for mediaType in [AVMediaType.video, .audio] {
     guard let track = try? await asset.loadTracks(withMediaType: mediaType).first else {
         print("  \(mediaType.rawValue): (none)")

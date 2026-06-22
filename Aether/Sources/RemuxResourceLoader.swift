@@ -80,7 +80,7 @@ final class RemuxedLocalAsset {
                 let offset = dataRequest.currentOffset
                 let length = dataRequest.requestedLength
                 serve(dataRequest)
-                Self.log.info("serve off=\(offset) len=\(length) in \(Date().timeIntervalSince(start), format: .fixed(precision: 3))s")
+                Self.log.debug("serve off=\(offset) len=\(length) in \(Date().timeIntervalSince(start), format: .fixed(precision: 3))s")
             }
             loadingRequest.finishLoading()
             return true
