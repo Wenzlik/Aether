@@ -236,7 +236,7 @@ extension DetailView {
     /// engine plays the local file fine. `nil` mediaInfo ⇒ don't restrict.
     private var forcesTranscodeDownload: Bool {
         #if os(visionOS)
-        return PlaybackEngine.engine(forContainer: current.mediaInfo?.container) == .vlc
+        return VideoEngineResolver.standard.engine(forContainer: current.mediaInfo?.container) == .vlc
         #else
         return false
         #endif

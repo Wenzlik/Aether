@@ -64,6 +64,19 @@ struct DetailView: View {
     @State private var isPlayerPresented = false
     /// Set when a local file needs the VLCKit engine (mkv etc.) instead of AVKit.
     @State private var vlcPlayback: VLCPlayback?
+    /// Set when a local MKV is played through the AVFoundation remux path (#476)
+    /// instead of VLCKit.
+    @State private var remuxPlayback: RemuxPlayback?
+    /// #476: route a local MKV through the AVFoundation remux shim (AVPlayer)
+    /// instead of VLCKit when the muxer can fully package it — H.264/HEVC video
+    /// + AAC audio, B-frames handled, validated end-to-end (plays on AVPlayer).
+    /// `RemuxedLocalAsset` returns nil for anything else (E-AC-3/DTS/exotic) so
+    /// those fall back to VLCKit.
+    /// **Off by default** until track-selection parity lands: the remuxed
+    /// player has no audio/subtitle selection yet (audio plays but isn't exposed
+    /// as a media-selection group; subtitles are dropped — #476 follow-ups). The
+    /// pipeline is fully landed and proven; flip on once selection is in.
+    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = false
     #if os(visionOS)
     /// visionOS: drives the "Continue or Start Over" prompt before entering
     /// Cinema Mode when a resume point exists.
@@ -468,6 +481,10 @@ struct DetailView: View {
             ) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
+        .fullScreenCover(item: $remuxPlayback) { playback in
+            RemuxPlayerView(remuxAsset: playback.asset) { remuxPlayback = nil }
+                .ignoresSafeArea()
+        }
         .confirmationDialog(
             "Mark as Watched?",
             isPresented: $confirmMarkWatched,
@@ -500,6 +517,13 @@ struct DetailView: View {
         let url: URL
         /// VLCKit media options (SMB credentials + caching) — empty for local files.
         var options: [String] = []
+    }
+
+    /// Identifies a local MKV played through the AVFoundation remux path (#476).
+    /// Holds the `RemuxedLocalAsset` so its resource-loader delegate stays alive.
+    private struct RemuxPlayback: Identifiable {
+        let id = UUID()
+        let asset: RemuxedLocalAsset
     }
 
     func presentPlayer(fromStart: Bool) async {
@@ -536,7 +560,16 @@ struct DetailView: View {
         // absolute path onto the current downloads dir): if it's genuinely gone,
         // fall through to streaming instead of mis-playing.
         if let localURL = downloadStatus.existingLocalURL() {
-            if PlaybackEngine.engine(for: localURL) == .vlc {
+            if VideoEngineResolver.standard.engine(for: localURL) == .vlc {
+                // #476: prefer the AVFoundation remux path for a local MKV whose
+                // codecs AVFoundation can decode (H.264/HEVC + AAC) — native
+                // transport, PiP, AirPlay, no VLCKit. `RemuxedLocalAsset` returns
+                // nil when the file isn't remuxable (DTS, exotic codecs), so we
+                // fall through to VLCKit and nothing regresses.
+                if remuxLocalMKVEnabled, let remux = RemuxedLocalAsset(fileURL: localURL) {
+                    remuxPlayback = RemuxPlayback(asset: remux)
+                    return
+                }
                 // Local file — no SMB credentials / caching options needed.
                 vlcPlayback = VLCPlayback(url: localURL)
                 return
@@ -549,7 +582,7 @@ struct DetailView: View {
         // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
-        if let rawURL = current.streamURL, PlaybackEngine.engine(for: rawURL) == .vlc {
+        if let rawURL = current.streamURL, VideoEngineResolver.standard.engine(for: rawURL) == .vlc {
             // SMB: route through the localhost HTTP range proxy (#213/#347) so
             // VLCKit / AVPlayer use clean HTTP range requests instead of the
             // slow libsmb2 path (each seek re-established an SMB session).
@@ -557,7 +590,7 @@ struct DetailView: View {
             // extension and fall through to the AVPlayer path below.
             if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
-                    if PlaybackEngine.engine(for: proxyURL) == .vlc {
+                    if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
                         // mkv / avi / ts — still needs VLCKit, but over HTTP now.
                         vlcPlayback = VLCPlayback(url: proxyURL)
                         return

@@ -23,6 +23,15 @@ let package = Package(
             swiftSettings: [
                 .enableUpcomingFeature("ExistentialAny")
             ]
+        ),
+        // Dev-only CLI (#476): remux a real `.mkv` to fMP4 and write it out so
+        // the output can be validated with ffprobe / AVFoundation off-device.
+        // Not part of the app — the iOS target depends on the library product
+        // only, so this never ships. Run: `swift run RemuxValidate in.mkv out.mp4`.
+        .executableTarget(
+            name: "RemuxValidate",
+            dependencies: ["AetherCore"],
+            path: "Sources/RemuxValidate"
         )
     ],
     swiftLanguageModes: [.v6]
