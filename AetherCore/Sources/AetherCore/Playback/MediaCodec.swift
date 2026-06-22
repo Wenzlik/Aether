@@ -22,6 +22,11 @@ public enum VideoCodec: Sendable, Equatable {
         }
     }
 
+    /// Whether the remux muxer can build a sample entry for this codec today.
+    /// For video this matches `isAVFoundationDecodable` (avc1/hvc1 from the
+    /// container's avcC/hvcC).
+    public var isRemuxPackageable: Bool { isAVFoundationDecodable }
+
     /// Map a Matroska `CodecID` (e.g. `"V_MPEG4/ISO/AVC"`) to a codec identity.
     public init(matroskaCodecID id: String) {
         switch id {
@@ -60,6 +65,16 @@ public enum AudioCodec: Sendable, Equatable {
         case .aac, .ac3, .eac3, .mp3, .alac, .pcm: return true
         case .other: return false
         }
+    }
+
+    /// Whether the remux muxer can build a sample entry for this codec **today**.
+    /// Only AAC (`mp4a`/`esds` from the AudioSpecificConfig) is implemented.
+    /// AC-3 / E-AC-3 are AVFoundation-decodable but need `ac-3`/`ec-3` sample
+    /// entries whose `dac3`/`dec3` boxes must be synthesised from the bitstream
+    /// (MKV carries no CodecPrivate for them) — until then a title with non-AAC
+    /// audio routes to a fallback engine rather than remuxing to silent video.
+    public var isRemuxPackageable: Bool {
+        self == .aac
     }
 
     /// Map a Matroska `CodecID` (e.g. `"A_AAC"`, `"A_AC3"`, `"A_DTS"`).

@@ -329,6 +329,18 @@ struct RemuxEngineRoutingTests {
         #expect(resolver.resolve(d) == .vlc)
     }
 
+    @Test("MKV with decodable-but-not-packageable audio (E-AC-3) falls to VLC")
+    func nonPackageableAudioToVLC() {
+        // E-AC-3 is AVFoundation-decodable, but the muxer can't build an ec-3
+        // sample entry yet — remuxing would drop the audio. Route to VLC, not
+        // to silent-video remux.
+        let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [.eac3])
+        #expect(AudioCodec.eac3.isAVFoundationDecodable)        // decodable…
+        #expect(!AudioCodec.eac3.isRemuxPackageable)            // …but not packageable yet
+        #expect(!RemuxEngine().canPlay(d))
+        #expect(resolver.resolve(d) == .vlc)
+    }
+
     @Test("MKV with unknown codecs (un-probed) stays on VLC — today's behaviour")
     func unprobedMKVtoVLC() {
         let d = MediaDescriptor(container: "mkv")   // no codecs yet

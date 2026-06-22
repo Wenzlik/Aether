@@ -31,11 +31,13 @@ public struct RemuxEngine: VideoEngine {
         let hasAudio = !descriptor.audioCodecs.isEmpty
         guard hasVideo || hasAudio else { return false }
 
-        // Every present A/V track must be Apple-decodable — otherwise remuxing
-        // would either embed an undecodable stream or silently drop the only
-        // audio. Those titles belong on Tier 2 (server transcode) or Tier 3.
-        if let video = descriptor.videoCodec, !video.isAVFoundationDecodable { return false }
-        if descriptor.audioCodecs.contains(where: { !$0.isAVFoundationDecodable }) { return false }
+        // Every present A/V track must be something the muxer can actually
+        // package — not merely something AVFoundation could decode. A title with
+        // (say) H.264 + E-AC-3 is decodable but the muxer can't build an `ec-3`
+        // sample entry yet, so remuxing it would drop the only audio and produce
+        // silent video — worse than the fallback. Those go to Tier 2/3 instead.
+        if let video = descriptor.videoCodec, !video.isRemuxPackageable { return false }
+        if descriptor.audioCodecs.contains(where: { !$0.isRemuxPackageable }) { return false }
 
         return true
     }
