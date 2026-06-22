@@ -75,8 +75,13 @@ public struct AetherDisclosureRow: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
             }
+            #if os(tvOS)
+            .padding(.vertical, AetherDesign.Spacing.l)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            #else
             .padding(.vertical, AetherDesign.Spacing.m)
             .padding(.horizontal, AetherDesign.Spacing.m)
+            #endif
             .contentShape(Rectangle())
             .aetherFocusRow()
         }

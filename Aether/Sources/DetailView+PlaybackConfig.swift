@@ -18,7 +18,8 @@ extension DetailView {
             if !current.audioTracks.isEmpty {
                 AetherDisclosureRow(
                     label: "Audio",
-                    value: current.selectedAudioTrack?.displayTitle
+                    value: current.selectedAudioTrack?.displayTitle,
+                    systemImage: "waveform"
                 ) {
                     presentedSelector = .audio
                 }
@@ -26,14 +27,16 @@ extension DetailView {
             if !current.subtitleTracks.isEmpty {
                 AetherDisclosureRow(
                     label: "Subtitles",
-                    value: current.selectedSubtitleTrack?.displayTitle ?? "Off"
+                    value: current.selectedSubtitleTrack?.displayTitle ?? "Off",
+                    systemImage: "captions.bubble"
                 ) {
                     presentedSelector = .subtitles
                 }
             }
             AetherDisclosureRow(
                 label: "Quality",
-                value: qualityRowValue
+                value: qualityRowValue,
+                systemImage: "film.stack"
             ) {
                 presentedSelector = .quality
             }

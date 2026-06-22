@@ -177,14 +177,21 @@ public struct AetherSettingsSection<Content: View>: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
             if !title.isEmpty {
-            Text(LocalizedStringKey(title))
-                .textCase(.uppercase)   // localize the key, then uppercase (#312)
-                .font(AetherDesign.Typography.caption)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
-                .tracking(0.6)
-                .padding(.horizontal, AetherDesign.Spacing.m)
+                Text(LocalizedStringKey(title))
+                    .textCase(.uppercase)   // localize the key, then uppercase (#312)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .tracking(0.6)
+                    .padding(.horizontal, AetherDesign.Spacing.m)
             }
 
+            #if os(tvOS)
+            // tvOS: bare rows — each item highlights on focus via .aetherFocusRow().
+            // No card container; a card feels like an iOS transplant on the 10-foot UI.
+            VStack(spacing: AetherDesign.Spacing.xs) {
+                content()
+            }
+            #else
             // Hairline separators between rows, inset from the leading edge — so
             // a grouped card reads like an iOS inset-grouped list instead of one
             // undivided block (the rows used to blur together). `_VariadicView`
@@ -201,6 +208,7 @@ public struct AetherSettingsSection<Content: View>: View {
                     .strokeBorder(AetherDesign.Palette.separator, lineWidth: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+            #endif
         }
     }
 }
