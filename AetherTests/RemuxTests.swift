@@ -105,3 +105,122 @@ struct EBMLReaderTests {
         #expect(r.readBytes(length: 10) == nil)
     }
 }
+
+// MARK: - Matroska EBML builder (test fixtures)
+
+/// Minimal EBML encoder for building synthetic `.mkv` byte fixtures in tests.
+private enum MKV {
+    /// Encode a length as an EBML size vint (smallest form, marker set, never
+    /// the all-ones "unknown" sentinel).
+    static func vint(_ n: Int) -> [UInt8] {
+        var length = 1
+        while UInt64(n) >= (UInt64(1) << (7 * length)) - 1 { length += 1 }
+        var out = [UInt8](repeating: 0, count: length)
+        var v = UInt64(n)
+        var i = length - 1
+        while i >= 0 { out[i] = UInt8(v & 0xFF); v >>= 8; i -= 1 }
+        out[0] |= UInt8(0x80 >> (length - 1))
+        return out
+    }
+
+    /// `id + size + payload`.
+    static func el(_ id: [UInt8], _ payload: [UInt8]) -> [UInt8] {
+        id + vint(payload.count) + payload
+    }
+
+    /// Minimal big-endian unsigned integer payload.
+    static func uint(_ v: UInt64) -> [UInt8] {
+        if v == 0 { return [0] }
+        var bytes: [UInt8] = []
+        var x = v
+        while x > 0 { bytes.insert(UInt8(x & 0xFF), at: 0); x >>= 8 }
+        return bytes
+    }
+
+    /// Big-endian 4-byte float payload.
+    static func f32(_ v: Float) -> [UInt8] {
+        withUnsafeBytes(of: v.bitPattern.bigEndian) { Array($0) }
+    }
+
+    // Canonical element IDs.
+    static let ebmlHeader: [UInt8]       = [0x1A, 0x45, 0xDF, 0xA3]
+    static let segment: [UInt8]          = [0x18, 0x53, 0x80, 0x67]
+    static let info: [UInt8]             = [0x15, 0x49, 0xA9, 0x66]
+    static let timestampScale: [UInt8]   = [0x2A, 0xD7, 0xB1]
+    static let tracks: [UInt8]           = [0x16, 0x54, 0xAE, 0x6B]
+    static let trackEntry: [UInt8]       = [0xAE]
+    static let trackNumber: [UInt8]      = [0xD7]
+    static let trackType: [UInt8]        = [0x83]
+    static let codecID: [UInt8]          = [0x86]
+    static let video: [UInt8]            = [0xE0]
+    static let pixelWidth: [UInt8]       = [0xB0]
+    static let pixelHeight: [UInt8]      = [0xBA]
+    static let audio: [UInt8]            = [0xE1]
+    static let channels: [UInt8]         = [0x9F]
+    static let samplingFrequency: [UInt8] = [0xB5]
+    static let cluster: [UInt8]          = [0x1F, 0x43, 0xB6, 0x75]
+
+    /// A complete synthetic MKV: H.264 video + AAC audio, 1ms timestamp scale,
+    /// followed by one (empty) cluster so the probe's cluster-stop is exercised.
+    static func sample() -> Data {
+        let header = el(ebmlHeader, [])
+        let infoEl = el(info, el(timestampScale, uint(1_000_000)))
+        let videoEntry = el(trackEntry,
+            el(trackNumber, uint(1)) +
+            el(trackType, uint(1)) +
+            el(codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
+            el(video, el(pixelWidth, uint(1920)) + el(pixelHeight, uint(1080))))
+        let audioEntry = el(trackEntry,
+            el(trackNumber, uint(2)) +
+            el(trackType, uint(2)) +
+            el(codecID, Array("A_AAC".utf8)) +
+            el(audio, el(channels, uint(2)) + el(samplingFrequency, f32(48_000))))
+        let tracksEl = el(tracks, videoEntry + audioEntry)
+        let clusterEl = el(cluster, [0x00])
+        let segmentEl = el(segment, infoEl + tracksEl + clusterEl)
+        return Data(header + segmentEl)
+    }
+}
+
+@Suite("AetherCore — MatroskaDemuxer probe (#476 remux)")
+struct MatroskaDemuxerTests {
+
+    @Test("probes timestamp scale + both tracks with codecs and geometry")
+    func probe() throws {
+        let seg = try MatroskaDemuxer.probe(MKV.sample())
+
+        #expect(seg.info.timestampScaleNs == 1_000_000)
+        #expect(seg.tracks.count == 2)
+
+        let video = try #require(seg.videoTracks.first)
+        #expect(video.number == 1)
+        #expect(video.type == .video)
+        #expect(video.codecID == "V_MPEG4/ISO/AVC")
+        #expect(video.pixelWidth == 1920)
+        #expect(video.pixelHeight == 1080)
+
+        let audio = try #require(seg.audioTracks.first)
+        #expect(audio.number == 2)
+        #expect(audio.type == .audio)
+        #expect(audio.codecID == "A_AAC")
+        #expect(audio.channels == 2)
+        #expect(audio.sampleRate == 48_000)
+    }
+
+    @Test("firstClusterOffset points at the cluster element header")
+    func clusterOffset() throws {
+        let data = MKV.sample()
+        let seg = try MatroskaDemuxer.probe(data)
+        let offset = try #require(seg.firstClusterOffset)
+        // Seeking there and reading an element id yields the Cluster id.
+        var reader = EBMLReader(data, offset: offset)
+        #expect(reader.readElementID() == 0x1F43B675)
+    }
+
+    @Test("non-Matroska bytes throw notMatroska, not a trap")
+    func rejectsGarbage() {
+        #expect(throws: MatroskaDemuxer.DemuxError.notMatroska) {
+            try MatroskaDemuxer.probe(Data([0x00, 0x01, 0x02, 0x03, 0x04]))
+        }
+    }
+}
