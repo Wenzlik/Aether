@@ -762,6 +762,20 @@ struct MatroskaFrameReaderTests {
         #expect(!result.frames[1].isKeyframe)   // has ReferenceBlock
     }
 
+    @Test("CRC-32 / unknown cluster children are skipped, not treated as a boundary")
+    func skipsClusterCRC() throws {
+        // ffmpeg writes a per-cluster CRC-32 (0xBF) as the first child; it must be
+        // skipped, not mistaken for the next top-level element (which would make
+        // the cluster read as empty).
+        let crc = MKV.el([0xBF], [0x12, 0x34, 0x56, 0x78])
+        let void = MKV.el([0xEC], [0x00, 0x00])
+        let block = MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 0, flags: 0x80, frame: [0xAB, 0xCD]))
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(0)) + crc + void + block)
+        let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
+        #expect(result.frames.count == 1)
+        #expect(result.frames.first?.data == [0xAB, 0xCD])
+    }
+
     @Test("readAllFrames walks consecutive clusters")
     func multipleClusters() {
         func cluster(base: UInt64, frame: [UInt8]) -> [UInt8] {

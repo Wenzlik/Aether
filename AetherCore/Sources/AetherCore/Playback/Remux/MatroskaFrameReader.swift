@@ -24,11 +24,21 @@ enum MatroskaFrameReader {
         static let prevSize: UInt32     = 0xAB
     }
 
-    /// Cluster-level child IDs. An element id *not* in this set marks the start
-    /// of the next top-level element, so the current (possibly unknown-size)
-    /// cluster ends there.
-    private static let clusterChildIDs: Set<UInt32> = [
-        ID.timestamp, ID.simpleBlock, ID.blockGroup, ID.position, ID.prevSize
+    /// Top-level Segment elements. Hitting one of these ends the current cluster
+    /// (used for unknown-size clusters, which have no length to stop at). Any
+    /// *other* unrecognised id inside a cluster — CRC-32 (`0xBF`), Void (`0xEC`),
+    /// or a future element — is skipped by size, **not** treated as a boundary.
+    /// (ffmpeg writes a per-cluster CRC-32 as the first child; treating it as a
+    /// boundary made every ffmpeg-muxed cluster read as empty.)
+    private static let topLevelSiblingIDs: Set<UInt32> = [
+        0x1F43B675,  // Cluster
+        0x1C53BB6B,  // Cues
+        0x1043A770,  // Chapters
+        0x1254C367,  // Tags
+        0x1941A469,  // Attachments
+        0x114D9B74,  // SeekHead
+        0x1549A966,  // Info
+        0x1654AE6B   // Tracks
     ]
 
     /// Parse the cluster whose element header starts at `offset`. Returns the
@@ -57,9 +67,9 @@ enum MatroskaFrameReader {
             let childStart = reader.offset
             guard let childID = reader.readElementID() else { break }
 
-            // A non-cluster-child id is the next top-level element — the cluster
-            // ends here (handles unknown-size clusters).
-            guard clusterChildIDs.contains(childID) else {
+            // The next top-level Segment element marks the end of this cluster
+            // (handles unknown-size clusters).
+            if Self.topLevelSiblingIDs.contains(childID) {
                 nextOffset = childStart
                 break
             }
@@ -78,7 +88,7 @@ enum MatroskaFrameReader {
                 frames += parseBlockGroup(&reader, end: childEnd, clusterTimestamp: clusterTimestamp)
                 reader.seek(to: childEnd)
             default:
-                reader.skip(len)   // Position / PrevSize
+                reader.skip(len)   // Position / PrevSize / CRC-32 / Void / unknown
             }
         }
 
