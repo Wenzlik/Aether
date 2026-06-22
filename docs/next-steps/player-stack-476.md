@@ -27,9 +27,16 @@ fallback: each title routes to the cheapest engine that can play it.
 - **P2 — SMB browse off VLCKit.** ✅ Dead VLCKit `SMBBrowser` removed; browsing
   is fully native (`SMBSession`/`SMBClient`). `import VLCKit` now lives in
   exactly one file (`VLCPlayerView`).
-- **P4 — Tier 1 remux shim.** ⏳ **Reordered before P3** (this doc) — building
-  the remux fallback *first* means deleting VLCKit (P3) regresses nobody. See
-  below.
+- **P4 — Tier 1 remux shim.** ⏳ **Reordered before P3** — building the remux
+  fallback *first* means deleting VLCKit (P3) regresses nobody. **AetherCore
+  pipeline complete** (pure-Swift, 46 tests): `EBMLReader` → `MatroskaDemuxer`
+  (probe) → `MatroskaFrameReader` (clusters→samples) → `RemuxEngine` (tier-1
+  routing on codec decodability) → `MP4Box`/`FragmentedMP4Writer` (ftyp/moov/
+  moof/mdat) → `MatroskaRemuxer` (end-to-end MKV→fMP4). Supports H.264/HEVC +
+  AAC; samples pass through (no transcode). **Remaining: iOS integration** —
+  `SMBRangeProxy` remux mode (serve the fMP4 over HTTP range), `DetailView`
+  async probe → fill `MediaDescriptor` codecs → route to `.remux`, and
+  on-device validation on a corpus of real rips. See below.
 - **P3 — Delete VLCKit + ship App-Store-viable cut.** After P4 lands.
 - **P5 — libmpv-LGPL port** (iOS/iPadOS full, tvOS focus-engine UI, visionOS
   windowed-fallback only — **never** the immersive/Cinema/spatial path).
