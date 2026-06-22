@@ -12,6 +12,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   engine that can play it (AVFoundation first, VLCKit as a temporary fallback).
   No user-facing change; this is the foundation for removing VLCKit — an App
   Store license risk — in favour of an AVFoundation-first stack.
+- **SMB browsing no longer touches VLCKit** (#476, P2) — removed the dead
+  `SMBBrowser` (VLCKit `VLCMedia` parse + log bridge); browsing already runs on
+  the pure-Swift `SMBSession`/`SMBClient`. `import VLCKit` is now confined to a
+  single file (`VLCPlayerView`), so deleting the engine in a later phase is a
+  one-file change.
 
 ## [0.8.2] — 2026-06-22
 
