@@ -228,6 +228,11 @@ extension DetailView {
                 .padding(.bottom, AetherDesign.Spacing.xxl)
             }
         }
+        // Cinematic backdrop is always dark; force the SwiftUI environment to
+        // dark so .ultraThinMaterial cards render as frosted glass, not white.
+        #if os(tvOS)
+        .environment(\.colorScheme, .dark)
+        #endif
     }
 
     #if os(iOS)
