@@ -4,6 +4,17 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **VLCKit playback crash** — local / SMB files that fall back to the VLCKit
+  engine (MKV, AVI, …) crashed on the first playback state change: VLCKit fires
+  its delegate off the main thread, but the controller is `@MainActor`, so the
+  Swift 6 runtime trapped (`SIGTRAP`). The delegate callbacks are now
+  `nonisolated` and hop to the main actor.
+- **Player controls never auto-hiding** — on auto-play (no tap) the VLCKit
+  player's controls stayed on top of the video indefinitely; they now fade out a
+  few seconds after playback starts and reappear on tap.
+
 ## [0.8.2] — 2026-06-22
 
 ### What's New
