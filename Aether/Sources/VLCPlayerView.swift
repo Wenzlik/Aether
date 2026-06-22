@@ -799,18 +799,30 @@ extension VLCPlaybackController: @preconcurrency VLCMediaPlayerDelegate {
     /// for SMB is typically opening → buffering → playing; a long gap before
     /// `buffering` points at SMB connect/parse, a long gap before the first
     /// frame at decode/parse.
-    func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
-        guard loggedStates.insert(newState.rawValue).inserted else { return }
+    /// **`nonisolated` + main hop is mandatory.** VLCKit fires its delegate from
+    /// its own input/event thread, but `VLCPlaybackController` is a
+    /// `UIViewController` (`@MainActor`). A `@MainActor`-isolated witness called
+    /// off-thread makes the Swift runtime trap (`swift_task_isCurrentExecutor` →
+    /// `dispatch_assert_queue_fail`, SIGTRAP) the instant VLC reports a state
+    /// change — `@preconcurrency` only silences the *compile-time* check, not the
+    /// runtime one. So hop to main before touching any actor-isolated state.
+    nonisolated func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
         let name = VLCMediaPlayerStateToString(newState)
-        Self.perfLog.log("• state=\(name, privacy: .public) @ \(self.elapsedMS(), privacy: .public)ms")
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.loggedStates.insert(newState.rawValue).inserted else { return }
+            Self.perfLog.log("• state=\(name, privacy: .public) @ \(self.elapsedMS(), privacy: .public)ms")
+        }
     }
 
     /// First time-change ≈ first decoded/presented frame — the number that
-    /// matters for "time to first frame".
-    func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        guard !firstFrameLogged else { return }
-        firstFrameLogged = true
-        Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
+    /// matters for "time to first frame". `nonisolated` for the same reason as
+    /// `mediaPlayerStateChanged` (VLC calls it off the main thread).
+    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.firstFrameLogged else { return }
+            self.firstFrameLogged = true
+            Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
+        }
     }
 }
 
