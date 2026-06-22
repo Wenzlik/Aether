@@ -563,7 +563,7 @@
       }
     },
     "Audio & Subtitles" : {
-      "comment" : "Button that opens the audio/subtitle track picker during playback\nNavigation title for the track picker sheet",
+      "comment" : "Navigation title for the track picker sheet",
       "localizations" : {
         "cs" : {
           "stringUnit" : {

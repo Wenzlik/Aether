@@ -24,19 +24,119 @@ struct AboutView: View {
     private static let unlockTapTarget = 7
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        defaultBody
+        #endif
+    }
+
+    // MARK: - tvOS layout
+
+    #if os(tvOS)
+    /// Full-screen centered layout for the 10-foot UI. No floating X button —
+    /// the remote's Back/Menu dismisses. Large wordmark, generous breathing room.
+    private var tvBody: some View {
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Wordmark — large, centered, tappable for dev mode
+                    AetherWordmark(.large)
+                        .contentShape(Rectangle())
+                        .onTapGesture { registerLogoTap() }
+                        .padding(.bottom, AetherDesign.Spacing.l)
+
+                    // Tagline
+                    Text("Personal media, beautifully played.")
+                        .font(.system(size: 34, weight: .medium, design: .default))
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, AetherDesign.Spacing.m)
+
+                    // Description
+                    Text("Aether is a native player for your own media — Plex, Jellyfin, and files on your device — built for Apple platforms with one cinematic interface across iPhone, iPad, Apple TV, and Vision Pro. No catalogue to rent, no account to sell: just your library, played well.")
+                        .font(.system(size: 26, weight: .regular))
+                        .foregroundStyle(AetherDesign.Palette.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 900)
+                        .padding(.bottom, AetherDesign.Spacing.xxl)
+
+                    // Credits — horizontal pill layout
+                    HStack(spacing: AetherDesign.Spacing.xl) {
+                        tvCreditPill(
+                            name: "Vaclav Zmrhal",
+                            role: "Creator",
+                            icon: "person.crop.circle.fill"
+                        )
+                        tvCreditPill(
+                            name: "Yana Shamruk",
+                            role: "Ideas",
+                            icon: "sparkles"
+                        )
+                    }
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+
+                    // Version + attribution
+                    VStack(spacing: AetherDesign.Spacing.xs) {
+                        Text(versionLabel)
+                            .font(.system(size: 22, weight: .regular))
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .multilineTextAlignment(.center)
+                        if developerUnlocked {
+                            Label(
+                                justUnlocked ? "Developer Mode unlocked" : "Developer Mode enabled",
+                                systemImage: "hammer.fill"
+                            )
+                            .font(.system(size: 20))
+                            .foregroundStyle(AetherDesign.Palette.accent)
+                        }
+                    }
+                    .padding(.bottom, AetherDesign.Spacing.xxl)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
+                .padding(.horizontal, 120)
+            }
+        }
+        .aetherScreenBackground()
+        .onExitCommand(perform: onClose)
+    }
+
+    private func tvCreditPill(name: String, role: LocalizedStringKey, icon: String) -> some View {
+        VStack(spacing: AetherDesign.Spacing.s) {
+            Image(systemName: icon)
+                .font(.system(size: 36))
+                .foregroundStyle(AetherDesign.Palette.accent)
+            Text(name)
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            Text(role)
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+        }
+        .frame(minWidth: 300)
+        .padding(AetherDesign.Spacing.xl)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+    #endif
+
+    // MARK: - iOS / visionOS layout
+
+    #if !os(tvOS)
+    private var defaultBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                 hero
                 authorSection
-                #if !os(tvOS)
                 linksSection
-                #endif
                 footer
             }
             .padding(AetherDesign.Spacing.l)
             .frame(maxWidth: AetherSheetLayout.maxContentWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
-            .tvOSScrollFocusable()
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
@@ -75,7 +175,6 @@ struct AboutView: View {
         }
     }
 
-    #if !os(tvOS)
     private var linksSection: some View {
         AetherSettingsSection("Links") {
             if let githubURL {
@@ -95,14 +194,12 @@ struct AboutView: View {
             }
         }
     }
-    #endif
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
             Text(versionLabel)
                 .font(AetherDesign.Typography.metadata)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
-            // Attribution for the bundled VLCKit engine (local mkv playback).
             Text("Plays non-native formats with VLCKit © VideoLAN, licensed under LGPL-2.1.")
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
@@ -114,6 +211,7 @@ struct AboutView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+    #endif
 
     private func registerLogoTap() {
         guard !developerUnlocked else { return }
