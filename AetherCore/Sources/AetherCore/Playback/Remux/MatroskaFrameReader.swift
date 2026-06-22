@@ -176,7 +176,7 @@ enum MatroskaFrameReader {
 
     /// Like `readCluster`, but returns per-frame (track, size) without reading
     /// the sample payloads.
-    static func readClusterFrameInfo(_ source: any ByteSource, at offset: Int) -> (frames: [FrameInfo], nextOffset: Int)? {
+    static func readClusterFrameInfo(_ source: any ByteSource, at offset: Int) -> (frames: [FrameInfo], timestamp: Int64, nextOffset: Int)? {
         var reader = EBMLReader(source, offset: offset)
         guard let id = reader.readElementID(), id == ID.cluster, let size = reader.readSize() else { return nil }
         let boundedEnd: Int
@@ -186,6 +186,7 @@ enum MatroskaFrameReader {
         }
 
         var frames: [FrameInfo] = []
+        var clusterTimestamp: Int64 = 0
         var nextOffset = boundedEnd
         while reader.offset < boundedEnd {
             let childStart = reader.offset
@@ -195,6 +196,10 @@ enum MatroskaFrameReader {
             let len = Int(childSize)
             let childEnd = reader.offset + len
             switch childID {
+            case ID.timestamp:
+                // The cluster's base timestamp — needed to derive each fMP4
+                // fragment's duration for the sidx (seek index).
+                clusterTimestamp = Int64(reader.readUInt(length: len) ?? 0)
             case ID.simpleBlock:
                 frames += parseBlockSizes(&reader, end: childEnd)
                 reader.seek(to: childEnd)
@@ -205,7 +210,7 @@ enum MatroskaFrameReader {
                 reader.skip(len)
             }
         }
-        return (frames, nextOffset)
+        return (frames, clusterTimestamp, nextOffset)
     }
 
     private static func parseBlockGroupSizes(_ reader: inout EBMLReader, end: Int) -> [FrameInfo] {

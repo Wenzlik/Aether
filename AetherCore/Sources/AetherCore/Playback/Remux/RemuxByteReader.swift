@@ -12,7 +12,6 @@ import Foundation
 public final class RemuxByteReader: @unchecked Sendable {
     private let remuxer: MatroskaRemuxer
     private let index: MatroskaRemuxer.StreamIndex
-    private var initSegment: [UInt8]?
     /// Small MRU cache of generated segments, keyed by sequence number. AVPlayer
     /// reads roughly forward, so a handful covers the overlap between requests.
     private var cache: [(sequence: UInt32, bytes: [UInt8])] = []
@@ -34,8 +33,7 @@ public final class RemuxByteReader: @unchecked Sendable {
         var result: [UInt8] = []
 
         if offset < index.initLength {
-            let segment = initializationSegment()
-            result += segment[offset..<min(end, index.initLength)]
+            result += index.initSegment[offset..<min(end, index.initLength)]
         }
 
         // Subtitle (WebVTT) segment region, directly after init. Empty when the
@@ -57,13 +55,6 @@ public final class RemuxByteReader: @unchecked Sendable {
             if lo < hi { result += bytes[lo..<hi] }
         }
         return result
-    }
-
-    private func initializationSegment() -> [UInt8] {
-        if let initSegment { return initSegment }
-        let segment = remuxer.initializationSegment()
-        initSegment = segment
-        return segment
     }
 
     private func segmentBytes(_ segment: MatroskaRemuxer.StreamIndex.Segment) -> [UInt8] {

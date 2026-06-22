@@ -184,7 +184,11 @@ public struct MatroskaRemuxer {
     /// are kept; the bytes are regenerated on demand from the cluster.
     public struct StreamIndex: Sendable {
         public let totalLength: Int
-        let initLength: Int
+        /// The materialised init segment (`ftyp`+`moov`+`sidx`). Stored rather
+        /// than recomputed because it carries the `sidx` seek index, which depends
+        /// on the full fragment layout discovered during the index pass.
+        let initSegment: [UInt8]
+        var initLength: Int { initSegment.count }
         /// The fully-materialised subtitle media segment (WebVTT), served from the
         /// region directly after the init segment. Empty when there are no
         /// subtitles. The A/V `segments` below start after it.
@@ -208,14 +212,16 @@ public struct MatroskaRemuxer {
     /// reads only the cluster/block structure — not the gigabytes of sample
     /// data. This is what keeps first-play off a full-file copy.
     public func buildStreamIndex() -> StreamIndex {
-        let initLength = initializationSegment().count
         let subtitle = subtitleSegment()
-        var segments: [StreamIndex.Segment] = []
-        var outputOffset = initLength + subtitle.count   // A/V follows the subtitle segment
-        var sequence: UInt32 = subtitle.isEmpty ? 1 : 2  // subtitle segment is #1
+
+        // Pass over the clusters once: record each A/V fragment's analytic size,
+        // source cluster, and base timestamp (the last is what lets us derive
+        // per-fragment durations for the sidx).
+        struct RawSegment { let clusterOffset: Int; let length: Int; let timestamp: Int64 }
+        var raw: [RawSegment] = []
         var clusterOffset = firstClusterOffset
         while let start = clusterOffset, start < source.count {
-            guard let (frames, next) = MatroskaFrameReader.readClusterFrameInfo(source, at: start),
+            guard let (frames, timestamp, next) = MatroskaFrameReader.readClusterFrameInfo(source, at: start),
                   next > start else { break }
             // Group by track in the same order mediaSegment emits trafs (only A/V
             // tracks with frames, in `mediaTracks` order) so the size matches
@@ -230,16 +236,43 @@ public struct MatroskaRemuxer {
             }
             let perTrack = mediaTracks.compactMap { byTrack[$0.trackID] }
                 .map { (sampleCount: $0.count, dataBytes: $0.bytes) }
-            let length = writer.mediaSegmentByteSize(perTrack)
             if !perTrack.isEmpty {
-                segments.append(.init(outputOffset: outputOffset, length: length,
-                                      clusterOffset: start, sequence: sequence))
-                outputOffset += length
-                sequence += 1
+                raw.append(.init(clusterOffset: start,
+                                 length: writer.mediaSegmentByteSize(perTrack),
+                                 timestamp: timestamp))
             }
             clusterOffset = next
         }
-        return StreamIndex(totalLength: outputOffset, initLength: initLength,
+
+        // sidx (seek index) over the video track: each A/V fragment's size + its
+        // duration (gap to the next fragment's timestamp; the last runs to the
+        // movie end). first_offset skips the eager subtitle segment.
+        let videoTrack = mediaTracks.first { $0.kind == .video }
+        let initSeg: [UInt8]
+        if let videoTrack, !raw.isEmpty {
+            let entries = raw.indices.map { i -> FragmentedMP4Writer.SidxEntry in
+                let next = i + 1 < raw.count ? raw[i + 1].timestamp : max(raw[i].timestamp + 1, totalDurationTicks)
+                return .init(size: raw[i].length, durationTicks: Int(max(1, next - raw[i].timestamp)))
+            }
+            let sidxBox = writer.sidx(referenceID: videoTrack.trackID, timescale: movieTimescale,
+                                      earliestPresentationTime: UInt64(max(0, raw.first?.timestamp ?? 0)),
+                                      firstOffset: UInt64(subtitle.count), entries: entries)
+            initSeg = writer.initializationSegment(appending: sidxBox)
+        } else {
+            initSeg = initializationSegment()
+        }
+
+        // Assign output offsets now the init-segment size (with sidx) is known.
+        var segments: [StreamIndex.Segment] = []
+        var outputOffset = initSeg.count + subtitle.count   // A/V follows init + subtitle
+        var sequence: UInt32 = subtitle.isEmpty ? 1 : 2      // subtitle segment is #1
+        for r in raw {
+            segments.append(.init(outputOffset: outputOffset, length: r.length,
+                                  clusterOffset: r.clusterOffset, sequence: sequence))
+            outputOffset += r.length
+            sequence += 1
+        }
+        return StreamIndex(totalLength: outputOffset, initSegment: initSeg,
                            subtitleSegment: subtitle, segments: segments)
     }
 
@@ -251,10 +284,9 @@ public struct MatroskaRemuxer {
         guard offset >= 0, offset < end else { return [] }
         var result: [UInt8] = []
 
-        // Init-segment region.
+        // Init-segment region (ftyp+moov+sidx, materialised in the index).
         if offset < index.initLength {
-            let initSegment = initializationSegment()
-            result += Array(initSegment[offset..<min(end, index.initLength)])
+            result += Array(index.initSegment[offset..<min(end, index.initLength)])
         }
 
         // Subtitle-segment region (immediately after init).

@@ -111,6 +111,45 @@ struct FragmentedMP4Writer {
         MP4Box.ftyp() + moov()
     }
 
+    /// Init segment with an extra top-level box appended after `moov` — used to
+    /// place a `sidx` (segment index) so AVPlayer can seek over the resource
+    /// loader (without it, a fragmented MP4 has no time→byte map and a seek
+    /// hangs: the scrubber moves but the frame never loads).
+    func initializationSegment(appending extra: [UInt8]) -> [UInt8] {
+        MP4Box.ftyp() + moov() + extra
+    }
+
+    /// One referenced subsegment (one `moof`+`mdat` media segment) in a `sidx`.
+    struct SidxEntry: Sendable, Equatable {
+        let size: Int           // total bytes of the moof+mdat
+        let durationTicks: Int  // subsegment duration in the reference timescale
+    }
+
+    /// SegmentIndexBox (ISO 14496-12 §8.16.3, version 0) indexing the A/V media
+    /// segments for one track. `firstOffset` is the byte gap from the end of this
+    /// box to the first referenced segment (used to skip the eager subtitle
+    /// segment that sits between the init segment and the first A/V fragment).
+    func sidx(referenceID: UInt32, timescale: UInt32, earliestPresentationTime: UInt64,
+              firstOffset: UInt64, entries: [SidxEntry]) -> [UInt8] {
+        var w = MP4ByteWriter()
+        w.u32(referenceID)
+        w.u32(timescale)
+        w.u32(UInt32(clamping: earliestPresentationTime))   // earliest_presentation_time (v0)
+        w.u32(UInt32(clamping: firstOffset))                 // first_offset (v0)
+        w.u16(0)                                             // reserved
+        w.u16(UInt16(clamping: entries.count))               // reference_count
+        for entry in entries {
+            // reference_type(1)=0 (points to media) | referenced_size(31).
+            w.u32(UInt32(clamping: entry.size) & 0x7FFF_FFFF)
+            w.u32(UInt32(clamping: entry.durationTicks))     // subsegment_duration
+            // starts_with_SAP(1)=1 | SAP_type(3)=1 | SAP_delta_time(28)=0. MKV
+            // clusters conventionally start on a keyframe, so the fragment is a
+            // valid seek point.
+            w.u32(0x9000_0000)
+        }
+        return MP4Box.fullBox("sidx", version: 0, flags: 0, w.bytes)
+    }
+
     private func moov() -> [UInt8] {
         var children: [[UInt8]] = [mvhd()]
         children += tracks.map { trak($0) }

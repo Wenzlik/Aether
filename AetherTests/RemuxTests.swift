@@ -756,6 +756,29 @@ struct MatroskaRemuxerTests {
         // The first sample's duration (40) should appear as a u32 in the trun.
         #expect(MP4Probe.contains(seg, subsequence: [0x00, 0x00, 0x00, 0x28]))   // 40
     }
+
+    @Test("the streamed init segment carries a sidx with one reference per fragment")
+    func streamIndexHasSidx() throws {
+        // Two clusters → two A/V fragments → a sidx (seek index) with two
+        // references. Without it AVPlayer can't map a seek time to a byte offset
+        // over the resource loader and playback hangs on scrub.
+        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let index = remuxer.buildStreamIndex()
+        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
+
+        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
+        let sidx = try #require(top.first { $0.type == "sidx" })
+        #expect(top.map(\.type).prefix(3) == ["ftyp", "moov", "sidx"])
+        // reference_count is a u16 at payload+22 (after version/flags, reference_ID,
+        // timescale, earliest_presentation_time, first_offset, reserved).
+        let rc = (Int(whole[sidx.payloadStart + 22]) << 8) | Int(whole[sidx.payloadStart + 23])
+        #expect(rc == index.segments.count)
+        #expect(rc == 2)
+        // No subtitles here → first_offset (payload+16, u32) is 0.
+        let firstOffset = MP4Probe.be32(whole, sidx.payloadStart + 16)
+        #expect(firstOffset == 0)
+    }
 }
 
 @Suite("AetherCore — MP4Box writer (#476 remux)")
