@@ -122,6 +122,10 @@ final class VLCPlaybackController: UIViewController {
     private var isScrubbing = false
     private var controlsVisible = true
     private var hideWorkItem: DispatchWorkItem?
+    /// Whether the first auto-hide has been armed. The controls start visible and
+    /// only the interaction handlers schedule a hide — so on auto-play (no tap)
+    /// they'd stay up forever. Arm the hide once, the moment frames start flowing.
+    private var firstAutoHideArmed = false
     private var lastAudioCount = -1
     private var lastTextCount = -1
     private var videoFillEnabled = false
@@ -266,6 +270,14 @@ final class VLCPlaybackController: UIViewController {
         let active = player.isPlaying || player.position > 0
         if active { spinner.stopAnimating() }
         else if !spinner.isAnimating { spinner.startAnimating() }
+        #if !os(tvOS)
+        // Frames are flowing — arm the one-shot initial auto-hide so the controls
+        // don't sit on top of the video forever after an untouched auto-play.
+        if active, !firstAutoHideArmed {
+            firstAutoHideArmed = true
+            scheduleAutoHide()
+        }
+        #endif
     }
 
     /// Once VLC has parsed the tracks, select the audio/subtitle matching the
