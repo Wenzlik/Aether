@@ -288,8 +288,12 @@ struct FragmentedMP4Writer {
     /// One sample (frame) in a fragment.
     struct Sample: Sendable, Equatable {
         let data: [UInt8]
-        let duration: UInt32   // in the track's timescale ticks
+        /// DTS-timeline duration (next DTS − this DTS), in track timescale ticks.
+        let duration: UInt32
         let isKeyframe: Bool
+        /// Composition offset = PTS − DTS, for B-frame reordering. Signed
+        /// (trun version 1). 0 for streams with no reordering.
+        let compositionOffset: Int32
     }
 
     /// One track's samples within a fragment, plus the decode time of its first
@@ -351,9 +355,12 @@ struct FragmentedMP4Writer {
             w.u32(UInt32(sample.data.count))
             // sync sample → sample_depends_on=2; otherwise sample_is_non_sync_sample.
             w.u32(sample.isKeyframe ? 0x0200_0000 : 0x0001_0000)
+            w.i32(sample.compositionOffset)   // PTS − DTS (B-frame reordering)
         }
-        // flags: data-offset(0x1) | sample-duration(0x100) | sample-size(0x200) | sample-flags(0x400)
-        return MP4Box.fullBox("trun", version: 0, flags: 0x00_0701, w.bytes)
+        // flags: data-offset(0x1) | sample-duration(0x100) | sample-size(0x200)
+        // | sample-flags(0x400) | sample-composition-time-offset(0x800). Version 1
+        // makes the composition offset signed.
+        return MP4Box.fullBox("trun", version: 1, flags: 0x00_0F01, w.bytes)
     }
 
     // MARK: - Helpers

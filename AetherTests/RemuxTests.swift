@@ -444,8 +444,8 @@ struct FragmentedMP4WriterTests {
     @Test("media segment is moof + mdat; mdat carries the sample bytes")
     func mediaSegmentStructure() throws {
         let samples = [
-            FragmentedMP4Writer.Sample(data: [0xA0, 0xA1, 0xA2], duration: 512, isKeyframe: true),
-            FragmentedMP4Writer.Sample(data: [0xB0, 0xB1], duration: 512, isKeyframe: false)
+            FragmentedMP4Writer.Sample(data: [0xA0, 0xA1, 0xA2], duration: 512, isKeyframe: true, compositionOffset: 0),
+            FragmentedMP4Writer.Sample(data: [0xB0, 0xB1], duration: 512, isKeyframe: false, compositionOffset: 0)
         ]
         let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
         let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
@@ -465,7 +465,7 @@ struct FragmentedMP4WriterTests {
 
     @Test("trun data_offset points exactly at the first sample byte")
     func dataOffsetResolves() {
-        let samples = [FragmentedMP4Writer.Sample(data: [0xCA, 0xFE], duration: 1000, isKeyframe: true)]
+        let samples = [FragmentedMP4Writer.Sample(data: [0xCA, 0xFE], duration: 1000, isKeyframe: true, compositionOffset: 0)]
         let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
         let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
 
@@ -597,6 +597,34 @@ struct MatroskaRemuxerTests {
             let slice = remuxer.readBytes(offset: offset, length: length, index: index)
             #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
         }
+    }
+
+    @Test("decode order is preserved (frames are NOT PTS-sorted) — B-frame fix")
+    func decodeOrderPreserved() throws {
+        // One cluster, three video frames in DECODE order with reordered PTS —
+        // the classic B-frame pattern: I@0, P@80, B@40. PTS-sorting (the old bug)
+        // would reorder to I,B,P and scramble the decoder; decode order must win.
+        let fA: [UInt8] = [0x0A, 0x0A], fB: [UInt8] = [0x0B, 0x0B], fC: [UInt8] = [0x0C, 0x0C]
+        let videoEntry = MKV.el(MKV.trackEntry,
+            MKV.el(MKV.trackNumber, MKV.uint(1)) +
+            MKV.el(MKV.trackType, MKV.uint(1)) +
+            MKV.el(MKV.codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
+            MKV.el(MKV.codecPrivate, avcConfig) +
+            MKV.el(MKV.video, MKV.el(MKV.pixelWidth, MKV.uint(640)) + MKV.el(MKV.pixelHeight, MKV.uint(360))))
+        let cluster = MKV.el(MKV.cluster,
+            MKV.el(MKV.timestamp, MKV.uint(0)) +
+            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 0,  flags: 0x80, frame: fA)) +
+            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 80, flags: 0x00, frame: fB)) +
+            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 40, flags: 0x00, frame: fC)))
+        let data = Data(MKV.el(MKV.ebmlHeader, []) + MKV.el(MKV.segment,
+            MKV.el(MKV.info, MKV.el(MKV.timestampScale, MKV.uint(1_000_000))) +
+            MKV.el(MKV.tracks, videoEntry) + cluster))
+
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let out = remuxer.remuxAll()
+        let mdat = try #require(MP4Probe.boxes(out, from: 0, to: out.count).first { $0.type == "mdat" })
+        // Decode order A,B,C — NOT the PTS-sorted A,C,B.
+        #expect(Array(out[mdat.payloadStart..<(mdat.start + mdat.size)]) == fA + fB + fC)
     }
 
     @Test("sample durations come from successive frame timestamps")

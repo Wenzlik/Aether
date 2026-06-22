@@ -134,6 +134,25 @@ public struct MatroskaRemuxer {
         return result
     }
 
+    /// Remux just the first `clusterLimit` clusters into a self-contained fMP4
+    /// (init + that many media segments). For validation / quick previews
+    /// without processing a whole multi-GB file.
+    public func remuxPrefix(clusterLimit: Int) -> [UInt8] {
+        var output = initializationSegment()
+        guard let start = firstClusterOffset else { return output }
+        var offset = start
+        var sequence: UInt32 = 1
+        var produced = 0
+        while produced < clusterLimit, offset < source.count {
+            guard let (frames, next) = MatroskaFrameReader.readCluster(source, at: offset), next > offset else { break }
+            output += mediaSegment(from: frames, sequenceNumber: sequence)
+            offset = next
+            sequence += 1
+            produced += 1
+        }
+        return output
+    }
+
     /// Build one media segment from a batch of frames (e.g. one cluster).
     func mediaSegment(from frames: [MatroskaFrame], sequenceNumber: UInt32) -> [UInt8] {
         var framesByTrack: [UInt32: [MatroskaFrame]] = [:]
@@ -145,28 +164,40 @@ public struct MatroskaRemuxer {
         var fragmentTracks: [FragmentedMP4Writer.FragmentTrack] = []
         for track in tracks {
             guard let trackFrames = framesByTrack[track.trackID], !trackFrames.isEmpty else { continue }
-            let ordered = trackFrames.sorted { $0.timestampTicks < $1.timestampTicks }
-            let samples = makeSamples(ordered)
-            let base = UInt64(max(0, ordered.first?.timestampTicks ?? 0))
+            // Keep the frames in **decode (storage) order** — Matroska stores them
+            // that way, and H.264/HEVC must be fed to the decoder in decode order.
+            // Sorting by PTS (as we did before) scrambled B-frame order and the
+            // decoder produced torn video. DTS is derived from the PTS set inside
+            // makeSamples; the fragment's decode timeline starts at the min PTS.
+            let samples = makeSamples(trackFrames)
+            let base = UInt64(max(0, trackFrames.map(\.timestampTicks).min() ?? 0))
             fragmentTracks.append(.init(trackID: track.trackID, baseDecodeTime: base, samples: samples))
         }
         return writer.mediaSegment(sequenceNumber: sequenceNumber, tracks: fragmentTracks)
     }
 
-    /// Per-sample durations from successive presentation timestamps. The last
-    /// sample reuses the previous duration (no following frame to measure
-    /// against). Frames are already in timestamp order.
+    /// Build samples from decode-order frames, deriving the DTS timeline and the
+    /// per-sample composition (PTS − DTS) offsets that B-frames require.
+    ///
+    /// DTS is the PTS set sorted ascending (a valid monotonic decode timeline
+    /// with the same frame spacing); the composition offset reinstates each
+    /// frame's actual presentation time. Durations are DTS deltas. The last
+    /// sample reuses the previous duration (no following DTS to measure against).
     private func makeSamples(_ frames: [MatroskaFrame]) -> [FragmentedMP4Writer.Sample] {
+        let pts = frames.map(\.timestampTicks)        // decode order
+        let dts = pts.sorted()                         // monotonic decode timeline
         var samples: [FragmentedMP4Writer.Sample] = []
         samples.reserveCapacity(frames.count)
         for i in frames.indices {
             let duration: UInt32
-            if i + 1 < frames.count {
-                duration = UInt32(max(0, frames[i + 1].timestampTicks - frames[i].timestampTicks))
+            if i + 1 < dts.count {
+                duration = UInt32(max(0, dts[i + 1] - dts[i]))
             } else {
                 duration = samples.last?.duration ?? 0
             }
-            samples.append(.init(data: frames[i].data, duration: duration, isKeyframe: frames[i].isKeyframe))
+            let composition = Int32(clamping: pts[i] - dts[i])
+            samples.append(.init(data: frames[i].data, duration: duration,
+                                 isKeyframe: frames[i].isKeyframe, compositionOffset: composition))
         }
         return samples
     }
