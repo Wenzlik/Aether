@@ -38,6 +38,16 @@ public final class RemuxByteReader: @unchecked Sendable {
             result += segment[offset..<min(end, index.initLength)]
         }
 
+        // Subtitle (WebVTT) segment region, directly after init. Empty when the
+        // file has no subtitles. The A/V segments below start after it.
+        let subStart = index.initLength
+        let subEnd = subStart + index.subtitleSegment.count
+        if offset < subEnd, end > subStart {
+            let lo = max(offset, subStart) - subStart
+            let hi = min(end, subEnd) - subStart
+            if lo < hi { result += index.subtitleSegment[lo..<hi] }
+        }
+
         for segment in index.segments {
             let segmentEnd = segment.outputOffset + segment.length
             guard segmentEnd > offset, segment.outputOffset < end else { continue }

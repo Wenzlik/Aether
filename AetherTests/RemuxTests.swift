@@ -1027,4 +1027,23 @@ struct WebVTTRemuxTests {
             #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
         }
     }
+
+    @Test("RemuxByteReader (the resource-loader path) serves the subtitle region")
+    func byteReaderServesSubtitles() throws {
+        // RemuxByteReader is the production reader behind RemuxResourceLoader — it
+        // must serve the eager subtitle segment, not just init + A/V (a gap there
+        // would corrupt the whole stream).
+        let data = MKV.remuxableWithSubtitles(avcConfig: avcConfig, cueText: "Salut")
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let reader = RemuxByteReader(remuxer)
+        let index = remuxer.buildStreamIndex()
+
+        #expect(reader.contentLength == index.totalLength)
+        let whole = reader.read(offset: 0, length: reader.contentLength)
+        #expect(whole.count == reader.contentLength)
+        // Byte-identical to the remuxer's own read path, and the cue is present.
+        #expect(whole == remuxer.readBytes(offset: 0, length: index.totalLength, index: index))
+        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))
+        #expect(MP4Probe.contains(whole, subsequence: Array("Salut".utf8)))
+    }
 }
