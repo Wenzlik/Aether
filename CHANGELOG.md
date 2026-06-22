@@ -4,6 +4,16 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **VLCKit playback crash** — local/SMB files that fall back to the VLCKit
+  engine (MKV, AVI, …) crashed on the first playback state change (VLCKit fires
+  its delegate off the main thread into `@MainActor` code → Swift 6 `SIGTRAP`).
+  The delegate callbacks are now `nonisolated` and hop to the main actor.
+- **VLC player controls never auto-hiding** — on auto-play the controls stayed
+  on top of the video; they now fade out a few seconds after playback starts and
+  reappear on tap.
+
 ### Changed
 
 - **Playback engine routing is now a capability-tiered seam** (#476, P1) — the
@@ -17,6 +27,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   the pure-Swift `SMBSession`/`SMBClient`. `import VLCKit` is now confined to a
   single file (`VLCPlayerView`), so deleting the engine in a later phase is a
   one-file change.
+- **Pure-Swift MKV→fMP4 remux shim landed (Tier 1, #476, P4) — off by default.**
+  A complete pure-Swift pipeline (EBML demux → cluster/frame reader → fMP4 muxer
+  with B-frame composition offsets → range-addressable streaming) plays a local
+  H.264/HEVC + AAC MKV through `AVPlayer` instead of VLCKit, validated end-to-end
+  (AVFoundation decodes video + audio). Disabled by default pending track-
+  selection parity (audio/subtitle menus) — see issue #476.
 
 ## [0.8.2] — 2026-06-22
 

@@ -69,11 +69,14 @@ struct DetailView: View {
     @State private var remuxPlayback: RemuxPlayback?
     /// #476: route a local MKV through the AVFoundation remux shim (AVPlayer)
     /// instead of VLCKit when the muxer can fully package it — H.264/HEVC video
-    /// + AAC audio, B-frames handled (decode-order + composition offsets),
-    /// validated to decode in AVFoundation. `RemuxedLocalAsset` returns nil for
-    /// anything else (E-AC-3/DTS/exotic), so those still fall back to VLCKit.
-    /// On by default; toggleable for diagnostics.
-    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = true
+    /// + AAC audio, B-frames handled, validated end-to-end (plays on AVPlayer).
+    /// `RemuxedLocalAsset` returns nil for anything else (E-AC-3/DTS/exotic) so
+    /// those fall back to VLCKit.
+    /// **Off by default** until track-selection parity lands: the remuxed
+    /// player has no audio/subtitle selection yet (audio plays but isn't exposed
+    /// as a media-selection group; subtitles are dropped — #476 follow-ups). The
+    /// pipeline is fully landed and proven; flip on once selection is in.
+    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = false
     #if os(visionOS)
     /// visionOS: drives the "Continue or Start Over" prompt before entering
     /// Cinema Mode when a resume point exists.
