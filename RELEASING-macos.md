@@ -39,7 +39,7 @@ Xcode ▸ Settings ▸ Accounts ▸ (your Apple ID) ▸ **Manage Certificates** 
 **Developer ID Application**. Confirm with:
 ```sh
 security find-identity -v -p codesigning | grep "Developer ID Application"
-# → "Developer ID Application: Vaclav Zmrhal (8PW5FWH7P2)"
+# → "Developer ID Application: Your Name (<TEAM_ID>)"
 ```
 (No provisioning profile is needed — Developer ID apps don't use one. That's also
 why the app carries **no iCloud entitlement**: iCloud is App-Store-only and can't
@@ -69,7 +69,7 @@ can't make it "disappear"), and it works headless / in CI / on a second Mac.
 [appleid.apple.com](https://appleid.apple.com) ▸ Sign-In & Security, then store it:
 ```sh
 xcrun notarytool store-credentials aether-notary \
-  --apple-id "vasek@zmrhal.cz" --team-id 8PW5FWH7P2
+  --apple-id "<your-apple-id>" --team-id "<TEAM_ID>"
 # (omit --password and it prompts, so it stays out of shell history)
 ```
 The profile name **`aether-notary`** is what `package-mac.sh` defaults to. ⚠️ This
@@ -78,18 +78,18 @@ profile's keychain item is ACL-bound to the `notarytool` binary, so a new
 you must re-run `store-credentials`. Prefer (a) to avoid this entirely.
 
 ### 4. NAS access for deploy (SSH key)
-The website lives on the Synology at `192.168.1.10` (SSH **port 5002**, user
-`venda`), web root `/volume1/web/aether`. **You must be on its LAN — via VPN if
-you're off-site.**
+The website lives on the Synology NAS (SSH user + host + port configured via env
+vars — see `deploy-dmg.sh` header), web root on the `web` share. **You must be
+on its LAN — via VPN if you're off-site.**
 
 Either copy an existing key, or create one and install it (password auth, once):
 ```sh
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/aether_synology -C "aether-deploy"
-# install the public key (you'll be asked for venda's password once):
-ssh -p 5002 -o PubkeyAuthentication=no venda@192.168.1.10 \
+# install the public key (you'll be asked for the NAS user's password once):
+ssh -p "$NAS_PORT" -o PubkeyAuthentication=no "$NAS_USER@$NAS_HOST" \
   "umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys" < ~/.ssh/aether_synology.pub
 # verify keyless:
-ssh -i ~/.ssh/aether_synology -p 5002 venda@192.168.1.10 'echo OK'
+ssh -i ~/.ssh/aether_synology -p "$NAS_PORT" "$NAS_USER@$NAS_HOST" 'echo OK'
 ```
 `deploy-dmg.sh` uses `~/.ssh/aether_synology` by default (override with `SSH_KEY`,
 `NAS_HOST`, `NAS_PORT`, `NAS_USER`, `WEB_ROOT`, `SITE_URL`). It uploads by piping
@@ -229,7 +229,7 @@ baked-in `SUPublicEDKey`, installs it, and relaunches.
 
 - Served from the Synology `web` share, vhost root = `web/aether` → `aetherplayer.com`.
 - **The entire site is a Next.js app**, repo **`aether_web`** at
-  `/Users/vasek/Git/aether_web` (Wenzlik/aether_web). It's a static export
+  `~/Git/aether_web` (Wenzlik/aether_web). It's a static export
   (`output: "export"`) deployed with `npm run deploy`. **Clone that repo on any
   machine you publish from** — the whole site, including `/download/`, is
   generated from it; do **not** hand-edit the deployed HTML (React re-renders it
