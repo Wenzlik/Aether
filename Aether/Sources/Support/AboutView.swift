@@ -71,7 +71,7 @@ struct AboutView: View {
     private var authorSection: some View {
         AetherSettingsSection("Credits") {
             AetherSettingsRow(label: "Vaclav Zmrhal", systemImage: "person.crop.circle.fill", value: "Creator")
-            AetherSettingsRow(label: "Yana Shamruk", systemImage: "sparkles", value: "Design & Ideas")
+            AetherSettingsRow(label: "Yana Shamruk", systemImage: "sparkles", value: "Ideas")
         }
     }
 
