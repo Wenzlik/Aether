@@ -40,7 +40,19 @@ fallback: each title routes to the cheapest engine that can play it.
 - **P3 — Delete VLCKit + ship App-Store-viable cut.** After P4 lands.
 - **P5 — libmpv-LGPL port** (iOS/iPadOS full, tvOS focus-engine UI, visionOS
   windowed-fallback only — **never** the immersive/Cinema/spatial path).
-- **P6 — Subtitle conversion / burn-in** for Tier 1.
+- **P6 — Subtitle conversion.** ⏳ SRT (`S_TEXT/UTF8`) tracks are repackaged as
+  a WebVTT-in-ISOBMFF (`wvtt`) track so AVPlayer shows a subtitle menu. Pure
+  Swift, no burn-in. **Design:** subtitles ride in ONE eager media segment right
+  after the init segment (their cues span the whole movie, the data is tiny),
+  *not* fragmented per cluster — per-cluster WebVTT would break the analytic
+  stream index (segment sizes come from frame bytes alone, but a WebVTT sample's
+  size depends on its cue text + `vtte` gap-fillers). `WebVTTSampleBuilder` tiles
+  the timeline with cue (`vttc`→`payl`) and empty (`vtte`) samples; SRT is
+  non-overlapping, overlaps clamp. Image subs (PGS/VobSub) + ASS are dropped (not
+  remuxed) — playback still works. Unit-tested end to end (`RemuxByteReader`, the
+  resource-loader path, serves it too). **Remaining gate: on-device/sim
+  validation on a real SRT-bearing rip** (RemuxValidate already reports the
+  `.legible` selection group) before flipping `player.remuxLocalMKV` ON.
 
 ---
 
