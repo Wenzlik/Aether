@@ -34,6 +34,12 @@ struct PlayerView: View {
     @State private var viewModel: PlayerStateViewModel
     @State private var showFailureDetails = false
     @State private var showTrackPicker = false
+    /// Mirrors AVKit's transport chrome visibility so our waveform button
+    /// shows and hides in sync. Starts true; auto-hides 4 s after the last
+    /// tap (same rhythm as AVKit's own timer). Cancelled while the track
+    /// picker overlay is open so the button doesn't vanish mid-interaction.
+    @State private var controlsVisible = true
+    @State private var hideControlsTask: Task<Void, Never>?
     /// Foreground/background — drives suspending the UI-refresh poll while
     /// backgrounded (audio keeps playing; we just stop the 500 ms CPU churn).
     /// The app session — marks the finished item watched on **every** connected
@@ -124,6 +130,7 @@ struct PlayerView: View {
                 // never steals touches from AVKit's transport (scrubber/menus).
                 .offset(y: dragOffset)
                 .simultaneousGesture(swipeDownDismissGesture)
+                .simultaneousGesture(TapGesture().onEnded { flashControls() })
                 .animation(reduceMotion ? nil : .interactiveSpring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
                 #endif
             } else {
@@ -165,15 +172,29 @@ struct PlayerView: View {
 
             trackPickerButton
                 .zIndex(27)
-        }
-        .sheet(isPresented: $showTrackPicker) {
-            TrackPickerSheet(item: viewModel.state.item) { audio, subtitle in
-                // Sheet dismisses itself via @Environment(\.dismiss); just
-                // trigger the session switch here.
-                Task {
-                    if let audio { await viewModel.switchAudioTrack(audio) }
-                    if let subtitle { await viewModel.switchSubtitleTrack(subtitle.value) }
-                }
+
+            // Track picker: rendered as a ZStack overlay instead of a .sheet
+            // so it never triggers a UIKit presentation on the view that hosts
+            // AVPlayerViewController — a modal presentation inside a fullscreen
+            // player causes the player to be re-created on dismiss.
+            if showTrackPicker {
+                TrackPickerOverlay(
+                    item: viewModel.state.item,
+                    onPick: { audio, subtitle in
+                        showTrackPicker = false
+                        flashControls()
+                        Task {
+                            if let audio { await viewModel.switchAudioTrack(audio) }
+                            if let subtitle { await viewModel.switchSubtitleTrack(subtitle.value) }
+                        }
+                    },
+                    onDismiss: {
+                        showTrackPicker = false
+                        flashControls()
+                    }
+                )
+                .zIndex(28)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .onChange(of: viewModel.currentSeconds) { _, _ in
@@ -625,7 +646,8 @@ struct PlayerView: View {
                 HStack {
                     Spacer()
                     Button {
-                        showTrackPicker = true
+                        hideControlsTask?.cancel()
+                        withAnimation { showTrackPicker = true }
                     } label: {
                         Image(systemName: "waveform")
                             .font(.system(size: 15, weight: .semibold))
@@ -642,41 +664,105 @@ struct PlayerView: View {
                 }
                 Spacer()
             }
+            .opacity(controlsVisible ? 1 : 0)
+            .animation(.easeInOut(duration: 0.25), value: controlsVisible)
         }
         #endif
     }
+
+    /// Show the waveform button and schedule auto-hide after 4 seconds,
+    /// mirroring AVKit's transport chrome visibility rhythm.
+    private func flashControls() {
+        hideControlsTask?.cancel()
+        controlsVisible = true
+        hideControlsTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation { controlsVisible = false }
+        }
+    }
 }
 
-// MARK: - Track picker sheet
+// MARK: - Track picker overlay
 
-/// Sheet that lets the user pick an audio track or subtitle during playback.
-/// On selection it calls `onPick` and dismisses — the caller re-starts (or
-/// live-switches) the appropriate track in the session.
-private struct TrackPickerSheet: View {
+/// Full-ZStack overlay (not a UIKit sheet) that lets the user pick an audio
+/// track or subtitle during playback. Rendered inside `PlayerView`'s own
+/// ZStack so it never triggers a UIKit modal presentation — which would cause
+/// `AVPlayerViewController` to be re-created on dismiss.
+private struct TrackPickerOverlay: View {
     let item: MediaItem?
-    /// Called when the user taps a row. Exactly one of `audio` / `subtitle` is
-    /// non-nil. `subtitle.value == nil` means "turn subtitles off".
-    let onPick: (_ audio: MediaAudioTrack?, _ subtitle: SubtitleChoice?) -> Void
-
     struct SubtitleChoice { let value: MediaSubtitleTrack? }
-
-    @Environment(\.dismiss) private var dismiss
+    let onPick: (_ audio: MediaAudioTrack?, _ subtitle: SubtitleChoice?) -> Void
+    let onDismiss: () -> Void
 
     var body: some View {
-        NavigationStack {
-            List {
-                if let item, !item.audioTracks.isEmpty {
-                    Section {
-                        ForEach(item.audioTracks) { track in
+        ZStack(alignment: .bottom) {
+            // Scrim — tapping outside dismisses
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+
+            // Panel
+            VStack(spacing: 0) {
+                // Drag handle
+                Capsule()
+                    .fill(Color.secondary.opacity(0.5))
+                    .frame(width: 36, height: 4)
+                    .padding(.top, AetherDesign.Spacing.s)
+                    .padding(.bottom, AetherDesign.Spacing.xs)
+
+                HStack {
+                    Text(String(localized: "Audio & Subtitles",
+                                comment: "Navigation title for the track picker sheet"))
+                        .font(AetherDesign.Typography.headline)
+                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    Spacer()
+                    Button(String(localized: "Done",
+                                  comment: "Dismiss the track picker sheet")) {
+                        onDismiss()
+                    }
+                    .foregroundStyle(AetherDesign.Palette.accent)
+                }
+                .padding(.horizontal, AetherDesign.Spacing.m)
+                .padding(.bottom, AetherDesign.Spacing.s)
+
+                Divider()
+
+                List {
+                    if let item, !item.audioTracks.isEmpty {
+                        Section {
+                            ForEach(item.audioTracks) { track in
+                                Button {
+                                    onPick(track, nil)
+                                } label: {
+                                    Label {
+                                        Text(track.displayTitle)
+                                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                    } icon: {
+                                        if track.id == item.selectedAudioTrackID {
+                                            Image(systemName: "checkmark")
+                                                .foregroundStyle(AetherDesign.Palette.accent)
+                                        } else {
+                                            Color.clear.frame(width: 14)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } header: {
+                            Text("Audio")
+                        }
+                    }
+
+                    if let item, !item.subtitleTracks.isEmpty {
+                        Section {
                             Button {
-                                onPick(track, nil)
-                                dismiss()
+                                onPick(nil, SubtitleChoice(value: nil))
                             } label: {
                                 Label {
-                                    Text(track.displayTitle)
-                                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                    Text("Off").foregroundStyle(AetherDesign.Palette.textPrimary)
                                 } icon: {
-                                    if track.id == item.selectedAudioTrackID {
+                                    if item.selectedSubtitleTrackID == nil {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(AetherDesign.Palette.accent)
                                     } else {
@@ -685,68 +771,36 @@ private struct TrackPickerSheet: View {
                                 }
                             }
                             .buttonStyle(.plain)
-                        }
-                    } header: {
-                        Text("Audio")
-                    }
-                }
 
-                if let item, !item.subtitleTracks.isEmpty {
-                    Section {
-                        Button {
-                            onPick(nil, SubtitleChoice(value: nil))
-                            dismiss()
-                        } label: {
-                            Label {
-                                Text("Off").foregroundStyle(AetherDesign.Palette.textPrimary)
-                            } icon: {
-                                if item.selectedSubtitleTrackID == nil {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(AetherDesign.Palette.accent)
-                                } else {
-                                    Color.clear.frame(width: 14)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        ForEach(item.subtitleTracks) { track in
-                            Button {
-                                onPick(nil, SubtitleChoice(value: track))
-                                dismiss()
-                            } label: {
-                                Label {
-                                    Text(track.displayTitle)
-                                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                                } icon: {
-                                    if track.id == item.selectedSubtitleTrackID {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(AetherDesign.Palette.accent)
-                                    } else {
-                                        Color.clear.frame(width: 14)
+                            ForEach(item.subtitleTracks) { track in
+                                Button {
+                                    onPick(nil, SubtitleChoice(value: track))
+                                } label: {
+                                    Label {
+                                        Text(track.displayTitle)
+                                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                    } icon: {
+                                        if track.id == item.selectedSubtitleTrackID {
+                                            Image(systemName: "checkmark")
+                                                .foregroundStyle(AetherDesign.Palette.accent)
+                                        } else {
+                                            Color.clear.frame(width: 14)
+                                        }
                                     }
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                        } header: {
+                            Text("Subtitles")
                         }
-                    } header: {
-                        Text("Subtitles")
                     }
                 }
+                .listStyle(.insetGrouped)
+                .frame(maxHeight: 400)
             }
-            .navigationTitle(String(localized: "Audio & Subtitles",
-                                    comment: "Navigation title for the track picker sheet"))
-            .navigationBarTitleDisplayMode(.inline)
-            #if os(iOS)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Done", comment: "Dismiss the track picker sheet")) {
-                        dismiss()
-                    }
-                }
-            }
-            #endif
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, AetherDesign.Spacing.s)
+            .padding(.bottom, AetherDesign.Spacing.s)
         }
-        .presentationDetents([.medium, .large])
     }
 }
