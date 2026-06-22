@@ -27,6 +27,20 @@ fallback: each title routes to the cheapest engine that can play it.
 - **P2 — SMB browse off VLCKit.** ✅ Dead VLCKit `SMBBrowser` removed; browsing
   is fully native (`SMBSession`/`SMBClient`). `import VLCKit` now lives in
   exactly one file (`VLCPlayerView`).
+> **Update (2026-06-23) — progressive MP4, not fragmented.** The remux output
+> shipped as fragmented MP4 (moof/mdat per cluster). It plays, but **AVPlayer
+> won't seek a fragmented MP4 over `AVAssetResourceLoader`** — the loader log
+> showed it never requests the seek target's bytes, so a scrub hangs (scrubber
+> moves, frame frozen). Adding a `sidx` didn't help. Fixed by switching the
+> served output to a **progressive** MP4: one `moov` with full sample tables
+> (`stts`/`ctts`/`stss`/`stsc`/`stsz`/`co64`) → AVPlayer maps any seek time to an
+> exact byte range. `ProgressiveMP4Writer` + `ProgressiveRemuxReader` +
+> `MatroskaFrameReader.readSampleIndex` (one no-copy metadata pass); the loader
+> uses `MatroskaRemuxer.progressiveReader()`. Seek **verified on-device (sim)**:
+> far-offset byte-range requests (~3.4 GB into the file) now arrive and serve in
+> ~8 ms. The fragmented writer/sidx path remains (tests still green) but is no
+> longer the production path — candidate for removal.
+
 - **P4 — Tier 1 remux shim.** ⏳ **Reordered before P3** — building the remux
   fallback *first* means deleting VLCKit (P3) regresses nobody. **AetherCore
   pipeline complete** (pure-Swift, 46 tests): `EBMLReader` → `MatroskaDemuxer`
