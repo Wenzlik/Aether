@@ -115,7 +115,7 @@ struct FragmentedMP4Writer {
         w.u32(0)                 // creation_time
         w.u32(0)                 // modification_time
         w.u32(1000)              // timescale (movie)
-        w.u32(0)                 // duration (0 = unknown / fragmented)
+        w.u32(movieDurationTicks)   // total duration (VOD; 0 would signal "live")
         w.u32(0x0001_0000)       // rate 1.0
         w.u16(0x0100)            // volume 1.0
         w.u16(0)                 // reserved
@@ -135,7 +135,7 @@ struct FragmentedMP4Writer {
         w.u32(0); w.u32(0)       // creation / modification
         w.u32(track.trackID)
         w.u32(0)                 // reserved
-        w.u32(0)                 // duration
+        w.u32(movieDurationTicks)   // total duration (movie timescale)
         w.u32(0); w.u32(0)       // reserved
         w.u16(0)                 // layer
         // alternate_group puts tracks of the same media type into a selectable
@@ -160,7 +160,8 @@ struct FragmentedMP4Writer {
         var w = MP4ByteWriter()
         w.u32(0); w.u32(0)       // creation / modification
         w.u32(track.timescale)
-        w.u32(0)                 // duration
+        // Total duration in this track's timescale (movie ticks → track ticks).
+        w.u32(UInt32(clamping: Int(movieDurationTicks) * Int(track.timescale) / 1000))
         w.u16(packedLanguage(track.language))
         w.u16(0)                 // pre_defined
         return MP4Box.fullBox("mdhd", version: 0, flags: 0, w.bytes)
