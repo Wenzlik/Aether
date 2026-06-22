@@ -311,6 +311,110 @@ private extension AudioCodec {
     static var dtsLike: AudioCodec { .other("A_DTS") }
 }
 
+/// Minimal MP4 box-tree walker for asserting structure in tests.
+private enum MP4Probe {
+    struct Box { let type: String; let start: Int; let size: Int; var payloadStart: Int { start + 8 } }
+
+    static func be32(_ b: [UInt8], _ i: Int) -> Int {
+        (Int(b[i]) << 24) | (Int(b[i+1]) << 16) | (Int(b[i+2]) << 8) | Int(b[i+3])
+    }
+
+    /// Top-level boxes in `[from, to)`.
+    static func boxes(_ b: [UInt8], from: Int, to: Int) -> [Box] {
+        var out: [Box] = []
+        var i = from
+        while i + 8 <= to {
+            let size = be32(b, i)
+            guard size >= 8, i + size <= to else { break }
+            let type = String(decoding: b[(i+4)..<(i+8)], as: UTF8.self)
+            out.append(Box(type: type, start: i, size: size))
+            i += size
+        }
+        return out
+    }
+
+    /// Does the fourCC appear anywhere in the byte range?
+    static func contains(_ b: [UInt8], fourCC: String) -> Bool {
+        let needle = Array(fourCC.utf8)
+        guard b.count >= needle.count else { return false }
+        for i in 0...(b.count - needle.count) where Array(b[i..<(i+needle.count)]) == needle { return true }
+        return false
+    }
+
+    static func contains(_ b: [UInt8], subsequence: [UInt8]) -> Bool {
+        guard !subsequence.isEmpty, b.count >= subsequence.count else { return false }
+        for i in 0...(b.count - subsequence.count) where Array(b[i..<(i+subsequence.count)]) == subsequence { return true }
+        return false
+    }
+}
+
+@Suite("AetherCore — FragmentedMP4Writer init segment (#476 remux)")
+struct FragmentedMP4WriterTests {
+
+    private let avcConfig: [UInt8] = [0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0x00, 0x04, 0x67, 0x42]
+    private let aacConfig: [UInt8] = [0x12, 0x10]   // AAC-LC, 48 kHz, stereo
+
+    private func writer() -> FragmentedMP4Writer {
+        let video = RemuxTrack(trackID: 1, kind: .video, timescale: 1000,
+                               videoCodec: .h264, codecConfig: avcConfig,
+                               width: 1920, height: 1080)
+        let audio = RemuxTrack(trackID: 2, kind: .audio, timescale: 1000,
+                               audioCodec: .aac, codecConfig: aacConfig,
+                               channels: 2, sampleRate: 48_000)
+        return FragmentedMP4Writer(tracks: [video, audio])
+    }
+
+    @Test("init segment is ftyp + moov at the top level")
+    func topLevel() {
+        let seg = writer().initializationSegment()
+        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
+        #expect(top.map(\.type) == ["ftyp", "moov"])
+        // Every box's size fits exactly within the buffer.
+        #expect(top.last.map { $0.start + $0.size } == seg.count)
+    }
+
+    @Test("moov contains mvhd, one trak per track, and mvex")
+    func moovChildren() throws {
+        let seg = writer().initializationSegment()
+        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
+        let moov = try #require(top.first { $0.type == "moov" })
+        let children = MP4Probe.boxes(seg, from: moov.payloadStart, to: moov.start + moov.size)
+        #expect(children.filter { $0.type == "trak" }.count == 2)
+        #expect(children.contains { $0.type == "mvhd" })
+        #expect(children.contains { $0.type == "mvex" })
+    }
+
+    @Test("sample entries embed avc1/avcC and mp4a/esds with the codec configs")
+    func sampleEntries() {
+        let seg = writer().initializationSegment()
+        #expect(MP4Probe.contains(seg, fourCC: "avc1"))
+        #expect(MP4Probe.contains(seg, fourCC: "avcC"))
+        #expect(MP4Probe.contains(seg, fourCC: "mp4a"))
+        #expect(MP4Probe.contains(seg, fourCC: "esds"))
+        #expect(MP4Probe.contains(seg, fourCC: "trex"))
+        // The codec configs we passed are actually embedded.
+        #expect(MP4Probe.contains(seg, subsequence: avcConfig))
+        #expect(MP4Probe.contains(seg, subsequence: aacConfig))
+    }
+
+    @Test("RemuxTrack(matroska:) builds H.264/AAC, rejects DTS + subtitles")
+    func trackFactory() {
+        let h264 = MatroskaTrack(number: 1, type: .video, codecID: "V_MPEG4/ISO/AVC",
+                                 codecPrivate: avcConfig, pixelWidth: 1280, pixelHeight: 720)
+        let aac = MatroskaTrack(number: 2, type: .audio, codecID: "A_AAC",
+                                codecPrivate: aacConfig, channels: 2, sampleRate: 44_100)
+        let dts = MatroskaTrack(number: 3, type: .audio, codecID: "A_DTS", codecPrivate: [0x00])
+        let subs = MatroskaTrack(number: 4, type: .subtitle, codecID: "S_TEXT/UTF8")
+        let noConfig = MatroskaTrack(number: 5, type: .video, codecID: "V_MPEG4/ISO/AVC", codecPrivate: nil)
+
+        #expect(RemuxTrack(matroska: h264, trackID: 1, timescaleTicksPerSecond: 1000)?.kind == .video)
+        #expect(RemuxTrack(matroska: aac, trackID: 2, timescaleTicksPerSecond: 1000)?.kind == .audio)
+        #expect(RemuxTrack(matroska: dts, trackID: 3, timescaleTicksPerSecond: 1000) == nil)
+        #expect(RemuxTrack(matroska: subs, trackID: 4, timescaleTicksPerSecond: 1000) == nil)
+        #expect(RemuxTrack(matroska: noConfig, trackID: 5, timescaleTicksPerSecond: 1000) == nil)
+    }
+}
+
 @Suite("AetherCore — MP4Box writer (#476 remux)")
 struct MP4BoxTests {
 
