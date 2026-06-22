@@ -52,6 +52,22 @@ fallback: each title routes to the cheapest engine that can play it.
   async probe → fill `MediaDescriptor` codecs → route to `.remux`, and
   on-device validation on a corpus of real rips. See below.
 - **P3 — Delete VLCKit + ship App-Store-viable cut.** After P4 lands.
+  **Blocked on remux entry-point coverage (follow-up, 2026-06-23):** the remux
+  (`RemuxedLocalAsset`) is currently wired into a *single* playback entry point —
+  `DetailView`'s windowed `fullScreenCover` (`RemuxPlayerView`). That path is
+  cross-platform (no `#if os`), so a downloaded local H.264/HEVC+AAC MKV remuxes
+  on **iOS, tvOS, and visionOS-windowed** alike (native AVKit transport, seek,
+  audio + SRT-subtitle menus). But the **visionOS Cinema / immersive** path goes
+  through `cinema.present(item, source)` → the docked `PlayerView`, which does
+  **not** use `RemuxedLocalAsset` — so a local MKV in the Dark Theater still
+  falls back to VLCKit (or streaming). `PlayerView`/`PlayerStateViewModel` never
+  reference the remux. **Before VLCKit can be deleted, the local-file resolution
+  (`existingLocalURL()` → RemuxedLocalAsset vs VLC vs server stream) must move
+  into one shared place — ideally behind `VideoEngineResolver` / the player view
+  model — that every entry point uses (DetailView windowed ✔, `PlayerView`,
+  visionOS Cinema).** Otherwise the immersive theater keeps VLCKit alive.
+  Windowed remux on tvOS + visionOS is also not yet device-verified (only iOS sim
+  was).
 - **P5 — libmpv-LGPL port** (iOS/iPadOS full, tvOS focus-engine UI, visionOS
   windowed-fallback only — **never** the immersive/Cinema/spatial path).
 - **P6 — Subtitle conversion.** ⏳ SRT (`S_TEXT/UTF8`) tracks are repackaged as
