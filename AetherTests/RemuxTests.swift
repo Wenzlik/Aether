@@ -522,6 +522,34 @@ struct FragmentedMP4WriterTests {
     }
 }
 
+@Suite("AetherCore — WebVTTConverter (#476 P6 subtitles)")
+struct WebVTTConverterTests {
+
+    @Test("plain SRT text passes through, trimmed")
+    func plain() {
+        #expect(WebVTTConverter.payload(fromSRT: "Hello world\n") == "Hello world")
+        #expect(WebVTTConverter.payload(fromSRT: "Line 1\nLine 2") == "Line 1\nLine 2")
+    }
+
+    @Test("italic/bold/underline tags are kept (valid in WebVTT)")
+    func keepsBasicTags() {
+        #expect(WebVTTConverter.payload(fromSRT: "<i>tilt</i>") == "<i>tilt</i>")
+        #expect(WebVTTConverter.payload(fromSRT: "<b>x</b> <u>y</u>") == "<b>x</b> <u>y</u>")
+    }
+
+    @Test("font tags are stripped, inner text kept")
+    func stripsFont() {
+        #expect(WebVTTConverter.payload(fromSRT: "<font color=\"#FFFF00\">Yellow</font>") == "Yellow")
+        #expect(WebVTTConverter.payload(fromSRT: "a <font face=\"x\">b</font> c") == "a b c")
+    }
+
+    @Test("CRLF normalised and a literal --> escaped")
+    func normalises() {
+        #expect(WebVTTConverter.payload(fromSRT: "a\r\nb") == "a\nb")
+        #expect(WebVTTConverter.payload(fromSRT: "5 --> 6") == "5 → 6")
+    }
+}
+
 @Suite("AetherCore — ByteSource (#476 remux)")
 struct ByteSourceTests {
 
