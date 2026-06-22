@@ -1070,3 +1070,61 @@ struct WebVTTRemuxTests {
         #expect(MP4Probe.contains(whole, subsequence: Array("Salut".utf8)))
     }
 }
+
+@Suite("AetherCore — Progressive MP4 remux (#476 seekable output)")
+struct ProgressiveRemuxTests {
+
+    private let avcConfig: [UInt8] = [0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0xBE, 0xEF]
+
+    @Test("progressive output is ftyp+moov+mdat with full sample tables")
+    func progressiveStructure() throws {
+        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let reader = remuxer.progressiveReader()
+        let whole = reader.read(offset: 0, length: reader.contentLength)
+        #expect(whole.count == reader.contentLength)
+
+        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
+        #expect(top.map(\.type) == ["ftyp", "moov", "mdat"])
+        #expect(top.last.map { $0.start + $0.size } == whole.count)
+        // The seek tables a progressive MP4 needs (no moof/sidx).
+        #expect(MP4Probe.contains(whole, fourCC: "stts"))   // time-to-sample
+        #expect(MP4Probe.contains(whole, fourCC: "stsz"))   // sample sizes
+        #expect(MP4Probe.contains(whole, fourCC: "stsc"))   // sample-to-chunk
+        #expect(MP4Probe.contains(whole, fourCC: "co64"))   // chunk byte offsets
+        #expect(!MP4Probe.contains(whole, fourCC: "moof"))  // NOT fragmented
+        // Both frames' bytes land in mdat, in order.
+        let mdat = try #require(top.first { $0.type == "mdat" })
+        let payload = Array(whole[mdat.payloadStart..<(mdat.start + mdat.size)])
+        #expect(payload == [0xC0, 0xC1] + [0xD0, 0xD1, 0xD2])
+    }
+
+    @Test("partial range reads match the whole progressive stream")
+    func progressivePartialReads() throws {
+        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let reader = remuxer.progressiveReader()
+        let whole = reader.read(offset: 0, length: reader.contentLength)
+        for (offset, length) in [(0, 12), (8, whole.count - 8), (whole.count - 4, 4), (whole.count - 5, 5)] {
+            let slice = reader.read(offset: offset, length: length)
+            #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
+        }
+    }
+
+    @Test("progressive output carries the WebVTT subtitle track + cue text")
+    func progressiveSubtitles() throws {
+        let data = MKV.remuxableWithSubtitles(avcConfig: avcConfig, cueText: "Ahoj")
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let reader = remuxer.progressiveReader()
+        let whole = reader.read(offset: 0, length: reader.contentLength)
+
+        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))
+        #expect(MP4Probe.contains(whole, fourCC: "co64"))
+        #expect(MP4Probe.contains(whole, subsequence: Array("Ahoj".utf8)))
+        // Two tracks (video + subtitle) → two trak boxes.
+        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
+        let moov = try #require(top.first { $0.type == "moov" })
+        let children = MP4Probe.boxes(whole, from: moov.payloadStart, to: moov.start + moov.size)
+        #expect(children.filter { $0.type == "trak" }.count == 2)
+    }
+}

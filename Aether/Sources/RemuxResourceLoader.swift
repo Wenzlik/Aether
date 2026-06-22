@@ -54,7 +54,10 @@ final class RemuxedLocalAsset {
         /// Built lazily off the main-actor construction path; the serial loader
         /// queue makes the lazy init race-free.
         private let remuxer: MatroskaRemuxer
-        private lazy var reader = RemuxByteReader(remuxer)
+        /// Progressive (non-fragmented) reader: AVPlayer seeks it over the loader
+        /// because its `moov` carries exact per-sample byte offsets. A fragmented
+        /// stream hangs on scrub (no time→byte map AVPlayer trusts).
+        private lazy var reader = remuxer.progressiveReader()
         private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "remux.loader")
 
         /// Cap per `respond(with:)` so an open-ended request doesn't allocate the

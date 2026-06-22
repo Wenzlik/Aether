@@ -175,6 +175,115 @@ public struct MatroskaRemuxer {
         return cues
     }
 
+    // MARK: - Progressive (non-fragmented) output
+
+    /// Build a reader over a **progressive** MP4 remux (`moov` with full sample
+    /// tables + one `mdat`). This is the path AVPlayer actually seeks: a
+    /// fragmented MP4 over the resource loader has no time→byte map AVPlayer will
+    /// use, so scrubbing hangs; progressive `stco`/`stss`/`stts` give exact byte
+    /// offsets for any seek time. Does one metadata pass over the file (no
+    /// payload copy) to build the tables; bytes are read on demand while playing.
+    public func progressiveReader() -> ProgressiveRemuxReader {
+        let metas = firstClusterOffset.map { MatroskaFrameReader.readSampleIndex(source, from: $0) } ?? []
+        var metasByTrack: [UInt64: [MatroskaFrameReader.SampleMeta]] = [:]
+        for meta in metas { metasByTrack[meta.trackNumber, default: []].append(meta) }
+
+        var writerTracks: [ProgressiveMP4Writer.Track] = []
+        // Per writer track, the source mapping: A/V sample (sourceOffset, size)
+        // ranges, or the generated subtitle bytes. Parallel to `writerTracks`.
+        var sourceInfo: [(av: [(sourceOffset: Int, size: Int)]?, inline: [UInt8]?)] = []
+
+        // Video + audio, in mediaTracks order.
+        for track in mediaTracks {
+            guard let number = trackIDByNumber.first(where: { $0.value == track.trackID })?.key,
+                  let trackMetas = metasByTrack[number], !trackMetas.isEmpty else { continue }
+            let (samples, map) = shapeMediaSamples(trackMetas, track: track)
+            writerTracks.append(.init(track: track, samples: samples))
+            sourceInfo.append((av: map, inline: nil))
+        }
+
+        // Subtitle tracks: cues need their text, so read the (tiny) subtitle
+        // payloads and build WebVTT samples held inline.
+        if !subtitleTracks.isEmpty, let start = firstClusterOffset {
+            let frames = MatroskaFrameReader.readSubtitleFrames(source, from: start, trackNumbers: subtitleTrackNumbers)
+            for track in subtitleTracks {
+                let trackFrames = frames.filter { trackIDByNumber[$0.trackNumber] == track.trackID }
+                let cues = makeCues(trackFrames)
+                guard !cues.isEmpty else { continue }
+                let lastEnd = cues.map { $0.startTicks + $0.durationTicks }.max() ?? 0
+                let span = totalDurationTicks > lastEnd ? totalDurationTicks : lastEnd
+                let builderSamples = WebVTTSampleBuilder.samples(cues: cues, totalDurationTicks: span)
+                guard !builderSamples.isEmpty else { continue }
+                let progSamples = builderSamples.map {
+                    ProgressiveMP4Writer.Sample(size: $0.data.count, duration: $0.duration,
+                                                compositionOffset: 0, isKeyframe: true)
+                }
+                writerTracks.append(.init(track: track, samples: progSamples))
+                sourceInfo.append((av: nil, inline: builderSamples.flatMap { $0.data }))
+            }
+        }
+
+        let durationMs = totalDurationTicks > 0
+            ? UInt32(clamping: Int(totalDurationTicks) * 1000 / Int(max(1, movieTimescale))) : 0
+        let writer = ProgressiveMP4Writer(tracks: writerTracks, movieDurationMs: durationMs)
+        let initSegment = writer.initSegment()
+        let offsets = writer.trackDataOffsets()
+
+        var regions: [ProgressiveRemuxReader.Region] = []
+        for (index, info) in sourceInfo.enumerated() {
+            let outputStart = offsets[index]
+            if let inline = info.inline {
+                regions.append(.init(outputStart: outputStart, size: inline.count,
+                                     avSamples: nil, inlineData: inline))
+            } else if let map = info.av {
+                var avSamples: [ProgressiveRemuxReader.AVSample] = []
+                avSamples.reserveCapacity(map.count)
+                var cum = 0
+                for sample in map {
+                    avSamples.append(.init(cumOffset: cum, sourceOffset: sample.sourceOffset, size: sample.size))
+                    cum += sample.size
+                }
+                regions.append(.init(outputStart: outputStart, size: cum,
+                                     avSamples: avSamples, inlineData: nil))
+            }
+        }
+        return ProgressiveRemuxReader(source: source, initSegment: initSegment,
+                                      regions: regions, contentLength: writer.totalLength)
+    }
+
+    /// Shape a media track's samples for the progressive sample tables. Video:
+    /// DTS = sorted PTS (monotonic decode timeline), durations = DTS deltas,
+    /// composition offset = PTS − DTS (B-frames). Audio: each AAC frame is 1024
+    /// samples at the sample-rate timescale. Samples stay in source (decode)
+    /// order — matching the mdat byte order and the source map.
+    private func shapeMediaSamples(_ metas: [MatroskaFrameReader.SampleMeta], track: RemuxTrack)
+        -> (samples: [ProgressiveMP4Writer.Sample], sourceMap: [(sourceOffset: Int, size: Int)]) {
+        let sourceMap = metas.map { (sourceOffset: $0.sourceOffset, size: $0.size) }
+        if track.kind == .audio {
+            let samples = metas.map {
+                ProgressiveMP4Writer.Sample(size: $0.size, duration: Self.aacSamplesPerFrame,
+                                            compositionOffset: 0, isKeyframe: true)
+            }
+            return (samples, sourceMap)
+        }
+        let pts = metas.map(\.timestampTicks)
+        let dts = pts.sorted()
+        var samples: [ProgressiveMP4Writer.Sample] = []
+        samples.reserveCapacity(metas.count)
+        for i in metas.indices {
+            let duration: UInt32
+            if i + 1 < dts.count {
+                duration = UInt32(max(0, dts[i + 1] - dts[i]))
+            } else {
+                duration = samples.last?.duration ?? 1
+            }
+            samples.append(.init(size: metas[i].size, duration: duration,
+                                 compositionOffset: Int32(clamping: pts[i] - dts[i]),
+                                 isKeyframe: metas[i].isKeyframe))
+        }
+        return (samples, sourceMap)
+    }
+
     // MARK: - Range-addressable streaming
 
     /// A map of the remuxed output's byte layout, built in one pass over the
