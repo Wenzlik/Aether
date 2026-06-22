@@ -574,6 +574,32 @@ struct MatroskaRemuxerTests {
         #expect(MatroskaRemuxer(data: MKV.sample()) == nil)
     }
 
+    @Test("H.264 + E-AC-3 → init nil (don't remux to silent video; use VLC)")
+    func initBailsOnNonPackageableAudio() {
+        // The muxer can't package E-AC-3, so a file that has it must NOT remux
+        // (which would drop the audio) — it returns nil so DetailView falls back
+        // to VLCKit, where the audio plays. The DetailView local path builds
+        // RemuxedLocalAsset directly without a codec probe, so this guard lives
+        // in the remuxer init.
+        let videoEntry = MKV.el(MKV.trackEntry,
+            MKV.el(MKV.trackNumber, MKV.uint(1)) +
+            MKV.el(MKV.trackType, MKV.uint(1)) +
+            MKV.el(MKV.codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
+            MKV.el(MKV.codecPrivate, avcConfig) +
+            MKV.el(MKV.video, MKV.el(MKV.pixelWidth, MKV.uint(1920)) + MKV.el(MKV.pixelHeight, MKV.uint(1080))))
+        let audioEntry = MKV.el(MKV.trackEntry,
+            MKV.el(MKV.trackNumber, MKV.uint(2)) +
+            MKV.el(MKV.trackType, MKV.uint(2)) +
+            MKV.el(MKV.codecID, Array("A_EAC3".utf8)) +
+            MKV.el(MKV.audio, MKV.el(MKV.channels, MKV.uint(6))))
+        let data = Data(MKV.el(MKV.ebmlHeader, []) + MKV.el(MKV.segment,
+            MKV.el(MKV.info, MKV.el(MKV.timestampScale, MKV.uint(1_000_000))) +
+            MKV.el(MKV.tracks, videoEntry + audioEntry) +
+            MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(0)) +
+                MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 0, flags: 0x80, frame: [0xAA])))))
+        #expect(MatroskaRemuxer(data: data) == nil)
+    }
+
     @Test("remuxAll emits a valid fMP4 stream: ftyp + moov + moof + mdat")
     func fullStream() throws {
         let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)

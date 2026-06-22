@@ -35,11 +35,21 @@ public struct MatroskaRemuxer {
         var idByNumber: [UInt64: UInt32] = [:]
         var nextID: UInt32 = 1
         for track in segment.tracks {
-            guard let remux = RemuxTrack(matroska: track, trackID: nextID,
-                                         timescaleTicksPerSecond: timescale) else { continue }
-            remuxTracks.append(remux)
-            idByNumber[track.number] = nextID
-            nextID += 1
+            switch track.type {
+            case .video, .audio:
+                // A real A/V track we can't package (E-AC-3, DTS, VC-1, …) means
+                // remuxing would drop audio or video — worse than the fallback.
+                // Bail so the whole file goes to VLCKit/server instead. (The
+                // DetailView local path builds RemuxedLocalAsset directly without
+                // a codec probe, so this is where that rule must hold.)
+                guard let remux = RemuxTrack(matroska: track, trackID: nextID,
+                                             timescaleTicksPerSecond: timescale) else { return nil }
+                remuxTracks.append(remux)
+                idByNumber[track.number] = nextID
+                nextID += 1
+            case .subtitle, .other:
+                continue   // not carried into the fMP4 (subtitles are #6 / handled elsewhere)
+            }
         }
         guard !remuxTracks.isEmpty else { return nil }
 
