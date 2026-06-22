@@ -35,15 +35,18 @@ enum MatroskaFrameReader {
     /// frames it contains and the offset of the next element (cluster or
     /// sibling), or `nil` if `offset` isn't a cluster.
     static func readCluster(_ data: Data, at offset: Int) -> (frames: [MatroskaFrame], nextOffset: Int)? {
-        let bytes = [UInt8](data)
-        var reader = EBMLReader(bytes: bytes, offset: offset)
+        readCluster(DataByteSource(data), at: offset)
+    }
+
+    static func readCluster(_ source: any ByteSource, at offset: Int) -> (frames: [MatroskaFrame], nextOffset: Int)? {
+        var reader = EBMLReader(source, offset: offset)
         guard let id = reader.readElementID(), id == ID.cluster,
               let size = reader.readSize() else { return nil }
 
         let boundedEnd: Int
         switch size {
-        case .known(let s): boundedEnd = min(bytes.count, reader.offset + Int(s))
-        case .unknown:      boundedEnd = bytes.count
+        case .known(let s): boundedEnd = min(source.count, reader.offset + Int(s))
+        case .unknown:      boundedEnd = source.count
         }
 
         var clusterTimestamp: Int64 = 0
@@ -85,10 +88,14 @@ enum MatroskaFrameReader {
     /// Read every frame from `firstOffset` to EOF — convenience for small files
     /// and tests. Streaming callers use `readCluster` directly.
     static func readAllFrames(_ data: Data, from firstOffset: Int) -> [MatroskaFrame] {
+        readAllFrames(DataByteSource(data), from: firstOffset)
+    }
+
+    static func readAllFrames(_ source: any ByteSource, from firstOffset: Int) -> [MatroskaFrame] {
         var frames: [MatroskaFrame] = []
         var offset = firstOffset
-        while offset < data.count {
-            guard let (clusterFrames, next) = readCluster(data, at: offset), next > offset else { break }
+        while offset < source.count {
+            guard let (clusterFrames, next) = readCluster(source, at: offset), next > offset else { break }
             frames += clusterFrames
             offset = next
         }
@@ -116,7 +123,7 @@ enum MatroskaFrameReader {
         }
 
         guard let range = blockRange else { return [] }
-        var blockReader = EBMLReader(bytes: reader.allBytes, offset: range.start)
+        var blockReader = EBMLReader(reader.source, offset: range.start)
         return parseBlock(&blockReader, end: range.end,
                           clusterTimestamp: clusterTimestamp, keyframeOverride: !hasReference)
     }

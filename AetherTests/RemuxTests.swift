@@ -494,6 +494,36 @@ struct FragmentedMP4WriterTests {
     }
 }
 
+@Suite("AetherCore — ByteSource (#476 remux)")
+struct ByteSourceTests {
+
+    @Test("DataByteSource reads clamped ranges without copying the whole buffer")
+    func dataByteSource() {
+        let source = DataByteSource(Data([0x00, 0x01, 0x02, 0x03, 0x04]))
+        #expect(source.count == 5)
+        #expect(source.bytes(at: 1, length: 2) == [0x01, 0x02])
+        #expect(source.bytes(at: 3, length: 10) == [0x03, 0x04])   // clamped at EOF
+        #expect(source.bytes(at: 5, length: 1) == [])              // past the end
+        #expect(source.bytes(at: 0, length: 0) == [])
+    }
+
+    @Test("DataByteSource honours a non-zero Data startIndex (sliced Data)")
+    func slicedData() {
+        // A Data slice keeps a non-zero startIndex; offsets here are 0-based.
+        let sliced = Data([0xFF, 0xAA, 0xBB, 0xCC]).dropFirst()   // [0xAA,0xBB,0xCC], startIndex 1
+        let source = DataByteSource(sliced)
+        #expect(source.count == 3)
+        #expect(source.bytes(at: 0, length: 2) == [0xAA, 0xBB])
+    }
+
+    @Test("EBMLReader over a ByteSource reads the same as over raw bytes")
+    func readerOverSource() {
+        var reader = EBMLReader(DataByteSource(Data([0x1A, 0x45, 0xDF, 0xA3, 0x81])))
+        #expect(reader.readElementID() == 0x1A45DFA3)
+        #expect(reader.readSize() == .known(1))
+    }
+}
+
 @Suite("AetherCore — MatroskaRemuxer end-to-end (#476 remux)")
 struct MatroskaRemuxerTests {
 

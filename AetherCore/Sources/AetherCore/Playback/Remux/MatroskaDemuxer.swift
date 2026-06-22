@@ -50,7 +50,11 @@ enum MatroskaDemuxer {
     // MARK: - Probe
 
     static func probe(_ data: Data) throws -> MatroskaSegmentInfo {
-        var reader = EBMLReader(data)
+        try probe(DataByteSource(data))
+    }
+
+    static func probe(_ source: any ByteSource) throws -> MatroskaSegmentInfo {
+        var reader = EBMLReader(source)
 
         // 1) EBML header — must be present; we don't need its body.
         guard let headerID = reader.readElementID(), headerID == ID.ebmlHeader,

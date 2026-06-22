@@ -14,14 +14,18 @@ public struct MatroskaRemuxer {
     /// Tracks that will appear in the fMP4 output (packageable ones only).
     public let tracks: [RemuxTrack]
 
-    private let data: Data
+    private let source: any ByteSource
     private let firstClusterOffset: Int?
     /// Matroska track number → fMP4 track id.
     private let trackIDByNumber: [UInt64: UInt32]
     private let writer: FragmentedMP4Writer
 
     public init?(data: Data) {
-        guard let segment = try? MatroskaDemuxer.probe(data) else { return nil }
+        self.init(source: DataByteSource(data))
+    }
+
+    public init?(source: any ByteSource) {
+        guard let segment = try? MatroskaDemuxer.probe(source) else { return nil }
 
         // Track timescale = ticks per second implied by the Matroska timestamp
         // scale (default 1 ms → 1000).
@@ -40,7 +44,7 @@ public struct MatroskaRemuxer {
         guard !remuxTracks.isEmpty else { return nil }
 
         self.tracks = remuxTracks
-        self.data = data
+        self.source = source
         self.firstClusterOffset = segment.firstClusterOffset
         self.trackIDByNumber = idByNumber
         self.writer = FragmentedMP4Writer(tracks: remuxTracks)
@@ -57,7 +61,7 @@ public struct MatroskaRemuxer {
     public func remuxAll() -> [UInt8] {
         var output = initializationSegment()
         guard let start = firstClusterOffset else { return output }
-        let frames = MatroskaFrameReader.readAllFrames(data, from: start)
+        let frames = MatroskaFrameReader.readAllFrames(source, from: start)
         output += mediaSegment(from: frames, sequenceNumber: 1)
         return output
     }
@@ -91,8 +95,8 @@ public struct MatroskaRemuxer {
         var outputOffset = initLength
         var sequence: UInt32 = 1
         var clusterOffset = firstClusterOffset
-        while let start = clusterOffset, start < data.count {
-            guard let (frames, next) = MatroskaFrameReader.readCluster(data, at: start), next > start else { break }
+        while let start = clusterOffset, start < source.count {
+            guard let (frames, next) = MatroskaFrameReader.readCluster(source, at: start), next > start else { break }
             let segment = mediaSegment(from: frames, sequenceNumber: sequence)
             segments.append(.init(outputOffset: outputOffset, length: segment.count,
                                   clusterOffset: start, sequence: sequence))
@@ -121,7 +125,7 @@ public struct MatroskaRemuxer {
         for segment in index.segments {
             let segmentEnd = segment.outputOffset + segment.length
             guard segmentEnd > offset, segment.outputOffset < end else { continue }
-            guard let (frames, _) = MatroskaFrameReader.readCluster(data, at: segment.clusterOffset) else { continue }
+            guard let (frames, _) = MatroskaFrameReader.readCluster(source, at: segment.clusterOffset) else { continue }
             let bytes = mediaSegment(from: frames, sequenceNumber: segment.sequence)
             let lo = max(offset, segment.outputOffset) - segment.outputOffset
             let hi = min(end, segmentEnd) - segment.outputOffset
