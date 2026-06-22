@@ -138,6 +138,70 @@ enum MatroskaFrameReader {
                           clusterTimestamp: clusterTimestamp, keyframeOverride: !hasReference)
     }
 
+    // MARK: - Size-only scan (for the stream index, no payload copy)
+
+    /// A frame's track + byte size, without its payload. Building the stream
+    /// index from these (rather than full media segments) means the index pass
+    /// reads only the cluster/block structure — never the gigabytes of sample
+    /// data — so first-play isn't gated on a full-file copy.
+    struct FrameInfo: Sendable { let trackNumber: UInt64; let size: Int }
+
+    /// Like `readCluster`, but returns per-frame (track, size) without reading
+    /// the sample payloads.
+    static func readClusterFrameInfo(_ source: any ByteSource, at offset: Int) -> (frames: [FrameInfo], nextOffset: Int)? {
+        var reader = EBMLReader(source, offset: offset)
+        guard let id = reader.readElementID(), id == ID.cluster, let size = reader.readSize() else { return nil }
+        let boundedEnd: Int
+        switch size {
+        case .known(let s): boundedEnd = min(source.count, reader.offset + Int(s))
+        case .unknown:      boundedEnd = source.count
+        }
+
+        var frames: [FrameInfo] = []
+        var nextOffset = boundedEnd
+        while reader.offset < boundedEnd {
+            let childStart = reader.offset
+            guard let childID = reader.readElementID() else { break }
+            if Self.topLevelSiblingIDs.contains(childID) { nextOffset = childStart; break }
+            guard case let .known(childSize)? = reader.readSize() else { break }
+            let len = Int(childSize)
+            let childEnd = reader.offset + len
+            switch childID {
+            case ID.simpleBlock:
+                frames += parseBlockSizes(&reader, end: childEnd)
+                reader.seek(to: childEnd)
+            case ID.blockGroup:
+                frames += parseBlockGroupSizes(&reader, end: childEnd)
+                reader.seek(to: childEnd)
+            default:
+                reader.skip(len)
+            }
+        }
+        return (frames, nextOffset)
+    }
+
+    private static func parseBlockGroupSizes(_ reader: inout EBMLReader, end: Int) -> [FrameInfo] {
+        while reader.offset < end {
+            guard let id = reader.readElementID(), case let .known(size)? = reader.readSize() else { break }
+            let len = Int(size)
+            if id == ID.block {
+                var blockReader = EBMLReader(reader.source, offset: reader.offset)
+                return parseBlockSizes(&blockReader, end: reader.offset + len)
+            }
+            reader.skip(len)
+        }
+        return []
+    }
+
+    /// Read a block's track + per-frame sizes without copying the payload.
+    private static func parseBlockSizes(_ reader: inout EBMLReader, end: Int) -> [FrameInfo] {
+        guard let track = reader.readVInt(),
+              reader.readUInt(length: 2) != nil,   // skip relative timestamp
+              let flags = reader.readUInt(length: 1) else { return [] }
+        let lacing = (flags >> 1) & 0x03
+        return frameSizes(&reader, end: end, lacing: lacing).map { FrameInfo(trackNumber: track, size: $0) }
+    }
+
     // MARK: - Block / SimpleBlock payload
 
     /// Parse a block payload `[reader.offset, end)`. `keyframeOverride` is set by

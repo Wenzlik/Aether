@@ -475,6 +475,22 @@ struct FragmentedMP4WriterTests {
         #expect(Array(seg[mdat.payloadStart..<(mdat.start + mdat.size)]) == [0xA0, 0xA1, 0xA2, 0xB0, 0xB1])
     }
 
+    @Test("mediaSegmentByteSize equals the real media segment size")
+    func analyticSizeMatches() {
+        // Two tracks with different sample counts/sizes — the analytic size used
+        // by the stream index must match the materialised segment exactly.
+        let v = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: [
+            .init(data: [0x01, 0x02, 0x03], duration: 100, isKeyframe: true, compositionOffset: 0),
+            .init(data: [0x04, 0x05], duration: 100, isKeyframe: false, compositionOffset: 33)
+        ])
+        let a = FragmentedMP4Writer.FragmentTrack(trackID: 2, baseDecodeTime: 0, samples: [
+            .init(data: [0xAA], duration: 50, isKeyframe: true, compositionOffset: 0)
+        ])
+        let real = writer().mediaSegment(sequenceNumber: 7, tracks: [v, a]).count
+        let analytic = writer().mediaSegmentByteSize([(2, 5), (1, 1)])
+        #expect(real == analytic)
+    }
+
     @Test("trun data_offset points exactly at the first sample byte")
     func dataOffsetResolves() {
         let samples = [FragmentedMP4Writer.Sample(data: [0xCA, 0xFE], duration: 1000, isKeyframe: true, compositionOffset: 0)]

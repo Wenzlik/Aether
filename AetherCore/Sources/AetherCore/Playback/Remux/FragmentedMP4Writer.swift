@@ -326,6 +326,23 @@ struct FragmentedMP4Writer {
         return realMoof + MP4Box.box("mdat", mdat)
     }
 
+    /// The exact byte size `mediaSegment` produces for the given per-track
+    /// (sampleCount, total sample-data bytes) — without materialising the
+    /// segment. Lets the stream index be built from frame *sizes* alone, so it
+    /// never reads/copies the gigabytes of sample data. **Must stay in lockstep
+    /// with `mediaSegment` / `moof` / `traf` / `trun`** (a test asserts equality).
+    ///
+    /// moof = box(8) + mfhd(16) + Σ traf; traf = box(8)+tfhd(16)+tfdt(20)+trun;
+    /// trun = box(8)+vf(4)+count(4)+dataOffset(4)+16·samples. mdat = box(8)+data.
+    func mediaSegmentByteSize(_ tracks: [(sampleCount: Int, dataBytes: Int)]) -> Int {
+        var size = 8 + 16 + 8   // moof header + mfhd + mdat header
+        for track in tracks {
+            size += 64 + 16 * track.sampleCount   // one traf (64 fixed + 16/sample in trun)
+            size += track.dataBytes               // this track's mdat payload
+        }
+        return size
+    }
+
     private func moof(sequenceNumber: UInt32, tracks: [FragmentTrack], dataOffsets: [Int]) -> [UInt8] {
         var mfhd = MP4ByteWriter(); mfhd.u32(sequenceNumber)
         var children: [[UInt8]] = [MP4Box.fullBox("mfhd", version: 0, flags: 0, mfhd.bytes)]

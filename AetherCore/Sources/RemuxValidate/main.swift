@@ -32,6 +32,13 @@ for t in remuxer.tracks {
     print("  #\(t.trackID) \(t.kind) codec=\(codec) \(t.width)x\(t.height) ch=\(t.channels) rate=\(t.sampleRate) configBytes=\(t.codecConfig.count)")
 }
 
+// Time the full stream-index build — the operation that gates first-play
+// (AVPlayer's first content-info request waits on it).
+let indexStart = Date()
+let totalLength = remuxer.buildStreamIndex().totalLength
+let indexElapsed = Date().timeIntervalSince(indexStart)
+print("buildStreamIndex: total \(totalLength) bytes in \(String(format: "%.2f", indexElapsed))s")
+
 let out = remuxer.remuxPrefix(clusterLimit: clusterLimit)
 try Data(out).write(to: outputURL)
 print("wrote \(out.count) bytes (\(clusterLimit) clusters) → \(outputURL.path)")

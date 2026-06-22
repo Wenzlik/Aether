@@ -89,6 +89,11 @@ public struct MatroskaRemuxer {
     /// One pass over the clusters, recording each media segment's output offset,
     /// length, and source cluster — enough to serve any range and to report the
     /// total content length (needed for HTTP `Content-Length` / asset sizing).
+    ///
+    /// Computes each segment's size **analytically from frame sizes**
+    /// (`mediaSegmentByteSize`) rather than building the segment, so the pass
+    /// reads only the cluster/block structure — not the gigabytes of sample
+    /// data. This is what keeps first-play off a full-file copy.
     public func buildStreamIndex() -> StreamIndex {
         let initLength = initializationSegment().count
         var segments: [StreamIndex.Segment] = []
@@ -96,12 +101,27 @@ public struct MatroskaRemuxer {
         var sequence: UInt32 = 1
         var clusterOffset = firstClusterOffset
         while let start = clusterOffset, start < source.count {
-            guard let (frames, next) = MatroskaFrameReader.readCluster(source, at: start), next > start else { break }
-            let segment = mediaSegment(from: frames, sequenceNumber: sequence)
-            segments.append(.init(outputOffset: outputOffset, length: segment.count,
-                                  clusterOffset: start, sequence: sequence))
-            outputOffset += segment.count
-            sequence += 1
+            guard let (frames, next) = MatroskaFrameReader.readClusterFrameInfo(source, at: start),
+                  next > start else { break }
+            // Group by track in the same order mediaSegment emits trafs (only
+            // tracks with frames, in `tracks` order) so the size matches exactly.
+            var byTrack: [UInt32: (count: Int, bytes: Int)] = [:]
+            for frame in frames {
+                guard let id = trackIDByNumber[frame.trackNumber] else { continue }
+                var entry = byTrack[id] ?? (0, 0)
+                entry.count += 1
+                entry.bytes += frame.size
+                byTrack[id] = entry
+            }
+            let perTrack = tracks.compactMap { byTrack[$0.trackID] }
+                .map { (sampleCount: $0.count, dataBytes: $0.bytes) }
+            let length = writer.mediaSegmentByteSize(perTrack)
+            if !perTrack.isEmpty {
+                segments.append(.init(outputOffset: outputOffset, length: length,
+                                      clusterOffset: start, sequence: sequence))
+                outputOffset += length
+                sequence += 1
+            }
             clusterOffset = next
         }
         return StreamIndex(totalLength: outputOffset, initLength: initLength, segments: segments)
