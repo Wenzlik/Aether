@@ -39,6 +39,21 @@ let totalLength = remuxer.buildStreamIndex().totalLength
 let indexElapsed = Date().timeIntervalSince(indexStart)
 print("buildStreamIndex: total \(totalLength) bytes in \(String(format: "%.2f", indexElapsed))s")
 
+// Simulate AVPlayer-style sequential reads through the cached reader, timing
+// the index build (first) and each subsequent read.
+let readerStart = Date()
+let reader = RemuxByteReader(remuxer)
+let len = reader.contentLength
+print("RemuxByteReader: contentLength \(len), built in \(String(format: "%.2f", Date().timeIntervalSince(readerStart)))s")
+// Cold reads spread across the file — each lands in a different cluster
+// (cache miss), mimicking AVPlayer reading forward through the movie.
+for i in 0..<8 {
+    let pos = (len / 10) * i
+    let t = Date()
+    let bytes = reader.read(offset: pos, length: 256 * 1024)
+    print("  cold read #\(i) @\(pos): \(bytes.count) bytes in \(String(format: "%.3f", Date().timeIntervalSince(t)))s")
+}
+
 let out = remuxer.remuxPrefix(clusterLimit: clusterLimit)
 try Data(out).write(to: outputURL)
 print("wrote \(out.count) bytes (\(clusterLimit) clusters) → \(outputURL.path)")

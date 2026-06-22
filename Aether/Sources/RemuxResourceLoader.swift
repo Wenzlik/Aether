@@ -67,32 +67,38 @@ final class RemuxedLocalAsset {
 
         func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                             shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+            let start = Date()
             if let info = loadingRequest.contentInformationRequest {
                 // Fragmented MP4. Byte-range access is what makes seeking work.
                 info.contentType = "public.mpeg-4"
                 info.contentLength = Int64(reader.contentLength)
                 info.isByteRangeAccessSupported = true
+                Self.log.info("content-info length=\(info.contentLength) in \(Date().timeIntervalSince(start), format: .fixed(precision: 3))s")
             }
 
             if let dataRequest = loadingRequest.dataRequest {
+                let offset = dataRequest.currentOffset
+                let length = dataRequest.requestedLength
                 serve(dataRequest)
+                Self.log.info("serve off=\(offset) len=\(length) in \(Date().timeIntervalSince(start), format: .fixed(precision: 3))s")
             }
             loadingRequest.finishLoading()
             return true
         }
 
-        /// Serve the requested range in bounded chunks (cached segments make
-        /// repeated/overlapping reads cheap).
+        /// Serve **one** bounded chunk and return. AVPlayer asks for the whole
+        /// remaining file in `requestedLength` (gigabytes); trying to satisfy that
+        /// in one synchronous callback blocked the loader for seconds → black
+        /// screen. Responding with a chunk and finishing lets AVFoundation issue
+        /// a follow-up request for the rest (its documented incremental pattern),
+        /// so each callback is fast and playback starts after the first chunks.
         private func serve(_ dataRequest: AVAssetResourceLoadingDataRequest) {
-            var current = Int(dataRequest.currentOffset)
-            let end = Int(dataRequest.requestedOffset) + dataRequest.requestedLength
-            while current < end {
-                let length = min(Self.chunkBytes, end - current)
-                let bytes = reader.read(offset: current, length: length)
-                if bytes.isEmpty { break }
-                dataRequest.respond(with: Data(bytes))
-                current += bytes.count
-            }
+            let offset = Int(dataRequest.currentOffset)
+            let wanted = Int(dataRequest.requestedOffset) + dataRequest.requestedLength - offset
+            let length = min(Self.chunkBytes, max(0, wanted))
+            guard length > 0 else { return }
+            let bytes = reader.read(offset: offset, length: length)
+            if !bytes.isEmpty { dataRequest.respond(with: Data(bytes)) }
         }
     }
 }
