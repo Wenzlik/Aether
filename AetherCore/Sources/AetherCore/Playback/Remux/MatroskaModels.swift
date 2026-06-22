@@ -97,6 +97,27 @@ public struct MatroskaInfo: Sendable, Equatable {
     }
 }
 
+/// One coded frame (sample) extracted from a cluster's `SimpleBlock` / `Block`.
+/// The remux muxer repackages these into fMP4 samples — so this carries exactly
+/// what a sample needs: which track, when, whether it's a sync sample, and the
+/// raw coded bytes (still in the container's bitstream form — e.g. H.264 NALs in
+/// Annex-B; the muxer converts to AVCC).
+public struct MatroskaFrame: Sendable, Equatable {
+    public let trackNumber: UInt64
+    /// Absolute presentation timestamp in timestamp-scale ticks (cluster
+    /// timestamp + the block's signed relative offset).
+    public let timestampTicks: Int64
+    public let isKeyframe: Bool
+    public let data: [UInt8]
+
+    public init(trackNumber: UInt64, timestampTicks: Int64, isKeyframe: Bool, data: [UInt8]) {
+        self.trackNumber = trackNumber
+        self.timestampTicks = timestampTicks
+        self.isKeyframe = isKeyframe
+        self.data = data
+    }
+}
+
 /// The result of probing a Matroska file's head: timing + track list, plus the
 /// byte offset where cluster (frame) data begins — the entry point the frame
 /// reader uses in a later stage.

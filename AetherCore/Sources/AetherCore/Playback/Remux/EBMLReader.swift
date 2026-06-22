@@ -32,6 +32,9 @@ struct EBMLReader {
     var count: Int { bytes.count }
     var isAtEnd: Bool { offset >= bytes.count }
     var remaining: Int { max(0, bytes.count - offset) }
+    /// The backing buffer — for callers that need to spawn a second reader over
+    /// the same bytes at a different offset (e.g. re-reading a sub-element).
+    var allBytes: [UInt8] { bytes }
 
     mutating func seek(to newOffset: Int) { offset = newOffset }
     mutating func skip(_ n: Int) { offset += n }
@@ -100,6 +103,21 @@ struct EBMLReader {
         }
         offset += length
         return (value, length, allOnes)
+    }
+
+    /// Read an unsigned vint and return its value (marker stripped), ignoring
+    /// the "unknown size" distinction. Used for in-block track numbers and lace
+    /// sizes (which are plain vints, not element sizes).
+    mutating func readVInt() -> UInt64? {
+        readUnsignedVint()?.value
+    }
+
+    /// Read a **signed** vint (EBML lacing size deltas). The signed value is the
+    /// unsigned value minus the bias `2^(7·length−1) − 1`, centring the range.
+    mutating func readSignedVInt() -> Int64? {
+        guard let (value, length, _) = readUnsignedVint() else { return nil }
+        let bias = (Int64(1) << (7 * length - 1)) - 1
+        return Int64(value) - bias
     }
 
     // MARK: - Fixed-width primitives (element payloads)

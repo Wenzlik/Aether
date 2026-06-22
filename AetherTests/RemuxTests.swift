@@ -159,6 +159,22 @@ private enum MKV {
     static let channels: [UInt8]         = [0x9F]
     static let samplingFrequency: [UInt8] = [0xB5]
     static let cluster: [UInt8]          = [0x1F, 0x43, 0xB6, 0x75]
+    static let timestamp: [UInt8]        = [0xE7]
+    static let simpleBlock: [UInt8]      = [0xA3]
+    static let blockGroup: [UInt8]       = [0xA0]
+    static let block: [UInt8]            = [0xA1]
+    static let referenceBlock: [UInt8]   = [0xFB]
+
+    /// 2-byte big-endian signed block-relative timestamp.
+    static func relTs(_ t: Int16) -> [UInt8] {
+        let u = UInt16(bitPattern: t)
+        return [UInt8(u >> 8), UInt8(u & 0xFF)]
+    }
+
+    /// A block payload: track vint + relative ts + flags + (optional lace) + frame bytes.
+    static func blockPayload(track: Int, relTs t: Int16, flags: UInt8, lace: [UInt8] = [], frame: [UInt8]) -> [UInt8] {
+        vint(track) + relTs(t) + [flags] + lace + frame
+    }
 
     /// A complete synthetic MKV: H.264 video + AAC audio, 1ms timestamp scale,
     /// followed by one (empty) cluster so the probe's cluster-stop is exercised.
@@ -293,4 +309,75 @@ struct RemuxEngineRoutingTests {
 private extension AudioCodec {
     /// An undecodable audio codec for routing tests.
     static var dtsLike: AudioCodec { .other("A_DTS") }
+}
+
+@Suite("AetherCore — MatroskaFrameReader (#476 remux)")
+struct MatroskaFrameReaderTests {
+
+    @Test("unlaced SimpleBlocks → frames with track, abs timestamp, keyframe, data")
+    func simpleBlocks() throws {
+        let b1 = MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 16, flags: 0x80, frame: [0xAA, 0xBB, 0xCC]))
+        let b2 = MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 32, flags: 0x00, frame: [0xDD, 0xEE]))
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(100)) + b1 + b2)
+        let data = Data(clusterEl)
+
+        let result = try #require(MatroskaFrameReader.readCluster(data, at: 0))
+        #expect(result.frames.count == 2)
+        #expect(result.nextOffset == clusterEl.count)
+
+        let f1 = result.frames[0]
+        #expect(f1.trackNumber == 1)
+        #expect(f1.timestampTicks == 116)   // cluster 100 + relative 16
+        #expect(f1.isKeyframe)
+        #expect(f1.data == [0xAA, 0xBB, 0xCC])
+
+        let f2 = result.frames[1]
+        #expect(f2.timestampTicks == 132)
+        #expect(!f2.isKeyframe)
+        #expect(f2.data == [0xDD, 0xEE])
+    }
+
+    @Test("negative relative timestamp resolves below the cluster base")
+    func negativeRelativeTimestamp() throws {
+        let b = MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: -10, flags: 0x80, frame: [0x01]))
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(50)) + b)
+        let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
+        #expect(result.frames.first?.timestampTicks == 40)
+    }
+
+    @Test("fixed lacing splits the payload into equal frames")
+    func fixedLacing() throws {
+        // flags 0x04 → lacing field 0b10 = fixed; countMinus1 = 1 → 2 frames; 4 bytes → 2 each.
+        let payload = MKV.blockPayload(track: 1, relTs: 0, flags: 0x04, lace: [0x01], frame: [0x11, 0x22, 0x33, 0x44])
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(0)) + MKV.el(MKV.simpleBlock, payload))
+        let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
+        #expect(result.frames.map(\.data) == [[0x11, 0x22], [0x33, 0x44]])
+    }
+
+    @Test("BlockGroup keyframe is decided by ReferenceBlock presence")
+    func blockGroupKeyframe() throws {
+        let blockPayload = MKV.blockPayload(track: 1, relTs: 0, flags: 0x00, frame: [0x99])
+        let keyframeGroup = MKV.el(MKV.blockGroup, MKV.el(MKV.block, blockPayload))
+        let interGroup = MKV.el(MKV.blockGroup,
+            MKV.el(MKV.block, blockPayload) + MKV.el(MKV.referenceBlock, [0x01]))
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(0)) + keyframeGroup + interGroup)
+
+        let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
+        #expect(result.frames.count == 2)
+        #expect(result.frames[0].isKeyframe)    // no ReferenceBlock
+        #expect(!result.frames[1].isKeyframe)   // has ReferenceBlock
+    }
+
+    @Test("readAllFrames walks consecutive clusters")
+    func multipleClusters() {
+        func cluster(base: UInt64, frame: [UInt8]) -> [UInt8] {
+            MKV.el(MKV.cluster,
+                   MKV.el(MKV.timestamp, MKV.uint(base)) +
+                   MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 0, flags: 0x80, frame: frame)))
+        }
+        let data = Data(cluster(base: 0, frame: [0x01]) + cluster(base: 1000, frame: [0x02]))
+        let frames = MatroskaFrameReader.readAllFrames(data, from: 0)
+        #expect(frames.map(\.timestampTicks) == [0, 1000])
+        #expect(frames.map(\.data) == [[0x01], [0x02]])
+    }
 }
