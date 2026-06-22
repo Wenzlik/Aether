@@ -203,7 +203,11 @@ struct SettingsView: View {
                 history: viewModel.releaseHistory
             ) { isWhatsNewPresented = false }
         }
+        #if os(tvOS)
+        .fullScreenCover(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
+        #else
         .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
+        #endif
         .sheet(item: $accountSheet) { sheet in accountSheetView(for: sheet) }
         .sheet(isPresented: $isEditingTMDbToken) {
             TMDbTokenEditSheet(
