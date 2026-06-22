@@ -228,6 +228,11 @@ extension DetailView {
                 .padding(.bottom, AetherDesign.Spacing.xxl)
             }
         }
+        // Cinematic backdrop is always dark; force the SwiftUI environment to
+        // dark so .ultraThinMaterial cards render as frosted glass, not white.
+        #if os(tvOS)
+        .environment(\.colorScheme, .dark)
+        #endif
     }
 
     #if os(iOS)
@@ -362,10 +367,17 @@ extension DetailView {
     /// switches + hydration.
     var cinematicDetailBackground: some View {
         let backdrop = current.backdropURL(heroBackdropTier)
+        // On compact width (iPhone portrait) a 16:9 backdrop aspect-filled to
+        // the full screen height crops ~75 % of the image. fitTop pins it at
+        // its natural 16:9 ratio so the whole width of the backdrop is visible.
+        // Blurred-poster fallback keeps full-screen (it's intentionally enlarged
+        // atmosphere, not a frame-accurate image).
+        let fitTop = hSizeClass == .compact && backdrop != nil
         return CinematicArtworkBackground(
             url: backdrop ?? current.posterURL(.detail),
             blurRadius: backdrop != nil ? 0 : 40,
-            maxPixel: heroBackdropTier.maxPixel
+            maxPixel: heroBackdropTier.maxPixel,
+            fitTop: fitTop
         )
     }
 

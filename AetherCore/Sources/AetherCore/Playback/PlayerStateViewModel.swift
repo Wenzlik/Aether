@@ -83,6 +83,20 @@ public final class PlayerStateViewModel {
         await refresh()
     }
 
+    /// Switch to a different audio track. Restarts the stream for transcode,
+    /// applies live `AVMediaSelection` for direct play.
+    public func switchAudioTrack(_ track: MediaAudioTrack) async {
+        await session.switchAudioTrack(track)
+        await refresh()
+    }
+
+    /// Switch subtitle track (pass `nil` to turn subtitles off). Same
+    /// transcode-restart / direct-play-live logic as `switchAudioTrack`.
+    public func switchSubtitleTrack(_ track: MediaSubtitleTrack?) async {
+        await session.switchSubtitleTrack(track)
+        await refresh()
+    }
+
     /// Track the app's foreground/background state (drive from `scenePhase`).
     /// While backgrounded there's no visible player UI, so the 500 ms refresh
     /// poll is suspended entirely — audio keeps playing via the background-audio

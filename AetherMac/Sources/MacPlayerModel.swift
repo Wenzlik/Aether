@@ -39,7 +39,7 @@ final class MacPlayerModel {
 
     // Resume tracking (server items only — local files carry no `item`).
     @ObservationIgnored private var session: MacSession?
-    @ObservationIgnored private var item: MediaItem?
+    @ObservationIgnored private(set) var item: MediaItem?
     private var pendingResumeSeconds: Double?
     private var didSeekResume = false
     private var lastRecordedSecond = -10
@@ -129,6 +129,27 @@ final class MacPlayerModel {
 
     func selectAudio(id: Int) { mpv.setProperty("aid", id < 0 ? "no" : String(id)) }
     func selectSubtitle(id: Int) { mpv.setProperty("sid", id < 0 ? "no" : String(id)) }
+
+    /// Switch audio track from the server's metadata list. For Plex/Jellyfin
+    /// transcode and direct-play HTTP streams, restarts the URL with the new
+    /// selection baked in (guarantees the server honours the choice). For local
+    /// files without a `session`/`item`, falls back to mpv native switching
+    /// (caller should use `selectAudio(id:)` in that case instead).
+    func selectServerAudioTrack(_ track: MediaAudioTrack) async {
+        guard let item, let session else { return }
+        let newItem = item.selectingAudioTrack(track)
+        let startAt = lastKnownSeconds > 0 ? lastKnownSeconds : nil
+        await session.play(newItem, startAt: startAt)
+    }
+
+    /// Switch subtitle track (pass `nil` to turn subtitles off). Same
+    /// restart logic as `selectServerAudioTrack`.
+    func selectServerSubtitleTrack(_ track: MediaSubtitleTrack?) async {
+        guard let item, let session else { return }
+        let newItem = item.selectingSubtitleTrack(track)
+        let startAt = lastKnownSeconds > 0 ? lastKnownSeconds : nil
+        await session.play(newItem, startAt: startAt)
+    }
 
     // MARK: Display sleep prevention
 
