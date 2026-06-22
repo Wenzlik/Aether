@@ -283,6 +283,79 @@ struct FragmentedMP4Writer {
         return MP4Box.fullBox("trex", version: 0, flags: 0, w.bytes)
     }
 
+    // MARK: - Media segments (moof + mdat)
+
+    /// One sample (frame) in a fragment.
+    struct Sample: Sendable, Equatable {
+        let data: [UInt8]
+        let duration: UInt32   // in the track's timescale ticks
+        let isKeyframe: Bool
+    }
+
+    /// One track's samples within a fragment, plus the decode time of its first
+    /// sample (`tfdt` base).
+    struct FragmentTrack: Sendable {
+        let trackID: UInt32
+        let baseDecodeTime: UInt64
+        let samples: [Sample]
+    }
+
+    /// A media segment: `moof` + `mdat`. `data_offset` in each `trun` is relative
+    /// to the `moof` start (default-base-is-moof), so it depends on the moof's
+    /// own size — built in two passes (the size is independent of the offset
+    /// *values*, only the structure, so pass 1 measures and pass 2 fills).
+    func mediaSegment(sequenceNumber: UInt32, tracks: [FragmentTrack]) -> [UInt8] {
+        let trackDataSizes = tracks.map { $0.samples.reduce(0) { $0 + $1.data.count } }
+        let moofSize = moof(sequenceNumber: sequenceNumber, tracks: tracks,
+                            dataOffsets: Array(repeating: 0, count: tracks.count)).count
+
+        var offsets: [Int] = []
+        var cumulative = 0
+        for size in trackDataSizes {
+            offsets.append(moofSize + 8 + cumulative)   // +8 for the mdat header
+            cumulative += size
+        }
+
+        let realMoof = moof(sequenceNumber: sequenceNumber, tracks: tracks, dataOffsets: offsets)
+        var mdat: [UInt8] = []
+        for track in tracks { for sample in track.samples { mdat += sample.data } }
+        return realMoof + MP4Box.box("mdat", mdat)
+    }
+
+    private func moof(sequenceNumber: UInt32, tracks: [FragmentTrack], dataOffsets: [Int]) -> [UInt8] {
+        var mfhd = MP4ByteWriter(); mfhd.u32(sequenceNumber)
+        var children: [[UInt8]] = [MP4Box.fullBox("mfhd", version: 0, flags: 0, mfhd.bytes)]
+        for (index, track) in tracks.enumerated() {
+            children.append(traf(track, dataOffset: dataOffsets[index]))
+        }
+        return MP4Box.container("moof", children)
+    }
+
+    private func traf(_ track: FragmentTrack, dataOffset: Int) -> [UInt8] {
+        var tfhd = MP4ByteWriter(); tfhd.u32(track.trackID)
+        // flags 0x020000 = default-base-is-moof (data offsets relative to moof).
+        let tfhdBox = MP4Box.fullBox("tfhd", version: 0, flags: 0x02_0000, tfhd.bytes)
+
+        var tfdt = MP4ByteWriter(); tfdt.u64(track.baseDecodeTime)
+        let tfdtBox = MP4Box.fullBox("tfdt", version: 1, flags: 0, tfdt.bytes)
+
+        return MP4Box.container("traf", [tfhdBox, tfdtBox, trun(track.samples, dataOffset: dataOffset)])
+    }
+
+    private func trun(_ samples: [Sample], dataOffset: Int) -> [UInt8] {
+        var w = MP4ByteWriter()
+        w.u32(UInt32(samples.count))
+        w.i32(Int32(dataOffset))
+        for sample in samples {
+            w.u32(sample.duration)
+            w.u32(UInt32(sample.data.count))
+            // sync sample → sample_depends_on=2; otherwise sample_is_non_sync_sample.
+            w.u32(sample.isKeyframe ? 0x0200_0000 : 0x0001_0000)
+        }
+        // flags: data-offset(0x1) | sample-duration(0x100) | sample-size(0x200) | sample-flags(0x400)
+        return MP4Box.fullBox("trun", version: 0, flags: 0x00_0701, w.bytes)
+    }
+
     // MARK: - Helpers
 
     private func appendIdentityMatrix(_ w: inout MP4ByteWriter) {

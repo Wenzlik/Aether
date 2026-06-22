@@ -397,6 +397,41 @@ struct FragmentedMP4WriterTests {
         #expect(MP4Probe.contains(seg, subsequence: aacConfig))
     }
 
+    @Test("media segment is moof + mdat; mdat carries the sample bytes")
+    func mediaSegmentStructure() throws {
+        let samples = [
+            FragmentedMP4Writer.Sample(data: [0xA0, 0xA1, 0xA2], duration: 512, isKeyframe: true),
+            FragmentedMP4Writer.Sample(data: [0xB0, 0xB1], duration: 512, isKeyframe: false)
+        ]
+        let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
+        let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
+
+        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
+        #expect(top.map(\.type) == ["moof", "mdat"])
+
+        let moof = try #require(top.first { $0.type == "moof" })
+        let moofChildren = MP4Probe.boxes(seg, from: moof.payloadStart, to: moof.start + moof.size)
+        #expect(moofChildren.contains { $0.type == "mfhd" })
+        #expect(moofChildren.contains { $0.type == "traf" })
+
+        // mdat payload = concatenated sample data.
+        let mdat = try #require(top.first { $0.type == "mdat" })
+        #expect(Array(seg[mdat.payloadStart..<(mdat.start + mdat.size)]) == [0xA0, 0xA1, 0xA2, 0xB0, 0xB1])
+    }
+
+    @Test("trun data_offset points exactly at the first sample byte")
+    func dataOffsetResolves() {
+        let samples = [FragmentedMP4Writer.Sample(data: [0xCA, 0xFE], duration: 1000, isKeyframe: true)]
+        let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
+        let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
+
+        // moof size + 8 (mdat header) is where sample data starts; default-base-
+        // is-moof makes data_offset relative to the moof start, i.e. that value.
+        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
+        let moofSize = top.first { $0.type == "moof" }!.size
+        #expect(Array(seg[(moofSize + 8)..<(moofSize + 10)]) == [0xCA, 0xFE])
+    }
+
     @Test("RemuxTrack(matroska:) builds H.264/AAC, rejects DTS + subtitles")
     func trackFactory() {
         let h264 = MatroskaTrack(number: 1, type: .video, codecID: "V_MPEG4/ISO/AVC",
