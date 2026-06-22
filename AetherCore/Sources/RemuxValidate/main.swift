@@ -1,8 +1,10 @@
 import Foundation
+import AVFoundation
 import AetherCore
 
-// Dev CLI (#476): remux a prefix of a real .mkv to fMP4 and write it out, so the
-// output can be checked with ffprobe / AVFoundation off-device.
+// Dev CLI (#476): remux a prefix of a real .mkv to fMP4, write it out, and
+// validate the result with **AVFoundation** (the real iOS playback engine's
+// family) — not just ffmpeg.
 //
 //   swift run RemuxValidate <input.mkv> <output.mp4> [clusterLimit]
 
@@ -33,3 +35,30 @@ for t in remuxer.tracks {
 let out = remuxer.remuxPrefix(clusterLimit: clusterLimit)
 try Data(out).write(to: outputURL)
 print("wrote \(out.count) bytes (\(clusterLimit) clusters) → \(outputURL.path)")
+
+// MARK: - AVFoundation validation (the iOS AVPlayer family)
+
+let asset = AVURLAsset(url: outputURL)
+let playable = (try? await asset.load(.isPlayable)) ?? false
+let duration = (try? await asset.load(.duration)).map { CMTimeGetSeconds($0) } ?? -1
+print("AVFoundation: isPlayable=\(playable) duration=\(String(format: "%.2f", duration))s")
+
+for mediaType in [AVMediaType.video, .audio] {
+    guard let track = try? await asset.loadTracks(withMediaType: mediaType).first else {
+        print("  \(mediaType.rawValue): (none)")
+        continue
+    }
+    // Decode the first samples through AVAssetReader — proves AVFoundation can
+    // actually parse + decode the elementary stream, not just open the file.
+    let reader = try AVAssetReader(asset: asset)
+    let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+    reader.add(output)
+    reader.startReading()
+    var decoded = 0
+    while decoded < 30, let sample = output.copyNextSampleBuffer() {
+        if CMSampleBufferGetNumSamples(sample) > 0 { decoded += 1 }
+    }
+    let status = reader.status == .failed ? "FAILED: \(reader.error?.localizedDescription ?? "?")" : "ok"
+    print("  \(mediaType.rawValue): decoded \(decoded) sample buffers — \(status)")
+    reader.cancelReading()
+}
