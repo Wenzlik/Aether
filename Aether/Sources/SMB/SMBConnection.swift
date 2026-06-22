@@ -90,7 +90,7 @@ extension URL {
     /// vendored VLCKit registers `smb2` as a module shortcut, so the scheme name
     /// selects the module; the smb2 module reads host/path from the parsed URL,
     /// so the scheme string itself is irrelevant to libsmb2. We keep `smb://`
-    /// everywhere else (MediaID, storage, PlaybackEngine routing) and swap to
+    /// everywhere else (MediaID, storage, VideoEngineResolver routing) and swap to
     /// `smb2://` only at the VLCKit boundary. No-op for any other scheme.
     var forcingSMB2VLCModule: URL {
         guard scheme == "smb" else { return self }

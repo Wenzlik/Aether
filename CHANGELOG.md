@@ -4,6 +4,15 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **Playback engine routing is now a capability-tiered seam** (#476, P1) — the
+  two-case `PlaybackEngine` enum is replaced by a `VideoEngine` protocol +
+  `VideoEngineResolver` in AetherCore. Each title routes to the lowest-tier
+  engine that can play it (AVFoundation first, VLCKit as a temporary fallback).
+  No user-facing change; this is the foundation for removing VLCKit — an App
+  Store license risk — in favour of an AVFoundation-first stack.
+
 ## [0.8.2] — 2026-06-22
 
 ### What's New

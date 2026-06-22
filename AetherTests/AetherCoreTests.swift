@@ -1584,26 +1584,57 @@ struct LocalLibraryTests {
     }
 }
 
-@Suite("AetherCore — PlaybackEngine (mkv #173)")
-struct PlaybackEngineTests {
-    private func eng(_ s: String) -> PlaybackEngine { .engine(for: URL(string: s)!) }
+@Suite("AetherCore — VideoEngineResolver (mkv #173, capability tiers #476)")
+struct VideoEngineResolverTests {
+    private func eng(_ s: String) -> VideoEngineKind {
+        VideoEngineResolver.standard.engine(for: URL(string: s)!)
+    }
 
-    @Test("system for AVPlayer containers + HLS; VLC for mkv/avi/ts/webm")
+    @Test("AVFoundation for AVPlayer containers + HLS; VLC for mkv/avi/ts/webm")
     func selection() {
-        #expect(eng("file:///x/Movie.mp4") == .system)
-        #expect(eng("file:///x/Movie.m4v") == .system)
-        #expect(eng("file:///x/Clip.mov") == .system)
-        #expect(eng("https://h/video/start.m3u8?session=1") == .system)
+        #expect(eng("file:///x/Movie.mp4") == .avFoundation)
+        #expect(eng("file:///x/Movie.m4v") == .avFoundation)
+        #expect(eng("file:///x/Clip.mov") == .avFoundation)
+        #expect(eng("https://h/video/start.m3u8?session=1") == .avFoundation)
         #expect(eng("file:///x/Movie.mkv") == .vlc)
         #expect(eng("file:///x/Movie.avi") == .vlc)
         #expect(eng("file:///x/Movie.ts") == .vlc)
         #expect(eng("file:///x/Movie.webm") == .vlc)
     }
 
-    @Test("no stream URL → system")
+    @Test("smb:// always falls back to VLC, even for an mp4 (#214)")
+    func smbAlwaysFallsBack() {
+        #expect(eng("smb://nas/share/Movie.mp4") == .vlc)
+        #expect(eng("smb://nas/share/Movie.mkv") == .vlc)
+    }
+
+    @Test("extension-less transcode/HLS URL → AVFoundation")
+    func extensionlessURL() {
+        #expect(eng("https://h/video/:/transcode/universal/start?session=1") == .avFoundation)
+    }
+
+    @Test("no stream URL → AVFoundation")
     func noURL() {
         let item = MediaItem(id: .init(source: .local, rawValue: "1"), title: "X", kind: .movie)
-        #expect(PlaybackEngine.engine(for: item) == .system)
+        #expect(VideoEngineResolver.standard.engine(for: item) == .avFoundation)
+    }
+
+    @Test("raw container routing (download-time, no URL yet)")
+    func containerRouting() {
+        let r = VideoEngineResolver.standard
+        #expect(r.engine(forContainer: "mp4") == .avFoundation)
+        #expect(r.engine(forContainer: "mkv") == .vlc)
+        #expect(r.engine(forContainer: nil) == .avFoundation)
+        #expect(r.engine(forContainer: "") == .avFoundation)
+    }
+
+    @Test("resolver picks the lowest tier that can play")
+    func tierOrdering() {
+        // VLC (tier 3) is universal; AVFoundation (tier 0) is preferred when it
+        // can play, regardless of the order engines are passed in.
+        let r = VideoEngineResolver(engines: [VLCEngine(), AVFoundationEngine()])
+        #expect(r.engine(for: URL(string: "file:///x/Movie.mp4")!) == .avFoundation)
+        #expect(r.engine(for: URL(string: "file:///x/Movie.mkv")!) == .vlc)
     }
 }
 

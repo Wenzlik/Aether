@@ -11,7 +11,7 @@ import AetherCore
 /// count-capped), run each filename through `TitleInference`, and surface the
 /// result as flat movies + synthetic show containers (`show:<series>`) split
 /// into "Movies" / "TV Shows" libraries. Playback is direct: `streamURL` is the
-/// credential-free `smb://` URL, routed to VLCKit by `PlaybackEngine`, with
+/// credential-free `smb://` URL, routed to VLCKit by `VideoEngineResolver`, with
 /// credentials supplied as media options at play time (`vlcMediaOptions`).
 /// Why an SMB download couldn't start (the transfer itself throws SMBClient's
 /// own errors, which already read clearly).

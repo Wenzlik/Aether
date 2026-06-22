@@ -536,7 +536,7 @@ struct DetailView: View {
         // absolute path onto the current downloads dir): if it's genuinely gone,
         // fall through to streaming instead of mis-playing.
         if let localURL = downloadStatus.existingLocalURL() {
-            if PlaybackEngine.engine(for: localURL) == .vlc {
+            if VideoEngineResolver.standard.engine(for: localURL) == .vlc {
                 // Local file — no SMB credentials / caching options needed.
                 vlcPlayback = VLCPlayback(url: localURL)
                 return
@@ -549,7 +549,7 @@ struct DetailView: View {
         // Local files AVFoundation can't demux (mkv, …) play through the VLCKit
         // engine instead of the AVKit player. Resume / Cinema stay AVPlayer-only
         // for now (fast-follow on this engine).
-        if let rawURL = current.streamURL, PlaybackEngine.engine(for: rawURL) == .vlc {
+        if let rawURL = current.streamURL, VideoEngineResolver.standard.engine(for: rawURL) == .vlc {
             // SMB: route through the localhost HTTP range proxy (#213/#347) so
             // VLCKit / AVPlayer use clean HTTP range requests instead of the
             // slow libsmb2 path (each seek re-established an SMB session).
@@ -557,7 +557,7 @@ struct DetailView: View {
             // extension and fall through to the AVPlayer path below.
             if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
-                    if PlaybackEngine.engine(for: proxyURL) == .vlc {
+                    if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
                         // mkv / avi / ts — still needs VLCKit, but over HTTP now.
                         vlcPlayback = VLCPlayback(url: proxyURL)
                         return
