@@ -48,12 +48,13 @@ final class RemuxedLocalAsset {
     // MARK: - Delegate
 
     private final class ResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
+        /// Cached byte reader — builds the index once and reuses generated
+        /// segments across the many overlapping range requests AVPlayer makes
+        /// (regenerating per request stalled playback for seconds → black screen).
+        /// Built lazily off the main-actor construction path; the serial loader
+        /// queue makes the lazy init race-free.
         private let remuxer: MatroskaRemuxer
-        /// Output layout + total length. Built **lazily on first request** — it's
-        /// a full pass over the source, so we keep it off the construction path
-        /// (which runs on the main actor); the delegate's serial loader queue
-        /// makes the lazy init race-free.
-        private lazy var index: MatroskaRemuxer.StreamIndex = remuxer.buildStreamIndex()
+        private lazy var reader = RemuxByteReader(remuxer)
         private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "remux.loader")
 
         /// Cap per `respond(with:)` so an open-ended request doesn't allocate the
@@ -69,7 +70,7 @@ final class RemuxedLocalAsset {
             if let info = loadingRequest.contentInformationRequest {
                 // Fragmented MP4. Byte-range access is what makes seeking work.
                 info.contentType = "public.mpeg-4"
-                info.contentLength = Int64(index.totalLength)
+                info.contentLength = Int64(reader.contentLength)
                 info.isByteRangeAccessSupported = true
             }
 
@@ -80,14 +81,14 @@ final class RemuxedLocalAsset {
             return true
         }
 
-        /// Serve the requested range in bounded chunks, regenerating only the
-        /// fMP4 segments that overlap it.
+        /// Serve the requested range in bounded chunks (cached segments make
+        /// repeated/overlapping reads cheap).
         private func serve(_ dataRequest: AVAssetResourceLoadingDataRequest) {
             var current = Int(dataRequest.currentOffset)
             let end = Int(dataRequest.requestedOffset) + dataRequest.requestedLength
             while current < end {
                 let length = min(Self.chunkBytes, end - current)
-                let bytes = remuxer.readBytes(offset: current, length: length, index: index)
+                let bytes = reader.read(offset: current, length: length)
                 if bytes.isEmpty { break }
                 dataRequest.respond(with: Data(bytes))
                 current += bytes.count

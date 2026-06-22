@@ -155,13 +155,21 @@ public struct MatroskaRemuxer {
         for segment in index.segments {
             let segmentEnd = segment.outputOffset + segment.length
             guard segmentEnd > offset, segment.outputOffset < end else { continue }
-            guard let (frames, _) = MatroskaFrameReader.readCluster(source, at: segment.clusterOffset) else { continue }
-            let bytes = mediaSegment(from: frames, sequenceNumber: segment.sequence)
+            let bytes = segmentData(segment)
             let lo = max(offset, segment.outputOffset) - segment.outputOffset
             let hi = min(end, segmentEnd) - segment.outputOffset
             if lo < hi { result += Array(bytes[lo..<hi]) }
         }
         return result
+    }
+
+    /// Regenerate one media segment's bytes from its source cluster. Deterministic
+    /// (matches the size `buildStreamIndex` recorded). `RemuxByteReader` caches
+    /// the result so a segment isn't rebuilt for every overlapping byte-range
+    /// request.
+    func segmentData(_ segment: StreamIndex.Segment) -> [UInt8] {
+        guard let (frames, _) = MatroskaFrameReader.readCluster(source, at: segment.clusterOffset) else { return [] }
+        return mediaSegment(from: frames, sequenceNumber: segment.sequence)
     }
 
     /// Remux just the first `clusterLimit` clusters into a self-contained fMP4
