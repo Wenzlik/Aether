@@ -152,6 +152,7 @@ private enum MKV {
     static let trackNumber: [UInt8]      = [0xD7]
     static let trackType: [UInt8]        = [0x83]
     static let codecID: [UInt8]          = [0x86]
+    static let codecPrivate: [UInt8]     = [0x63, 0xA2]
     static let video: [UInt8]            = [0xE0]
     static let pixelWidth: [UInt8]       = [0xB0]
     static let pixelHeight: [UInt8]      = [0xBA]
@@ -174,6 +175,28 @@ private enum MKV {
     /// A block payload: track vint + relative ts + flags + (optional lace) + frame bytes.
     static func blockPayload(track: Int, relTs t: Int16, flags: UInt8, lace: [UInt8] = [], frame: [UInt8]) -> [UInt8] {
         vint(track) + relTs(t) + [flags] + lace + frame
+    }
+
+    /// A synthetic MKV that is actually remuxable: a single H.264 video track
+    /// with an avcC `CodecPrivate`, plus a cluster of two frames (keyframe +
+    /// inter). `avcC` and frame bytes are arbitrary but distinct so tests can
+    /// find them in the fMP4 output.
+    static func remuxableSample(avcConfig: [UInt8], frame0: [UInt8], frame1: [UInt8]) -> Data {
+        let header = el(ebmlHeader, [])
+        let infoEl = el(info, el(timestampScale, uint(1_000_000)))   // 1ms ticks → timescale 1000
+        let videoEntry = el(trackEntry,
+            el(trackNumber, uint(1)) +
+            el(trackType, uint(1)) +
+            el(codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
+            el(codecPrivate, avcConfig) +
+            el(video, el(pixelWidth, uint(640)) + el(pixelHeight, uint(360))))
+        let tracksEl = el(tracks, videoEntry)
+        let clusterEl = el(cluster,
+            el(timestamp, uint(0)) +
+            el(simpleBlock, blockPayload(track: 1, relTs: 0, flags: 0x80, frame: frame0)) +
+            el(simpleBlock, blockPayload(track: 1, relTs: 40, flags: 0x00, frame: frame1)))
+        let segmentEl = el(segment, infoEl + tracksEl + clusterEl)
+        return Data(header + segmentEl)
     }
 
     /// A complete synthetic MKV: H.264 video + AAC audio, 1ms timestamp scale,
@@ -447,6 +470,63 @@ struct FragmentedMP4WriterTests {
         #expect(RemuxTrack(matroska: dts, trackID: 3, timescaleTicksPerSecond: 1000) == nil)
         #expect(RemuxTrack(matroska: subs, trackID: 4, timescaleTicksPerSecond: 1000) == nil)
         #expect(RemuxTrack(matroska: noConfig, trackID: 5, timescaleTicksPerSecond: 1000) == nil)
+    }
+}
+
+@Suite("AetherCore — MatroskaRemuxer end-to-end (#476 remux)")
+struct MatroskaRemuxerTests {
+
+    private let avcConfig: [UInt8] = [0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0xDE, 0xAD]
+    private let frame0: [UInt8] = [0xF0, 0x00, 0x00, 0x01]
+    private let frame1: [UInt8] = [0xF1, 0x11]
+
+    @Test("probes a remuxable MKV into one video track")
+    func initSucceeds() throws {
+        let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        #expect(remuxer.tracks.count == 1)
+        #expect(remuxer.tracks.first?.kind == .video)
+        #expect(remuxer.tracks.first?.videoCodec == .h264)
+    }
+
+    @Test("non-remuxable MKV (no CodecPrivate) → init returns nil")
+    func initFailsWithoutConfig() {
+        // MKV.sample()'s tracks carry no CodecPrivate, so nothing is packageable.
+        #expect(MatroskaRemuxer(data: MKV.sample()) == nil)
+    }
+
+    @Test("remuxAll emits a valid fMP4 stream: ftyp + moov + moof + mdat")
+    func fullStream() throws {
+        let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let out = remuxer.remuxAll()
+
+        let top = MP4Probe.boxes(out, from: 0, to: out.count)
+        #expect(top.map(\.type) == ["ftyp", "moov", "moof", "mdat"])
+        // Every top-level box accounts for the whole buffer with none left over.
+        #expect(top.last.map { $0.start + $0.size } == out.count)
+
+        // The avcC config and both frames made it into the output.
+        #expect(MP4Probe.contains(out, subsequence: avcConfig))
+        #expect(MP4Probe.contains(out, subsequence: frame0))
+        #expect(MP4Probe.contains(out, subsequence: frame1))
+
+        // mdat payload is exactly the two frames, in order.
+        let mdat = try #require(top.first { $0.type == "mdat" })
+        #expect(Array(out[mdat.payloadStart..<(mdat.start + mdat.size)]) == frame0 + frame1)
+    }
+
+    @Test("sample durations come from successive frame timestamps")
+    func durations() throws {
+        let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let frames = [
+            MatroskaFrame(trackNumber: 1, timestampTicks: 0, isKeyframe: true, data: frame0),
+            MatroskaFrame(trackNumber: 1, timestampTicks: 40, isKeyframe: false, data: frame1)
+        ]
+        let seg = remuxer.mediaSegment(from: frames, sequenceNumber: 1)
+        // The first sample's duration (40) should appear as a u32 in the trun.
+        #expect(MP4Probe.contains(seg, subsequence: [0x00, 0x00, 0x00, 0x28]))   // 40
     }
 }
 
