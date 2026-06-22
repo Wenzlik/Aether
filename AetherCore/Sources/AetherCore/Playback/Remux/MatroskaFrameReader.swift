@@ -20,6 +20,7 @@ enum MatroskaFrameReader {
         static let blockGroup: UInt32   = 0xA0
         static let block: UInt32        = 0xA1
         static let referenceBlock: UInt32 = 0xFB
+        static let blockDuration: UInt32 = 0x9B
         static let position: UInt32     = 0xA7
         static let prevSize: UInt32     = 0xAB
     }
@@ -120,6 +121,7 @@ enum MatroskaFrameReader {
         // any ReferenceBlock, then parse the block with the resolved keyframe flag.
         var blockRange: (start: Int, end: Int)?
         var hasReference = false
+        var duration: Int64?
 
         while reader.offset < end {
             guard let id = reader.readElementID(), case let .known(size)? = reader.readSize() else { break }
@@ -128,14 +130,15 @@ enum MatroskaFrameReader {
             switch id {
             case ID.block:          blockRange = (reader.offset, childEnd); reader.seek(to: childEnd)
             case ID.referenceBlock: hasReference = true; reader.skip(len)
+            case ID.blockDuration:  duration = reader.readUInt(length: len).map(Int64.init)
             default:                reader.skip(len)
             }
         }
 
         guard let range = blockRange else { return [] }
         var blockReader = EBMLReader(reader.source, offset: range.start)
-        return parseBlock(&blockReader, end: range.end,
-                          clusterTimestamp: clusterTimestamp, keyframeOverride: !hasReference)
+        return parseBlock(&blockReader, end: range.end, clusterTimestamp: clusterTimestamp,
+                          keyframeOverride: !hasReference, durationTicks: duration)
     }
 
     // MARK: - Size-only scan (for the stream index, no payload copy)
@@ -207,7 +210,7 @@ enum MatroskaFrameReader {
     /// Parse a block payload `[reader.offset, end)`. `keyframeOverride` is set by
     /// BlockGroup (from ReferenceBlock presence); `nil` for a SimpleBlock, whose
     /// keyframe bit lives in its own flags byte.
-    private static func parseBlock(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64, keyframeOverride: Bool?) -> [MatroskaFrame] {
+    private static func parseBlock(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64, keyframeOverride: Bool?, durationTicks: Int64? = nil) -> [MatroskaFrame] {
         guard let track = reader.readVInt(),
               let relRaw = reader.readUInt(length: 2),
               let flags = reader.readUInt(length: 1) else { return [] }
@@ -222,7 +225,7 @@ enum MatroskaFrameReader {
         for size in sizes {
             guard let data = reader.readBytes(length: size) else { break }
             frames.append(MatroskaFrame(trackNumber: track, timestampTicks: timestamp,
-                                        isKeyframe: isKeyframe, data: data))
+                                        isKeyframe: isKeyframe, data: data, durationTicks: durationTicks))
         }
         return frames
     }

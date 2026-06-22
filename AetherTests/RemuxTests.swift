@@ -165,6 +165,7 @@ private enum MKV {
     static let blockGroup: [UInt8]       = [0xA0]
     static let block: [UInt8]            = [0xA1]
     static let referenceBlock: [UInt8]   = [0xFB]
+    static let blockDuration: [UInt8]    = [0x9B]
 
     /// 2-byte big-endian signed block-relative timestamp.
     static func relTs(_ t: Int16) -> [UInt8] {
@@ -844,6 +845,24 @@ struct MatroskaFrameReaderTests {
         let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
         #expect(result.frames.count == 1)
         #expect(result.frames.first?.data == [0xAB, 0xCD])
+    }
+
+    @Test("subtitle cue: BlockGroup with BlockDuration → frame carries text + duration")
+    func subtitleCueDuration() throws {
+        // Subtitle cue (track 3): a BlockGroup with a Block (text payload) +
+        // BlockDuration (display ticks). No keyframe bit → keyframe via no
+        // ReferenceBlock.
+        let text = Array("Hello, world".utf8)
+        let group = MKV.el(MKV.blockGroup,
+            MKV.el(MKV.block, MKV.blockPayload(track: 3, relTs: 0, flags: 0x00, frame: text)) +
+            MKV.el(MKV.blockDuration, MKV.uint(2043)))
+        let clusterEl = MKV.el(MKV.cluster, MKV.el(MKV.timestamp, MKV.uint(17559)) + group)
+        let result = try #require(MatroskaFrameReader.readCluster(Data(clusterEl), at: 0))
+        let cue = try #require(result.frames.first)
+        #expect(cue.trackNumber == 3)
+        #expect(cue.timestampTicks == 17559)
+        #expect(cue.durationTicks == 2043)
+        #expect(String(decoding: cue.data, as: UTF8.self) == "Hello, world")
     }
 
     @Test("readAllFrames walks consecutive clusters")

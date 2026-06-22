@@ -109,12 +109,17 @@ public struct MatroskaFrame: Sendable, Equatable {
     public let timestampTicks: Int64
     public let isKeyframe: Bool
     public let data: [UInt8]
+    /// Block display duration in timestamp-scale ticks, when the container states
+    /// it (`BlockDuration` in a `BlockGroup`). Carried mainly for subtitle cues,
+    /// whose on-screen time is explicit; `nil` for A/V frames.
+    public let durationTicks: Int64?
 
-    public init(trackNumber: UInt64, timestampTicks: Int64, isKeyframe: Bool, data: [UInt8]) {
+    public init(trackNumber: UInt64, timestampTicks: Int64, isKeyframe: Bool, data: [UInt8], durationTicks: Int64? = nil) {
         self.trackNumber = trackNumber
         self.timestampTicks = timestampTicks
         self.isKeyframe = isKeyframe
         self.data = data
+        self.durationTicks = durationTicks
     }
 }
 
