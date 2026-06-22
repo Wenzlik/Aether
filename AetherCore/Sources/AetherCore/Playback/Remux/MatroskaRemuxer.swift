@@ -57,7 +57,10 @@ public struct MatroskaRemuxer {
         self.source = source
         self.firstClusterOffset = segment.firstClusterOffset
         self.trackIDByNumber = idByNumber
-        self.writer = FragmentedMP4Writer(tracks: remuxTracks)
+        // Movie timescale is 1000 (see mvhd); declare the total duration in mehd
+        // so a streamed fragmented MP4 reports the real length, not a guess.
+        let durationTicks = UInt32(clamping: Int((segment.info.durationSeconds ?? 0) * 1000))
+        self.writer = FragmentedMP4Writer(tracks: remuxTracks, movieDurationTicks: durationTicks)
     }
 
     /// `ftyp` + `moov` — the fMP4 init segment AVPlayer opens first.

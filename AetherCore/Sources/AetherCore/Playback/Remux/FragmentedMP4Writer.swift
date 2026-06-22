@@ -85,9 +85,15 @@ public struct RemuxTrack: Sendable, Equatable {
 /// raw frames — so this only assembles the box structure, no transcoding.
 struct FragmentedMP4Writer {
     let tracks: [RemuxTrack]
+    /// Total movie duration in the movie timescale (1000). Declared in `mehd` so
+    /// AVPlayer knows the full length up front — without it, a fragmented stream
+    /// served over the resource loader shows a wrong/short duration (it can only
+    /// guess from the fragments seen so far). 0 = unknown (omit `mehd`).
+    let movieDurationTicks: UInt32
 
-    init(tracks: [RemuxTrack]) {
+    init(tracks: [RemuxTrack], movieDurationTicks: UInt32 = 0) {
         self.tracks = tracks
+        self.movieDurationTicks = movieDurationTicks
     }
 
     // MARK: - Initialization segment
@@ -279,7 +285,13 @@ struct FragmentedMP4Writer {
     }
 
     private func mvex() -> [UInt8] {
-        MP4Box.container("mvex", tracks.map { trex($0) })
+        var children: [[UInt8]] = []
+        if movieDurationTicks > 0 {
+            var w = MP4ByteWriter(); w.u32(movieDurationTicks)   // fragment_duration (movie timescale)
+            children.append(MP4Box.fullBox("mehd", version: 0, flags: 0, w.bytes))
+        }
+        children += tracks.map { trex($0) }
+        return MP4Box.container("mvex", children)
     }
 
     private func trex(_ track: RemuxTrack) -> [UInt8] {
