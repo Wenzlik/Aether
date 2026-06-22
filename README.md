@@ -4,7 +4,7 @@
 
 Aether is a premium, native cinematic media player for **iPhone**, **iPad**, **Apple TV**, **Vision Pro**, and **Mac**.
 
-It plays your own media from your own infrastructure — a Synology NAS on the local network, a Plex server at home or on the road, or files you've downloaded for offline travel — wrapped in a calm, typography-forward interface that feels at home on every Apple platform.
+It plays your own media from your own infrastructure — a Plex or Jellyfin server at home or on the road, a NAS or SMB share on the local network, or files you've downloaded for offline travel — wrapped in a calm, typography-forward interface that feels at home on every Apple platform.
 
 ---
 
@@ -15,7 +15,7 @@ It plays your own media from your own infrastructure — a Synology NAS on the l
 | iOS        | 26      | primary |
 | iPadOS     | 26      | primary |
 | tvOS       | 26      | primary |
-| visionOS   | 26      | early base — runs in a window, shares all UI; spatial-native experience TBD |
+| visionOS   | 26      | primary — spatial Cinema mode (Dark Theater, screen size, seat distance) |
 | macOS      | 15      | native app (Apple Silicon) — sidebar + inline player; plays through libmpv |
 
 Aether is built top-to-bottom on the modern Apple stack. SwiftUI for every surface, Swift 6 with full concurrency, AVKit for playback, and a shared `AetherCore` package for everything that isn't view code.
@@ -54,17 +54,17 @@ Aether is **not** a torrent client, an IPTV-first app, a piracy tool, or a do-ev
 ## Architecture summary
 
 ```
-Aether (app target, iOS + tvOS)
+Aether (app target, iOS + iPadOS + tvOS + visionOS + macOS)
   └── depends on → AetherCore (shared Swift package)
                      ├── Models          // media domain types
-                     ├── MediaSources    // Plex + Synology connectors
-                     ├── Playback        // AVPlayer wrappers, queue, session
+                     ├── MediaSources    // Plex, Jellyfin, SMB/NAS connectors
+                     ├── Playback        // VLCKit 4 / libmpv wrappers, queue, session
                      ├── Downloads       // background download manager
                      ├── Storage         // local persistence + cache
                      └── DesignSystem    // tokens, components, motion
 ```
 
-The app target stays thin — it is mostly SwiftUI views, navigation, and platform glue. All real logic lives in `AetherCore` so it can be unit-tested and shared across iOS and tvOS.
+The app target stays thin — it is mostly SwiftUI views, navigation, and platform glue. All real logic lives in `AetherCore` so it can be unit-tested and shared across platforms.
 
 See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for the full picture.
 
@@ -75,7 +75,7 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for t
 - **SwiftUI** — every view, every platform
 - **Swift 6** with strict concurrency
 - **async/await** + **actors** for all asynchronous work
-- **AVKit / AVFoundation** for playback
+- **VLCKit 4** for playback on iOS / iPadOS / tvOS / visionOS (AVPlayer fast path for natively-decodable files); **libmpv** on macOS
 - **URLSession** with background configuration for downloads
 - **XcodeGen** to keep the Xcode project file regenerable from `project.yml`
 
@@ -85,11 +85,10 @@ Apple frameworks are strongly preferred. Third-party dependencies are added only
 
 ## Roadmap preview
 
-- **0.1 Foundation** — multi-platform shell, design system, AVPlayer prototype
-- **0.2 Media Sources** — Plex + Synology connectors, metadata, artwork, continue watching
-- **0.3 Offline** — background downloads, offline playback, storage management
-- **0.4 Premium UX** — immersive detail screens, cinematic transitions, tvOS focus polish
-- **0.5 Distribution** — TestFlight, localization, accessibility, App Store prep
+- **0.1–0.5** ✅ — multi-platform shell, Plex + Jellyfin connectors, offline downloads, unified library, immersive detail screens
+- **0.6 "Cassiopeia"** ✅ — full design system refresh, tvOS focus polish, clearLogos, visionOS Cinema (Dark Theater)
+- **0.7** ✅ — native macOS app (libmpv), SMB/NAS native source, cross-device resume, Netflix availability badges
+- **0.8** 🚧 — Plex direct play, mid-playback audio/subtitle track switching, VLC player controls, SMB performance
 
 Full roadmap: [ROADMAP.md](ROADMAP.md).
 
@@ -112,6 +111,11 @@ Requirements: Xcode with iOS 26 and tvOS 26 SDKs.
 
 The repository is intentionally checked in **without** `Aether.xcodeproj` — the project file is generated from `project.yml` to keep diffs sane and merge conflicts rare.
 
+> **Note:** Playback requires `VLCKit.xcframework` (~2.4 GB), which is not checked in. Symlink or copy it from an existing checkout before building:
+> ```bash
+> ln -s /path/to/existing/Aether/VLCKit.xcframework VLCKit.xcframework
+> ```
+
 ---
 
 ## Documentation
@@ -122,10 +126,8 @@ The repository is intentionally checked in **without** `Aether.xcodeproj` — th
 | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Module layout, data flow, actors, caching |
 | [docs/architecture/PLAYER_ENGINES.md](docs/architecture/PLAYER_ENGINES.md) | Playback engines: VLCKit 4 (iOS/tvOS/visionOS) vs libmpv (macOS), bundling |
 | [docs/ux/DESIGN_PRINCIPLES.md](docs/ux/DESIGN_PRINCIPLES.md) | Visual language, motion, focus behavior |
-| [docs/next-steps/0.1-foundation.md](docs/next-steps/0.1-foundation.md) | Implementation plan for the current milestone |
-| [docs/next-steps/0.2-media-sources.md](docs/next-steps/0.2-media-sources.md) | Plex/Synology source plan and remaining connector work |
-| [docs/next-steps/0.3-offline.md](docs/next-steps/0.3-offline.md) | Offline downloads, storage, and resume-sync plan |
-| [docs/next-steps/0.5-distribution.md](docs/next-steps/0.5-distribution.md) | Internal TestFlight and Xcode Cloud setup checklist |
+| [CHANGELOG.md](CHANGELOG.md) | Release history with per-version feature lists |
+| [RELEASING.md](RELEASING.md) | Ship procedure: staging → main promotion + Xcode Cloud tagging |
 | [AGENTS.md](AGENTS.md) | Conventions for AI coding agents (Claude Code, Codex, Gemini, Copilot, Cursor) |
 
 ---
