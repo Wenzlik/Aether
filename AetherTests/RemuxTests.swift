@@ -199,6 +199,27 @@ private enum MKV {
         return Data(header + segmentEl)
     }
 
+    /// Like `remuxableSample` but with two clusters (→ two fMP4 media segments),
+    /// to exercise the streaming index across segment boundaries.
+    static func remuxableTwoCluster(avcConfig: [UInt8]) -> Data {
+        let header = el(ebmlHeader, [])
+        let infoEl = el(info, el(timestampScale, uint(1_000_000)))
+        let videoEntry = el(trackEntry,
+            el(trackNumber, uint(1)) +
+            el(trackType, uint(1)) +
+            el(codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
+            el(codecPrivate, avcConfig) +
+            el(video, el(pixelWidth, uint(640)) + el(pixelHeight, uint(360))))
+        let tracksEl = el(tracks, videoEntry)
+        func clusterAt(_ base: UInt64, _ bytes: [UInt8]) -> [UInt8] {
+            el(cluster,
+               el(timestamp, uint(base)) +
+               el(simpleBlock, blockPayload(track: 1, relTs: 0, flags: 0x80, frame: bytes)))
+        }
+        let segmentEl = el(segment, infoEl + tracksEl + clusterAt(0, [0xC0, 0xC1]) + clusterAt(1000, [0xD0, 0xD1, 0xD2]))
+        return Data(header + segmentEl)
+    }
+
     /// A complete synthetic MKV: H.264 video + AAC audio, 1ms timestamp scale,
     /// followed by one (empty) cluster so the probe's cluster-stop is exercised.
     static func sample() -> Data {
@@ -514,6 +535,38 @@ struct MatroskaRemuxerTests {
         // mdat payload is exactly the two frames, in order.
         let mdat = try #require(top.first { $0.type == "mdat" })
         #expect(Array(out[mdat.payloadStart..<(mdat.start + mdat.size)]) == frame0 + frame1)
+    }
+
+    @Test("stream index total length matches the read-back, output is valid fMP4")
+    func streamIndexLength() throws {
+        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let index = remuxer.buildStreamIndex()
+
+        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
+        #expect(whole.count == index.totalLength)
+
+        // Two clusters → ftyp + moov + two moof/mdat pairs.
+        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
+        #expect(top.prefix(2).map(\.type) == ["ftyp", "moov"])
+        #expect(top.filter { $0.type == "moof" }.count == 2)
+        #expect(top.filter { $0.type == "mdat" }.count == 2)
+        #expect(top.last.map { $0.start + $0.size } == whole.count)
+    }
+
+    @Test("partial range reads are consistent with the whole stream")
+    func partialReadsConsistent() throws {
+        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
+        let remuxer = try #require(MatroskaRemuxer(data: data))
+        let index = remuxer.buildStreamIndex()
+        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
+
+        // A range spanning the init segment into the first media segment, a
+        // mid-stream range, and the tail — each must equal the whole sliced.
+        for (offset, length) in [(0, 20), (10, whole.count - 10), (whole.count - 5, 5), (index.initLength - 3, 12)] {
+            let slice = remuxer.readBytes(offset: offset, length: length, index: index)
+            #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
+        }
     }
 
     @Test("sample durations come from successive frame timestamps")

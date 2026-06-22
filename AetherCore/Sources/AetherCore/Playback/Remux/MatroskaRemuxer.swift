@@ -62,6 +62,74 @@ public struct MatroskaRemuxer {
         return output
     }
 
+    // MARK: - Range-addressable streaming
+
+    /// A map of the remuxed output's byte layout, built in one pass over the
+    /// source. Lets a server (the SMB range proxy / an AVFoundation resource
+    /// loader) answer arbitrary byte-range requests **without** holding the whole
+    /// remuxed file in memory — only segment sizes + their source cluster offset
+    /// are kept; the bytes are regenerated on demand from the cluster.
+    public struct StreamIndex: Sendable {
+        public let totalLength: Int
+        let initLength: Int
+        let segments: [Segment]
+
+        struct Segment: Sendable {
+            let outputOffset: Int   // byte offset of this segment in the output
+            let length: Int
+            let clusterOffset: Int  // source offset to regenerate it from
+            let sequence: UInt32
+        }
+    }
+
+    /// One pass over the clusters, recording each media segment's output offset,
+    /// length, and source cluster — enough to serve any range and to report the
+    /// total content length (needed for HTTP `Content-Length` / asset sizing).
+    public func buildStreamIndex() -> StreamIndex {
+        let initLength = initializationSegment().count
+        var segments: [StreamIndex.Segment] = []
+        var outputOffset = initLength
+        var sequence: UInt32 = 1
+        var clusterOffset = firstClusterOffset
+        while let start = clusterOffset, start < data.count {
+            guard let (frames, next) = MatroskaFrameReader.readCluster(data, at: start), next > start else { break }
+            let segment = mediaSegment(from: frames, sequenceNumber: sequence)
+            segments.append(.init(outputOffset: outputOffset, length: segment.count,
+                                  clusterOffset: start, sequence: sequence))
+            outputOffset += segment.count
+            sequence += 1
+            clusterOffset = next
+        }
+        return StreamIndex(totalLength: outputOffset, initLength: initLength, segments: segments)
+    }
+
+    /// Read `[offset, offset+length)` of the remuxed output, regenerating only
+    /// the segments that overlap the range. Deterministic — the regenerated
+    /// bytes match what `buildStreamIndex` measured.
+    public func readBytes(offset: Int, length: Int, index: StreamIndex) -> [UInt8] {
+        let end = min(offset + length, index.totalLength)
+        guard offset >= 0, offset < end else { return [] }
+        var result: [UInt8] = []
+
+        // Init-segment region.
+        if offset < index.initLength {
+            let initSegment = initializationSegment()
+            result += Array(initSegment[offset..<min(end, index.initLength)])
+        }
+
+        // Overlapping media segments.
+        for segment in index.segments {
+            let segmentEnd = segment.outputOffset + segment.length
+            guard segmentEnd > offset, segment.outputOffset < end else { continue }
+            guard let (frames, _) = MatroskaFrameReader.readCluster(data, at: segment.clusterOffset) else { continue }
+            let bytes = mediaSegment(from: frames, sequenceNumber: segment.sequence)
+            let lo = max(offset, segment.outputOffset) - segment.outputOffset
+            let hi = min(end, segmentEnd) - segment.outputOffset
+            if lo < hi { result += Array(bytes[lo..<hi]) }
+        }
+        return result
+    }
+
     /// Build one media segment from a batch of frames (e.g. one cluster).
     func mediaSegment(from frames: [MatroskaFrame], sequenceNumber: UInt32) -> [UInt8] {
         var framesByTrack: [UInt32: [MatroskaFrame]] = [:]
