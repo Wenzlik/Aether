@@ -49,7 +49,11 @@ final class RemuxedLocalAsset {
 
     private final class ResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
         private let remuxer: MatroskaRemuxer
-        private let index: MatroskaRemuxer.StreamIndex
+        /// Output layout + total length. Built **lazily on first request** — it's
+        /// a full pass over the source, so we keep it off the construction path
+        /// (which runs on the main actor); the delegate's serial loader queue
+        /// makes the lazy init race-free.
+        private lazy var index: MatroskaRemuxer.StreamIndex = remuxer.buildStreamIndex()
         private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "remux.loader")
 
         /// Cap per `respond(with:)` so an open-ended request doesn't allocate the
@@ -58,9 +62,6 @@ final class RemuxedLocalAsset {
 
         init(remuxer: MatroskaRemuxer) {
             self.remuxer = remuxer
-            // One pass to learn the output layout + total length (for the content
-            // info response). Cheap on local disk; cached for the asset's life.
-            self.index = remuxer.buildStreamIndex()
         }
 
         func resourceLoader(_ resourceLoader: AVAssetResourceLoader,

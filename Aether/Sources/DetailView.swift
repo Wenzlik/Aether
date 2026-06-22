@@ -64,6 +64,16 @@ struct DetailView: View {
     @State private var isPlayerPresented = false
     /// Set when a local file needs the VLCKit engine (mkv etc.) instead of AVKit.
     @State private var vlcPlayback: VLCPlayback?
+    /// Set when a local MKV is played through the AVFoundation remux path (#476)
+    /// instead of VLCKit.
+    @State private var remuxPlayback: RemuxPlayback?
+    /// #476: route a local MKV with Apple-decodable codecs through the remux
+    /// shim (AVPlayer) instead of VLCKit. **Off** until the fMP4 muxer handles
+    /// B-frames (decode-order + composition offsets) and E-AC-3/AC-3 audio —
+    /// real-world H.264 rips have B-frames, and feeding them PTS-sorted with no
+    /// composition offsets produces a black screen. VLCKit handles everything
+    /// today; flip this on once the muxer is complete.
+    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = false
     #if os(visionOS)
     /// visionOS: drives the "Continue or Start Over" prompt before entering
     /// Cinema Mode when a resume point exists.
@@ -468,6 +478,10 @@ struct DetailView: View {
             ) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
+        .fullScreenCover(item: $remuxPlayback) { playback in
+            RemuxPlayerView(remuxAsset: playback.asset) { remuxPlayback = nil }
+                .ignoresSafeArea()
+        }
         .confirmationDialog(
             "Mark as Watched?",
             isPresented: $confirmMarkWatched,
@@ -500,6 +514,13 @@ struct DetailView: View {
         let url: URL
         /// VLCKit media options (SMB credentials + caching) — empty for local files.
         var options: [String] = []
+    }
+
+    /// Identifies a local MKV played through the AVFoundation remux path (#476).
+    /// Holds the `RemuxedLocalAsset` so its resource-loader delegate stays alive.
+    private struct RemuxPlayback: Identifiable {
+        let id = UUID()
+        let asset: RemuxedLocalAsset
     }
 
     func presentPlayer(fromStart: Bool) async {
@@ -537,6 +558,15 @@ struct DetailView: View {
         // fall through to streaming instead of mis-playing.
         if let localURL = downloadStatus.existingLocalURL() {
             if VideoEngineResolver.standard.engine(for: localURL) == .vlc {
+                // #476: prefer the AVFoundation remux path for a local MKV whose
+                // codecs AVFoundation can decode (H.264/HEVC + AAC) — native
+                // transport, PiP, AirPlay, no VLCKit. `RemuxedLocalAsset` returns
+                // nil when the file isn't remuxable (DTS, exotic codecs), so we
+                // fall through to VLCKit and nothing regresses.
+                if remuxLocalMKVEnabled, let remux = RemuxedLocalAsset(fileURL: localURL) {
+                    remuxPlayback = RemuxPlayback(asset: remux)
+                    return
+                }
                 // Local file — no SMB credentials / caching options needed.
                 vlcPlayback = VLCPlayback(url: localURL)
                 return
