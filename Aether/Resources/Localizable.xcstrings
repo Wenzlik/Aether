@@ -1752,6 +1752,22 @@
         }
       }
     },
+    "Design & Ideas": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Design a nápady"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дизайн та ідеї"
+          }
+        }
+      }
+    },
     "Designer": {
       "localizations": {
         "cs": {

@@ -714,7 +714,7 @@ private struct TrackPickerOverlay: View {
                 HStack {
                     Text(String(localized: "Audio & Subtitles",
                                 comment: "Navigation title for the track picker sheet"))
-                        .font(AetherDesign.Typography.headline)
+                        .font(AetherDesign.Typography.cardTitle)
                         .foregroundStyle(AetherDesign.Palette.textPrimary)
                     Spacer()
                     Button(String(localized: "Done",
