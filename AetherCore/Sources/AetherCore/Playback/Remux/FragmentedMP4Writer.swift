@@ -4,7 +4,7 @@ import Foundation
 /// `MatroskaTrack` (#476 Tier 1). Carries the codec config (avcC / hvcC /
 /// AudioSpecificConfig) and the geometry each sample-entry box needs.
 public struct RemuxTrack: Sendable, Equatable {
-    public enum Kind: Sendable, Equatable { case video, audio }
+    public enum Kind: Sendable, Equatable { case video, audio, subtitle }
 
     /// 1-based fMP4 track id (also the moof track id).
     public let trackID: UInt32
@@ -73,7 +73,15 @@ public struct RemuxTrack: Sendable, Equatable {
                 audioCodec: codec, codecConfig: config, language: t.language,
                 channels: UInt16(clamping: t.channels ?? 2),
                 sampleRate: rate)
-        case .subtitle, .other:
+        case .subtitle:
+            // Only S_TEXT/UTF8 (SubRip/SRT) is carried, repackaged as WebVTT
+            // (#476 P6). Image subs (PGS/VobSub) and ASS/SSA aren't supported —
+            // returning nil here just drops the track; playback still works.
+            guard t.codecID == "S_TEXT/UTF8" else { return nil }
+            self.init(
+                trackID: trackID, kind: .subtitle, timescale: timescaleTicksPerSecond,
+                codecConfig: [], language: t.language)
+        case .other:
             return nil
         }
     }
@@ -139,10 +147,15 @@ struct FragmentedMP4Writer {
         w.u32(0); w.u32(0)       // reserved
         w.u16(0)                 // layer
         // alternate_group puts tracks of the same media type into a selectable
-        // set — without it, AVFoundation builds no audible media-selection group
-        // and the player's audio menu is empty (audio still plays). 1 = audio,
-        // 0 = video. (Subtitles → 2 when added.)
-        w.u16(track.kind == .audio ? 1 : 0)  // alternate_group
+        // set — without it, AVFoundation builds no media-selection group and the
+        // player's audio/subtitle menu is empty. 0 = video, 1 = audio, 2 = subtitle.
+        let alternateGroup: UInt16
+        switch track.kind {
+        case .video:    alternateGroup = 0
+        case .audio:    alternateGroup = 1
+        case .subtitle: alternateGroup = 2
+        }
+        w.u16(alternateGroup)
         w.u16(track.kind == .audio ? 0x0100 : 0)  // volume
         w.u16(0)                 // reserved
         appendIdentityMatrix(&w)
@@ -168,17 +181,33 @@ struct FragmentedMP4Writer {
     }
 
     private func hdlr(_ track: RemuxTrack) -> [UInt8] {
+        let handlerType: String
+        switch track.kind {
+        case .video:    handlerType = "vide"
+        case .audio:    handlerType = "soun"
+        case .subtitle: handlerType = "text"   // WebVTT in ISOBMFF (ISO 14496-30)
+        }
         var w = MP4ByteWriter()
         w.u32(0)                 // pre_defined
-        w.fourCC(track.kind == .video ? "vide" : "soun")
+        w.fourCC(handlerType)
         w.u32(0); w.u32(0); w.u32(0)  // reserved
         w.append(Array("Aether\u{0}".utf8))  // handler name, null-terminated
         return MP4Box.fullBox("hdlr", version: 0, flags: 0, w.bytes)
     }
 
     private func minf(_ track: RemuxTrack) -> [UInt8] {
-        let header = track.kind == .video ? vmhd() : smhd()
+        let header: [UInt8]
+        switch track.kind {
+        case .video:    header = vmhd()
+        case .audio:    header = smhd()
+        case .subtitle: header = nmhd()   // WebVTT tracks use a null media header
+        }
         return MP4Box.container("minf", [header, dinf(), stbl(track)])
+    }
+
+    /// NullMediaHeaderBox — the media header for a WebVTT ('text' handler) track.
+    private func nmhd() -> [UInt8] {
+        MP4Box.fullBox("nmhd", version: 0, flags: 0, [])
     }
 
     private func vmhd() -> [UInt8] {
@@ -227,9 +256,21 @@ struct FragmentedMP4Writer {
 
     private func sampleEntry(_ track: RemuxTrack) -> [UInt8] {
         switch track.kind {
-        case .video: return visualSampleEntry(track)
-        case .audio: return audioSampleEntry(track)
+        case .video:    return visualSampleEntry(track)
+        case .audio:    return audioSampleEntry(track)
+        case .subtitle: return webVTTSampleEntry()
         }
+    }
+
+    /// WebVTTSampleEntry ('wvtt', ISO 14496-30 §7.3): the SampleEntry base
+    /// (6 reserved + data_reference_index) followed by a `vttC`
+    /// WebVTTConfigurationBox holding the cue-less WebVTT header ("WEBVTT").
+    private func webVTTSampleEntry() -> [UInt8] {
+        var w = MP4ByteWriter()
+        for _ in 0..<6 { w.u8(0) }                 // reserved
+        w.u16(1)                                    // data_reference_index
+        w.append(MP4Box.box("vttC", Array("WEBVTT".utf8)))
+        return MP4Box.box("wvtt", w.bytes)
     }
 
     private func visualSampleEntry(_ track: RemuxTrack) -> [UInt8] {
