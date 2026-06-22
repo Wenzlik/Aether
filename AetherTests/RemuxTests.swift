@@ -311,6 +311,58 @@ private extension AudioCodec {
     static var dtsLike: AudioCodec { .other("A_DTS") }
 }
 
+@Suite("AetherCore — MP4Box writer (#476 remux)")
+struct MP4BoxTests {
+
+    @Test("big-endian integer writers")
+    func byteWriter() {
+        var w = MP4ByteWriter()
+        w.u16(0x0102)
+        w.u32(0x0304_0506)
+        w.u64(0x0708_090A_0B0C_0D0E)
+        #expect(w.bytes == [0x01, 0x02,
+                            0x03, 0x04, 0x05, 0x06,
+                            0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E])
+    }
+
+    @Test("box = size(incl. header) + type + payload")
+    func box() {
+        let b = MP4Box.box("test", [0x01, 0x02])
+        #expect(b == [0x00, 0x00, 0x00, 0x0A, 0x74, 0x65, 0x73, 0x74, 0x01, 0x02])
+    }
+
+    @Test("full box inserts version + 24-bit flags")
+    func fullBox() {
+        let b = MP4Box.fullBox("abcd", version: 1, flags: 0x000002, [0xFF])
+        // size 13 = 8 header + 1 version + 3 flags + 1 payload
+        #expect(b == [0x00, 0x00, 0x00, 0x0D, 0x61, 0x62, 0x63, 0x64,
+                      0x01, 0x00, 0x00, 0x02, 0xFF])
+    }
+
+    @Test("container box size accounts for nested children")
+    func container() {
+        let inner = MP4Box.box("inn1", [0xAA])           // 9 bytes
+        let outer = MP4Box.container("outr", [inner])
+        #expect(outer.count == inner.count + 8)
+        #expect(Array(outer[0..<4]) == [0x00, 0x00, 0x00, UInt8(inner.count + 8)])
+    }
+
+    @Test("four-CC shorter than 4 chars is space-padded")
+    func fourCCPadding() {
+        let b = MP4Box.box("id", [])
+        #expect(Array(b[4..<8]) == [0x69, 0x64, 0x20, 0x20])   // "id  "
+    }
+
+    @Test("ftyp brand box")
+    func ftyp() {
+        let b = MP4Box.ftyp()
+        #expect(b.count == 36)                                 // 8 + 4 + 4 + 5*4
+        #expect(Array(b[4..<8]) == Array("ftyp".utf8))
+        #expect(Array(b[8..<12]) == Array("isom".utf8))        // major brand
+        #expect(Array(b[12..<16]) == [0x00, 0x00, 0x02, 0x00]) // minor version
+    }
+}
+
 @Suite("AetherCore — MatroskaFrameReader (#476 remux)")
 struct MatroskaFrameReaderTests {
 
