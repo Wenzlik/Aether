@@ -4691,6 +4691,23 @@
         }
       }
     },
+    "Recommended for Apple TV" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doporučeno pro Apple TV"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рекомендовано для Apple TV"
+          }
+        }
+      }
+    },
     "Reality" : {
       "comment" : "Genre name shown in Library/Discover; localized for display (#343).",
       "extractionState" : "manual",

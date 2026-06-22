@@ -191,6 +191,7 @@ extension SettingsView {
             ForEach(AppearancePreference.allCases, id: \.self) { option in
                 AetherSelectionRow(
                     title: option.displayName,
+                    detail: appearanceDetail(for: option),
                     isSelected: viewModel.appearance.preference == option
                 ) {
                     viewModel.appearance.preference = option
@@ -198,6 +199,14 @@ extension SettingsView {
                 }
             }
         }
+    }
+
+    private func appearanceDetail(for option: AppearancePreference) -> String? {
+        #if os(tvOS)
+        return option == .dark ? "Recommended for Apple TV" : nil
+        #else
+        return nil
+        #endif
     }
 
     private var languagePickerSheet: some View {
