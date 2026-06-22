@@ -125,8 +125,20 @@ struct MpvPlayerScreen: View {
                         .help("Volume (\(Int(model.volume))%)")
                 }
 
-                trackMenu(systemImage: "waveform", tracks: model.audioTracks, currentID: model.currentAudioID) { model.selectAudio(id: $0) }
-                trackMenu(systemImage: "captions.bubble", tracks: model.subtitleTracks, currentID: model.currentSubtitleID) { model.selectSubtitle(id: $0) }
+                // When the item carries server metadata tracks (Plex/Jellyfin),
+                // use those — they include all available streams with the
+                // correct IDs to restart the transcode. Fall back to mpv's
+                // parsed track list for local / SMB files.
+                if let item = model.item, !item.audioTracks.isEmpty {
+                    serverAudioMenu(item, model: model)
+                } else {
+                    trackMenu(systemImage: "waveform", tracks: model.audioTracks, currentID: model.currentAudioID) { model.selectAudio(id: $0) }
+                }
+                if let item = model.item, !item.subtitleTracks.isEmpty {
+                    serverSubtitleMenu(item, model: model)
+                } else {
+                    trackMenu(systemImage: "captions.bubble", tracks: model.subtitleTracks, currentID: model.currentSubtitleID) { model.selectSubtitle(id: $0) }
+                }
 
                 transportButton("arrow.up.left.and.arrow.down.right") {
                     NSApp.keyWindow?.toggleFullScreen(nil)
@@ -226,6 +238,58 @@ struct MpvPlayerScreen: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(tracks.isEmpty)
+    }
+
+    /// Audio track menu backed by `MediaItem.audioTracks` (server metadata).
+    /// Restarts the stream with the chosen track via `MacPlayerModel`.
+    private func serverAudioMenu(_ item: MediaItem, model: MacPlayerModel) -> some View {
+        Menu {
+            ForEach(item.audioTracks) { track in
+                Button {
+                    Task { await model.selectServerAudioTrack(track) }
+                } label: {
+                    if track.id == item.selectedAudioTrackID {
+                        Label(track.displayTitle, systemImage: "checkmark")
+                    } else {
+                        Text(track.displayTitle)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "waveform")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    /// Subtitle track menu backed by `MediaItem.subtitleTracks` (server metadata).
+    private func serverSubtitleMenu(_ item: MediaItem, model: MacPlayerModel) -> some View {
+        Menu {
+            Button {
+                Task { await model.selectServerSubtitleTrack(nil) }
+            } label: {
+                if item.selectedSubtitleTrackID == nil {
+                    Label("Off", systemImage: "checkmark")
+                } else {
+                    Text("Off")
+                }
+            }
+            ForEach(item.subtitleTracks) { track in
+                Button {
+                    Task { await model.selectServerSubtitleTrack(track) }
+                } label: {
+                    if track.id == item.selectedSubtitleTrackID {
+                        Label(track.displayTitle, systemImage: "checkmark")
+                    } else {
+                        Text(track.displayTitle)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "captions.bubble")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     // MARK: Keyboard
