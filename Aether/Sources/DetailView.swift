@@ -72,11 +72,11 @@ struct DetailView: View {
     /// + AAC audio, B-frames handled, validated end-to-end (plays on AVPlayer).
     /// `RemuxedLocalAsset` returns nil for anything else (E-AC-3/DTS/exotic) so
     /// those fall back to VLCKit.
-    /// **Off by default** until track-selection parity lands: the remuxed
-    /// player has no audio/subtitle selection yet (audio plays but isn't exposed
-    /// as a media-selection group; subtitles are dropped — #476 follow-ups). The
-    /// pipeline is fully landed and proven; flip on once selection is in.
-    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = false
+    /// **On by default** (#476 P4/P6): the progressive-MP4 remux exposes audio +
+    /// SRT-subtitle media-selection groups and AVPlayer seeks it (full sample
+    /// tables). Verified on-device — playback, seeking, and the subtitle track
+    /// AVFoundation surfaces.
+    @AppStorage("player.remuxLocalMKV") private var remuxLocalMKVEnabled = true
     #if os(visionOS)
     /// visionOS: drives the "Continue or Start Over" prompt before entering
     /// Cinema Mode when a resume point exists.
