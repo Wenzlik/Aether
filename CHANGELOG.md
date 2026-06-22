@@ -4,6 +4,35 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-06-22
+
+### What's New
+
+- **Mid-playback audio & subtitle track switching** (#471) — tap the waveform
+  button during playback to switch audio language or subtitle track without
+  stopping the video. Works on iOS, iPadOS, visionOS, and macOS. tvOS is
+  excluded for now (needs a focus-engine approach, tracked separately).
+- **tvOS Settings redesign** — Settings sections now use bare rows with icons
+  and larger padding for a cleaner Apple TV look. The appearance picker shows
+  a "Recommended for Apple TV" hint when Dark is selected. About and Diagnostics
+  open full-screen instead of as sheets.
+- **Updated Aether wordmark** (#472) — refined 2026 AetherBrandMark across all
+  surfaces; transparent-background PNGs replace the previous solid versions.
+
+### Fixed
+
+- **Detail: iPhone backdrop** (#470) — the cinematic backdrop now fills only
+  the hero band instead of bleeding into the full screen on compact layouts.
+- **macOS: source switcher in Discover/Search** — the active source is now
+  visible and switchable from the Discover and Search tabs (previously only
+  available in Detail).
+- **macOS: mpv hardware decoding mode** — corrected the `hwdec` option so
+  hardware-accelerated decoding is reliably enabled on Apple Silicon.
+- **tvOS: dark glass cards** — `wideContent` now forces a dark environment so
+  material cards render as dark glass regardless of system appearance.
+- **tvOS: track picker overlay** — fixed a crash caused by `insetGrouped`
+  list style being unavailable in the overlay context.
+
 ## [0.8.1] — 2026-06-21
 
 ### What's New
