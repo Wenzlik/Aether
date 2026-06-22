@@ -67,11 +67,12 @@ public struct RemuxTrack: Sendable, Equatable {
             let codec = AudioCodec(matroskaCodecID: t.codecID)
             // Only AAC (with its AudioSpecificConfig) is packageable today.
             guard codec == .aac, let config = t.codecPrivate, !config.isEmpty else { return nil }
+            let rate = UInt32(t.sampleRate ?? 48_000)
             self.init(
-                trackID: trackID, kind: .audio, timescale: timescaleTicksPerSecond,
+                trackID: trackID, kind: .audio, timescale: rate,   // audio media timescale = sample rate (exact AAC frame durations)
                 audioCodec: codec, codecConfig: config, language: t.language,
                 channels: UInt16(clamping: t.channels ?? 2),
-                sampleRate: UInt32(t.sampleRate ?? 48_000))
+                sampleRate: rate)
         case .subtitle, .other:
             return nil
         }

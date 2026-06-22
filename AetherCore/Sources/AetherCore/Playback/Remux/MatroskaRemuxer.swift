@@ -19,6 +19,10 @@ public struct MatroskaRemuxer {
     /// Matroska track number → fMP4 track id.
     private let trackIDByNumber: [UInt64: UInt32]
     private let writer: FragmentedMP4Writer
+    /// Ticks per second of the Matroska timeline (= the video/movie timescale).
+    /// Audio sample timestamps are converted from this into the audio track's
+    /// sample-rate timescale.
+    private let movieTimescale: UInt32
 
     public init?(data: Data) {
         self.init(source: DataByteSource(data))
@@ -57,6 +61,7 @@ public struct MatroskaRemuxer {
         self.source = source
         self.firstClusterOffset = segment.firstClusterOffset
         self.trackIDByNumber = idByNumber
+        self.movieTimescale = timescale
         // Movie timescale is 1000 (see mvhd); declare the total duration in mehd
         // so a streamed fragmented MP4 reports the real length, not a guess.
         let durationTicks = UInt32(clamping: Int((segment.info.durationSeconds ?? 0) * 1000))
@@ -205,26 +210,40 @@ public struct MatroskaRemuxer {
         var fragmentTracks: [FragmentedMP4Writer.FragmentTrack] = []
         for track in tracks {
             guard let trackFrames = framesByTrack[track.trackID], !trackFrames.isEmpty else { continue }
-            // Keep the frames in **decode (storage) order** — Matroska stores them
-            // that way, and H.264/HEVC must be fed to the decoder in decode order.
-            // Sorting by PTS (as we did before) scrambled B-frame order and the
-            // decoder produced torn video. DTS is derived from the PTS set inside
-            // makeSamples; the fragment's decode timeline starts at the min PTS.
-            let samples = makeSamples(trackFrames)
-            let base = UInt64(max(0, trackFrames.map(\.timestampTicks).min() ?? 0))
+            // Frames stay in decode (storage) order — H.264/HEVC must be fed in
+            // decode order, and DTS/durations are derived per track below.
+            let (samples, base) = makeSamples(trackFrames, track: track)
             fragmentTracks.append(.init(trackID: track.trackID, baseDecodeTime: base, samples: samples))
         }
         return writer.mediaSegment(sequenceNumber: sequenceNumber, tracks: fragmentTracks)
     }
 
-    /// Build samples from decode-order frames, deriving the DTS timeline and the
-    /// per-sample composition (PTS − DTS) offsets that B-frames require.
+    /// Number of audio samples per coded frame. AAC-LC is 1024 (the common case);
+    /// HE-AAC/SBR is 2048 but is rare and still plays acceptably at 1024 spacing.
+    private static let aacSamplesPerFrame: UInt32 = 1024
+
+    /// Build samples + the fragment's `baseMediaDecodeTime`, per track kind.
     ///
-    /// DTS is the PTS set sorted ascending (a valid monotonic decode timeline
-    /// with the same frame spacing); the composition offset reinstates each
-    /// frame's actual presentation time. Durations are DTS deltas. The last
-    /// sample reuses the previous duration (no following DTS to measure against).
-    private func makeSamples(_ frames: [MatroskaFrame]) -> [FragmentedMP4Writer.Sample] {
+    /// **Video**: keep decode order; DTS is the PTS set sorted ascending (a valid
+    /// monotonic decode timeline), durations are DTS deltas, and the composition
+    /// offset (PTS − DTS) reinstates presentation order for B-frames.
+    ///
+    /// **Audio**: Matroska laces several AAC frames into one block sharing a
+    /// single timestamp, so PTS deltas are 0 — useless for durations. Instead use
+    /// the exact AAC frame size (1024 samples) at the sample-rate timescale, which
+    /// gives a continuous, drift-free timeline. Base = first frame's PTS converted
+    /// from the movie timescale into the audio sample-rate timescale.
+    private func makeSamples(_ frames: [MatroskaFrame], track: RemuxTrack) -> (samples: [FragmentedMP4Writer.Sample], baseDecodeTime: UInt64) {
+        if track.kind == .audio {
+            let minPTS = frames.map(\.timestampTicks).min() ?? 0
+            let base = UInt64(max(0, minPTS)) * UInt64(track.timescale) / UInt64(max(1, movieTimescale))
+            let samples = frames.map {
+                FragmentedMP4Writer.Sample(data: $0.data, duration: Self.aacSamplesPerFrame,
+                                           isKeyframe: true, compositionOffset: 0)
+            }
+            return (samples, base)
+        }
+
         let pts = frames.map(\.timestampTicks)        // decode order
         let dts = pts.sorted()                         // monotonic decode timeline
         var samples: [FragmentedMP4Writer.Sample] = []
@@ -240,6 +259,6 @@ public struct MatroskaRemuxer {
             samples.append(.init(data: frames[i].data, duration: duration,
                                  isKeyframe: frames[i].isKeyframe, compositionOffset: composition))
         }
-        return samples
+        return (samples, UInt64(max(0, dts.first ?? 0)))
     }
 }
