@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 #if canImport(UIKit)
 import UIKit   // UIViewController / UIHostingController for the visionOS cinema Info-panel tab
 #endif
@@ -670,11 +671,17 @@ struct DetailView: View {
     private static func makeSMBRemuxAsset(proxyURL: URL) async -> RemuxedLocalAsset? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
+                let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb-remux")  // TEMP
+                let t0 = Date()  // TEMP
                 guard let source = SMBByteSource(proxyURL: proxyURL) else {
+                    log.error("⏱ SMBByteSource init FAILED (no Content-Length) for \(proxyURL.lastPathComponent, privacy: .public)")  // TEMP
                     continuation.resume(returning: nil); return
                 }
+                log.notice("⏱ SMBByteSource ok, count=\(source.count, privacy: .public) in \(Date().timeIntervalSince(t0), privacy: .public)s — building remuxer…")  // TEMP
                 let name = proxyURL.deletingPathExtension().lastPathComponent
-                continuation.resume(returning: RemuxedLocalAsset(byteSource: source, name: name))
+                let asset = RemuxedLocalAsset(byteSource: source, name: name)
+                log.notice("⏱ RemuxedLocalAsset \(asset == nil ? "NIL (not remuxable)" : "built ✓", privacy: .public) in \(Date().timeIntervalSince(t0), privacy: .public)s")  // TEMP
+                continuation.resume(returning: asset)
             }
         }
     }
