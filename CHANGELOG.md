@@ -4,6 +4,26 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-06-23
+
+### What's New
+
+- **Local MKV plays through AVPlayer (#476)** — a pure-Swift pipeline remuxes a
+  downloaded H.264/HEVC + AAC MKV into a **progressive MP4** on the fly and plays
+  it through `AVPlayer` instead of VLCKit: native transport, PiP, AirPlay, audio
+  selection, and **seeking**. Embedded **SRT subtitles** are repackaged as WebVTT
+  so the subtitle menu works. On by default; files AVFoundation can't handle
+  (E-AC-3/DTS/exotic codecs, image or ASS subtitles) still fall back to VLCKit.
+- **SMB: match a title to TMDb, confirm-first (#213)** — the SMB "Edit title &
+  year" sheet now searches TMDb and leads with the **proposed match** for one-tap
+  accept (with a gallery of alternatives), dropping into manual title/year +
+  search only when the guess is wrong. Available on **tvOS** too (full-screen, no
+  keyboard needed), and it shows the source filename so a wrong match stays
+  traceable to the file.
+- **SMB: smarter TV detection (#481)** — episodes are grouped by their **series
+  folder**, so a series that doesn't match TMDb now shows as one named show (the
+  folder) instead of a pile of loose, unlabeled episodes.
+
 ### Fixed
 
 - **VLCKit playback crash** — local/SMB files that fall back to the VLCKit
@@ -13,6 +33,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **VLC player controls never auto-hiding** — on auto-play the controls stayed
   on top of the video; they now fade out a few seconds after playback starts and
   reappear on tap.
+- **Library loading state** — the Library landing (and the Collections / Genres
+  browse) showed a stray placeholder bar during the first load; it now shows the
+  same calm skeleton (title row + poster strip) as Home and Discover.
 
 ### Changed
 
@@ -27,15 +50,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   the pure-Swift `SMBSession`/`SMBClient`. `import VLCKit` is now confined to a
   single file (`VLCPlayerView`), so deleting the engine in a later phase is a
   one-file change.
-- **Local MKV plays through AVPlayer by default (Tier 1 remux, #476, P4/P6) —
-  on by default.** A pure-Swift pipeline remuxes a local H.264/HEVC + AAC MKV
-  into a **progressive MP4** (full `moov` sample tables) on the fly and plays it
-  through `AVPlayer` instead of VLCKit — with the native transport, PiP, AirPlay,
-  audio selection, and **seeking** (the progressive sample tables give AVPlayer
-  an exact time→byte map; a fragmented stream hung on scrub). Embedded **SRT
-  subtitles** are repackaged as a WebVTT (`wvtt`) track so the subtitle menu
-  works. Files AVFoundation can't handle (E-AC-3/DTS/exotic codecs, image or ASS
-  subtitles) still fall back to VLCKit automatically. Verified on-device.
 
 ## [0.8.2] — 2026-06-22
 
