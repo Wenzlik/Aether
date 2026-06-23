@@ -103,7 +103,8 @@ extension DetailView {
             SMBMetadataEditSheet(
                 itemID: activeItem.id,
                 currentTitle: current.title,
-                currentYear: current.year
+                currentYear: current.year,
+                currentFilename: current.streamURL?.lastPathComponent
             ) {
                 presentedSelector = nil
                 localEditToken = UUID()   // re-hydrate Detail with the corrected match

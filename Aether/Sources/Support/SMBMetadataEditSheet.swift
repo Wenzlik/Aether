@@ -17,6 +17,9 @@ struct SMBMetadataEditSheet: View {
     /// override yet (so the user edits from what they see).
     let currentTitle: String
     let currentYear: Int?
+    /// The source filename — shown so the user can tell *which* file they're
+    /// correcting when a bad match makes the title/poster misleading.
+    let currentFilename: String?
     let onClose: () -> Void
 
     @Environment(AppSession.self) private var session
@@ -42,6 +45,22 @@ struct SMBMetadataEditSheet: View {
                 Text("SMB files have no metadata. Correct the title and year, or search TMDb and pick the right result.")
                     .font(AetherDesign.Typography.caption)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
+
+                if let currentFilename {
+                    // Show the source filename so a wrong match (misleading title /
+                    // poster) is still traceable back to the actual file.
+                    HStack(spacing: AetherDesign.Spacing.xs) {
+                        Image(systemName: "doc")
+                        Text(currentFilename)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                    }
+                    .font(AetherDesign.Typography.caption.monospaced())
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .padding(AetherDesign.Spacing.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AetherDesign.Materials.card, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                }
 
                 detailsSection
                 if session.isTMDbConfigured { matchSection }
