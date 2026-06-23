@@ -268,6 +268,12 @@ targets:
       # Sparkle — in-app auto-update for the web-distributed build (#405).
       - package: Sparkle
         product: Sparkle
+      # NetFS — mount SMB shares via the kernel SMB client (smbfs) so they appear
+      # under /Volumes and scan like a local folder (SMBMounter). iOS can't do
+      # this (no system mounting), which is why it ships its own SMB stack; the
+      # Mac doesn't need it. Homebrew's libmpv/FFmpeg has no smb:// protocol, so
+      # the mounted filesystem path is what actually plays.
+      - sdk: NetFS.framework
       # libmpv — the engine behind IINA (#232). The macOS player uses mpv's
       # **software render API** and composites via **Metal** (MTKView), so there's
       # no OpenGL link (NSOpenGLView/OpenGL are deprecated — #19). Metal/MetalKit

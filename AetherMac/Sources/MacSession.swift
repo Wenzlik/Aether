@@ -21,6 +21,7 @@ final class MacSession {
     private let plexServerStore: PlexServerStore
     private let jellyfinServerStore: JellyfinServerStore
     private let embyServerStore: EmbyServerStore
+    private let smbShareStore: SMBShareStore
 
     private(set) var plexSources: [PlexMediaSource] = []
     /// The enabled Plex servers, primary first — kept so the Settings server
@@ -33,6 +34,19 @@ final class MacSession {
     /// built from them. Folders persist as paths in UserDefaults.
     private(set) var localFolders: [URL] = MacSession.loadLocalFolders()
     private var localSource: LocalFolderSource?
+
+    /// Configured SMB shares (persisted in the Keychain), the live mountpoint
+    /// each one resolved to once mounted, and any per-share mount error to show
+    /// in Settings. macOS mounts shares via NetFS and folds their mountpoints
+    /// into the same `LocalFolderSource` scan as local folders — see
+    /// `SMBMounter` / `SMBShare` for why the Mac doesn't need iOS's SMB stack.
+    private(set) var smbShares: [SMBShare] = []
+    private var smbMountpoints: [UUID: URL] = [:]
+    private(set) var smbMountErrors: [UUID: String] = [:]
+
+    /// Every folder fed into the local-library scan: user-picked folders plus
+    /// the mountpoints of currently-mounted SMB shares.
+    private var scanFolders: [URL] { localFolders + Array(smbMountpoints.values) }
 
     /// Bumped whenever the set of sources or local folders changes, so the
     /// library/discover views reload (their `.task(id:)` keys on it). Needed
@@ -236,7 +250,8 @@ final class MacSession {
     var isPlexConnected: Bool { !plexSources.isEmpty }
     var isJellyfinConnected: Bool { jellyfinSource != nil }
     var isEmbyConnected: Bool { embySource != nil }
-    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected || !localFolders.isEmpty }
+    var isSMBConnected: Bool { !smbShares.isEmpty }
+    var hasAnySource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected || !localFolders.isEmpty || isSMBConnected }
 
     /// Every connected source — what `UnifiedLibrary` fans out over.
     var connectedSources: [any MediaSource] {
@@ -278,13 +293,14 @@ final class MacSession {
     }
 
     private func rebuildLocalSource() {
-        guard !localFolders.isEmpty else {
+        let folders = scanFolders
+        guard !folders.isEmpty else {
             localSource = nil
             localScanStatus = nil
             libraryToken &+= 1
             return
         }
-        let source = LocalFolderSource(folders: localFolders, tmdb: makeTMDbClient())
+        let source = LocalFolderSource(folders: folders, tmdb: makeTMDbClient())
         localSource = source
         libraryToken &+= 1
         // Scan in the background and report progress → result in Settings.
@@ -338,6 +354,7 @@ final class MacSession {
         plexServerStore = PlexServerStore(keychain: keychain)
         jellyfinServerStore = JellyfinServerStore(keychain: keychain)
         embyServerStore = EmbyServerStore(keychain: keychain)
+        smbShareStore = SMBShareStore(keychain: keychain)
     }
 
     // MARK: Restore
@@ -366,6 +383,16 @@ final class MacSession {
         if let record = try? await embyServerStore.read(), let source = makeEmbySource(record) {
             embySource = source
             embyServerName = record.serverName
+        }
+        if let shares = try? await smbShareStore.read(), !shares.isEmpty {
+            smbShares = shares
+            // Mount in the background — a NAS may be asleep or off-network, and
+            // we must never block app startup on it. Each share that comes up
+            // registers its mountpoint and rebuilds the local source, so the
+            // library fills in as shares mount (or stays empty if they don't).
+            for share in shares {
+                Task { await mountAndRegister(share) }
+            }
         }
         // Sources are wired up now — bump the token so any view that ran its
         // initial load before restore finished (Home/Discover race the library
@@ -526,6 +553,76 @@ final class MacSession {
             configuration: embyConfiguration,
             api: api
         )
+    }
+
+    // MARK: SMB shares
+
+    /// Add an SMB share: mount it first (so we validate the server + credentials
+    /// before saving anything), then persist and fold its mountpoint into the
+    /// local-library scan. Returns a user-facing error message on failure, or
+    /// `nil` on success. Nothing is persisted if the mount fails.
+    func addSMBShare(host: String, shareName: String, username: String?, password: String?) async -> String? {
+        let host = host.trimmingCharacters(in: .whitespaces)
+        let shareName = shareName.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
+        guard !host.isEmpty, !shareName.isEmpty else {
+            return String(localized: "Enter both a server and a share name.")
+        }
+        // Avoid duplicates — same host + share already configured.
+        if smbShares.contains(where: { $0.host.caseInsensitiveCompare(host) == .orderedSame
+            && $0.shareName.caseInsensitiveCompare(shareName) == .orderedSame }) {
+            return String(localized: "That share is already added.")
+        }
+        let share = SMBShare(host: host, shareName: shareName, username: username, password: password)
+        do {
+            let mountpoint = try await SMBMounter.mount(share)
+            smbShares.append(share)
+            smbMountpoints[share.id] = mountpoint
+            smbMountErrors[share.id] = nil
+            try? await smbShareStore.write(smbShares)
+            rebuildLocalSource()
+            return nil
+        } catch {
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Remove a share: drop it from the list, unmount it (best-effort), and
+    /// rebuild the local source so its titles leave the library.
+    func removeSMBShare(_ share: SMBShare) async {
+        smbShares.removeAll { $0.id == share.id }
+        smbMountErrors[share.id] = nil
+        if let mountpoint = smbMountpoints.removeValue(forKey: share.id) {
+            SMBMounter.unmount(mountpoint)
+        }
+        try? await smbShareStore.write(smbShares)
+        rebuildLocalSource()
+    }
+
+    /// Mount a persisted share and register its mountpoint, rebuilding the local
+    /// source so its titles appear. On failure, record a status string Settings
+    /// can show (e.g. NAS off-network) without dropping the saved share.
+    private func mountAndRegister(_ share: SMBShare) async {
+        do {
+            let mountpoint = try await SMBMounter.mount(share)
+            // Guard against a removal that raced the mount.
+            guard smbShares.contains(where: { $0.id == share.id }) else {
+                SMBMounter.unmount(mountpoint)
+                return
+            }
+            smbMountpoints[share.id] = mountpoint
+            smbMountErrors[share.id] = nil
+            rebuildLocalSource()
+        } catch {
+            smbMountErrors[share.id] = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Re-attempt mounting any shares that aren't currently mounted — used by a
+    /// "Reconnect" affordance when a NAS comes back online.
+    func remountSMBShares() async {
+        for share in smbShares where smbMountpoints[share.id] == nil {
+            await mountAndRegister(share)
+        }
     }
 
     // MARK: Library + playback
