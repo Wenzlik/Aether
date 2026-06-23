@@ -99,12 +99,6 @@ extension DetailView {
             .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-        #if !os(tvOS)
-        case .editMetadata:
-            LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
-                presentedSelector = nil
-                localEditToken = UUID()   // force a re-hydrate on dismiss
-            }
         case .smbEditMetadata:
             SMBMetadataEditSheet(
                 itemID: activeItem.id,
@@ -113,6 +107,12 @@ extension DetailView {
             ) {
                 presentedSelector = nil
                 localEditToken = UUID()   // re-hydrate Detail with the corrected match
+            }
+        #if !os(tvOS)
+        case .editMetadata:
+            LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
+                presentedSelector = nil
+                localEditToken = UUID()   // force a re-hydrate on dismiss
             }
         #endif
         }
