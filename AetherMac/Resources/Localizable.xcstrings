@@ -67,6 +67,22 @@
         }
       }
     },
+    "Add Folder": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidat složku"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додати теку"
+          }
+        }
+      }
+    },
     "Add Folder…": {
       "localizations": {
         "cs": {
@@ -93,6 +109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pro vyhledávání dostupnosti přidejte výše klíč TMDb."
+          }
+        }
+      }
+    },
+    "Add the folders that make up your library and tell Aether what each one holds. Leave it empty to scan every share on the server.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidej složky, ze kterých se skládá tvá knihovna, a řekni Aetheru, co každá obsahuje. Necháš-li prázdné, prohledá se každý share na serveru."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додайте теки, з яких складається ваша бібліотека, і вкажіть Aether, що містить кожна. Якщо залишити порожнім, скануватиметься кожен спільний ресурс на сервері."
           }
         }
       }
@@ -926,12 +958,44 @@
         }
       }
     },
+    "Leave the selection empty to scan every share on this server.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Necháš-li výběr prázdný, prohledá se každý share na tomto serveru."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Якщо залишити вибір порожнім, скануватиметься кожен спільний ресурс на цьому сервері."
+          }
+        }
+      }
+    },
     "Library": {
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
             "value": "Knihovna"
+          }
+        }
+      }
+    },
+    "Library Folders": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Složky knihovny"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Теки бібліотеки"
           }
         }
       }
@@ -1085,6 +1149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zatím žádná stahování"
+          }
+        }
+      }
+    },
+    "No folders yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádné složky"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поки що немає тек"
           }
         }
       }
@@ -1544,6 +1624,22 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odebrat"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видалити"
+          }
+        }
+      }
+    },
     "Remove %@ filter": {
       "comment": "Library: accessibility/help label for a removable active-filter chip; %@ is the facet value (#367).",
       "localizations": {
@@ -1730,6 +1826,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit vše"
+          }
+        }
+      }
+    },
+    "Selected Folders": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vybrané složky"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибрані теки"
           }
         }
       }
