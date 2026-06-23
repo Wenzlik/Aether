@@ -260,9 +260,9 @@ struct DetailView: View {
     // `internal`: playbackSelectorSheet(for:) (DetailView+PlaybackConfig.swift) takes this (#241 inc 6).
     enum PlaybackSelector: Identifiable {
         case audio, subtitles, quality, downloadQuality, technicalDetails
+        case smbEditMetadata
         #if !os(tvOS)
         case editMetadata
-        case smbEditMetadata
         #endif
         var id: String {
             switch self {
@@ -271,9 +271,9 @@ struct DetailView: View {
             case .quality: return "quality"
             case .downloadQuality: return "downloadQuality"
             case .technicalDetails: return "technicalDetails"
+            case .smbEditMetadata: return "smbEditMetadata"
             #if !os(tvOS)
             case .editMetadata: return "editMetadata"
-            case .smbEditMetadata: return "smbEditMetadata"
             #endif
             }
         }

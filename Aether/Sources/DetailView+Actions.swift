@@ -186,15 +186,16 @@ extension DetailView {
                 presentedSelector = .editMetadata
             }
         }
-        // SMB items carry no metadata — let the user correct the title/year
-        // so a mis-named file matches a TMDb poster (#213). Movies/episodes
-        // only (not show containers, whose id is "show:<series>").
+        #endif
+        // SMB items carry no metadata — let the user correct the title/year (or
+        // search TMDb and pick a match) so a mis-named file gets a poster (#213).
+        // Movies/episodes only (not show containers, whose id is "show:<series>").
+        // Available on tvOS too.
         if isSMBSource(activeItem.id.source) && !activeItem.kind.isContainer {
             AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
                 presentedSelector = .smbEditMetadata
             }
         }
-        #endif
     }
 
     /// Download as a compact icon `Menu`: the glyph reflects the current state,

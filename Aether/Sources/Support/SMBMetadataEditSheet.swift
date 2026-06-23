@@ -1,25 +1,25 @@
-#if !os(tvOS)
 import SwiftUI
 import AetherCore
 
-/// Correct an SMB item's title & year (#213). SMB files carry no metadata —
-/// only a filename — so a mis-named release (e.g. `the.film.2009.x265.mkv`
-/// vs the real title) won't match TMDb. This sheet lets the user fix the title
-/// and year; on save the correction is persisted as an override, the cached
-/// walk is dropped, and the next browse re-matches TMDb with the corrected
-/// title → a fresh poster / overview.
+/// Correct an SMB item's title & year (#213) and match it to TMDb. SMB files
+/// carry no metadata — only a filename — so a mis-named release (e.g.
+/// `the.film.2009.x265.mkv` vs the real title) won't match TMDb. This sheet lets
+/// the user fix the title/year **and** search TMDb to pick the right result; on
+/// save the correction is persisted as an override, the cached walk is dropped,
+/// and the next browse re-matches TMDb with the corrected title → a fresh poster
+/// / overview.
 ///
-/// Deliberately lighter than the Local Library editor: no poster picker (SMB
-/// posters always come from TMDb) and no episode fields — corrections target
-/// the title/year that drive the match key.
-///
-/// tvOS-gated: free-form text entry, matching the Local editor's gating.
+/// Available on tvOS too (free-form entry via the TV keyboard, plus the
+/// search-and-pick flow, which is the easier path with a remote).
 struct SMBMetadataEditSheet: View {
     let itemID: MediaID
     /// Currently displayed title / year, used to pre-fill when there's no saved
     /// override yet (so the user edits from what they see).
     let currentTitle: String
     let currentYear: Int?
+    /// The source filename — shown so the user can tell *which* file they're
+    /// correcting when a bad match makes the title/poster misleading.
+    let currentFilename: String?
     let onClose: () -> Void
 
     @Environment(AppSession.self) private var session
@@ -30,6 +30,11 @@ struct SMBMetadataEditSheet: View {
     @State private var isSaving = false
     @State private var loaded = false
 
+    // TMDb search-and-pick.
+    @State private var candidates: [TMDbMetadata] = []
+    @State private var isSearching = false
+    @State private var chosenMatch: TMDbMetadata?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
@@ -37,11 +42,28 @@ struct SMBMetadataEditSheet: View {
                     .font(AetherDesign.Typography.sectionTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
 
-                Text("SMB files have no metadata. Correct the title and year to match a poster on TMDb.")
+                Text("SMB files have no metadata. Correct the title and year, or search TMDb and pick the right result.")
                     .font(AetherDesign.Typography.caption)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
 
+                if let currentFilename {
+                    // Show the source filename so a wrong match (misleading title /
+                    // poster) is still traceable back to the actual file.
+                    HStack(spacing: AetherDesign.Spacing.xs) {
+                        Image(systemName: "doc")
+                        Text(currentFilename)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                    }
+                    .font(AetherDesign.Typography.caption.monospaced())
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .padding(AetherDesign.Spacing.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AetherDesign.Materials.card, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                }
+
                 detailsSection
+                if session.isTMDbConfigured { matchSection }
                 saveRow
             }
             .padding(AetherDesign.Spacing.l)
@@ -58,8 +80,10 @@ struct SMBMetadataEditSheet: View {
             }
             .buttonStyle(.plain)
         }
+        #if !os(tvOS)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        #endif
         .task { await load() }
     }
 
@@ -95,6 +119,77 @@ struct SMBMetadataEditSheet: View {
         }
     }
 
+    // MARK: - Match
+
+    /// Search TMDb by the title/year above and let the user pick the right
+    /// result. Picking fills the title/year fields with the candidate's exact
+    /// values, so the saved override re-matches to that result on the next walk.
+    private var matchSection: some View {
+        AetherSettingsSection("Match") {
+            AetherSettingsRow(
+                label: isSearching ? "Searching…" : "Find Match on TMDb",
+                description: "Search by the title & year above, then pick the right result.",
+                systemImage: "magnifyingglass",
+                value: nil
+            ) {
+                guard !isSearching else { return }
+                Task { await search() }
+            }
+            .disabled(isSearching)
+
+            if !candidates.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AetherDesign.Spacing.m) {
+                        ForEach(candidates, id: \.tmdbID) { candidate in
+                            candidateCard(candidate)
+                        }
+                    }
+                    .padding(.horizontal, AetherDesign.Spacing.m)
+                    .padding(.bottom, AetherDesign.Spacing.m)
+                }
+            }
+        }
+    }
+
+    private func candidateCard(_ candidate: TMDbMetadata) -> some View {
+        let selected = chosenMatch?.tmdbID == candidate.tmdbID
+        return Button {
+            chosenMatch = candidate
+            // Reflect the pick in the editable fields so the user sees what
+            // they're applying (and the saved override re-matches it).
+            title = candidate.title
+            yearText = candidate.year.map(String.init) ?? ""
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                CachedAsyncImage(url: candidate.posterURL, aspectRatio: 2.0 / 3.0, maxPixel: ArtworkTier.thumbnail.maxPixel)
+                    .frame(width: 92, height: 138)
+                    .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                            .strokeBorder(selected ? AetherDesign.Palette.accent : .clear, lineWidth: 3)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(AetherDesign.Palette.accent)
+                                .padding(4)
+                        }
+                    }
+                Text(candidate.title)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(1)
+                if let y = candidate.year {
+                    Text(String(y))
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+            }
+            .frame(width: 92)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var saveRow: some View {
         VStack(spacing: AetherDesign.Spacing.s) {
             AetherButton(isSaving ? "Saving…" : "Save & Re-match", systemImage: "checkmark", role: .primary) {
@@ -123,6 +218,16 @@ struct SMBMetadataEditSheet: View {
         }
     }
 
+    private func search() async {
+        isSearching = true
+        defer { isSearching = false }
+        candidates = await session.localMatchCandidates(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            year: Int(yearText.trimmingCharacters(in: .whitespaces)),
+            isEpisode: false
+        )
+    }
+
     private func save() async {
         isSaving = true
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -141,4 +246,3 @@ struct SMBMetadataEditSheet: View {
         onClose()
     }
 }
-#endif
