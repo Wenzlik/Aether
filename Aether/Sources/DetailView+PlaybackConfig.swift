@@ -99,20 +99,21 @@ extension DetailView {
             .aetherScreenBackground()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        case .smbEditMetadata:
+            SMBMetadataEditSheet(
+                itemID: activeItem.id,
+                currentTitle: current.title,
+                currentYear: current.year,
+                currentFilename: current.streamURL?.lastPathComponent
+            ) {
+                presentedSelector = nil
+                localEditToken = UUID()   // re-hydrate Detail with the corrected match
+            }
         #if !os(tvOS)
         case .editMetadata:
             LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {
                 presentedSelector = nil
                 localEditToken = UUID()   // force a re-hydrate on dismiss
-            }
-        case .smbEditMetadata:
-            SMBMetadataEditSheet(
-                itemID: activeItem.id,
-                currentTitle: current.title,
-                currentYear: current.year
-            ) {
-                presentedSelector = nil
-                localEditToken = UUID()   // re-hydrate Detail with the corrected match
             }
         #endif
         }
@@ -236,7 +237,7 @@ extension DetailView {
     /// engine plays the local file fine. `nil` mediaInfo ⇒ don't restrict.
     private var forcesTranscodeDownload: Bool {
         #if os(visionOS)
-        return PlaybackEngine.engine(forContainer: current.mediaInfo?.container) == .vlc
+        return VideoEngineResolver.standard.engine(forContainer: current.mediaInfo?.container) == .vlc
         #else
         return false
         #endif

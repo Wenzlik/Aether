@@ -42,10 +42,49 @@ platforms ship. The iOS `.ipa` does **not** contain libmpv; the Mac `.app` does
 - **Vendored binary** `Vendor/VLCKit/VLCKit.xcframework` (~522 MB), **gitignored**,
   fetched by `scripts/fetch_vlckit.sh` (CI runs it via `ci_scripts/ci_post_clone.sh`).
 - Linked as a local SPM `binaryTarget` and used by the `Aether` app target only.
-- `PlaybackEngine` routes natively-decodable containers to **AVPlayer** (system
-  chrome, PiP, AirPlay, HDR) and everything else to **VLCKit**.
+- `VideoEngineResolver` (AetherCore) routes natively-decodable containers to
+  **AVPlayer** (system chrome, PiP, AirPlay, HDR) and everything else to
+  **VLCKit** — see *Engine selection* below.
 - VLCKit **4** specifically, because it is the only build with a usable visionOS
   slice. (VLCKit 3 has the macOS vout but no visionOS.)
+
+> **⚠️ VLCKit is on its way out (#476).** It's an LGPL-over-GPL wrapper we don't
+> hold the copyright to → an App Store license risk. The plan is an
+> AVFoundation-first, capability-tiered stack (remux shim + libmpv-LGPL
+> fallback) that lets us drop VLCKit from the iOS family. macOS keeps libmpv and
+> is out of scope. The routing seam below is the first step (P1).
+
+---
+
+## Engine selection — capability tiers (#476)
+
+The choice of engine lives in **`AetherCore/Playback/VideoEngine.swift`** and is
+pure, deterministic, and unit-tested (`VideoEngineResolverTests`). It is
+UIKit-free — AetherCore never constructs a player, it only *decides* which one
+the app target should present.
+
+- **`MediaDescriptor`** — the routing inputs (URL scheme + container), built
+  from a resolved URL or a raw container name (download-time, before a URL
+  exists).
+- **`VideoEngine`** protocol — a `canPlay(_:)` capability plus a `tier`
+  (lower = cheaper / preferred). Conformers today: `AVFoundationEngine` (tier 0)
+  and `VLCEngine` (tier 3, universal fallback).
+- **`VideoEngineResolver`** — picks the **lowest-tier engine that can play** the
+  descriptor. `.standard` is the app-wide immutable default; tests inject a
+  custom engine list.
+
+Routing rules (unchanged from the old enum, now expressed as tiers):
+
+| Input | Engine |
+|---|---|
+| mp4 / m4v / mov / m4a / HLS (`.m3u8`) / extension-less transcode URL | AVFoundation |
+| mkv / avi / ts / webm / … (local) | VLCKit |
+| `smb://` anything (even `.mp4`) | VLCKit — AVPlayer can't open SMB (#214) |
+
+> The tier model is the extension seam for #476: the planned **remux-to-fMP4
+> shim** and **libmpv-LGPL fallback** slot in as new `VideoEngine` conformers at
+> their tier; deleting VLCKit (P3) is removing the `VLCEngine` conformer + its
+> view. No routing call site changes.
 
 ---
 

@@ -11,7 +11,7 @@ import AetherCore
 /// count-capped), run each filename through `TitleInference`, and surface the
 /// result as flat movies + synthetic show containers (`show:<series>`) split
 /// into "Movies" / "TV Shows" libraries. Playback is direct: `streamURL` is the
-/// credential-free `smb://` URL, routed to VLCKit by `PlaybackEngine`, with
+/// credential-free `smb://` URL, routed to VLCKit by `VideoEngineResolver`, with
 /// credentials supplied as media options at play time (`vlcMediaOptions`).
 /// Why an SMB download couldn't start (the transfer itself throws SMBClient's
 /// own errors, which already read clearly).
@@ -69,6 +69,9 @@ actor SMBMediaSource: CustomDownloadSource {
     private struct SMBFile: Sendable {
         let url: URL
         let inference: TitleInference
+        /// Share + the folders leading to the file (no filename) — the signal the
+        /// folder-role classifier groups by (#481).
+        let folderComponents: [String]
         var metadata: TMDbMetadata?
         /// Resolution / codec / HDR / audio parsed from the release filename
         /// (SMB has no probed stream metadata).
@@ -76,6 +79,17 @@ actor SMBMediaSource: CustomDownloadSource {
         /// User's title/year correction (#213), keyed by this file's stream URL.
         /// Used for both the TMDb match key and the displayed title/year.
         var override: SMBMetadataStore.Override?
+        /// Folder-role result (#481), filled after the walk. `nil` falls back to
+        /// the per-filename inference (defensive — classification always runs).
+        var classification: SMBFolderClassifier.Classification?
+
+        /// Movie vs episode — the folder role wins over the filename guess.
+        var roleIsEpisode: Bool { classification?.isEpisode ?? inference.isEpisode }
+        /// Key that groups a show's episodes (the series folder), stable across
+        /// filename variations. Falls back to the inferred title.
+        var seriesGroupKey: String { classification?.seriesKey ?? inference.title }
+        /// Show display name when TMDb doesn't match — the series folder name.
+        var seriesDisplayName: String { classification?.seriesName ?? inference.title }
 
         /// Title to match + display: the user's correction wins over inference.
         var effectiveTitle: String {
@@ -94,10 +108,10 @@ actor SMBMediaSource: CustomDownloadSource {
     func libraries() async throws -> [Library] {
         let files = await files()
         var libs: [Library] = []
-        if files.contains(where: { !$0.inference.isEpisode }) {
+        if files.contains(where: { !$0.roleIsEpisode }) {
             libs.append(Library(id: moviesLibraryID, title: "Movies", kind: .movie))
         }
-        if files.contains(where: { $0.inference.isEpisode }) {
+        if files.contains(where: { $0.roleIsEpisode }) {
             libs.append(Library(id: showsLibraryID, title: "TV Shows", kind: .show))
         }
         return libs
@@ -106,36 +120,38 @@ actor SMBMediaSource: CustomDownloadSource {
     func items(in library: Library.ID) async throws -> [MediaItem] {
         let files = await files()
         if library == moviesLibraryID {
-            return files.filter { !$0.inference.isEpisode }
+            return files.filter { !$0.roleIsEpisode }
                 .map { movieItem($0) }
                 .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
         if library == showsLibraryID {
-            let episodes = files.filter { $0.inference.isEpisode }
-            return Dictionary(grouping: episodes, by: { $0.inference.title })
-                .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
-                .map { showContainer(series: $0.key, episodes: $0.value) }
+            // Group a show's episodes by their series folder (#481), not by the
+            // per-filename title — so filename variance doesn't fragment a show.
+            let episodes = files.filter { $0.roleIsEpisode }
+            return Dictionary(grouping: episodes, by: { $0.seriesGroupKey })
+                .map { showContainer(seriesKey: $0.key, episodes: $0.value) }
+                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
         return []
     }
 
     func children(of id: MediaID) async throws -> [MediaItem] {
         guard id.source == self.id, id.rawValue.hasPrefix(Self.showPrefix) else { return [] }
-        let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
-        let episodes = await files().filter { $0.inference.isEpisode && $0.inference.title == series }
+        let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
+        let episodes = await files().filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
         return sortedEpisodes(episodes).map { episodeItem($0, showID: id) }
     }
 
     func item(for id: MediaID) async throws -> MediaItem? {
         guard id.source == self.id else { return nil }
         if id.rawValue.hasPrefix(Self.showPrefix) {
-            let series = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = await files().filter { $0.inference.isEpisode && $0.inference.title == series }
-            return episodes.isEmpty ? nil : showContainer(series: series, episodes: episodes)
+            let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
+            let episodes = await files().filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            return episodes.isEmpty ? nil : showContainer(seriesKey: seriesKey, episodes: episodes)
         }
         guard let file = await files().first(where: { $0.url.absoluteString == id.rawValue }) else { return nil }
-        return file.inference.isEpisode
-            ? episodeItem(file, showID: showID(for: file.inference.title))
+        return file.roleIsEpisode
+            ? episodeItem(file, showID: showID(for: file.seriesGroupKey))
             : movieItem(file)
     }
 
@@ -236,17 +252,31 @@ actor SMBMediaSource: CustomDownloadSource {
                 discovered.append(SMBFile(
                     url: entry.streamURL,
                     inference: inference,
+                    folderComponents: Array(pathComponents),
                     mediaInfo: mediaInfo,
                     override: overrides[entry.streamURL.absoluteString]
                 ))
             }
         }
         Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
+        classifyFolderRoles(&discovered)
         await enrichWithTMDb(&discovered)
         let matched = discovered.filter { $0.metadata != nil }.count
         Self.log.info("SMB TMDb: matched \(matched, privacy: .public)/\(discovered.count, privacy: .public) titles")
         lastStats = (matched: matched, total: discovered.count)
         return discovered   // `files()` owns caching
+    }
+
+    /// Tag each file with its folder role (#481): group a show's episodes by the
+    /// series folder (stable across filename variations, so a series doesn't
+    /// fragment into one-episode shows) and fold oddly-named files in a series
+    /// folder in as episodes rather than leaking them into Movies.
+    private nonisolated func classifyFolderRoles(_ files: inout [SMBFile]) {
+        let entries = files.map {
+            SMBFolderClassifier.Entry(folderComponents: $0.folderComponents, isEpisode: $0.inference.isEpisode)
+        }
+        let classifications = SMBFolderClassifier.classify(entries)
+        for index in files.indices { files[index].classification = classifications[index] }
     }
 
     /// Attach TMDb posters/overview to each file (SMB has none). Matched once per
@@ -262,11 +292,19 @@ actor SMBMediaSource: CustomDownloadSource {
         var pendingMisses: [String] = []
         for index in files.indices {
             let file = files[index]
-            // The user's correction (if any) drives the match key — editing a
-            // title/year yields a new key → a fresh TMDb match.
-            let title = file.effectiveTitle
-            let year = file.effectiveYear
-            let isEpisode = file.inference.isEpisode
+            // Episodes match the series by its folder name → one TMDb lookup
+            // covers the whole show (consistent art). Movies match their own
+            // title. A per-file title/year correction still wins (#213).
+            let isEpisode = file.roleIsEpisode
+            let title: String
+            let year: Int?
+            if isEpisode {
+                title = (file.override?.title).flatMap { $0.isEmpty ? nil : $0 } ?? file.seriesDisplayName
+                year = file.override?.year
+            } else {
+                title = file.effectiveTitle
+                year = file.effectiveYear
+            }
             let key = SMBMetadataStore.key(title: title, year: year, isEpisode: isEpisode)
             switch await store.lookup(key) {
             case .hit(let metadata):
@@ -336,8 +374,8 @@ actor SMBMediaSource: CustomDownloadSource {
 
     // MARK: - Mapping
 
-    private nonisolated func showID(for series: String) -> MediaID {
-        .init(source: id, rawValue: "\(Self.showPrefix)\(series)")
+    private nonisolated func showID(for seriesKey: String) -> MediaID {
+        .init(source: id, rawValue: "\(Self.showPrefix)\(seriesKey)")
     }
 
     private nonisolated func movieItem(_ file: SMBFile) -> MediaItem {
@@ -367,19 +405,21 @@ actor SMBMediaSource: CustomDownloadSource {
             backdropURL: file.metadata?.backdropURL,
             streamURL: file.url,
             mediaInfo: file.mediaInfo,
-            seriesTitle: file.inference.title,
+            seriesTitle: file.seriesDisplayName,
             seasonNumber: file.inference.season,
             episodeNumber: file.inference.episode,
             parentID: showID
         )
     }
 
-    private nonisolated func showContainer(series: String, episodes: [SMBFile]) -> MediaItem {
-        // Series art from the first episode that got a TMDb match.
+    private nonisolated func showContainer(seriesKey: String, episodes: [SMBFile]) -> MediaItem {
+        // Series art from the first episode that got a TMDb match; the title is
+        // the canonical match, else the series folder name (#481).
         let metadata = episodes.compactMap(\.metadata).first
+        let folderName = episodes.first?.seriesDisplayName ?? seriesKey
         return MediaItem(
-            id: showID(for: series),
-            title: metadata?.title ?? series,
+            id: showID(for: seriesKey),
+            title: metadata?.title ?? folderName,
             kind: .show,
             summary: metadata?.overview,
             posterURL: metadata?.posterURL,

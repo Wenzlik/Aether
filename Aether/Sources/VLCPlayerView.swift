@@ -122,6 +122,10 @@ final class VLCPlaybackController: UIViewController {
     private var isScrubbing = false
     private var controlsVisible = true
     private var hideWorkItem: DispatchWorkItem?
+    /// Whether the first auto-hide has been armed. The controls start visible and
+    /// only the interaction handlers schedule a hide — so on auto-play (no tap)
+    /// they'd stay up forever. Arm the hide once, the moment frames start flowing.
+    private var firstAutoHideArmed = false
     private var lastAudioCount = -1
     private var lastTextCount = -1
     private var videoFillEnabled = false
@@ -266,6 +270,14 @@ final class VLCPlaybackController: UIViewController {
         let active = player.isPlaying || player.position > 0
         if active { spinner.stopAnimating() }
         else if !spinner.isAnimating { spinner.startAnimating() }
+        #if !os(tvOS)
+        // Frames are flowing — arm the one-shot initial auto-hide so the controls
+        // don't sit on top of the video forever after an untouched auto-play.
+        if active, !firstAutoHideArmed {
+            firstAutoHideArmed = true
+            scheduleAutoHide()
+        }
+        #endif
     }
 
     /// Once VLC has parsed the tracks, select the audio/subtitle matching the
@@ -799,18 +811,30 @@ extension VLCPlaybackController: @preconcurrency VLCMediaPlayerDelegate {
     /// for SMB is typically opening → buffering → playing; a long gap before
     /// `buffering` points at SMB connect/parse, a long gap before the first
     /// frame at decode/parse.
-    func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
-        guard loggedStates.insert(newState.rawValue).inserted else { return }
+    /// **`nonisolated` + main hop is mandatory.** VLCKit fires its delegate from
+    /// its own input/event thread, but `VLCPlaybackController` is a
+    /// `UIViewController` (`@MainActor`). A `@MainActor`-isolated witness called
+    /// off-thread makes the Swift runtime trap (`swift_task_isCurrentExecutor` →
+    /// `dispatch_assert_queue_fail`, SIGTRAP) the instant VLC reports a state
+    /// change — `@preconcurrency` only silences the *compile-time* check, not the
+    /// runtime one. So hop to main before touching any actor-isolated state.
+    nonisolated func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
         let name = VLCMediaPlayerStateToString(newState)
-        Self.perfLog.log("• state=\(name, privacy: .public) @ \(self.elapsedMS(), privacy: .public)ms")
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.loggedStates.insert(newState.rawValue).inserted else { return }
+            Self.perfLog.log("• state=\(name, privacy: .public) @ \(self.elapsedMS(), privacy: .public)ms")
+        }
     }
 
     /// First time-change ≈ first decoded/presented frame — the number that
-    /// matters for "time to first frame".
-    func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        guard !firstFrameLogged else { return }
-        firstFrameLogged = true
-        Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
+    /// matters for "time to first frame". `nonisolated` for the same reason as
+    /// `mediaPlayerStateChanged` (VLC calls it off the main thread).
+    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.firstFrameLogged else { return }
+            self.firstFrameLogged = true
+            Self.perfLog.log("✓ first frame (time changed) @ \(self.elapsedMS(), privacy: .public)ms  hasVideoOut=\(self.player.hasVideoOut, privacy: .public)")
+        }
     }
 }
 
