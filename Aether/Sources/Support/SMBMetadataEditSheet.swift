@@ -21,9 +21,10 @@ struct SMBMetadataEditSheet: View {
     /// override yet (so the user edits from what they see).
     let currentTitle: String
     let currentYear: Int?
-    /// The source filename — shown so the user can tell *which* file they're
-    /// correcting when a bad match makes the title/poster misleading.
-    let currentFilename: String?
+    /// The source file's full path (host + share-relative path) — shown so the
+    /// user can tell *exactly* which file they're correcting when a bad match
+    /// makes the title/poster misleading. Marquee-scrolls if it overflows.
+    let currentPath: String?
     /// Editing a show (not a movie/episode) → search TMDb as a **series** so the
     /// proposed matches are TV shows, and the saved correction (keyed by the show
     /// id) re-matches the whole series.
@@ -105,14 +106,13 @@ struct SMBMetadataEditSheet: View {
     }
 
     @ViewBuilder private var filenameChip: some View {
-        if let currentFilename {
-            // Show the source filename so a wrong match (misleading title /
-            // poster) is still traceable back to the actual file.
+        if let currentPath {
+            // Show the full source path so a wrong match (misleading title /
+            // poster) is still traceable back to the actual file. Long paths
+            // marquee-scroll slowly instead of truncating.
             HStack(spacing: AetherDesign.Spacing.xs) {
                 Image(systemName: "doc")
-                Text(currentFilename)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                MarqueeText(text: currentPath, font: AetherDesign.Typography.caption.monospaced())
             }
             .font(AetherDesign.Typography.caption.monospaced())
             .foregroundStyle(AetherDesign.Palette.textSecondary)
@@ -485,4 +485,74 @@ struct SMBMetadataEditSheet: View {
         await session.saveSMBOverride(nil, for: itemID)
         onClose()
     }
+}
+
+// MARK: - Marquee
+
+/// A single line of text that, when wider than its container, slowly scrolls
+/// back and forth so the whole string is readable without truncation. Static
+/// (left-aligned) when it fits.
+private struct MarqueeText: View {
+    let text: String
+    var font: Font
+
+    @State private var textWidth: CGFloat = 0
+    @State private var containerWidth: CGFloat = 0
+    @State private var animate = false
+
+    private var overflow: CGFloat { max(0, textWidth - containerWidth) }
+
+    var body: some View {
+        // An invisible single-line copy drives the row height and reports the
+        // available (container) width; the visible copy keeps its full intrinsic
+        // width, overflows, and scrolls — clipped to the container.
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .opacity(0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                GeometryReader { g in
+                    Color.clear.preference(key: MarqueeContainerWidthKey.self, value: g.size.width)
+                }
+            )
+            .overlay(alignment: .leading) {
+                Text(text)
+                    .font(font)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .background(
+                        GeometryReader { g in
+                            Color.clear.preference(key: MarqueeTextWidthKey.self, value: g.size.width)
+                        }
+                    )
+                    .offset(x: (overflow > 0 && animate) ? -overflow : 0)
+            }
+            .clipped()
+            .onPreferenceChange(MarqueeContainerWidthKey.self) { containerWidth = $0 }
+            .onPreferenceChange(MarqueeTextWidthKey.self) { textWidth = $0 }
+            .onChange(of: overflow) { _, new in restartAnimation(overflow: new) }
+            .onAppear { restartAnimation(overflow: overflow) }
+            .accessibilityLabel(text)
+    }
+
+    private func restartAnimation(overflow: CGFloat) {
+        animate = false
+        guard overflow > 0 else { return }
+        // ~22 pt/s — a slow, readable crawl — with a pause at each end.
+        let duration = max(4, Double(overflow) / 22)
+        withAnimation(.linear(duration: duration).delay(1.2).repeatForever(autoreverses: true)) {
+            animate = true
+        }
+    }
+}
+
+private struct MarqueeContainerWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct MarqueeTextWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

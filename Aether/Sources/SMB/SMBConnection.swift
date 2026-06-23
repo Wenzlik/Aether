@@ -17,6 +17,10 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
     /// Share/folder paths to scan, relative to the host root (e.g. "Media",
     /// "Media/Movies"). Empty = scan every share found at the host root.
     var roots: [String]
+    /// Per-root content type chosen by the user, keyed by the `roots` string.
+    /// Optional so connections persisted before this field decode cleanly
+    /// (missing key → nil → `.both`, the previous auto-detect behaviour).
+    var rootContent: [String: SMBRootContent]?
 
     init(
         id: String = UUID().uuidString,
@@ -25,7 +29,8 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
         username: String? = nil,
         password: String? = nil,
         domain: String? = nil,
-        roots: [String] = []
+        roots: [String] = [],
+        rootContent: [String: SMBRootContent]? = nil
     ) {
         self.id = id
         self.host = host
@@ -34,9 +39,13 @@ struct SMBConnection: Codable, Hashable, Sendable, Identifiable {
         self.password = password
         self.domain = domain
         self.roots = roots
+        self.rootContent = rootContent
     }
 
     var sourceID: MediaSourceID { .smb(id: id) }
+
+    /// The user-chosen content type for `root` (defaults to `.both` = auto).
+    func content(for root: String) -> SMBRootContent { rootContent?[root] ?? .both }
 
     /// Base `smb://host/` URL — credential-free (creds go via VLC options).
     var rootURL: URL? { URL(string: "smb://\(host)/") }
