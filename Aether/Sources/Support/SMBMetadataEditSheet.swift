@@ -24,6 +24,10 @@ struct SMBMetadataEditSheet: View {
     /// The source filename — shown so the user can tell *which* file they're
     /// correcting when a bad match makes the title/poster misleading.
     let currentFilename: String?
+    /// Editing a show (not a movie/episode) → search TMDb as a **series** so the
+    /// proposed matches are TV shows, and the saved correction (keyed by the show
+    /// id) re-matches the whole series.
+    var searchAsShow: Bool = false
     let onClose: () -> Void
 
     @Environment(AppSession.self) private var session
@@ -437,7 +441,7 @@ struct SMBMetadataEditSheet: View {
         candidates = await session.localMatchCandidates(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             year: Int(yearText.trimmingCharacters(in: .whitespaces)),
-            isEpisode: false
+            isEpisode: searchAsShow
         )
         isSearching = false
         didSearch = true
@@ -451,7 +455,7 @@ struct SMBMetadataEditSheet: View {
         candidates = await session.localMatchCandidates(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             year: Int(yearText.trimmingCharacters(in: .whitespaces)),
-            isEpisode: false
+            isEpisode: searchAsShow
         )
         didSearch = true
     }

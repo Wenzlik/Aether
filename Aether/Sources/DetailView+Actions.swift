@@ -189,9 +189,9 @@ extension DetailView {
         #endif
         // SMB items carry no metadata — let the user correct the title/year (or
         // search TMDb and pick a match) so a mis-named file gets a poster (#213).
-        // Movies/episodes only (not show containers, whose id is "show:<series>").
-        // Available on tvOS too.
-        if isSMBSource(activeItem.id.source) && !activeItem.kind.isContainer {
+        // Movies, episodes, **and shows** (correcting a show fixes the whole
+        // series); not seasons. Available on tvOS too.
+        if isSMBSource(activeItem.id.source), activeItem.kind == .show || !activeItem.kind.isContainer {
             AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
                 presentedSelector = .smbEditMetadata
             }
