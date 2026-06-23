@@ -46,6 +46,12 @@ struct SMBMetadataEditSheet: View {
     @State private var chosenMatch: TMDbMetadata?
 
     @FocusState private var focus: FocusTarget?
+    #if !os(tvOS)
+    /// Open at `.large` so both the affirmative action *and* the "Edit Title &
+    /// Year" fallback are visible without scrolling — at `.medium` the secondary
+    /// button fell below the fold. The user can still drag down to `.medium`.
+    @State private var detent: PresentationDetent = .large
+    #endif
 
     var body: some View {
         ScrollView {
@@ -80,7 +86,7 @@ struct SMBMetadataEditSheet: View {
         // one click with no rail-walking. Inert on iOS / visionOS (no focus engine).
         .defaultFocus($focus, .primary)
         #if !os(tvOS)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         #endif
         .task { await start() }
@@ -169,7 +175,7 @@ struct SMBMetadataEditSheet: View {
                             Text(overview)
                                 .font(AetherDesign.Typography.body)
                                 .foregroundStyle(AetherDesign.Palette.textTertiary)
-                                .lineLimit(5)
+                                .lineLimit(3)
                                 .padding(.top, AetherDesign.Spacing.xs)
                         }
 
