@@ -265,6 +265,11 @@ actor SMBMediaSource: CustomDownloadSource {
             let shares = (try? await session.shares()) ?? []
             roots = shares.map { ($0, "/") }
         }
+        // Warm the playback proxy's SMB session now, in parallel with the walk, so
+        // the first Play doesn't stall on the ~16s NAS login (#213). Fire-and-forget.
+        let sharesToWarm = Set(roots.map(\.share))
+        let conn = connection
+        Task { for share in sharesToWarm { await SMBRangeProxy.shared.prewarm(connection: conn, share: share) } }
         // User title/year corrections, keyed by stream URL (#213).
         let overrides = await SMBMetadataStore.shared.allOverrides()
         var discovered: [SMBFile] = []
