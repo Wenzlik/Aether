@@ -114,18 +114,19 @@ struct SMBMetadataEditSheet: View {
 
     // MARK: - Loading
 
-    /// Skeleton (never a spinner) shaped like the confirm card, so the proposed
+    /// Skeleton (never a spinner) shaped like the confirm hero, so the proposed
     /// match fades in without a layout jump.
     private var loadingView: some View {
-        HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+        HStack(alignment: .top, spacing: AetherDesign.Spacing.l) {
             RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
                 .fill(AetherDesign.Palette.surfaceElevated)
-                .frame(width: posterWidth, height: posterWidth * 1.5)
+                .frame(width: heroPosterWidth, height: heroPosterWidth * 1.5)
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
-                skeletonBar(width: 180, height: 22)
-                skeletonBar(width: 110, height: 14)
-                skeletonBar(width: .infinity, height: 12)
-                skeletonBar(width: .infinity, height: 12)
+                skeletonBar(width: 280, height: 26)
+                skeletonBar(width: 140, height: 16)
+                skeletonBar(width: .infinity, height: 13)
+                skeletonBar(width: .infinity, height: 13)
+                skeletonBar(width: .infinity, height: 13)
             }
             Spacer(minLength: 0)
         }
@@ -141,17 +142,22 @@ struct SMBMetadataEditSheet: View {
 
     // MARK: - Confirm
 
+    /// A large, couch-readable hero for the top match + a rail of alternatives
+    /// (a "bigger offering" so a wrong top match isn't a dead end). Focus stays
+    /// deliberately simple — the only directed focus is `defaultFocus` onto the
+    /// primary button (tvOS focus is fragile; no per-item focus state, no
+    /// focus-driven reflow).
     @ViewBuilder private var confirmView: some View {
         if let match = chosenMatch {
-            VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
-                    CachedAsyncImage(url: match.posterURL, aspectRatio: 2.0 / 3.0, maxPixel: ArtworkTier.thumbnail.maxPixel)
-                        .frame(width: posterWidth, height: posterWidth * 1.5)
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                HStack(alignment: .top, spacing: AetherDesign.Spacing.l) {
+                    CachedAsyncImage(url: match.posterURL, aspectRatio: 2.0 / 3.0, maxPixel: ArtworkTier.detail.maxPixel)
+                        .frame(width: heroPosterWidth, height: heroPosterWidth * 1.5)
                         .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
                         Text(match.title)
-                            .font(AetherDesign.Typography.cardTitle)
+                            .font(AetherDesign.Typography.sectionTitle)
                             .foregroundStyle(AetherDesign.Palette.textPrimary)
                             .lineLimit(2)
                         if let meta = matchMetaLine(match) {
@@ -161,28 +167,79 @@ struct SMBMetadataEditSheet: View {
                         }
                         if let overview = match.overview, !overview.isEmpty {
                             Text(overview)
-                                .font(AetherDesign.Typography.caption)
+                                .font(AetherDesign.Typography.body)
                                 .foregroundStyle(AetherDesign.Palette.textTertiary)
-                                .lineLimit(4)
-                                .padding(.top, AetherDesign.Spacing.xxs)
+                                .lineLimit(5)
+                                .padding(.top, AetherDesign.Spacing.xs)
                         }
+
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                            AetherButton(isSaving ? "Saving…" : "Use This Match", systemImage: "checkmark", role: .primary) {
+                                guard !isSaving else { return }
+                                Task { await use(match) }
+                            }
+                            .focused($focus, equals: .primary)
+
+                            AetherButton("Edit Title & Year", systemImage: "pencil", role: .secondary) {
+                                step = .edit
+                            }
+                        }
+                        .padding(.top, AetherDesign.Spacing.m)
                     }
                     Spacer(minLength: 0)
                 }
 
-                VStack(spacing: AetherDesign.Spacing.s) {
-                    AetherButton(isSaving ? "Saving…" : "Use This Match", systemImage: "checkmark", role: .primary) {
-                        guard !isSaving else { return }
-                        Task { await use(match) }
-                    }
-                    .focused($focus, equals: .primary)
+                alternativesRail
+            }
+        }
+    }
 
-                    AetherButton("Edit Details", systemImage: "pencil", role: .secondary) {
-                        step = .edit
+    /// Alternatives to the top match. Big posters; clicking one adopts it
+    /// directly — a remote click is deliberate, so there's no accidental commit,
+    /// and nothing reflows as focus moves across the rail.
+    @ViewBuilder private var alternativesRail: some View {
+        let alternatives = Array(candidates.dropFirst())
+        if !alternatives.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                Text("MORE MATCHES")
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .tracking(0.6)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: AetherDesign.Spacing.m) {
+                        ForEach(alternatives, id: \.tmdbID) { candidate in
+                            alternativeCard(candidate)
+                        }
                     }
+                    .padding(.vertical, AetherDesign.Spacing.s)
                 }
             }
         }
+    }
+
+    private func alternativeCard(_ candidate: TMDbMetadata) -> some View {
+        Button {
+            guard !isSaving else { return }
+            Task { await use(candidate) }
+        } label: {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                CachedAsyncImage(url: candidate.posterURL, aspectRatio: 2.0 / 3.0, maxPixel: ArtworkTier.thumbnail.maxPixel)
+                    .frame(width: altPosterWidth, height: altPosterWidth * 1.5)
+                    .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                    .premiumFocus(scale: 1.06)
+                Text(candidate.title)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    .lineLimit(1)
+                if let y = candidate.year {
+                    Text(String(y))
+                        .font(AetherDesign.Typography.caption)
+                        .foregroundStyle(AetherDesign.Palette.textTertiary)
+                }
+            }
+            .frame(width: altPosterWidth)
+        }
+        .buttonStyle(.plain)
     }
 
     /// `2009 · ★ 7.8` — year and rating when present (TMDb gives us no genre /
@@ -335,11 +392,21 @@ struct SMBMetadataEditSheet: View {
 
     // MARK: - Layout
 
-    private var posterWidth: CGFloat {
+    /// The big confirm-step poster — sized to read from couch distance on tvOS.
+    private var heroPosterWidth: CGFloat {
         #if os(tvOS)
-        160
+        260
         #else
-        120
+        140
+        #endif
+    }
+
+    /// Alternatives-rail poster — smaller than the hero, still couch-readable.
+    private var altPosterWidth: CGFloat {
+        #if os(tvOS)
+        150
+        #else
+        100
         #endif
     }
 

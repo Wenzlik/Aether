@@ -101,6 +101,25 @@ struct DetailView: View {
     /// `.presentationDetents([.medium])` so the picker takes about half the
     /// screen and the Detail backdrop is still visible behind.
     @State var presentedSelector: PlaybackSelector?
+    #if os(tvOS)
+    /// On tvOS the SMB metadata editor presents full-screen — a big, couch-
+    /// readable match gallery, with no tab bar bleeding through behind a
+    /// centered card. Every other selector stays in the shared sheet. These two
+    /// bindings split the single `presentedSelector` across the two
+    /// presentations so only one is ever active.
+    var nonSMBSelector: Binding<PlaybackSelector?> {
+        Binding(
+            get: { presentedSelector == .smbEditMetadata ? nil : presentedSelector },
+            set: { presentedSelector = $0 }
+        )
+    }
+    var smbSelector: Binding<PlaybackSelector?> {
+        Binding(
+            get: { presentedSelector == .smbEditMetadata ? presentedSelector : nil },
+            set: { if $0 == nil { presentedSelector = nil } }
+        )
+    }
+    #endif
     // Set when the local metadata editor closes, to re-point the screen at the
     // edited item so its title / poster / overview repaint (#211). Seeded nil so
     // the re-hydrate task below is a no-op on first appear (no double fetch).
@@ -456,6 +475,16 @@ struct DetailView: View {
             tmdbRating = meta?.rating
         }
         .animation(reduceMotion ? nil : AetherDesign.Motion.hero, value: isPlayerPresented)
+        #if os(tvOS)
+        // SMB editor → full-screen cover (big gallery, no tab-bar bleed); the
+        // rest stays in the shared sheet. Split via the two derived bindings.
+        .sheet(item: nonSMBSelector) { selector in
+            playbackSelectorSheet(for: selector)
+        }
+        .fullScreenCover(item: smbSelector) { selector in
+            playbackSelectorSheet(for: selector)
+        }
+        #else
         .sheet(item: $presentedSelector) { selector in
             // Use the closure parameter, not the @State again. On first
             // presentation SwiftUI evaluates the sheet body before the
@@ -468,6 +497,7 @@ struct DetailView: View {
             // correct.
             playbackSelectorSheet(for: selector)
         }
+        #endif
         .fullScreenCover(item: $vlcPlayback) { playback in
             // SMB has no pre-play track list, so hand the player the app's default
             // audio/subtitle languages — it applies the matching tracks once VLC
