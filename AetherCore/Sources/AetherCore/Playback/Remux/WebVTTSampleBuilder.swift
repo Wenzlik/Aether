@@ -22,12 +22,19 @@ enum WebVTTSampleBuilder {
         let payload: String
     }
 
+    /// One WebVTT sample: the serialised cue box(es) plus its on-screen duration
+    /// (in the track timescale). Always a sync sample, no composition offset.
+    struct Sample: Sendable, Equatable {
+        let data: [UInt8]
+        let duration: UInt32
+    }
+
     /// Build the tiling sample list for `[0, totalDurationTicks)`.
-    static func samples(cues: [Cue], totalDurationTicks: Int64) -> [FragmentedMP4Writer.Sample] {
+    static func samples(cues: [Cue], totalDurationTicks: Int64) -> [Sample] {
         guard totalDurationTicks > 0 else { return [] }
         let sorted = cues.sorted { $0.startTicks < $1.startTicks }
 
-        var samples: [FragmentedMP4Writer.Sample] = []
+        var samples: [Sample] = []
         var cursor: Int64 = 0
 
         for cue in sorted {
@@ -54,16 +61,13 @@ enum WebVTTSampleBuilder {
 
     /// A presentation cue sample: a `vttc` VTTCueBox wrapping a `payl`
     /// CuePayloadBox with the UTF-8 cue text.
-    private static func cueSample(payload: String, duration: UInt32) -> FragmentedMP4Writer.Sample {
+    private static func cueSample(payload: String, duration: UInt32) -> Sample {
         let payl = MP4Box.box("payl", Array(payload.utf8))
-        let vttc = MP4Box.box("vttc", payl)
-        return FragmentedMP4Writer.Sample(data: vttc, duration: duration,
-                                          isKeyframe: true, compositionOffset: 0)
+        return Sample(data: MP4Box.box("vttc", payl), duration: duration)
     }
 
     /// An empty placeholder sample (`vtte` VTTEmptyCueBox) — no cue is on screen.
-    private static func emptySample(duration: UInt32) -> FragmentedMP4Writer.Sample {
-        FragmentedMP4Writer.Sample(data: MP4Box.box("vtte", []), duration: duration,
-                                   isKeyframe: true, compositionOffset: 0)
+    private static func emptySample(duration: UInt32) -> Sample {
+        Sample(data: MP4Box.box("vtte", []), duration: duration)
     }
 }

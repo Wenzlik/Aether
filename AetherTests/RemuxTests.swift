@@ -434,105 +434,11 @@ private enum MP4Probe {
     }
 }
 
-@Suite("AetherCore — FragmentedMP4Writer init segment (#476 remux)")
-struct FragmentedMP4WriterTests {
+@Suite("AetherCore — RemuxTrack factory (#476 remux)")
+struct RemuxTrackTests {
 
     private let avcConfig: [UInt8] = [0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0x00, 0x04, 0x67, 0x42]
     private let aacConfig: [UInt8] = [0x12, 0x10]   // AAC-LC, 48 kHz, stereo
-
-    private func writer() -> FragmentedMP4Writer {
-        let video = RemuxTrack(trackID: 1, kind: .video, timescale: 1000,
-                               videoCodec: .h264, codecConfig: avcConfig,
-                               width: 1920, height: 1080)
-        let audio = RemuxTrack(trackID: 2, kind: .audio, timescale: 1000,
-                               audioCodec: .aac, codecConfig: aacConfig,
-                               channels: 2, sampleRate: 48_000)
-        return FragmentedMP4Writer(tracks: [video, audio])
-    }
-
-    @Test("init segment is ftyp + moov at the top level")
-    func topLevel() {
-        let seg = writer().initializationSegment()
-        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
-        #expect(top.map(\.type) == ["ftyp", "moov"])
-        // Every box's size fits exactly within the buffer.
-        #expect(top.last.map { $0.start + $0.size } == seg.count)
-    }
-
-    @Test("moov contains mvhd, one trak per track, and mvex")
-    func moovChildren() throws {
-        let seg = writer().initializationSegment()
-        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
-        let moov = try #require(top.first { $0.type == "moov" })
-        let children = MP4Probe.boxes(seg, from: moov.payloadStart, to: moov.start + moov.size)
-        #expect(children.filter { $0.type == "trak" }.count == 2)
-        #expect(children.contains { $0.type == "mvhd" })
-        #expect(children.contains { $0.type == "mvex" })
-    }
-
-    @Test("sample entries embed avc1/avcC and mp4a/esds with the codec configs")
-    func sampleEntries() {
-        let seg = writer().initializationSegment()
-        #expect(MP4Probe.contains(seg, fourCC: "avc1"))
-        #expect(MP4Probe.contains(seg, fourCC: "avcC"))
-        #expect(MP4Probe.contains(seg, fourCC: "mp4a"))
-        #expect(MP4Probe.contains(seg, fourCC: "esds"))
-        #expect(MP4Probe.contains(seg, fourCC: "trex"))
-        // The codec configs we passed are actually embedded.
-        #expect(MP4Probe.contains(seg, subsequence: avcConfig))
-        #expect(MP4Probe.contains(seg, subsequence: aacConfig))
-    }
-
-    @Test("media segment is moof + mdat; mdat carries the sample bytes")
-    func mediaSegmentStructure() throws {
-        let samples = [
-            FragmentedMP4Writer.Sample(data: [0xA0, 0xA1, 0xA2], duration: 512, isKeyframe: true, compositionOffset: 0),
-            FragmentedMP4Writer.Sample(data: [0xB0, 0xB1], duration: 512, isKeyframe: false, compositionOffset: 0)
-        ]
-        let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
-        let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
-
-        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
-        #expect(top.map(\.type) == ["moof", "mdat"])
-
-        let moof = try #require(top.first { $0.type == "moof" })
-        let moofChildren = MP4Probe.boxes(seg, from: moof.payloadStart, to: moof.start + moof.size)
-        #expect(moofChildren.contains { $0.type == "mfhd" })
-        #expect(moofChildren.contains { $0.type == "traf" })
-
-        // mdat payload = concatenated sample data.
-        let mdat = try #require(top.first { $0.type == "mdat" })
-        #expect(Array(seg[mdat.payloadStart..<(mdat.start + mdat.size)]) == [0xA0, 0xA1, 0xA2, 0xB0, 0xB1])
-    }
-
-    @Test("mediaSegmentByteSize equals the real media segment size")
-    func analyticSizeMatches() {
-        // Two tracks with different sample counts/sizes — the analytic size used
-        // by the stream index must match the materialised segment exactly.
-        let v = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: [
-            .init(data: [0x01, 0x02, 0x03], duration: 100, isKeyframe: true, compositionOffset: 0),
-            .init(data: [0x04, 0x05], duration: 100, isKeyframe: false, compositionOffset: 33)
-        ])
-        let a = FragmentedMP4Writer.FragmentTrack(trackID: 2, baseDecodeTime: 0, samples: [
-            .init(data: [0xAA], duration: 50, isKeyframe: true, compositionOffset: 0)
-        ])
-        let real = writer().mediaSegment(sequenceNumber: 7, tracks: [v, a]).count
-        let analytic = writer().mediaSegmentByteSize([(2, 5), (1, 1)])
-        #expect(real == analytic)
-    }
-
-    @Test("trun data_offset points exactly at the first sample byte")
-    func dataOffsetResolves() {
-        let samples = [FragmentedMP4Writer.Sample(data: [0xCA, 0xFE], duration: 1000, isKeyframe: true, compositionOffset: 0)]
-        let track = FragmentedMP4Writer.FragmentTrack(trackID: 1, baseDecodeTime: 0, samples: samples)
-        let seg = writer().mediaSegment(sequenceNumber: 1, tracks: [track])
-
-        // moof size + 8 (mdat header) is where sample data starts; default-base-
-        // is-moof makes data_offset relative to the moof start, i.e. that value.
-        let top = MP4Probe.boxes(seg, from: 0, to: seg.count)
-        let moofSize = top.first { $0.type == "moof" }!.size
-        #expect(Array(seg[(moofSize + 8)..<(moofSize + 10)]) == [0xCA, 0xFE])
-    }
 
     @Test("RemuxTrack(matroska:) builds H.264/AAC + SRT, rejects DTS + image subs")
     func trackFactory() {
@@ -663,122 +569,6 @@ struct MatroskaRemuxerTests {
         #expect(MatroskaRemuxer(data: data) == nil)
     }
 
-    @Test("remuxAll emits a valid fMP4 stream: ftyp + moov + moof + mdat")
-    func fullStream() throws {
-        let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let out = remuxer.remuxAll()
-
-        let top = MP4Probe.boxes(out, from: 0, to: out.count)
-        #expect(top.map(\.type) == ["ftyp", "moov", "moof", "mdat"])
-        // Every top-level box accounts for the whole buffer with none left over.
-        #expect(top.last.map { $0.start + $0.size } == out.count)
-
-        // The avcC config and both frames made it into the output.
-        #expect(MP4Probe.contains(out, subsequence: avcConfig))
-        #expect(MP4Probe.contains(out, subsequence: frame0))
-        #expect(MP4Probe.contains(out, subsequence: frame1))
-
-        // mdat payload is exactly the two frames, in order.
-        let mdat = try #require(top.first { $0.type == "mdat" })
-        #expect(Array(out[mdat.payloadStart..<(mdat.start + mdat.size)]) == frame0 + frame1)
-    }
-
-    @Test("stream index total length matches the read-back, output is valid fMP4")
-    func streamIndexLength() throws {
-        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let index = remuxer.buildStreamIndex()
-
-        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
-        #expect(whole.count == index.totalLength)
-
-        // Two clusters → ftyp + moov + two moof/mdat pairs.
-        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
-        #expect(top.prefix(2).map(\.type) == ["ftyp", "moov"])
-        #expect(top.filter { $0.type == "moof" }.count == 2)
-        #expect(top.filter { $0.type == "mdat" }.count == 2)
-        #expect(top.last.map { $0.start + $0.size } == whole.count)
-    }
-
-    @Test("partial range reads are consistent with the whole stream")
-    func partialReadsConsistent() throws {
-        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let index = remuxer.buildStreamIndex()
-        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
-
-        // A range spanning the init segment into the first media segment, a
-        // mid-stream range, and the tail — each must equal the whole sliced.
-        for (offset, length) in [(0, 20), (10, whole.count - 10), (whole.count - 5, 5), (index.initLength - 3, 12)] {
-            let slice = remuxer.readBytes(offset: offset, length: length, index: index)
-            #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
-        }
-    }
-
-    @Test("decode order is preserved (frames are NOT PTS-sorted) — B-frame fix")
-    func decodeOrderPreserved() throws {
-        // One cluster, three video frames in DECODE order with reordered PTS —
-        // the classic B-frame pattern: I@0, P@80, B@40. PTS-sorting (the old bug)
-        // would reorder to I,B,P and scramble the decoder; decode order must win.
-        let fA: [UInt8] = [0x0A, 0x0A], fB: [UInt8] = [0x0B, 0x0B], fC: [UInt8] = [0x0C, 0x0C]
-        let videoEntry = MKV.el(MKV.trackEntry,
-            MKV.el(MKV.trackNumber, MKV.uint(1)) +
-            MKV.el(MKV.trackType, MKV.uint(1)) +
-            MKV.el(MKV.codecID, Array("V_MPEG4/ISO/AVC".utf8)) +
-            MKV.el(MKV.codecPrivate, avcConfig) +
-            MKV.el(MKV.video, MKV.el(MKV.pixelWidth, MKV.uint(640)) + MKV.el(MKV.pixelHeight, MKV.uint(360))))
-        let cluster = MKV.el(MKV.cluster,
-            MKV.el(MKV.timestamp, MKV.uint(0)) +
-            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 0,  flags: 0x80, frame: fA)) +
-            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 80, flags: 0x00, frame: fB)) +
-            MKV.el(MKV.simpleBlock, MKV.blockPayload(track: 1, relTs: 40, flags: 0x00, frame: fC)))
-        let data = Data(MKV.el(MKV.ebmlHeader, []) + MKV.el(MKV.segment,
-            MKV.el(MKV.info, MKV.el(MKV.timestampScale, MKV.uint(1_000_000))) +
-            MKV.el(MKV.tracks, videoEntry) + cluster))
-
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let out = remuxer.remuxAll()
-        let mdat = try #require(MP4Probe.boxes(out, from: 0, to: out.count).first { $0.type == "mdat" })
-        // Decode order A,B,C — NOT the PTS-sorted A,C,B.
-        #expect(Array(out[mdat.payloadStart..<(mdat.start + mdat.size)]) == fA + fB + fC)
-    }
-
-    @Test("sample durations come from successive frame timestamps")
-    func durations() throws {
-        let data = MKV.remuxableSample(avcConfig: avcConfig, frame0: frame0, frame1: frame1)
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let frames = [
-            MatroskaFrame(trackNumber: 1, timestampTicks: 0, isKeyframe: true, data: frame0),
-            MatroskaFrame(trackNumber: 1, timestampTicks: 40, isKeyframe: false, data: frame1)
-        ]
-        let seg = remuxer.mediaSegment(from: frames, sequenceNumber: 1)
-        // The first sample's duration (40) should appear as a u32 in the trun.
-        #expect(MP4Probe.contains(seg, subsequence: [0x00, 0x00, 0x00, 0x28]))   // 40
-    }
-
-    @Test("the streamed init segment carries a sidx with one reference per fragment")
-    func streamIndexHasSidx() throws {
-        // Two clusters → two A/V fragments → a sidx (seek index) with two
-        // references. Without it AVPlayer can't map a seek time to a byte offset
-        // over the resource loader and playback hangs on scrub.
-        let data = MKV.remuxableTwoCluster(avcConfig: avcConfig)
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let index = remuxer.buildStreamIndex()
-        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
-
-        let top = MP4Probe.boxes(whole, from: 0, to: whole.count)
-        let sidx = try #require(top.first { $0.type == "sidx" })
-        #expect(top.map(\.type).prefix(3) == ["ftyp", "moov", "sidx"])
-        // reference_count is a u16 at payload+22 (after version/flags, reference_ID,
-        // timescale, earliest_presentation_time, first_offset, reserved).
-        let rc = (Int(whole[sidx.payloadStart + 22]) << 8) | Int(whole[sidx.payloadStart + 23])
-        #expect(rc == index.segments.count)
-        #expect(rc == 2)
-        // No subtitles here → first_offset (payload+16, u32) is 0.
-        let firstOffset = MP4Probe.be32(whole, sidx.payloadStart + 16)
-        #expect(firstOffset == 0)
-    }
 }
 
 @Suite("AetherCore — MP4Box writer (#476 remux)")
@@ -939,7 +729,7 @@ struct MatroskaFrameReaderTests {
 @Suite("AetherCore — WebVTTSampleBuilder (#476 P6 subtitles)")
 struct WebVTTSampleBuilderTests {
 
-    private func totalDuration(_ samples: [FragmentedMP4Writer.Sample]) -> Int64 {
+    private func totalDuration(_ samples: [WebVTTSampleBuilder.Sample]) -> Int64 {
         samples.reduce(0) { $0 + Int64($1.duration) }
     }
 
@@ -994,83 +784,6 @@ struct WebVTTSampleBuilderTests {
     }
 }
 
-@Suite("AetherCore — WebVTT in the fMP4 writer + remuxer (#476 P6)")
-struct WebVTTRemuxTests {
-
-    private let avcConfig: [UInt8] = [0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0xBE, 0xEF]
-
-    @Test("a subtitle track's init segment declares a wvtt/vttC 'text' track")
-    func subtitleInitSegment() {
-        let video = RemuxTrack(trackID: 1, kind: .video, timescale: 1000,
-                               videoCodec: .h264, codecConfig: avcConfig, width: 640, height: 360)
-        let subs = RemuxTrack(trackID: 2, kind: .subtitle, timescale: 1000,
-                              codecConfig: [], language: "eng")
-        let seg = FragmentedMP4Writer(tracks: [video, subs]).initializationSegment()
-        #expect(MP4Probe.contains(seg, fourCC: "wvtt"))
-        #expect(MP4Probe.contains(seg, fourCC: "vttC"))
-        #expect(MP4Probe.contains(seg, fourCC: "nmhd"))     // null media header
-        #expect(MP4Probe.contains(seg, fourCC: "text"))     // hdlr handler_type
-        #expect(MP4Probe.contains(seg, subsequence: Array("WEBVTT".utf8)))
-    }
-
-    @Test("remuxer carries an SRT track: a wvtt track + a subtitle media segment")
-    func remuxesSubtitles() throws {
-        let data = MKV.remuxableWithSubtitles(avcConfig: avcConfig, cueText: "Bonjour")
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        // Two output tracks: video + subtitle.
-        #expect(remuxer.tracks.count == 2)
-        #expect(remuxer.tracks.contains { $0.kind == .subtitle })
-
-        let out = remuxer.remuxAll()
-        // ftyp, moov, then the subtitle moof/mdat, then the A/V moof/mdat.
-        let top = MP4Probe.boxes(out, from: 0, to: out.count)
-        #expect(top.prefix(2).map(\.type) == ["ftyp", "moov"])
-        #expect(top.filter { $0.type == "moof" }.count == 2)
-        #expect(top.last.map { $0.start + $0.size } == out.count)
-        // The WebVTT track + the cue text both made it into the output.
-        #expect(MP4Probe.contains(out, fourCC: "wvtt"))
-        #expect(MP4Probe.contains(out, subsequence: Array("Bonjour".utf8)))
-    }
-
-    @Test("subtitle stream index round-trips and serves the cue text")
-    func subtitleStreamIndex() throws {
-        let data = MKV.remuxableWithSubtitles(avcConfig: avcConfig, cueText: "Hola mundo")
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let index = remuxer.buildStreamIndex()
-        #expect(!index.subtitleSegment.isEmpty)
-
-        let whole = remuxer.readBytes(offset: 0, length: index.totalLength, index: index)
-        #expect(whole.count == index.totalLength)
-        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))
-        #expect(MP4Probe.contains(whole, subsequence: Array("Hola mundo".utf8)))
-
-        // Partial reads across the init / subtitle / A/V regions stay consistent.
-        for (offset, length) in [(0, 16), (index.initLength - 4, 24), (whole.count - 8, 8)] {
-            let slice = remuxer.readBytes(offset: offset, length: length, index: index)
-            #expect(slice == Array(whole[offset..<min(offset + length, whole.count)]))
-        }
-    }
-
-    @Test("RemuxByteReader (the resource-loader path) serves the subtitle region")
-    func byteReaderServesSubtitles() throws {
-        // RemuxByteReader is the production reader behind RemuxResourceLoader — it
-        // must serve the eager subtitle segment, not just init + A/V (a gap there
-        // would corrupt the whole stream).
-        let data = MKV.remuxableWithSubtitles(avcConfig: avcConfig, cueText: "Salut")
-        let remuxer = try #require(MatroskaRemuxer(data: data))
-        let reader = RemuxByteReader(remuxer)
-        let index = remuxer.buildStreamIndex()
-
-        #expect(reader.contentLength == index.totalLength)
-        let whole = reader.read(offset: 0, length: reader.contentLength)
-        #expect(whole.count == reader.contentLength)
-        // Byte-identical to the remuxer's own read path, and the cue is present.
-        #expect(whole == remuxer.readBytes(offset: 0, length: index.totalLength, index: index))
-        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))
-        #expect(MP4Probe.contains(whole, subsequence: Array("Salut".utf8)))
-    }
-}
-
 @Suite("AetherCore — Progressive MP4 remux (#476 seekable output)")
 struct ProgressiveRemuxTests {
 
@@ -1118,7 +831,11 @@ struct ProgressiveRemuxTests {
         let reader = remuxer.progressiveReader()
         let whole = reader.read(offset: 0, length: reader.contentLength)
 
-        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))
+        #expect(MP4Probe.contains(whole, fourCC: "wvtt"))   // WebVTT sample entry
+        #expect(MP4Probe.contains(whole, fourCC: "vttC"))   // WebVTT config box
+        #expect(MP4Probe.contains(whole, fourCC: "nmhd"))   // subtitle null media header
+        #expect(MP4Probe.contains(whole, fourCC: "text"))   // hdlr handler_type
+        #expect(MP4Probe.contains(whole, subsequence: Array("WEBVTT".utf8)))
         #expect(MP4Probe.contains(whole, fourCC: "co64"))
         #expect(MP4Probe.contains(whole, subsequence: Array("Ahoj".utf8)))
         // Two tracks (video + subtitle) → two trak boxes.
