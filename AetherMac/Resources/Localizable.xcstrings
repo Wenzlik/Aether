@@ -225,7 +225,6 @@
       }
     },
     "Audio & Subtitles": {
-      "comment": "Navigation title and button label for the audio/subtitle track picker.",
       "localizations": {
         "cs": {
           "stringUnit": {
