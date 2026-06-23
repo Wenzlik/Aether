@@ -6,16 +6,16 @@
     },
     "%@ of %@ · %@": {
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@ of %2$@ · %3$@"
-          }
-        },
         "cs": {
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ z %2$@ · %3$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ of %2$@ · %3$@"
           }
         }
       }
@@ -67,6 +67,22 @@
         }
       }
     },
+    "Add Folder": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidat složku"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додати теку"
+          }
+        }
+      }
+    },
     "Add Folder…": {
       "localizations": {
         "cs": {
@@ -103,6 +119,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pro vyhledávání dostupnosti přidejte výše klíč TMDb."
+          }
+        }
+      }
+    },
+    "Add the folders that make up your library and tell Aether what each one holds. Leave it empty to scan every share on the server.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přidej složky, ze kterých se skládá tvá knihovna, a řekni Aetheru, co každá obsahuje. Necháš-li prázdné, prohledá se každý share na serveru."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додайте теки, з яких складається ваша бібліотека, і вкажіть Aether, що містить кожна. Якщо залишити порожнім, скануватиметься кожен спільний ресурс на сервері."
           }
         }
       }
@@ -203,7 +235,6 @@
       }
     },
     "Audio & Subtitles": {
-      "comment": "Navigation title and button label for the audio/subtitle track picker.",
       "localizations": {
         "cs": {
           "stringUnit": {
@@ -555,6 +586,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontaktování serveru…"
+          }
+        }
+      }
+    },
+    "Contains": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsahuje"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Містить"
           }
         }
       }
@@ -970,6 +1017,22 @@
         }
       }
     },
+    "Leave the selection empty to scan every share on this server.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Necháš-li výběr prázdný, prohledá se každý share na tomto serveru."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Якщо залишити вибір порожнім, скануватиметься кожен спільний ресурс на цьому сервері."
+          }
+        }
+      }
+    },
     "Leave the username and password empty to connect as a guest. The share is mounted on this Mac and scanned for movies and shows.": {
       "localizations": {
         "cs": {
@@ -986,6 +1049,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Knihovna"
+          }
+        }
+      }
+    },
+    "Library Folders": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Složky knihovny"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Теки бібліотеки"
           }
         }
       }
@@ -1107,6 +1186,22 @@
         }
       }
     },
+    "Movies & TV": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filmy a seriály"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фільми та серіали"
+          }
+        }
+      }
+    },
     "Next Episode Countdown": {
       "localizations": {
         "cs": {
@@ -1123,6 +1218,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zatím žádná stahování"
+          }
+        }
+      }
+    },
+    "No folders yet": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádné složky"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поки що немає тек"
           }
         }
       }
@@ -1602,6 +1713,22 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odebrat"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видалити"
+          }
+        }
+      }
+    },
     "Remove %@ filter": {
       "comment": "Library: accessibility/help label for a removable active-filter chip; %@ is the facet value (#367).",
       "localizations": {
@@ -1818,6 +1945,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit vše"
+          }
+        }
+      }
+    },
+    "Selected Folders": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vybrané složky"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибрані теки"
           }
         }
       }
@@ -2160,6 +2303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Technické detaily"
+          }
+        }
+      }
+    },
+    "Tell Aether what this folder holds so it groups episodes into shows correctly. Pick TV Shows for a folder of series, Movies for a folder of films, or Movies & TV to auto-detect.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Řekni Aetheru, co složka obsahuje, aby správně seskupil epizody do seriálů. Vyber Seriály pro složku se seriály, Filmy pro složku s filmy, nebo Filmy a seriály pro automatické rozpoznání."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вкажіть Aether, що містить ця тека, щоб правильно групувати епізоди в серіали. Виберіть «Серіали» для теки із серіалами, «Фільми» для теки з фільмами або «Фільми та серіали» для автоматичного визначення."
           }
         }
       }

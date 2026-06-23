@@ -104,7 +104,11 @@ extension DetailView {
                 itemID: activeItem.id,
                 currentTitle: current.title,
                 currentYear: current.year,
-                currentFilename: current.streamURL?.lastPathComponent,
+                currentPath: current.streamURL.map { url in
+                    let host = url.host ?? ""
+                    let decoded = url.path.removingPercentEncoding ?? url.path
+                    return host.isEmpty ? decoded : "\(host)\(decoded)"
+                },
                 searchAsShow: activeItem.kind == .show
             ) {
                 presentedSelector = nil

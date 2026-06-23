@@ -66,6 +66,7 @@ extension SettingsView {
             }
             AetherSettingsRow(label: "Folders", value: smbFoldersValue) {
                 smbEditRoots = viewModel.smbConnection?.roots ?? []
+                smbEditRootContent = viewModel.smbConnection?.rootContent ?? [:]
                 isEditingSMBFolders = true
             }
             AetherSettingsRow(label: "Posters Matched", value: smbMatchSummary ?? "Open Library to match")

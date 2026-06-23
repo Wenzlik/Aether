@@ -1153,9 +1153,12 @@ final class AppSession {
     /// folders after sign-in (the picker was previously only reachable at
     /// sign-in). Persists the new roots, rebuilds the source, and drops the
     /// cached walk so the new set is scanned on the next browse.
-    func updateSMBRoots(_ roots: [String]) async {
-        guard var connection = smbConnection, connection.roots != roots else { return }
+    func updateSMBRoots(_ roots: [String], rootContent: [String: SMBRootContent] = [:]) async {
+        guard var connection = smbConnection else { return }
+        let pruned = rootContent.filter { roots.contains($0.key) }
+        guard connection.roots != roots || (connection.rootContent ?? [:]) != pruned else { return }
         connection.roots = roots
+        connection.rootContent = pruned.isEmpty ? nil : pruned
         do { try await smbConnectionStore?.write(connection) } catch { }
         smbConnection = connection
         smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
