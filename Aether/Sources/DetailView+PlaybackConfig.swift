@@ -104,7 +104,8 @@ extension DetailView {
                 itemID: activeItem.id,
                 currentTitle: current.title,
                 currentYear: current.year,
-                currentFilename: current.streamURL?.lastPathComponent
+                currentFilename: current.streamURL?.lastPathComponent,
+                searchAsShow: activeItem.kind == .show
             ) {
                 presentedSelector = nil
                 localEditToken = UUID()   // re-hydrate Detail with the corrected match
