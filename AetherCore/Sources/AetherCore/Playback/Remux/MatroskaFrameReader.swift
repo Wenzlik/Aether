@@ -49,7 +49,8 @@ enum MatroskaFrameReader {
         readCluster(DataByteSource(data), at: offset)
     }
 
-    static func readCluster(_ source: any ByteSource, at offset: Int) -> (frames: [MatroskaFrame], nextOffset: Int)? {
+    static func readCluster(_ source: any ByteSource, at offset: Int,
+                            trackFilter: Set<UInt64>? = nil) -> (frames: [MatroskaFrame], nextOffset: Int)? {
         var reader = EBMLReader(source, offset: offset)
         guard let id = reader.readElementID(), id == ID.cluster,
               let size = reader.readSize() else { return nil }
@@ -83,10 +84,12 @@ enum MatroskaFrameReader {
                 clusterTimestamp = Int64(reader.readUInt(length: len) ?? 0)
             case ID.simpleBlock:
                 frames += parseBlock(&reader, end: childEnd,
-                                     clusterTimestamp: clusterTimestamp, keyframeOverride: nil)
+                                     clusterTimestamp: clusterTimestamp, keyframeOverride: nil,
+                                     trackFilter: trackFilter)
                 reader.seek(to: childEnd)
             case ID.blockGroup:
-                frames += parseBlockGroup(&reader, end: childEnd, clusterTimestamp: clusterTimestamp)
+                frames += parseBlockGroup(&reader, end: childEnd, clusterTimestamp: clusterTimestamp,
+                                          trackFilter: trackFilter)
                 reader.seek(to: childEnd)
             default:
                 reader.skip(len)   // Position / PrevSize / CRC-32 / Void / unknown
@@ -113,9 +116,131 @@ enum MatroskaFrameReader {
         return frames
     }
 
+    /// Read only the frames belonging to `trackNumbers` (the subtitle tracks),
+    /// from `firstOffset` to EOF. The `trackFilter` makes `parseBlock` skip other
+    /// tracks' payloads without copying them — so this walks the whole file's
+    /// block structure but copies only the tiny subtitle blocks, never the
+    /// gigabytes of A/V sample data. Used to build the eager WebVTT segment
+    /// (#476 P6).
+    static func readSubtitleFrames(_ source: any ByteSource, from firstOffset: Int,
+                                   trackNumbers: Set<UInt64>) -> [MatroskaFrame] {
+        guard !trackNumbers.isEmpty else { return [] }
+        var frames: [MatroskaFrame] = []
+        var offset = firstOffset
+        while offset < source.count {
+            guard let (clusterFrames, next) = readCluster(source, at: offset, trackFilter: trackNumbers),
+                  next > offset else { break }
+            frames += clusterFrames
+            offset = next
+        }
+        return frames
+    }
+
+    // MARK: - Sample index (metadata + source offset, no payload copy)
+
+    /// One sample's location in the source file plus the timing/keyframe info a
+    /// progressive-MP4 sample table needs — **without** its payload bytes. The
+    /// muxer reads the bytes on demand from `sourceOffset` (the mapped file), so
+    /// indexing a multi-GB rip never copies the A/V data into memory.
+    struct SampleMeta: Sendable {
+        let trackNumber: UInt64
+        let sourceOffset: Int
+        let size: Int
+        let timestampTicks: Int64
+        let isKeyframe: Bool
+        let durationTicks: Int64?
+    }
+
+    /// Walk every cluster from `firstOffset` to EOF, recording each frame's
+    /// (track, source offset, size, timestamp, keyframe, duration) without
+    /// copying payloads. The progressive-MP4 path builds its sample tables from
+    /// this.
+    static func readSampleIndex(_ source: any ByteSource, from firstOffset: Int) -> [SampleMeta] {
+        var samples: [SampleMeta] = []
+        var offset = firstOffset
+        while offset < source.count {
+            guard let next = readClusterSamples(source, at: offset, into: &samples), next > offset else { break }
+            offset = next
+        }
+        return samples
+    }
+
+    private static func readClusterSamples(_ source: any ByteSource, at offset: Int, into samples: inout [SampleMeta]) -> Int? {
+        var reader = EBMLReader(source, offset: offset)
+        guard let id = reader.readElementID(), id == ID.cluster, let size = reader.readSize() else { return nil }
+        let boundedEnd: Int
+        switch size {
+        case .known(let s): boundedEnd = min(source.count, reader.offset + Int(s))
+        case .unknown:      boundedEnd = source.count
+        }
+        var clusterTimestamp: Int64 = 0
+        var nextOffset = boundedEnd
+        while reader.offset < boundedEnd {
+            let childStart = reader.offset
+            guard let childID = reader.readElementID() else { break }
+            if Self.topLevelSiblingIDs.contains(childID) { nextOffset = childStart; break }
+            guard case let .known(childSize)? = reader.readSize() else { break }
+            let len = Int(childSize)
+            let childEnd = reader.offset + len
+            switch childID {
+            case ID.timestamp:
+                clusterTimestamp = Int64(reader.readUInt(length: len) ?? 0)
+            case ID.simpleBlock:
+                parseBlockMeta(&reader, end: childEnd, clusterTimestamp: clusterTimestamp,
+                               keyframeOverride: nil, durationTicks: nil, into: &samples)
+                reader.seek(to: childEnd)
+            case ID.blockGroup:
+                parseBlockGroupMeta(&reader, end: childEnd, clusterTimestamp: clusterTimestamp, into: &samples)
+                reader.seek(to: childEnd)
+            default:
+                reader.skip(len)
+            }
+        }
+        return nextOffset
+    }
+
+    private static func parseBlockGroupMeta(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64, into samples: inout [SampleMeta]) {
+        var blockRange: (start: Int, end: Int)?
+        var hasReference = false
+        var duration: Int64?
+        while reader.offset < end {
+            guard let id = reader.readElementID(), case let .known(size)? = reader.readSize() else { break }
+            let len = Int(size)
+            let childEnd = reader.offset + len
+            switch id {
+            case ID.block:          blockRange = (reader.offset, childEnd); reader.seek(to: childEnd)
+            case ID.referenceBlock: hasReference = true; reader.skip(len)
+            case ID.blockDuration:  duration = reader.readUInt(length: len).map(Int64.init)
+            default:                reader.skip(len)
+            }
+        }
+        guard let range = blockRange else { return }
+        var blockReader = EBMLReader(reader.source, offset: range.start)
+        parseBlockMeta(&blockReader, end: range.end, clusterTimestamp: clusterTimestamp,
+                       keyframeOverride: !hasReference, durationTicks: duration, into: &samples)
+    }
+
+    private static func parseBlockMeta(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64,
+                                       keyframeOverride: Bool?, durationTicks: Int64?, into samples: inout [SampleMeta]) {
+        guard let track = reader.readVInt(),
+              let relRaw = reader.readUInt(length: 2),
+              let flags = reader.readUInt(length: 1) else { return }
+        let relative = Int16(bitPattern: UInt16(truncatingIfNeeded: relRaw))
+        let timestamp = clusterTimestamp + Int64(relative)
+        let isKeyframe = keyframeOverride ?? ((flags & 0x80) != 0)
+        let lacing = (flags >> 1) & 0x03
+        for size in frameSizes(&reader, end: end, lacing: lacing) {
+            let sourceOffset = reader.offset
+            samples.append(SampleMeta(trackNumber: track, sourceOffset: sourceOffset, size: size,
+                                      timestampTicks: timestamp, isKeyframe: isKeyframe, durationTicks: durationTicks))
+            reader.skip(size)
+        }
+    }
+
     // MARK: - BlockGroup
 
-    private static func parseBlockGroup(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64) -> [MatroskaFrame] {
+    private static func parseBlockGroup(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64,
+                                        trackFilter: Set<UInt64>? = nil) -> [MatroskaFrame] {
         // A Block inside a BlockGroup is a keyframe iff it has no ReferenceBlock.
         // BlockGroup children can appear in any order, so scan for the Block and
         // any ReferenceBlock, then parse the block with the resolved keyframe flag.
@@ -138,7 +263,8 @@ enum MatroskaFrameReader {
         guard let range = blockRange else { return [] }
         var blockReader = EBMLReader(reader.source, offset: range.start)
         return parseBlock(&blockReader, end: range.end, clusterTimestamp: clusterTimestamp,
-                          keyframeOverride: !hasReference, durationTicks: duration)
+                          keyframeOverride: !hasReference, durationTicks: duration,
+                          trackFilter: trackFilter)
     }
 
     // MARK: - Size-only scan (for the stream index, no payload copy)
@@ -151,7 +277,7 @@ enum MatroskaFrameReader {
 
     /// Like `readCluster`, but returns per-frame (track, size) without reading
     /// the sample payloads.
-    static func readClusterFrameInfo(_ source: any ByteSource, at offset: Int) -> (frames: [FrameInfo], nextOffset: Int)? {
+    static func readClusterFrameInfo(_ source: any ByteSource, at offset: Int) -> (frames: [FrameInfo], timestamp: Int64, nextOffset: Int)? {
         var reader = EBMLReader(source, offset: offset)
         guard let id = reader.readElementID(), id == ID.cluster, let size = reader.readSize() else { return nil }
         let boundedEnd: Int
@@ -161,6 +287,7 @@ enum MatroskaFrameReader {
         }
 
         var frames: [FrameInfo] = []
+        var clusterTimestamp: Int64 = 0
         var nextOffset = boundedEnd
         while reader.offset < boundedEnd {
             let childStart = reader.offset
@@ -170,6 +297,10 @@ enum MatroskaFrameReader {
             let len = Int(childSize)
             let childEnd = reader.offset + len
             switch childID {
+            case ID.timestamp:
+                // The cluster's base timestamp — needed to derive each fMP4
+                // fragment's duration for the sidx (seek index).
+                clusterTimestamp = Int64(reader.readUInt(length: len) ?? 0)
             case ID.simpleBlock:
                 frames += parseBlockSizes(&reader, end: childEnd)
                 reader.seek(to: childEnd)
@@ -180,7 +311,7 @@ enum MatroskaFrameReader {
                 reader.skip(len)
             }
         }
-        return (frames, nextOffset)
+        return (frames, clusterTimestamp, nextOffset)
     }
 
     private static func parseBlockGroupSizes(_ reader: inout EBMLReader, end: Int) -> [FrameInfo] {
@@ -210,9 +341,12 @@ enum MatroskaFrameReader {
     /// Parse a block payload `[reader.offset, end)`. `keyframeOverride` is set by
     /// BlockGroup (from ReferenceBlock presence); `nil` for a SimpleBlock, whose
     /// keyframe bit lives in its own flags byte.
-    private static func parseBlock(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64, keyframeOverride: Bool?, durationTicks: Int64? = nil) -> [MatroskaFrame] {
-        guard let track = reader.readVInt(),
-              let relRaw = reader.readUInt(length: 2),
+    private static func parseBlock(_ reader: inout EBMLReader, end: Int, clusterTimestamp: Int64, keyframeOverride: Bool?, durationTicks: Int64? = nil, trackFilter: Set<UInt64>? = nil) -> [MatroskaFrame] {
+        guard let track = reader.readVInt() else { return [] }
+        // Skip tracks the caller doesn't want before reading their payload — this
+        // is what keeps subtitle-only extraction off the A/V sample bytes.
+        if let filter = trackFilter, !filter.contains(track) { return [] }
+        guard let relRaw = reader.readUInt(length: 2),
               let flags = reader.readUInt(length: 1) else { return [] }
 
         let relative = Int16(bitPattern: UInt16(truncatingIfNeeded: relRaw))

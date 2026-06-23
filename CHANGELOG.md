@@ -27,12 +27,15 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   the pure-Swift `SMBSession`/`SMBClient`. `import VLCKit` is now confined to a
   single file (`VLCPlayerView`), so deleting the engine in a later phase is a
   one-file change.
-- **Pure-Swift MKV→fMP4 remux shim landed (Tier 1, #476, P4) — off by default.**
-  A complete pure-Swift pipeline (EBML demux → cluster/frame reader → fMP4 muxer
-  with B-frame composition offsets → range-addressable streaming) plays a local
-  H.264/HEVC + AAC MKV through `AVPlayer` instead of VLCKit, validated end-to-end
-  (AVFoundation decodes video + audio). Disabled by default pending track-
-  selection parity (audio/subtitle menus) — see issue #476.
+- **Local MKV plays through AVPlayer by default (Tier 1 remux, #476, P4/P6) —
+  on by default.** A pure-Swift pipeline remuxes a local H.264/HEVC + AAC MKV
+  into a **progressive MP4** (full `moov` sample tables) on the fly and plays it
+  through `AVPlayer` instead of VLCKit — with the native transport, PiP, AirPlay,
+  audio selection, and **seeking** (the progressive sample tables give AVPlayer
+  an exact time→byte map; a fragmented stream hung on scrub). Embedded **SRT
+  subtitles** are repackaged as a WebVTT (`wvtt`) track so the subtitle menu
+  works. Files AVFoundation can't handle (E-AC-3/DTS/exotic codecs, image or ASS
+  subtitles) still fall back to VLCKit automatically. Verified on-device.
 
 ## [0.8.2] — 2026-06-22
 

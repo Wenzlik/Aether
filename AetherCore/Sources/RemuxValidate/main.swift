@@ -76,8 +76,12 @@ for t in remuxer.tracks {
     print("  #\(t.trackID) \(t.kind) codec=\(codec) \(t.width)x\(t.height) ch=\(t.channels) rate=\(t.sampleRate) lang=\(t.language ?? "nil") configBytes=\(t.codecConfig.count)")
 }
 
-let out = remuxer.remuxPrefix(clusterLimit: clusterLimit)
+// Progressive (non-fragmented) output — the path AVPlayer seeks (full moov
+// sample tables). Read the whole thing through the on-demand reader.
+let reader = remuxer.progressiveReader()
+let out = reader.read(offset: 0, length: reader.contentLength)
 try Data(out).write(to: outputURL)
-print("wrote \(out.count) bytes (\(clusterLimit) clusters) → \(outputURL.path)")
+print("wrote \(out.count) bytes (progressive, contentLength=\(reader.contentLength)) → \(outputURL.path)")
+_ = clusterLimit
 
 await inspect(outputURL)
