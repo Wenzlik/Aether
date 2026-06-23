@@ -181,10 +181,10 @@ extension SettingsView {
                 smbDetailRows
             }
             .sheet(isPresented: $isEditingSMBFolders, onDismiss: {
-                Task { await viewModel.updateSMBRoots(smbEditRoots) }
+                Task { await viewModel.updateSMBRoots(smbEditRoots, rootContent: smbEditRootContent) }
             }) {
                 if let connection = viewModel.smbConnection {
-                    SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots)
+                    SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots, rootContent: $smbEditRootContent)
                 }
             }
         }
@@ -198,6 +198,7 @@ extension SettingsView {
         AetherSettingsSection("Library") {
             AetherSettingsRow(label: "Folders", value: smbDetailFoldersValue) {
                 smbEditRoots = viewModel.smbConnection?.roots ?? []
+                smbEditRootContent = viewModel.smbConnection?.rootContent ?? [:]
                 isEditingSMBFolders = true
             }
             AetherSettingsRow(label: "Posters Matched", value: smbMatchSummary ?? "Open Library to match")

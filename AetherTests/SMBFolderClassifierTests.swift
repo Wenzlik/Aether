@@ -6,8 +6,36 @@ import Testing
 @Suite("AetherCore — SMBFolderClassifier (#481)")
 struct SMBFolderClassifierTests {
 
-    private func entry(_ folder: [String], episode: Bool) -> SMBFolderClassifier.Entry {
-        .init(folderComponents: folder, isEpisode: episode)
+    private func entry(_ folder: [String], episode: Bool,
+                       content: SMBRootContent = .both) -> SMBFolderClassifier.Entry {
+        .init(folderComponents: folder, isEpisode: episode, content: content)
+    }
+
+    @Test("content == .series forces grouping even with no SxxExx and no Season folder")
+    func forcedSeriesGroupsFlatFolder() {
+        // A flat series folder whose files don't parse as episodes (e.g. anime
+        // "Show - 01") would auto-detect as movies; .series forces one show.
+        let entries = [
+            entry(["TV", "Vinland Saga"], episode: false, content: .series),
+            entry(["TV", "Vinland Saga"], episode: false, content: .series),
+        ]
+        let result = SMBFolderClassifier.classify(entries)
+        #expect(result.allSatisfy { $0.isEpisode })
+        #expect(Set(result.map { $0.seriesKey }) == ["TV/Vinland Saga"])
+        #expect(Set(result.map { $0.seriesName }) == ["Vinland Saga"])
+    }
+
+    @Test("content == .movies never groups, even with SxxExx-parsed files")
+    func forcedMoviesNeverGroups() {
+        // Files that parse as episodes in a Season-style folder would normally
+        // group; .movies keeps every file a movie (the user said it's films).
+        let entries = [
+            entry(["Films", "Collection", "Season 1"], episode: true, content: .movies),
+            entry(["Films", "Collection", "Season 1"], episode: true, content: .movies),
+        ]
+        let result = SMBFolderClassifier.classify(entries)
+        #expect(result.allSatisfy { !$0.isEpisode })
+        #expect(result.allSatisfy { $0.seriesKey == nil })
     }
 
     @Test("flat folder of distinct movies → all movies, no series")

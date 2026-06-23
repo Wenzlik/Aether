@@ -11,14 +11,26 @@ import AetherCore
 struct SMBFolderPickerView: View {
     let connection: SMBConnection
     @Binding var selectedRoots: [String]
+    /// Per-root content choice (Movies / TV Shows / Both), keyed by the root
+    /// string. Defaulted so existing callers that don't track it still compile.
+    @Binding var rootContent: [String: SMBRootContent]
     @Environment(\.dismiss) private var dismiss
+
+    init(connection: SMBConnection,
+         selectedRoots: Binding<[String]>,
+         rootContent: Binding<[String: SMBRootContent]> = .constant([:])) {
+        self.connection = connection
+        self._selectedRoots = selectedRoots
+        self._rootContent = rootContent
+    }
 
     var body: some View {
         NavigationStack {
             SMBFolderLevelView(
                 connection: connection,
                 location: .shares,
-                selectedRoots: $selectedRoots
+                selectedRoots: $selectedRoots,
+                rootContent: $rootContent
             )
             .navigationTitle("Choose Folders")
             #if os(iOS)
@@ -30,7 +42,8 @@ struct SMBFolderPickerView: View {
                 }
             }
             .navigationDestination(for: SMBFolderLevelView.Location.self) { loc in
-                SMBFolderLevelView(connection: connection, location: loc, selectedRoots: $selectedRoots)
+                SMBFolderLevelView(connection: connection, location: loc,
+                                   selectedRoots: $selectedRoots, rootContent: $rootContent)
             }
         }
     }
@@ -49,6 +62,7 @@ private struct SMBFolderLevelView: View {
     let connection: SMBConnection
     let location: Location
     @Binding var selectedRoots: [String]
+    @Binding var rootContent: [String: SMBRootContent]
 
     @State private var folders: [SMBNativeEntry] = []
     @State private var shares: [String] = []
@@ -69,6 +83,18 @@ private struct SMBFolderLevelView: View {
                             Text(isSelected(root) ? "Added to Library" : "Add This Folder")
                             Spacer()
                         }
+                    }
+                    if isSelected(root) {
+                        Picker("Contains", selection: contentBinding(for: root)) {
+                            Text("Movies & TV").tag(SMBRootContent.both)
+                            Text("Movies").tag(SMBRootContent.movies)
+                            Text("TV Shows").tag(SMBRootContent.series)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                } footer: {
+                    if isSelected(root) {
+                        Text("Tell Aether what this folder holds so it groups episodes into shows correctly. Pick TV Shows for a folder of series, Movies for a folder of films, or Movies & TV to auto-detect.")
                     }
                 }
             }
@@ -143,9 +169,18 @@ private struct SMBFolderLevelView: View {
     private func toggle(_ root: String) {
         if let index = selectedRoots.firstIndex(of: root) {
             selectedRoots.remove(at: index)
+            rootContent[root] = nil
         } else {
             selectedRoots.append(root)
         }
+    }
+
+    /// Binding for one root's content choice; absent ⇒ `.both` (auto-detect).
+    private func contentBinding(for root: String) -> Binding<SMBRootContent> {
+        Binding(
+            get: { rootContent[root] ?? .both },
+            set: { rootContent[root] = ($0 == .both ? nil : $0) }
+        )
     }
 
     // MARK: - Load

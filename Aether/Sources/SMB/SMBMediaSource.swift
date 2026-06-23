@@ -72,6 +72,9 @@ actor SMBMediaSource: CustomDownloadSource {
         /// Share + the folders leading to the file (no filename) — the signal the
         /// folder-role classifier groups by (#481).
         let folderComponents: [String]
+        /// The user's content choice for the configured root this file came from
+        /// (Movies / TV Shows / Both), fed to the folder-role classifier.
+        let content: SMBRootContent
         var metadata: TMDbMetadata?
         /// Resolution / codec / HDR / audio parsed from the release filename
         /// (SMB has no probed stream metadata).
@@ -260,10 +263,13 @@ actor SMBMediaSource: CustomDownloadSource {
         // Roots to scan: the configured ones (share + path), else every share at
         // the host. Native browse via the pure-Swift SMBClient (#213) — real
         // errors, no VLC. `SMBSession` owns the depth/count-capped BFS per share.
-        var roots: [(share: String, path: String)] = connection.roots.map { SMBConnection.splitShareAndPath($0) }
+        var roots: [(share: String, path: String, content: SMBRootContent)] = connection.roots.map {
+            let (share, path) = SMBConnection.splitShareAndPath($0)
+            return (share, path, connection.content(for: $0))
+        }
         if roots.isEmpty {
             let shares = (try? await session.shares()) ?? []
-            roots = shares.map { ($0, "/") }
+            roots = shares.map { ($0, "/", .both) }
         }
         // User title/year corrections, keyed by stream URL (#213).
         let overrides = await SMBMetadataStore.shared.allOverrides()
@@ -288,6 +294,7 @@ actor SMBMediaSource: CustomDownloadSource {
                     url: entry.streamURL,
                     inference: inference,
                     folderComponents: Array(pathComponents),
+                    content: root.content,
                     mediaInfo: mediaInfo,
                     override: overrides[entry.streamURL.absoluteString]
                 ))
@@ -313,7 +320,9 @@ actor SMBMediaSource: CustomDownloadSource {
     /// folder in as episodes rather than leaking them into Movies.
     private nonisolated func classifyFolderRoles(_ files: inout [SMBFile]) {
         let entries = files.map {
-            SMBFolderClassifier.Entry(folderComponents: $0.folderComponents, isEpisode: $0.inference.isEpisode)
+            SMBFolderClassifier.Entry(folderComponents: $0.folderComponents,
+                                      isEpisode: $0.inference.isEpisode,
+                                      content: $0.content)
         }
         let classifications = SMBFolderClassifier.classify(entries)
         for index in files.indices { files[index].classification = classifications[index] }

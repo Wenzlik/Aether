@@ -53,6 +53,7 @@ struct SettingsView: View {
     /// folders after sign-in, #214), seeded with the current roots.
     @State var isEditingSMBFolders = false
     @State var smbEditRoots: [String] = []
+    @State var smbEditRootContent: [String: SMBRootContent] = [:]
     #if os(iOS)
     /// Alternate app-icon chooser (iOS / iPadOS only).
     @State var appIconStore = AppIconStore()
@@ -219,10 +220,10 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isEditingSMBFolders, onDismiss: {
             // Persist the edited folder set on dismiss (no-op if unchanged).
-            Task { await viewModel.updateSMBRoots(smbEditRoots) }
+            Task { await viewModel.updateSMBRoots(smbEditRoots, rootContent: smbEditRootContent) }
         }) {
             if let connection = viewModel.smbConnection {
-                SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots)
+                SMBFolderPickerView(connection: connection, selectedRoots: $smbEditRoots, rootContent: $smbEditRootContent)
             }
         }
         #if !os(tvOS)

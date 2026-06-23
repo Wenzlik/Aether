@@ -14,6 +14,7 @@ struct SMBConnectView: View {
     @State private var password = ""
     @State private var domain = ""
     @State private var selectedRoots: [String] = []
+    @State private var rootContent: [String: SMBRootContent] = [:]
     @State private var showFolderPicker = false
     @State private var isPreparingBrowse = false
     @State private var phase: Phase = .idle
@@ -32,7 +33,8 @@ struct SMBConnectView: View {
             username: username.isEmpty ? nil : username,
             password: password.isEmpty ? nil : password,
             domain: domain.isEmpty ? nil : domain,
-            roots: selectedRoots
+            roots: selectedRoots,
+            rootContent: rootContent
         )
     }
 
@@ -110,7 +112,7 @@ struct SMBConnectView: View {
                 }
             }
             .sheet(isPresented: $showFolderPicker) {
-                SMBFolderPickerView(connection: draftConnection, selectedRoots: $selectedRoots)
+                SMBFolderPickerView(connection: draftConnection, selectedRoots: $selectedRoots, rootContent: $rootContent)
             }
         }
     }
@@ -137,7 +139,8 @@ struct SMBConnectView: View {
             username: username.isEmpty ? nil : username,
             password: password.isEmpty ? nil : password,
             domain: domain.isEmpty ? nil : domain,
-            roots: roots
+            roots: roots,
+            rootContent: rootContent
         )
 
         // Trigger the iOS Local Network prompt + confirm the host is reachable
