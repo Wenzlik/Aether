@@ -16,7 +16,11 @@ import os
 /// > Built and structurally complete; **playback must be verified on a real
 /// > device** — AVPlayer is particular about fMP4 conformance, and the simulator
 /// > doesn't exercise the same decode path.
-final class RemuxedLocalAsset {
+/// `@unchecked Sendable`: its stored state is immutable (`asset`/`delegate`/
+/// `queue` are `let`); the delegate's mutable bits are touched only on the
+/// loader queue. So it's safe to build off-thread (SMB) and hand to the main
+/// actor.
+final class RemuxedLocalAsset: @unchecked Sendable {
     /// Custom scheme so AVFoundation routes loading through our delegate rather
     /// than trying to open the file itself.
     static let scheme = "aether-remux"
@@ -27,17 +31,25 @@ final class RemuxedLocalAsset {
 
     /// Build an asset for a local `.mkv`. Returns `nil` if the file isn't a
     /// Matroska we can remux (no packageable H.264/HEVC + AAC track) — the
-    /// caller then falls back to another engine.
-    init?(fileURL: URL) {
-        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
-              let remuxer = MatroskaRemuxer(data: data) else { return nil }
+    /// caller then falls back to another engine. The file is memory-mapped, so
+    /// only the bytes the remuxer touches fault in.
+    convenience init?(fileURL: URL) {
+        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return nil }
+        self.init(byteSource: DataByteSource(data),
+                  name: fileURL.deletingPathExtension().lastPathComponent)
+    }
 
-        // A stable custom-scheme URL; the path is cosmetic (helps AVPlayer pick
-        // the .mp4 demuxer via the extension).
+    /// Build from any random-access byte source — e.g. an SMB range reader, so an
+    /// MKV on a share remuxes to AVPlayer the same way a local file does. The
+    /// source supplies the MKV bytes on demand; `name` is cosmetic (lets AVPlayer
+    /// pick the mp4 demuxer via the URL extension). `nil` when not remuxable.
+    init?(byteSource: any ByteSource, name: String) {
+        guard let remuxer = MatroskaRemuxer(source: byteSource) else { return nil }
+
         var components = URLComponents()
         components.scheme = Self.scheme
         components.host = "local"
-        components.path = "/" + fileURL.deletingPathExtension().lastPathComponent + ".mp4"
+        components.path = "/" + (name.isEmpty ? "remux" : name) + ".mp4"
         guard let url = components.url else { return nil }
 
         self.delegate = ResourceLoaderDelegate(remuxer: remuxer)

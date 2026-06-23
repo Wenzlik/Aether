@@ -621,7 +621,18 @@ struct DetailView: View {
             if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
                     if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
-                        // mkv / avi / ts — still needs VLCKit, but over HTTP now.
+                        // #476: try the AVFoundation remux path for an SMB MKV whose
+                        // codecs AVFoundation can decode (H.264/HEVC + AAC) — native
+                        // transport, resume, audio/subtitle menus, no VLCKit. The
+                        // asset parses the MKV over SMB off the main thread; it
+                        // returns nil when not remuxable, so we fall back to VLCKit
+                        // over HTTP and nothing regresses.
+                        if remuxLocalMKVEnabled,
+                           let remux = await Self.makeSMBRemuxAsset(proxyURL: proxyURL) {
+                            remuxPlayback = RemuxPlayback(asset: remux)
+                            return
+                        }
+                        // mkv / avi / ts not remuxable — still VLCKit, but over HTTP.
                         vlcPlayback = VLCPlayback(url: proxyURL)
                         return
                     }
@@ -649,6 +660,22 @@ struct DetailView: View {
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
+        }
+    }
+
+    /// Build a remux asset for an SMB MKV off the main thread — parsing reads the
+    /// MKV header/index over SMB synchronously (via `SMBByteSource` → the range
+    /// proxy's pooled client). Returns nil if the file isn't a remuxable Matroska,
+    /// so the caller falls back to VLCKit.
+    private static func makeSMBRemuxAsset(proxyURL: URL) async -> RemuxedLocalAsset? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let source = SMBByteSource(proxyURL: proxyURL) else {
+                    continuation.resume(returning: nil); return
+                }
+                let name = proxyURL.deletingPathExtension().lastPathComponent
+                continuation.resume(returning: RemuxedLocalAsset(byteSource: source, name: name))
+            }
         }
     }
 
