@@ -562,12 +562,19 @@ final class VLCPlaybackController: UIViewController {
         // Double-tap left/right half to seek ±10s; single-tap toggles controls.
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
         view.addGestureRecognizer(doubleTap)
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(toggleControls))
-        // Single-tap only fires after the double-tap window expires, preventing
-        // the first tap of a double-tap from hiding/showing the controls.
-        tap.require(toFail: doubleTap)
+        // Single-tap toggles controls and must fire IMMEDIATELY. The previous
+        // `tap.require(toFail: doubleTap)` made it wait ~300ms for the double-tap
+        // window; worse, with two tap recognizers on one view the double-tap's
+        // default prevention stopped the single-tap from firing at all, so taps
+        // did nothing and only a double-tap (which seeks) surfaced the controls.
+        // Letting both recognize simultaneously (see the delegate below) makes a
+        // single tap toggle instantly; a double-tap also seeks and re-shows the
+        // controls, so it still ends with them visible.
+        tap.delegate = self
         view.addGestureRecognizer(tap)
 
         NSLayoutConstraint.activate([
@@ -800,6 +807,21 @@ final class VLCPlaybackController: UIViewController {
     }
     #endif
 }
+
+#if !os(tvOS)
+// Single-tap (toggle controls) and double-tap (seek ±10s) live on the same view.
+// By default the double-tap recognizer prevents the single-tap from ever firing,
+// so a single tap did nothing. Allowing simultaneous recognition lets the single
+// tap fire instantly while the double-tap still works.
+extension VLCPlaybackController: @preconcurrency UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+}
+#endif
 
 // MARK: - Startup timing (#347)
 

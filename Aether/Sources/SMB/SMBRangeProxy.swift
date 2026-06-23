@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import os
+import SMBClient
 
 /// Localhost HTTP range-proxy for SMB playback (#213/#347).
 ///
@@ -8,9 +9,15 @@ import os
 /// seek re-establishes an SMB session (negotiate + auth + tree-connect), adding
 /// hundreds of ms of latency per seek. Routing VLC through a `127.0.0.1` HTTP
 /// server gives it clean HTTP/1.1 range requests; the proxy translates those
-/// into `SMBSession.read(share:path:offset:length:)` byte-range reads over the
-/// existing pure-Swift SMB stack. MKV seeks that previously stalled 1–2 s over
-/// SMB direct drop to near AVPlayer / Plex levels.
+/// into byte-range reads over the existing pure-Swift SMB stack. MKV seeks that
+/// previously stalled 1–2 s over SMB direct drop to near AVPlayer / Plex levels.
+///
+/// **Persistent session:** one logged-in `SMBClient` is cached per
+/// connection+share and reused for every range request of the playback (see
+/// `sharedClient(for:)`). The earlier implementation built a fresh `SMBSession`
+/// per HTTP request, so each range read paid a full negotiate + auth +
+/// tree-connect (a new TCP session to :445) — that thrash kept VLCKit stuck in
+/// buffering for tens of seconds on startup.
 ///
 /// AVPlayer also benefits: `smb://` can't be opened by AVPlayer at all, but an
 /// HTTP proxy URL with a `.mp4` extension plays natively with PiP and AirPlay.
@@ -90,6 +97,7 @@ actor SMBRangeProxy {
             fileSizeCache.removeValue(forKey: $0)
         }
         tokensByURL = tokensByURL.filter { entries[$0.value] != nil }
+        idleClients = idleClients.filter { !$0.key.hasPrefix("\(connectionID)|") }
     }
 
     /// Look up the entry and cached file size for a token.
@@ -101,6 +109,102 @@ actor SMBRangeProxy {
     /// Cache the file size after a successful HEAD or first GET.
     func cacheFileSize(_ size: UInt64, for token: String) {
         fileSizeCache[token] = size
+    }
+
+    // MARK: - Pooled SMB clients
+
+    /// Logged-in clients, idle and available for reuse, keyed by connection+share.
+    /// `checkout` removes one (so it's owned by a single request), `checkin`
+    /// returns it. A `SMBClient`'s `Session` mutates message-id/tree state with no
+    /// internal locking, so it must never be touched by two requests at once —
+    /// the pool guarantees that without a lock: a borrowed client isn't in the
+    /// dictionary, so it can't be handed out again until checked back in.
+    private var idleClients: [String: [ClientBox]] = [:]
+
+    private func clientKey(_ entry: Entry) -> String { "\(entry.connection.id)|\(entry.share)" }
+
+    /// Borrow a logged-in client for this connection+share. Reuses an idle one
+    /// (no SMB handshake at all) or logs in + tree-connects a fresh one. Fresh
+    /// logins happen only when no idle client is available — i.e. genuinely
+    /// concurrent range reads — and those clients are pooled for reuse afterwards.
+    func checkout(_ entry: Entry) async throws -> ClientBox {
+        let key = clientKey(entry)
+        if var pool = idleClients[key], let box = pool.popLast() {
+            idleClients[key] = pool
+            return box
+        }
+        let client = SMBClient(host: entry.connection.host)
+        try await client.login(username: entry.connection.username ?? "",
+                               password: entry.connection.password ?? "")
+        try await client.connectShare(entry.share)
+        return ClientBox(client)
+    }
+
+    /// Return a still-healthy client to the pool for reuse. A client that threw
+    /// mid-request is intentionally NOT checked in — it's dropped so the next
+    /// request logs in cleanly.
+    func checkin(_ box: ClientBox, for entry: Entry) {
+        idleClients[clientKey(entry), default: []].append(box)
+    }
+
+    private var warming: Set<String> = []
+
+    /// Fire-and-forget: log in to `connection`+`share` in the background and park
+    /// the client in the pool, so the first playback request doesn't pay the SMB
+    /// login latency (~16s against some NAS boxes — the first Play would otherwise
+    /// stall on it). Called when the SMB library loads, well before any Play.
+    /// No-op if a client is already pooled or a warm-up is already in flight.
+    func prewarm(connection: SMBConnection, share: String) {
+        guard !share.isEmpty else { return }
+        let entry = Entry(connection: connection, share: share, path: "")
+        let key = clientKey(entry)
+        guard idleClients[key]?.isEmpty ?? true, !warming.contains(key) else { return }
+        warming.insert(key)
+        Task {
+            if let box = try? await checkout(entry) {
+                checkin(box, for: entry)
+                Self.log.info("SMB proxy pre-warmed \(key, privacy: .public)")
+            }
+            warming.remove(key)
+        }
+    }
+
+    /// Holds a non-`Sendable` `SMBClient` and performs the actual reads. Marked
+    /// `@unchecked Sendable` so it can cross the actor boundary; safety rests on
+    /// the pool's exclusive-ownership invariant. The read helpers run in this
+    /// (non-isolated) class, not on the actor, so `FileReader`'s nonisolated
+    /// async members are reachable — exactly as the old per-request `SMBSession`.
+    final class ClientBox: @unchecked Sendable {
+        private let client: SMBClient
+        init(_ client: SMBClient) { self.client = client }
+
+        /// SMBClient paths are share-relative with no leading slash ("" = root).
+        private static func relativePath(_ path: String) -> String {
+            path.hasPrefix("/") ? String(path.dropFirst()) : path
+        }
+
+        func fileSize(path: String) async throws -> UInt64 {
+            let reader = client.fileReader(path: Self.relativePath(path))
+            let size = try await reader.fileSize
+            try? await reader.close()
+            return size
+        }
+
+        func read(path: String, offset: UInt64, length: UInt32) async throws -> Data {
+            let reader = client.fileReader(path: Self.relativePath(path))
+            let data = try await reader.read(offset: offset, length: length)
+            try? await reader.close()
+            return data
+        }
+
+        func fileSizeAndRead(path: String, offset: UInt64, length: UInt32)
+        async throws -> (fileSize: UInt64, data: Data) {
+            let reader = client.fileReader(path: Self.relativePath(path))
+            let fileSize = try await reader.fileSize
+            let data = try await reader.read(offset: offset, length: length)
+            try? await reader.close()
+            return (fileSize, data)
+        }
     }
 
     // MARK: - Server lifecycle
@@ -179,63 +283,59 @@ actor SMBRangeProxy {
         request: SMBHTTPRequest,
         on conn: NWConnection
     ) async {
-        let session = SMBSession(connection: entry.connection)
-
-        // HEAD: return file size. Use the cache to avoid a full SMB handshake on
-        // every VLCKit probe — VLCKit typically sends HEAD before the first GET.
-        if request.method == "HEAD" {
-            let fileSize: UInt64
-            if let cached = cachedFileSize {
-                fileSize = cached
-            } else {
-                do {
-                    fileSize = try await session.fileSize(share: entry.share, path: entry.path)
-                    await proxy.cacheFileSize(fileSize, for: token)
-                } catch {
-                    log.error("SMB proxy HEAD fileSize: \(error, privacy: .public)")
-                    await reply(conn, .init(status: 503)); return
-                }
-            }
-            var r = SMBHTTPResponse(status: 200)
-            r["Content-Length"] = "\(fileSize)"
-            r["Accept-Ranges"] = "bytes"
-            r["Content-Type"] = "application/octet-stream"
-            await reply(conn, r); return
+        // Borrow a pooled, already-logged-in client — no per-request SMB
+        // handshake. The client is returned to the pool only on success; a
+        // request that throws drops it so the next request reconnects cleanly.
+        let box: ClientBox
+        do {
+            box = try await proxy.checkout(entry)
+        } catch {
+            log.error("SMB proxy login: \(error, privacy: .public)")
+            await reply(conn, .init(status: 503)); return
         }
 
-        // GET: one SMB session covers both fileSize (if not cached) and the read.
-        // This halves SMB handshakes vs. calling fileSize() then read() separately.
-        if let cached = cachedFileSize {
-            // File size known — skip the extra fileSize round-trip, read directly.
-            let (start, rawEnd) = request.range(fileSize: cached)
-            let cappedEnd = min(rawEnd, start + maxChunkBytes - 1)
-            let length = UInt32(clamping: cappedEnd - start + 1)
-            do {
-                let body = try await session.read(share: entry.share, path: entry.path,
-                                                  offset: start, length: length)
-                await sendRangeResponse(body: body, start: start, fileSize: cached,
-                                        on: conn)
-            } catch {
-                log.error("SMB proxy read: \(error, privacy: .public)")
-                await reply(conn, .init(status: 500))
+        do {
+            // HEAD: return file size. The cache avoids even one SMB round-trip —
+            // VLCKit typically sends HEAD before the first GET.
+            if request.method == "HEAD" {
+                let fileSize: UInt64
+                if let cached = cachedFileSize {
+                    fileSize = cached
+                } else {
+                    fileSize = try await box.fileSize(path: entry.path)
+                    await proxy.cacheFileSize(fileSize, for: token)
+                }
+                await proxy.checkin(box, for: entry)
+                var r = SMBHTTPResponse(status: 200)
+                r["Content-Length"] = "\(fileSize)"
+                r["Accept-Ranges"] = "bytes"
+                r["Content-Type"] = "application/octet-stream"
+                await reply(conn, r); return
             }
-        } else {
-            // File size unknown — one session fetches both.
-            do {
-                // Probe range with a placeholder size first; fileSizeAndRead gives us
-                // the real size and the chunk in a single SMB session.
+
+            // GET with known size — skip the extra fileSize round-trip.
+            if let cached = cachedFileSize {
+                let (start, rawEnd) = request.range(fileSize: cached)
+                let cappedEnd = min(rawEnd, start + maxChunkBytes - 1)
+                let length = UInt32(clamping: cappedEnd - start + 1)
+                let body = try await box.read(path: entry.path, offset: start, length: length)
+                await proxy.checkin(box, for: entry)
+                await sendRangeResponse(body: body, start: start, fileSize: cached, on: conn)
+            } else {
+                // Size unknown — fetch size and the first chunk in one file open.
                 let probe = request.range(fileSize: UInt64.max)
                 let cappedEnd = min(probe.1, probe.0 + maxChunkBytes - 1)
                 let length = UInt32(clamping: cappedEnd - probe.0 + 1)
-                let (fileSize, body) = try await session.fileSizeAndRead(
-                    share: entry.share, path: entry.path, offset: probe.0, length: length)
+                let (fileSize, body) = try await box.fileSizeAndRead(
+                    path: entry.path, offset: probe.0, length: length)
                 await proxy.cacheFileSize(fileSize, for: token)
-                await sendRangeResponse(body: body, start: probe.0, fileSize: fileSize,
-                                        on: conn)
-            } catch {
-                log.error("SMB proxy fileSizeAndRead: \(error, privacy: .public)")
-                await reply(conn, .init(status: 500))
+                await proxy.checkin(box, for: entry)
+                await sendRangeResponse(body: body, start: probe.0, fileSize: fileSize, on: conn)
             }
+        } catch {
+            // Broken session — drop it (no checkin) so the pool stays healthy.
+            log.error("SMB proxy serve: \(error, privacy: .public)")
+            await reply(conn, .init(status: 500))
         }
     }
 
