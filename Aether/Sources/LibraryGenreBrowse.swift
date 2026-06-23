@@ -44,7 +44,7 @@ struct GenreListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 #endif
                 if isLoading && genres.isEmpty {
-                    AetherLoadingState(.inline)
+                    AetherLoadingState(.rails(count: 2))
                 } else if genres.isEmpty {
                     AetherEmptyState(glyph: "theatermasks", title: "No genres",
                                      message: "Your library's titles don't carry genres yet.")

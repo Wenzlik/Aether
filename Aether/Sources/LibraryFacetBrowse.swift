@@ -85,7 +85,7 @@ struct CollectionListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 #endif
                 if isLoading && entries.isEmpty {
-                    AetherLoadingState(.inline)
+                    AetherLoadingState(.rails(count: 2))
                 } else if entries.isEmpty {
                     AetherEmptyState(glyph: "square.stack", title: "No collections",
                                      message: "Your connected sources don't have any collections yet.")
