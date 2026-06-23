@@ -1,5 +1,14 @@
 import Foundation
 
+/// What a configured SMB folder holds, chosen by the user when picking it.
+/// `movies` = never group into shows; `series` = group every file under its
+/// folder as one show (even without an SxxExx marker); `both` = auto-detect.
+/// `.both` preserves the original heuristic (and is the default for folders
+/// configured before this choice existed).
+public enum SMBRootContent: String, Codable, Hashable, Sendable, CaseIterable {
+    case both, movies, series
+}
+
 /// Classifies SMB video files by the **role of their containing folder** rather
 /// than per-filename guesses (#481).
 ///
@@ -18,9 +27,12 @@ public enum SMBFolderClassifier {
     public struct Entry: Sendable, Equatable {
         public let folderComponents: [String]
         public let isEpisode: Bool
-        public init(folderComponents: [String], isEpisode: Bool) {
+        /// The user's content choice for the root this file came from.
+        public let content: SMBRootContent
+        public init(folderComponents: [String], isEpisode: Bool, content: SMBRootContent = .both) {
             self.folderComponents = folderComponents
             self.isEpisode = isEpisode
+            self.content = content
         }
     }
 
@@ -40,11 +52,12 @@ public enum SMBFolderClassifier {
 
     /// Classify each entry; the result array is parallel to `entries`.
     ///
-    /// A folder is treated as a **series** when it sits above a `Season NN`
-    /// subfolder, or when ≥2 of its files parsed as episodes — a strong enough
-    /// signal that mis-classifying a flat folder of distinct movies is unlikely.
-    /// Every file in a series folder becomes an episode (so oddly-named files
-    /// don't leak into Movies); everything else stays a movie.
+    /// With `content == .both` a folder is treated as a **series** when it sits
+    /// above a `Season NN` subfolder, or when ≥2 of its files parsed as episodes
+    /// — a strong enough signal that mis-classifying a flat folder of distinct
+    /// movies is unlikely. `.movies` never groups (everything stays a movie) and
+    /// `.series` always groups (every file becomes an episode of one show named
+    /// after the folder, even without an SxxExx marker — the user told us so).
     public static func classify(_ entries: [Entry]) -> [Classification] {
         let folders = entries.map { stripSeasonFolders($0.folderComponents) }
 
@@ -55,9 +68,22 @@ public enum SMBFolderClassifier {
 
         var result = [Classification](repeating: Classification(isEpisode: false), count: entries.count)
         for (key, indices) in indicesByFolder {
-            let episodeCount = indices.filter { entries[$0].isEpisode }.count
-            let underSeasonFolder = indices.contains { folders[$0].underSeason }
-            guard underSeasonFolder || episodeCount >= 2 else { continue }   // else: leave as movies
+            // A series folder belongs to one configured root, so its files share a
+            // content choice; a folder spanning roots of different types falls back
+            // to auto-detect.
+            let kinds = Set(indices.map { entries[$0].content })
+            let content: SMBRootContent = kinds.count == 1 ? (kinds.first ?? .both) : .both
+
+            let isSeries: Bool
+            switch content {
+            case .movies: isSeries = false
+            case .series: isSeries = true
+            case .both:
+                let episodeCount = indices.filter { entries[$0].isEpisode }.count
+                let underSeasonFolder = indices.contains { folders[$0].underSeason }
+                isSeries = underSeasonFolder || episodeCount >= 2
+            }
+            guard isSeries else { continue }   // else: leave as movies
 
             let name = folders[indices[0]].path.last ?? "Series"
             for i in indices {

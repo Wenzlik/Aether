@@ -104,6 +104,19 @@ final class VLCPlaybackController: UIViewController {
     #if os(tvOS)
     private let progress = UIProgressView(progressViewStyle: .default)
     private var infoPanel: VLCInfoPanelController?
+    /// All on-screen controls live in one container so they fade in/out together
+    /// (auto-hide). Hidden ⇒ interaction off, so focus doesn't sit on an
+    /// invisible button.
+    private let controlsContainer = UIView()
+    private let elapsedLabel = UILabel()
+    private let totalLabel = UILabel()
+    /// Opens the Audio & Subtitles panel — the discoverable equivalent of the
+    /// swipe-down gesture.
+    private let tracksButton = UIButton(type: .system)
+    private var tvHideWorkItem: DispatchWorkItem?
+    /// Arm the first auto-hide the moment playback actually starts (controls
+    /// start visible; without this they'd stay up until the first interaction).
+    private var tvFirstHideArmed = false
     #else
     // Rich controls (iOS / visionOS). The overlay passes taps in its empty
     // areas through to the video (so the tap-to-toggle gesture always fires),
@@ -247,9 +260,7 @@ final class VLCPlaybackController: UIViewController {
         view.bringSubviewToFront(scrim)
         view.bringSubviewToFront(controlsOverlay)
         #else
-        view.bringSubviewToFront(doneButton)
-        view.bringSubviewToFront(playPauseButton)
-        view.bringSubviewToFront(progress)
+        view.bringSubviewToFront(controlsContainer)
         #endif
     }
 
@@ -402,23 +413,79 @@ final class VLCPlaybackController: UIViewController {
         progress.progressTintColor = .white
         progress.trackTintColor = UIColor.white.withAlphaComponent(0.3)
         progress.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(doneButton)
-        view.addSubview(playPauseButton)
-        view.addSubview(progress)
+
+        for label in [elapsedLabel, totalLabel] {
+            label.textColor = .white
+            label.font = .monospacedDigitSystemFont(ofSize: 24, weight: .medium)
+            label.translatesAutoresizingMaskIntoConstraints = false
+        }
+        elapsedLabel.text = "0:00"
+        totalLabel.text = "0:00"
+        totalLabel.textAlignment = .right
+
+        // Discoverable Audio & Subtitles entry (same destination as swipe-down).
+        tracksButton.tintColor = .white
+        tracksButton.setTitle(String(localized: "Audio & Subtitles"), for: .normal)
+        tracksButton.setImage(UIImage(systemName: "captions.bubble"), for: .normal)
+        tracksButton.addTarget(self, action: #selector(showInfoPanel), for: .primaryActionTriggered)
+        tracksButton.translatesAutoresizingMaskIntoConstraints = false
+
+        // All controls share one container so they fade together on auto-hide.
+        controlsContainer.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controlsContainer)
+        for control in [doneButton, tracksButton, playPauseButton, elapsedLabel, totalLabel, progress] {
+            controlsContainer.addSubview(control)
+        }
+
         NSLayoutConstraint.activate([
+            controlsContainer.topAnchor.constraint(equalTo: view.topAnchor),
+            controlsContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            controlsContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controlsContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
             doneButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             doneButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+
+            tracksButton.centerYAnchor.constraint(equalTo: doneButton.centerYAnchor),
+            tracksButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+
             playPauseButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            playPauseButton.bottomAnchor.constraint(equalTo: progress.topAnchor, constant: -16),
+            playPauseButton.bottomAnchor.constraint(equalTo: progress.topAnchor, constant: -28),
+
+            elapsedLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            elapsedLabel.bottomAnchor.constraint(equalTo: progress.topAnchor, constant: -8),
+            totalLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            totalLabel.bottomAnchor.constraint(equalTo: progress.topAnchor, constant: -8),
+
             progress.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
             progress.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            progress.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+            progress.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
         ])
 
-        // Swipe down on the Siri Remote touch surface → info/settings panel.
+        // Touch-surface swipes: down → info/settings panel; left/right → ±10s.
+        // Seeking lives on swipes (not d-pad clicks) so the d-pad is free to move
+        // focus between Done / play-pause / Audio & Subtitles.
         let swipeDown = UISwipeGestureRecognizer(target: self, action: #selector(showInfoPanel))
         swipeDown.direction = .down
         view.addGestureRecognizer(swipeDown)
+        let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(seekBackwardSwipe))
+        swipeLeft.direction = .left
+        view.addGestureRecognizer(swipeLeft)
+        let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(seekForwardSwipe))
+        swipeRight.direction = .right
+        view.addGestureRecognizer(swipeRight)
+
+        showTVControls()   // visible at start; auto-hides once playback begins
+    }
+
+    @objc private func seekBackwardSwipe() {
+        player.jumpBackward(Self.skipInterval)
+        showTVControls()
+    }
+
+    @objc private func seekForwardSwipe() {
+        player.jumpForward(Self.skipInterval)
+        showTVControls()
     }
 
     private func tick() {
@@ -427,24 +494,63 @@ final class VLCPlaybackController: UIViewController {
         progress.setProgress(Float(player.position), animated: false)
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
         playPauseButton.setImage(UIImage(systemName: glyph), for: .normal)
+        elapsedLabel.text = player.time.stringValue
+        totalLabel.text = totalTime?.stringValue ?? player.media?.length.stringValue ?? "0:00"
+        // Arm the first auto-hide the moment frames start flowing.
+        if player.isPlaying, !tvFirstHideArmed {
+            tvFirstHideArmed = true
+            scheduleTVHide()
+        }
         updateNowPlayingInfo()
     }
 
-    /// Siri Remote seeking: left/right swipe/press = ±10s.
-    /// Seeking is suppressed while the info panel is open — the d-pad navigates
-    /// the panel's focusable rows instead.
+    // MARK: Auto-hiding HUD (tvOS)
+
+    /// Reveal the controls and (re)arm the auto-hide. Called on any interaction.
+    private func showTVControls() {
+        // Only grab focus when first revealing — otherwise every interaction would
+        // yank focus back to play-pause and you could never reach the other buttons.
+        let wasHidden = !controlsContainer.isUserInteractionEnabled
+        tvHideWorkItem?.cancel()
+        controlsContainer.isUserInteractionEnabled = true
+        UIView.animate(withDuration: 0.25) { self.controlsContainer.alpha = 1 }
+        if wasHidden { setNeedsFocusUpdate() }
+        scheduleTVHide()
+    }
+
+    private func scheduleTVHide() {
+        tvHideWorkItem?.cancel()
+        guard player.isPlaying else { return }   // keep up while paused / buffering
+        let work = DispatchWorkItem { [weak self] in self?.hideTVControls() }
+        tvHideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: work)
+    }
+
+    private func hideTVControls() {
+        guard infoPanel == nil else { return }   // never hide out from under the panel
+        controlsContainer.isUserInteractionEnabled = false
+        UIView.animate(withDuration: 0.3) { self.controlsContainer.alpha = 0 }
+        setNeedsFocusUpdate()
+    }
+
+    /// A touch on the Siri Remote surface reveals the HUD.
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        showTVControls()
+        super.touchesBegan(touches, with: event)
+    }
+
+    /// Siri Remote: any press reveals the HUD; hardware Play/Pause toggles.
+    /// Arrow CLICKS are left to the focus engine so the d-pad navigates between
+    /// Done / play-pause / Audio & Subtitles (seeking is on touch-surface swipes).
+    /// Suppressed while the info panel is open (it navigates its own rows).
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard infoPanel == nil else { super.pressesBegan(presses, with: event); return }
+        showTVControls()
         var handled = false
         for press in presses where !handled {
-            switch press.type {
-            case .leftArrow:
-                player.jumpBackward(Self.skipInterval)
+            if press.type == .playPause {
+                togglePlay()
                 handled = true
-            case .rightArrow:
-                player.jumpForward(Self.skipInterval)
-                handled = true
-            default: break
             }
         }
         if !handled { super.pressesBegan(presses, with: event) }
@@ -491,6 +597,9 @@ final class VLCPlaybackController: UIViewController {
 
     override var preferredFocusEnvironments: [any UIFocusEnvironment] {
         if let panel = infoPanel { return [panel] }
+        // Focus the play/pause control while the HUD is up; nothing when hidden so
+        // a press just reveals it again (and the d-pad still seeks).
+        if controlsContainer.alpha > 0 { return [playPauseButton] }
         return super.preferredFocusEnvironments
     }
 
@@ -562,12 +671,19 @@ final class VLCPlaybackController: UIViewController {
         // Double-tap left/right half to seek ±10s; single-tap toggles controls.
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
         view.addGestureRecognizer(doubleTap)
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(toggleControls))
-        // Single-tap only fires after the double-tap window expires, preventing
-        // the first tap of a double-tap from hiding/showing the controls.
-        tap.require(toFail: doubleTap)
+        // Single-tap toggles controls and must fire IMMEDIATELY. The previous
+        // `tap.require(toFail: doubleTap)` made it wait ~300ms for the double-tap
+        // window; worse, with two tap recognizers on one view the double-tap's
+        // default prevention stopped the single-tap from firing at all, so taps
+        // did nothing and only a double-tap (which seeks) surfaced the controls.
+        // Letting both recognize simultaneously (see the delegate below) makes a
+        // single tap toggle instantly; a double-tap also seeks and re-shows the
+        // controls, so it still ends with them visible.
+        tap.delegate = self
         view.addGestureRecognizer(tap)
 
         NSLayoutConstraint.activate([
@@ -800,6 +916,21 @@ final class VLCPlaybackController: UIViewController {
     }
     #endif
 }
+
+#if !os(tvOS)
+// Single-tap (toggle controls) and double-tap (seek ±10s) live on the same view.
+// By default the double-tap recognizer prevents the single-tap from ever firing,
+// so a single tap did nothing. Allowing simultaneous recognition lets the single
+// tap fire instantly while the double-tap still works.
+extension VLCPlaybackController: @preconcurrency UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+}
+#endif
 
 // MARK: - Startup timing (#347)
 

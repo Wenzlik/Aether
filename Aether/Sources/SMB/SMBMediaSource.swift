@@ -72,6 +72,9 @@ actor SMBMediaSource: CustomDownloadSource {
         /// Share + the folders leading to the file (no filename) — the signal the
         /// folder-role classifier groups by (#481).
         let folderComponents: [String]
+        /// The user's content choice for the configured root this file came from
+        /// (Movies / TV Shows / Both), fed to the folder-role classifier.
+        let content: SMBRootContent
         var metadata: TMDbMetadata?
         /// Resolution / codec / HDR / audio parsed from the release filename
         /// (SMB has no probed stream metadata).
@@ -82,14 +85,23 @@ actor SMBMediaSource: CustomDownloadSource {
         /// Folder-role result (#481), filled after the walk. `nil` falls back to
         /// the per-filename inference (defensive — classification always runs).
         var classification: SMBFolderClassifier.Classification?
+        /// Series-level correction the user made on the show (keyed by the show
+        /// id), filled after classification. Drives the show title + the series'
+        /// TMDb match, so fixing one show fixes every episode.
+        var seriesOverride: SMBMetadataStore.Override?
 
         /// Movie vs episode — the folder role wins over the filename guess.
         var roleIsEpisode: Bool { classification?.isEpisode ?? inference.isEpisode }
         /// Key that groups a show's episodes (the series folder), stable across
         /// filename variations. Falls back to the inferred title.
         var seriesGroupKey: String { classification?.seriesKey ?? inference.title }
-        /// Show display name when TMDb doesn't match — the series folder name.
-        var seriesDisplayName: String { classification?.seriesName ?? inference.title }
+        /// Show display name: the user's series correction wins, then the series
+        /// folder name (TMDb canonical title is applied separately when matched).
+        var seriesDisplayName: String {
+            if let t = seriesOverride?.title, !t.isEmpty { return t }
+            return classification?.seriesName ?? inference.title
+        }
+        var seriesMatchYear: Int? { seriesOverride?.year }
 
         /// Title to match + display: the user's correction wins over inference.
         var effectiveTitle: String {
@@ -102,6 +114,7 @@ actor SMBMediaSource: CustomDownloadSource {
     private nonisolated var moviesLibraryID: Library.ID { .init(source: id, rawValue: "movies") }
     private nonisolated var showsLibraryID: Library.ID { .init(source: id, rawValue: "shows") }
     private static let showPrefix = "show:"
+    private static let seasonPrefix = "season:"
 
     // MARK: - MediaSource
 
@@ -136,22 +149,47 @@ actor SMBMediaSource: CustomDownloadSource {
     }
 
     func children(of id: MediaID) async throws -> [MediaItem] {
-        guard id.source == self.id, id.rawValue.hasPrefix(Self.showPrefix) else { return [] }
-        let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-        let episodes = await files().filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
-        return sortedEpisodes(episodes).map { episodeItem($0, showID: id) }
+        guard id.source == self.id else { return [] }
+        let files = await files()
+        // Show → seasons. The app's show body expects `children` to be seasons
+        // (single-season shows then render their episodes inline). SMB has no
+        // season layer of its own, so synthesise one by grouping episodes on
+        // their season number (episodes with none fold into Season 1).
+        if id.rawValue.hasPrefix(Self.showPrefix) {
+            let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let bySeason = Dictionary(grouping: episodes, by: { Self.effectiveSeason($0) })
+            return bySeason.keys.sorted().map {
+                seasonItem(seriesKey: seriesKey, season: $0, episodes: bySeason[$0] ?? [], showEpisodes: episodes)
+            }
+        }
+        // Season → its episodes.
+        if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
+            let episodes = files.filter {
+                $0.roleIsEpisode && $0.seriesGroupKey == seriesKey && Self.effectiveSeason($0) == season
+            }
+            return sortedEpisodes(episodes).map { episodeItem($0, parentID: id) }
+        }
+        return []
     }
 
     func item(for id: MediaID) async throws -> MediaItem? {
         guard id.source == self.id else { return nil }
+        let files = await files()
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = await files().filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
             return episodes.isEmpty ? nil : showContainer(seriesKey: seriesKey, episodes: episodes)
         }
-        guard let file = await files().first(where: { $0.url.absoluteString == id.rawValue }) else { return nil }
+        if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
+            let showEpisodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let seasonEpisodes = showEpisodes.filter { Self.effectiveSeason($0) == season }
+            return seasonEpisodes.isEmpty ? nil
+                : seasonItem(seriesKey: seriesKey, season: season, episodes: seasonEpisodes, showEpisodes: showEpisodes)
+        }
+        guard let file = files.first(where: { $0.url.absoluteString == id.rawValue }) else { return nil }
         return file.roleIsEpisode
-            ? episodeItem(file, showID: showID(for: file.seriesGroupKey))
+            ? episodeItem(file, parentID: seasonID(seriesKey: file.seriesGroupKey, season: Self.effectiveSeason(file)))
             : movieItem(file)
     }
 
@@ -225,11 +263,19 @@ actor SMBMediaSource: CustomDownloadSource {
         // Roots to scan: the configured ones (share + path), else every share at
         // the host. Native browse via the pure-Swift SMBClient (#213) — real
         // errors, no VLC. `SMBSession` owns the depth/count-capped BFS per share.
-        var roots: [(share: String, path: String)] = connection.roots.map { SMBConnection.splitShareAndPath($0) }
+        var roots: [(share: String, path: String, content: SMBRootContent)] = connection.roots.map {
+            let (share, path) = SMBConnection.splitShareAndPath($0)
+            return (share, path, connection.content(for: $0))
+        }
         if roots.isEmpty {
             let shares = (try? await session.shares()) ?? []
-            roots = shares.map { ($0, "/") }
+            roots = shares.map { ($0, "/", .both) }
         }
+        // Warm the playback proxy's SMB session now, in parallel with the walk, so
+        // the first Play doesn't stall on the ~16s NAS login (#213). Fire-and-forget.
+        let sharesToWarm = Set(roots.map(\.share))
+        let conn = connection
+        Task { for share in sharesToWarm { await SMBRangeProxy.shared.prewarm(connection: conn, share: share) } }
         // User title/year corrections, keyed by stream URL (#213).
         let overrides = await SMBMetadataStore.shared.allOverrides()
         var discovered: [SMBFile] = []
@@ -253,6 +299,7 @@ actor SMBMediaSource: CustomDownloadSource {
                     url: entry.streamURL,
                     inference: inference,
                     folderComponents: Array(pathComponents),
+                    content: root.content,
                     mediaInfo: mediaInfo,
                     override: overrides[entry.streamURL.absoluteString]
                 ))
@@ -260,6 +307,11 @@ actor SMBMediaSource: CustomDownloadSource {
         }
         Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
         classifyFolderRoles(&discovered)
+        // Attach any series-level correction (keyed by the show id) so the show
+        // title + the series TMDb match reflect a fix made on the show (#213).
+        for index in discovered.indices where discovered[index].roleIsEpisode {
+            discovered[index].seriesOverride = overrides["\(Self.showPrefix)\(discovered[index].seriesGroupKey)"]
+        }
         await enrichWithTMDb(&discovered)
         let matched = discovered.filter { $0.metadata != nil }.count
         Self.log.info("SMB TMDb: matched \(matched, privacy: .public)/\(discovered.count, privacy: .public) titles")
@@ -273,7 +325,9 @@ actor SMBMediaSource: CustomDownloadSource {
     /// folder in as episodes rather than leaking them into Movies.
     private nonisolated func classifyFolderRoles(_ files: inout [SMBFile]) {
         let entries = files.map {
-            SMBFolderClassifier.Entry(folderComponents: $0.folderComponents, isEpisode: $0.inference.isEpisode)
+            SMBFolderClassifier.Entry(folderComponents: $0.folderComponents,
+                                      isEpisode: $0.inference.isEpisode,
+                                      content: $0.content)
         }
         let classifications = SMBFolderClassifier.classify(entries)
         for index in files.indices { files[index].classification = classifications[index] }
@@ -299,8 +353,10 @@ actor SMBMediaSource: CustomDownloadSource {
             let title: String
             let year: Int?
             if isEpisode {
-                title = (file.override?.title).flatMap { $0.isEmpty ? nil : $0 } ?? file.seriesDisplayName
-                year = file.override?.year
+                // Series match keyed by the show's display name (series override
+                // wins, else the folder name) → one lookup per show.
+                title = file.seriesDisplayName
+                year = file.seriesMatchYear
             } else {
                 title = file.effectiveTitle
                 year = file.effectiveYear
@@ -378,6 +434,40 @@ actor SMBMediaSource: CustomDownloadSource {
         .init(source: id, rawValue: "\(Self.showPrefix)\(seriesKey)")
     }
 
+    /// Synthetic season id: `season:<number>:<seriesKey>`. The number comes first
+    /// so the series key (which can contain `:` / `/`) is the unambiguous tail.
+    private nonisolated func seasonID(seriesKey: String, season: Int) -> MediaID {
+        .init(source: id, rawValue: "\(Self.seasonPrefix)\(season):\(seriesKey)")
+    }
+
+    /// Parse `season:<number>:<seriesKey>` back into its parts.
+    private nonisolated static func parseSeasonID(_ raw: String) -> (season: Int, seriesKey: String)? {
+        let body = raw.dropFirst(seasonPrefix.count)
+        guard let colon = body.firstIndex(of: ":"),
+              let season = Int(body[..<colon]) else { return nil }
+        return (season, String(body[body.index(after: colon)...]))
+    }
+
+    /// Episodes with no parsed season fold into Season 1 so they still appear.
+    private nonisolated static func effectiveSeason(_ file: SMBFile) -> Int {
+        file.inference.season ?? 1
+    }
+
+    private nonisolated func seasonItem(seriesKey: String, season: Int, episodes: [SMBFile], showEpisodes: [SMBFile]) -> MediaItem {
+        // SMB has no per-season art — reuse the show's match poster/backdrop.
+        let metadata = showEpisodes.compactMap(\.metadata).first
+        return MediaItem(
+            id: seasonID(seriesKey: seriesKey, season: season),
+            title: "Season \(season)",
+            kind: .season,
+            posterURL: metadata?.posterURL,
+            backdropURL: metadata?.backdropURL,
+            seasonNumber: season,
+            parentID: showID(for: seriesKey),
+            episodeCount: episodes.count
+        )
+    }
+
     private nonisolated func movieItem(_ file: SMBFile) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: file.url.absoluteString),
@@ -394,7 +484,7 @@ actor SMBMediaSource: CustomDownloadSource {
         )
     }
 
-    private nonisolated func episodeItem(_ file: SMBFile, showID: MediaID) -> MediaItem {
+    private nonisolated func episodeItem(_ file: SMBFile, parentID: MediaID) -> MediaItem {
         MediaItem(
             id: .init(source: id, rawValue: file.url.absoluteString),
             title: episodeDisplayTitle(file.inference),
@@ -406,9 +496,9 @@ actor SMBMediaSource: CustomDownloadSource {
             streamURL: file.url,
             mediaInfo: file.mediaInfo,
             seriesTitle: file.seriesDisplayName,
-            seasonNumber: file.inference.season,
+            seasonNumber: Self.effectiveSeason(file),
             episodeNumber: file.inference.episode,
-            parentID: showID
+            parentID: parentID
         )
     }
 
