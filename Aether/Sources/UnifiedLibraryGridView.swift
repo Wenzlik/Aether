@@ -188,7 +188,10 @@ struct UnifiedLibraryGridView: View {
         // Loading only blocks for the server catalog; the Downloaded filter reads
         // local state, so it stays usable (offline) even before a catalog lands.
         if isLoading && items.isEmpty && !downloadedOnly {
-            AetherLoadingState(.inline)
+            // The full Library landing — show the calm rails skeleton (title +
+            // poster strip, like Home/Discover), not the thin `.inline` hint pulse
+            // which renders as a lone bar on an otherwise empty screen.
+            AetherLoadingState(.rails(count: 2))
                 .padding(.top, AetherDesign.Spacing.l)
         } else {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
