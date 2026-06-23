@@ -31,7 +31,9 @@ enum SMBMounter {
                 case Int32(ETIMEDOUT), Int32(EHOSTUNREACH), Int32(ENETUNREACH):
                     return String(localized: "Couldn't reach the server — is it on and on this network?")
                 default:
-                    return String(localized: "Couldn't connect to the share (error \(status)).")
+                    // Cast to Int so the extracted key uses %lld, matching the
+                    // rest of the catalog's integer interpolations.
+                    return String(localized: "Couldn't connect to the share (error \(Int(status))).")
                 }
             }
         }
