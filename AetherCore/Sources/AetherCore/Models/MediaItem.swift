@@ -102,6 +102,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// items via `TMDbMetadata.rating`; for Plex/Jellyfin items it is fetched
     /// lazily in Detail and is `nil` in the list view unless pre-populated.
     public let tmdbRating: Double?
+    /// The user's **personal** rating (Plex `userRating`, 0–10) when the source
+    /// supports it and the item has been rated. `nil` = unrated. Drives the
+    /// Detail star control; set via `MediaSource.setRating`.
+    public let userRating: Double?
     /// Age / content classification as the source labels it — Plex
     /// `contentRating` / Jellyfin `OfficialRating` (e.g. "PG-13", "TV-MA",
     /// "15"). Rendered as a boxed badge in the Detail metadata line. `nil`
@@ -164,6 +168,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         cast: [CastMember] = [],
         communityRating: Double? = nil,
         tmdbRating: Double? = nil,
+        userRating: Double? = nil,
         contentRating: String? = nil,
         releaseDate: Date? = nil,
         dateAdded: Date? = nil,
@@ -203,6 +208,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.cast = cast
         self.communityRating = communityRating
         self.tmdbRating = tmdbRating
+        self.userRating = userRating
         self.contentRating = contentRating
         self.releaseDate = releaseDate
         self.dateAdded = dateAdded
@@ -279,7 +285,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         subtitleTracks: [MediaSubtitleTrack]? = nil,
         selectedSubtitleTrackID: String?? = nil,
         explicitTrackSelection: Bool?? = nil,
-        selectedQuality: PlaybackQuality? = nil
+        selectedQuality: PlaybackQuality? = nil,
+        isWatched: Bool? = nil
     ) -> MediaItem {
         MediaItem(
             id: id,
@@ -304,13 +311,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
             episodeNumber: episodeNumber,
             selectedQuality: selectedQuality ?? self.selectedQuality,
             guids: guids,
-            isWatched: isWatched,
+            isWatched: isWatched ?? self.isWatched,
             isFavorite: isFavorite,
             parentID: parentID,
             genres: genres,
             cast: cast,
             communityRating: communityRating,
             tmdbRating: tmdbRating,
+            userRating: userRating,
             contentRating: contentRating,
             releaseDate: releaseDate,
             dateAdded: dateAdded,
@@ -363,6 +371,13 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// Play priority; everything else biases the request toward a transcode.
     public func selectingQuality(_ quality: PlaybackQuality) -> MediaItem {
         copy(selectedQuality: quality)
+    }
+
+    /// Return a copy with the watched flag toggled — for on-device sources
+    /// (Local Library, SMB) that track watched state themselves and patch their
+    /// cached items when the user marks something watched.
+    public func markedWatched(_ value: Bool) -> MediaItem {
+        copy(isWatched: value)
     }
 
     public enum Kind: String, Sendable, Hashable {

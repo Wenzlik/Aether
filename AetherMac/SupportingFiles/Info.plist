@@ -36,6 +36,10 @@
 	<array>
 		<string>en</string>
 		<string>cs</string>
+		<string>uk</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>es</string>
 	</array>
 	<key>CFBundleName</key>
 	<string>Aether</string>

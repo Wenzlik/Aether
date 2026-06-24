@@ -345,7 +345,12 @@ final class AppSession {
 
     private(set) var plexConfiguration: PlexConfiguration?
     private(set) var plexAuthClient: PlexAuthClient?
+    private(set) var plexHomeClient: PlexHomeClient?
     var isPlexSignedIn: Bool = false
+    /// The active Plex Home profile, when the account has Home enabled and a
+    /// profile was picked. `nil` for plain (non-Home) accounts. Drives the
+    /// "who's watching" label + the Settings "Switch Profile" affordance.
+    private(set) var activePlexUser: PlexHomeUserRef?
 
     // MARK: - Plex — server discovery
 
@@ -581,12 +586,20 @@ final class AppSession {
         )
         plexConfiguration = config
         plexAuthClient = PlexAuthClient(api: api, configuration: config)
+        plexHomeClient = PlexHomeClient(api: api, configuration: config)
         plexResourceClient = PlexResourceClient(api: api, configuration: config)
         plexServerStore = PlexServerStore(keychain: keychain)
 
         do {
             if let token = try await keychain.string(for: Self.plexTokenKey), !token.isEmpty {
                 isPlexSignedIn = true
+            }
+            // Restore the active Home profile (working token was already
+            // persisted, so playback just resumes as that profile).
+            if let json = try await keychain.string(for: Self.plexHomeUserKey),
+               let data = json.data(using: .utf8),
+               let ref = try? JSONDecoder().decode(PlexHomeUserRef.self, from: data) {
+                activePlexUser = ref
             }
         } catch {
             // Keychain unavailable — user can re-sign-in.
@@ -735,18 +748,68 @@ final class AppSession {
     /// Persists the auth token, flips `isPlexSignedIn`, then kicks off server
     /// discovery so the onboarding flow moves directly into the next step
     /// without the user having to tap a separate "Discover servers" button.
-    func completePlexSignIn(token: String) async {
+    func completePlexSignIn(result: PlexSignInResult) async {
         do {
-            try await keychain.setString(token, for: Self.plexTokenKey)
+            try await keychain.setString(result.token, for: Self.plexTokenKey)
+            try await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
         } catch { }
+        await persistActivePlexUser(result.user)
         isPlexSignedIn = true
         await discoverPlexServers()
         // A fresh Plex sign-in becomes the active source.
         if plexSource != nil { setActiveSource(.plex) }
     }
 
+    /// Persist (or clear) the active Home profile ref + update the published
+    /// property. Passing `nil` clears it (plain account / sign-out).
+    private func persistActivePlexUser(_ user: PlexAPI.HomeUser?) async {
+        activePlexUser = user.map(PlexHomeUserRef.init)
+        do {
+            if let ref = activePlexUser,
+               let data = try? JSONEncoder().encode(ref),
+               let json = String(data: data, encoding: .utf8) {
+                try await keychain.setString(json, for: Self.plexHomeUserKey)
+            } else {
+                try await keychain.removeValue(for: Self.plexHomeUserKey)
+            }
+        } catch { }
+    }
+
+    /// The Plex Home profiles on the signed-in account (for the Settings
+    /// switcher). Empty when Home isn't enabled or the account token is missing.
+    func plexHomeUsers() async -> [PlexAPI.HomeUser] {
+        guard let homeClient = plexHomeClient,
+              let admin = try? await keychain.string(for: Self.plexAdminTokenKey),
+              !admin.isEmpty else { return [] }
+        return (try? await homeClient.users(adminToken: admin)) ?? []
+    }
+
+    /// Switch the active Plex Home profile at runtime (Settings). Swaps the
+    /// working token, re-runs discovery (libraries differ per profile) and
+    /// rebuilds the source. Throws `PlexHomeError.invalidPIN` on a bad PIN.
+    func switchPlexUser(_ user: PlexAPI.HomeUser, pin: String?) async throws {
+        guard let homeClient = plexHomeClient,
+              let admin = try? await keychain.string(for: Self.plexAdminTokenKey),
+              !admin.isEmpty else { return }
+        let token = try await homeClient.switchUser(uuid: user.uuid, pin: pin, adminToken: admin)
+        do { try await keychain.setString(token, for: Self.plexTokenKey) } catch { }
+        await persistActivePlexUser(user)
+        // The new profile may see different servers / libraries — drop the old
+        // server set + cached catalog and re-discover under the new token.
+        do { try await plexServerStore?.clear() } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        plexServers = []
+        plexSources = []
+        discoveryState = .idle
+        await discoverPlexServers()
+        if plexSource != nil { setActiveSource(.plex) }
+        libraryRevision &+= 1
+    }
+
     func signOutOfPlex() async {
         do { try await keychain.removeValue(for: Self.plexTokenKey) } catch { }
+        do { try await keychain.removeValue(for: Self.plexAdminTokenKey) } catch { }
+        await persistActivePlexUser(nil)
         do { try await plexServerStore?.clear() } catch { }
         // Drop the cross-launch library snapshot so a signed-out account's
         // catalog can't be read off disk (#197).
@@ -1180,6 +1243,12 @@ final class AppSession {
 
     static let plexClientIdentifierKey = "plex.clientIdentifier"
     static let plexTokenKey = "plex.authToken"
+    /// The account (admin) token, kept alongside the working token so Settings
+    /// can re-list and switch Plex Home profiles. Equals the working token on
+    /// non-Home accounts.
+    static let plexAdminTokenKey = "plex.adminToken"
+    /// JSON `PlexHomeUserRef` of the active Home profile (for restore + display).
+    static let plexHomeUserKey = "plex.homeUser"
     static let jellyfinDeviceIDKey = "jellyfin.deviceID"
     static let embyDeviceIDKey = "emby.deviceID"
     static let activeSourceKey = "active.source"

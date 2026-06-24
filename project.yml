@@ -45,7 +45,7 @@ settings:
     # Bumped to the in-progress version at the START of its work (see
     # AGENTS.md → Release process), not after — so staging/main always carry
     # the version currently being built.
-    MARKETING_VERSION: "0.8.3"
+    MARKETING_VERSION: "0.8.4"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -311,11 +311,16 @@ targets:
         SUFeedURL: https://aetherplayer.com/appcast.xml
         SUPublicEDKey: W1h42sR7S00GgCTS6B7J8+O/8S/vrt8+epvt2iZ1K6o=
         SUEnableAutomaticChecks: true
-        # Supported UI languages — Czech + English (in-app switcher in Settings,
-        # backed by Localizable.xcstrings). Lets the app run localized in cs.
+        # Supported UI languages (in-app switcher in Settings, backed by
+        # Localizable.xcstrings). The picker derives from Bundle.main.localizations,
+        # which the catalog populates; this list advertises them for the store.
         CFBundleLocalizations:
           - en
           - cs
+          - uk
+          - de
+          - fr
+          - es
         # ATS — allows HTTP connections to local Jellyfin/Emby servers and Plex
         # relay. Same justification as iOS (personal-media client, user-entered
         # URLs, no public internet data). Apple accepts this at review time for

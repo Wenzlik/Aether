@@ -17,6 +17,10 @@ struct SourceAccountSheet: View {
     /// When set, a **Choose Server** row is shown — for accounts that can reach
     /// more than one server (Plex, #323). Opens the server picker.
     var onChooseServer: (() -> Void)? = nil
+    /// The active Plex Home profile's name, shown above "Switch Profile".
+    var activeProfileName: String? = nil
+    /// When set, a **Switch Profile** row is shown (Plex Home). Opens the profile picker.
+    var onSwitchProfile: (() -> Void)? = nil
     let onSignOut: () -> Void
     let onClose: () -> Void
 
@@ -43,6 +47,21 @@ struct SourceAccountSheet: View {
                             systemImage: "rack",
                             value: nil,
                             action: onChooseServer
+                        )
+                    }
+                }
+
+                if let onSwitchProfile {
+                    AetherSettingsSection("Profile") {
+                        if let activeProfileName {
+                            AetherSettingsRow(label: "Watching as", value: activeProfileName)
+                        }
+                        AetherSettingsRow(
+                            label: "Switch Profile",
+                            description: "Choose a different Plex Home profile — each has its own watch history and libraries.",
+                            systemImage: "person.2",
+                            value: nil,
+                            action: onSwitchProfile
                         )
                     }
                 }

@@ -67,14 +67,18 @@ public enum AudioCodec: Sendable, Equatable {
         }
     }
 
-    /// Whether the remux muxer can build a sample entry for this codec **today**.
-    /// Only AAC (`mp4a`/`esds` from the AudioSpecificConfig) is implemented.
-    /// AC-3 / E-AC-3 are AVFoundation-decodable but need `ac-3`/`ec-3` sample
-    /// entries whose `dac3`/`dec3` boxes must be synthesised from the bitstream
-    /// (MKV carries no CodecPrivate for them) — until then a title with non-AAC
-    /// audio routes to a fallback engine rather than remuxing to silent video.
+    /// Whether the remux muxer can build a sample entry for this codec.
+    /// AAC (`mp4a`/`esds`), AC-3 (`ac-3`/`dac3`) and E-AC-3 (`ec-3`/`dec3`) —
+    /// the (E-)AC-3 config boxes are synthesised from the first frame's
+    /// bitstream (`AudioBitstreamConfig`), since MKV carries no CodecPrivate for
+    /// them. DTS / TrueHD aren't AVFoundation-decodable → fallback engine. Note
+    /// this is a coarse gate; the muxer still bails per-file on unpackageable
+    /// (E-)AC-3 variants (half-rate, dependent substreams).
     public var isRemuxPackageable: Bool {
-        self == .aac
+        switch self {
+        case .aac, .ac3, .eac3: return true
+        default: return false
+        }
     }
 
     /// Map a Matroska `CodecID` (e.g. `"A_AAC"`, `"A_AC3"`, `"A_DTS"`).

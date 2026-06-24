@@ -228,11 +228,12 @@ struct PlexOnboardingView: View {
                 onRetry: { Task { await session.discoverPlexServers() } },
                 onClose: { session.isSignInPresented = false }
             )
-        } else if let authClient = session.plexAuthClient {
+        } else if let authClient = session.plexAuthClient, let homeClient = session.plexHomeClient {
             PlexSignInView(
                 authClient: authClient,
-                onSuccess: { token in
-                    Task { await session.completePlexSignIn(token: token) }
+                homeClient: homeClient,
+                onSuccess: { result in
+                    Task { await session.completePlexSignIn(result: result) }
                 },
                 onCancel: { session.isSignInPresented = false }
             )

@@ -1,6 +1,414 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Clear Rating": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zrušit hodnocení"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скинути оцінку"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewertung entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer la note"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar valoración"
+          }
+        }
+      }
+    },
+    "Rate": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohodnotit"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оцінити"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewerten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valorar"
+          }
+        }
+      }
+    },
+    "Who's watching?": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kdo se dívá?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хто дивиться?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wer schaut?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui regarde ?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Quién está viendo?"
+          }
+        }
+      }
+    },
+    "PIN": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN-код"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN"
+          }
+        }
+      }
+    },
+    "Wrong PIN. Try again.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Špatný PIN. Zkuste to znovu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неправильний PIN. Спробуйте ще раз."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falscher PIN. Erneut versuchen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code incorrect. Réessayez."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN incorrecto. Inténtalo de nuevo."
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zpět"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назад"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atrás"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pokračovat"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продовжити"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortfahren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
+          }
+        }
+      }
+    },
+    "Enter this profile's PIN": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zadejte PIN tohoto profilu"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введіть PIN цього профілю"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN dieses Profils eingeben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisir le code de ce profil"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduce el PIN de este perfil"
+          }
+        }
+      }
+    },
+    "Switch Profile": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přepnout profil"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Змінити профіль"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil wechseln"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de profil"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar de perfil"
+          }
+        }
+      }
+    },
+    "Switch Profile…": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přepnout profil…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Змінити профіль…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil wechseln…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de profil…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar de perfil…"
+          }
+        }
+      }
+    },
+    "No other profiles on this account.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Na tomto účtu nejsou žádné další profily."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На цьому обліковому записі немає інших профілів."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine weiteren Profile in diesem Konto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun autre profil sur ce compte."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay otros perfiles en esta cuenta."
+          }
+        }
+      }
+    },
+    "Watching as": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Díváte se jako"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ви дивитеся як"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktives Profil"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil actif"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfil actual"
+          }
+        }
+      }
+    },
     "": {
       "shouldTranslate": false
     },
@@ -17,6 +425,24 @@
             "state": "new",
             "value": "%1$@ of %2$@ · %3$@"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ von %@ · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sur %@ · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ de %@ · %@"
+          }
         }
       }
     },
@@ -26,6 +452,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ využito · ~/Movies/Aether"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ belegt · ~/Movies/Aether"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ utilisés · ~/Movies/Aether"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ usados · ~/Movies/Aether"
           }
         }
       }
@@ -44,6 +488,24 @@
             "state": "translated",
             "value": "%lld s"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld s"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld s"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld s"
+          }
         }
       }
     },
@@ -54,6 +516,24 @@
             "state": "translated",
             "value": "O aplikaci"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À propos"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acerca de"
+          }
         }
       }
     },
@@ -63,6 +543,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Účty"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comptes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuentas"
           }
         }
       }
@@ -80,6 +578,24 @@
             "state": "translated",
             "value": "Додати теку"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un dossier"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir carpeta"
+          }
         }
       }
     },
@@ -89,6 +605,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Přidat složku…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner hinzufügen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un dossier…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir carpeta…"
           }
         }
       }
@@ -100,6 +634,24 @@
             "state": "translated",
             "value": "Přidat SMB složku"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SMB-Freigabe hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un partage SMB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir recurso compartido SMB"
+          }
         }
       }
     },
@@ -110,6 +662,24 @@
             "state": "translated",
             "value": "Přidat zdroj"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une source"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir fuente"
+          }
         }
       }
     },
@@ -119,6 +689,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pro vyhledávání dostupnosti přidejte výše klíč TMDb."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge oben einen TMDb-Schlüssel hinzu, um Verfügbarkeitsabfragen zu aktivieren."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoutez une clé TMDb ci-dessus pour activer les recherches de disponibilité."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añade una clave de TMDb arriba para habilitar las búsquedas de disponibilidad."
           }
         }
       }
@@ -136,6 +724,24 @@
             "state": "translated",
             "value": "Додайте теки, з яких складається ваша бібліотека, і вкажіть Aether, що містить кожна. Якщо залишити порожнім, скануватиметься кожен спільний ресурс на сервері."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge die Ordner hinzu, aus denen deine Mediathek besteht, und teile Aether mit, was jeder enthält. Lass es leer, um jede Freigabe auf dem Server zu scannen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoutez les dossiers qui composent votre bibliothèque et indiquez à Aether ce que contient chacun d’eux. Laissez le champ vide pour analyser tous les partages du serveur."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añade las carpetas que componen tu biblioteca e indica a Aether qué contiene cada una. Déjalo vacío para analizar todos los recursos compartidos del servidor."
+          }
         }
       }
     },
@@ -146,6 +752,24 @@
             "state": "translated",
             "value": "Aether se aktualizuje z aetherplayer.com — není v Mac App Store. Každá aktualizace je před instalací ověřena."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aether aktualisiert sich selbst über aetherplayer.com – es ist nicht im Mac App Store erhältlich. Jede Aktualisierung wird vor der Installation überprüft."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aether se met à jour depuis aetherplayer.com – il n'est pas sur le Mac App Store. Chaque mise à jour est vérifiée avant son installation."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aether se actualiza desde aetherplayer.com; no está en la Mac App Store. Cada actualización se verifica antes de instalarse."
+          }
         }
       }
     },
@@ -155,6 +779,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vše"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo"
           }
         }
       }
@@ -168,6 +810,24 @@
             "state": "translated",
             "value": "Všechny žánry"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Genres"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les genres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos los géneros"
+          }
         }
       }
     },
@@ -180,6 +840,24 @@
             "state": "translated",
             "value": "Jakékoli hodnocení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beliebige Bewertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute note"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cualquier valoración"
+          }
         }
       }
     },
@@ -189,6 +867,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vzhled"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darstellung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apparence"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aspecto"
           }
         }
       }
@@ -200,6 +896,24 @@
             "state": "translated",
             "value": "Použije se na každý titul, který otevřeš. Zvuk, titulky a kvalitu můžeš pořád změnit u konkrétního titulu na jeho detailu."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird auf jeden Titel angewendet, den du öffnest. Audio, Untertitel und Qualität kannst du für einen einzelnen Titel weiterhin auf dessen Detailseite ändern."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appliqué à chaque titre que vous ouvrez. Vous pouvez toujours modifier l'audio, les sous-titres et la qualité pour un titre donné sur sa page de détails."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica a cada título que abres. Aún puedes cambiar el audio, los subtítulos y la calidad de un título concreto en su pantalla de detalles."
+          }
         }
       }
     },
@@ -209,6 +923,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schvalte tento kód v Emby\n(Dashboard ▸ Quick Connect nebo v přihlášeném klientovi):"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genehmige diesen Code in Emby\n(Dashboard ▸ Quick Connect oder einem angemeldeten Client):"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuvez ce code dans Emby\n(Tableau de bord ▸ Quick Connect, ou un client connecté) :"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprueba este código en Emby\n(Panel ▸ Quick Connect, o un cliente con sesión iniciada):"
           }
         }
       }
@@ -220,6 +952,24 @@
             "state": "translated",
             "value": "Schval tento kód v Jellyfinu\n(Dashboard ▸ Quick Connect, nebo přihlášený klient):"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genehmige diesen Code in Jellyfin\n(Dashboard ▸ Quick Connect oder einem angemeldeten Client):"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuvez ce code dans Jellyfin\n(Tableau de bord ▸ Quick Connect, ou un client connecté) :"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprueba este código en Jellyfin\n(Panel ▸ Quick Connect, o un cliente con sesión iniciada):"
+          }
         }
       }
     },
@@ -230,6 +980,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zvuk"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
           }
         }
       }
@@ -247,6 +1015,24 @@
             "state": "translated",
             "value": "Звук і субтитри"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio & Untertitel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio et sous-titres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio y subtítulos"
+          }
         }
       }
     },
@@ -256,6 +1042,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jazyk zvuku"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audiosprache"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Langue audio"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idioma de audio"
           }
         }
       }
@@ -267,6 +1071,24 @@
             "state": "translated",
             "value": "Automaticky přehrát další epizodu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächste Folge automatisch abspielen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire automatiquement l'épisode suivant"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducir automáticamente el siguiente episodio"
+          }
         }
       }
     },
@@ -276,6 +1098,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automaticky kontrolovat aktualizace"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch nach Updates suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher automatiquement les mises à jour"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar actualizaciones automáticamente"
           }
         }
       }
@@ -287,6 +1127,24 @@
             "state": "translated",
             "value": "Build"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compilación"
+          }
         }
       }
     },
@@ -296,6 +1154,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zrušit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
           }
         }
       }
@@ -307,6 +1183,24 @@
             "state": "translated",
             "value": "Obsazení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besetzung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribution"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reparto"
+          }
         }
       }
     },
@@ -316,6 +1210,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Změnit klíč"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüssel ändern"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de clé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar clave"
           }
         }
       }
@@ -327,6 +1239,24 @@
             "state": "translated",
             "value": "Změní jazyk aplikace okamžitě. Některé texty mohou zůstat anglicky, dokud nebudou přeloženy."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändert die Sprache der App sofort. Einige Texte erscheinen möglicherweise noch auf Englisch, bis sie vollständig übersetzt sind."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change immédiatement la langue de l'app. Certains textes peuvent encore apparaître en anglais jusqu'à leur traduction complète."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia el idioma de la app de inmediato. Algunos textos pueden seguir apareciendo en inglés hasta que se traduzcan por completo."
+          }
         }
       }
     },
@@ -336,6 +1266,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zkontrolovat aktualizace…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Updates suchen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher les mises à jour…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar actualizaciones…"
           }
         }
       }
@@ -353,6 +1301,24 @@
             "state": "translated",
             "value": "Перевірте з'єднання і спробуйте ще раз."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez votre connexion et réessayez."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprueba tu conexión e inténtalo de nuevo."
+          }
         }
       }
     },
@@ -362,6 +1328,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vymazat vše"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle löschen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout effacer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar todo"
           }
         }
       }
@@ -375,6 +1359,24 @@
             "state": "translated",
             "value": "Zrušit filtry"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter löschen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les filtres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar filtros"
+          }
         }
       }
     },
@@ -384,6 +1386,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vymazat mezipaměť obrázků"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild-Cache löschen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer le cache d'images"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar caché de imágenes"
           }
         }
       }
@@ -396,6 +1416,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zrušit roky"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jahre löschen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les années"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar años"
           }
         }
       }
@@ -414,6 +1452,24 @@
             "state": "translated",
             "value": "Очистити все"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle löschen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout effacer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar todo"
+          }
         }
       }
     },
@@ -423,6 +1479,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zavřít přehrávač"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Player schließen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer le lecteur"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar el reproductor"
           }
         }
       }
@@ -435,6 +1509,24 @@
             "state": "translated",
             "value": "Již brzy"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demnächst"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bientôt disponible"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Próximamente"
+          }
         }
       }
     },
@@ -444,6 +1536,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nastaveno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konfiguriert"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuré"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurado"
           }
         }
       }
@@ -455,6 +1565,24 @@
             "state": "translated",
             "value": "Připojit"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar"
+          }
         }
       }
     },
@@ -464,6 +1592,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Připojit Emby"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emby verbinden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Emby"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar Emby"
           }
         }
       }
@@ -475,6 +1621,24 @@
             "state": "translated",
             "value": "Připojit Jellyfin"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin verbinden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Jellyfin"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar Jellyfin"
+          }
         }
       }
     },
@@ -485,6 +1649,24 @@
             "state": "translated",
             "value": "Připojit Jellyfin…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin verbinden…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Jellyfin…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar Jellyfin…"
+          }
         }
       }
     },
@@ -494,6 +1676,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Připojit Plex"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex verbinden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Plex"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar Plex"
           }
         }
       }
@@ -506,6 +1706,24 @@
             "state": "translated",
             "value": "Připoj Plex nebo Jellyfin v Nastavení a procházej svou knihovnu."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde Plex oder Jellyfin in den Einstellungen, um deine Mediathek zu durchsuchen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecte Plex ou Jellyfin dans les Réglages pour parcourir ta bibliothèque."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecta Plex o Jellyfin en Ajustes para explorar tu biblioteca."
+          }
         }
       }
     },
@@ -515,6 +1733,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Připojit Plex…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex verbinden…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Plex…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar Plex…"
           }
         }
       }
@@ -526,6 +1762,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Připojeno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecté"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado"
           }
         }
       }
@@ -543,6 +1797,24 @@
             "state": "translated",
             "value": "Підключення до Plex…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde mit Plex…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion à Plex…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando con Plex…"
+          }
         }
       }
     },
@@ -552,6 +1824,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Připojuji ke složce…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde mit der Freigabe…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion au partage…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando con el recurso compartido…"
           }
         }
       }
@@ -565,6 +1855,24 @@
             "state": "translated",
             "value": "Připojování…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando…"
+          }
         }
       }
     },
@@ -574,6 +1882,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontaktovat autora"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entwickler kontaktieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacter le créateur"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contactar al creador"
           }
         }
       }
@@ -586,6 +1912,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontaktování serveru…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontaktiere Server…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion au serveur…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contactando con el servidor…"
           }
         }
       }
@@ -603,6 +1947,24 @@
             "state": "translated",
             "value": "Містить"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enthält"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contient"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contiene"
+          }
         }
       }
     },
@@ -619,6 +1981,24 @@
             "state": "translated",
             "value": "Вміст з увімкнених серверів об'єднано в одну Бібліотеку. Щоб повністю відключитися від Plex, використовуйте Вийти на вкладці Акаунти."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalte von aktivierten Servern werden in einer Mediathek zusammengeführt. Um Plex vollständig zu trennen, verwende „Abmelden“ im Tab „Accounts“."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le contenu des serveurs activés est regroupé dans une seule bibliothèque. Pour déconnecter entièrement Plex, utilise « Se déconnecter » dans l’onglet Comptes."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El contenido de los servidores activados se combina en una sola biblioteca. Para desconectar Plex por completo, usa «Cerrar sesión» en la pestaña Cuentas."
+          }
         }
       }
     },
@@ -628,6 +2008,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pokračovat v přehrávání"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weiterschauen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre la lecture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar viendo"
           }
         }
       }
@@ -639,6 +2037,24 @@
             "state": "translated",
             "value": "Připojení se nezdařilo"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung fehlgeschlagen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec de la connexion"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar"
+          }
         }
       }
     },
@@ -648,6 +2064,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ke složce se nepodařilo připojit (chyba %lld)."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung zur Freigabe fehlgeschlagen (Fehler %lld)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de se connecter au partage (erreur %lld)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar al recurso compartido (error %lld)."
           }
         }
       }
@@ -665,6 +2099,24 @@
             "state": "translated",
             "value": "Не вдалося з'єднатися з Plex"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex nicht erreichbar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre Plex"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar con Plex"
+          }
         }
       }
     },
@@ -674,6 +2126,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nepodařilo se spojit s TMDb — zkontrolujte připojení."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb nicht erreichbar – überprüfe deine Verbindung."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre TMDb — vérifiez votre connexion."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar con TMDb: comprueba tu conexión."
           }
         }
       }
@@ -685,6 +2155,24 @@
             "state": "translated",
             "value": "Server je nedostupný — je zapnutý a ve stejné síti?"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server nicht erreichbar – ist er eingeschaltet und in diesem Netzwerk?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre le serveur — est-il allumé et sur ce réseau ?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar con el servidor: ¿está encendido y en esta red?"
+          }
         }
       }
     },
@@ -694,6 +2182,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ke složce se nepodařilo včas připojit — je server zapnutý a ve stejné síti?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabe nicht rechtzeitig erreichbar – ist der Server eingeschaltet und in diesem Netzwerk?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre le partage à temps — le serveur est-il allumé et sur ce réseau ?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo conectar con el recurso compartido a tiempo: ¿está el servidor encendido y en esta red?"
           }
         }
       }
@@ -705,6 +2211,24 @@
             "state": "translated",
             "value": "Nepodařilo se přihlásit — zkontroluj uživatelské jméno a heslo."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmeldung fehlgeschlagen – überprüfe Benutzername und Passwort."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec de la connexion — vérifiez le nom d'utilisateur et le mot de passe."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo iniciar sesión: comprueba el nombre de usuario y la contraseña."
+          }
         }
       }
     },
@@ -714,6 +2238,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Výchozí nastavení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardwerte"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valeurs par défaut"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valores predeterminados"
           }
         }
       }
@@ -725,6 +2267,24 @@
             "state": "translated",
             "value": "Ztlumení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abdunkeln"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atténuation"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atenuación"
+          }
         }
       }
     },
@@ -734,6 +2294,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Objevovat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entdecken"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Découvrir"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descubrir"
           }
         }
       }
@@ -745,6 +2323,24 @@
             "state": "translated",
             "value": "Objevování"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entdecken"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Découverte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descubrimiento"
+          }
         }
       }
     },
@@ -754,6 +2350,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zavřít"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descartar"
           }
         }
       }
@@ -771,6 +2385,24 @@
             "state": "translated",
             "value": "Готово"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
         }
       }
     },
@@ -780,6 +2412,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stáhnout"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar"
           }
         }
       }
@@ -791,6 +2441,24 @@
             "state": "translated",
             "value": "Staženo"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geladen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargado"
+          }
         }
       }
     },
@@ -801,11 +2469,49 @@
             "state": "translated",
             "value": "Stahování"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloads"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargements"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargas"
+          }
         }
       }
     },
     "Emby": {
-      "shouldTranslate": false
+      "shouldTranslate": false,
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emby"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emby"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emby"
+          }
+        }
+      }
     },
     "English": {
       "comment": "The name of the English language.",
@@ -815,6 +2521,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Angličtina"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Englisch"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anglais"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inglés"
           }
         }
       }
@@ -826,6 +2550,24 @@
             "state": "translated",
             "value": "Zadej server i název složky."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geben Sie einen Server und einen Freigabenamen ein."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez à la fois un serveur et un nom de partage."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduce un servidor y un nombre de recurso compartido."
+          }
         }
       }
     },
@@ -835,6 +2577,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zadej tento kód na plex.tv/link:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib diesen Code unter plex.tv/link ein:"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez ce code sur plex.tv/link :"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduce este código en plex.tv/link:"
           }
         }
       }
@@ -846,6 +2606,24 @@
             "state": "translated",
             "value": "Epizody"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folgen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Épisodes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episodios"
+          }
         }
       }
     },
@@ -855,6 +2633,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Selhalo — opakovat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlgeschlagen — Wiederholen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec — Réessayer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error — Reintentar"
           }
         }
       }
@@ -868,6 +2664,24 @@
             "state": "translated",
             "value": "Oblíbené"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favori"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorito"
+          }
         }
       }
     },
@@ -880,6 +2694,24 @@
             "state": "translated",
             "value": "V oblíbených"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Favorit markiert"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouté aux favoris"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcado como favorito"
+          }
         }
       }
     },
@@ -889,6 +2721,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Návrh funkce"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktionswunsch"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande de fonctionnalité"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solicitud de función"
           }
         }
       }
@@ -902,6 +2752,24 @@
             "state": "translated",
             "value": "Filtr"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtern"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtrer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtrar"
+          }
         }
       }
     },
@@ -911,6 +2779,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opravit přiřazení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Treffer korrigieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corriger la correspondance"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corregir coincidencia"
           }
         }
       }
@@ -922,6 +2808,24 @@
             "state": "translated",
             "value": "Podle zařízení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerät folgen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivre l’appareil"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seguir el dispositivo"
+          }
         }
       }
     },
@@ -931,6 +2835,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Obecné"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allgemein"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Général"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         }
       }
@@ -944,6 +2866,24 @@
             "state": "translated",
             "value": "Žánr"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genre"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genre"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Género"
+          }
         }
       }
     },
@@ -953,6 +2893,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skrýt zhlédnuté v Objevování"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesehene Titel in Entdecken ausblenden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les titres vus dans Découvrir"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar los títulos vistos en Descubrir"
           }
         }
       }
@@ -964,6 +2922,24 @@
             "state": "translated",
             "value": "Domů"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accueil"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inicio"
+          }
         }
       }
     },
@@ -973,6 +2949,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mezipaměť obrázků"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild-Cache"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache des images"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caché de imágenes"
           }
         }
       }
@@ -984,6 +2978,24 @@
             "state": "translated",
             "value": "Probíhá"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Bearbeitung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En cours"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En curso"
+          }
         }
       }
     },
@@ -994,12 +3006,48 @@
             "state": "translated",
             "value": "Neplatný klíč — TMDb jej odmítl."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger Schlüssel – TMDb hat ihn abgelehnt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé non valide — TMDb l’a refusée."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave no válida: TMDb la rechazó."
+          }
         }
       }
     },
     "Jellyfin": {
       "localizations": {
         "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jellyfin"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "Jellyfin"
@@ -1014,6 +3062,24 @@
             "state": "translated",
             "value": "Průhlednost nápisu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deckkraft der Beschriftung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacité du libellé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacidad de la etiqueta"
+          }
         }
       }
     },
@@ -1023,6 +3089,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jazyk"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Langue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idioma"
           }
         }
       }
@@ -1040,6 +3124,24 @@
             "state": "translated",
             "value": "Якщо залишити вибір порожнім, скануватиметься кожен спільний ресурс на цьому сервері."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasse die Auswahl leer, um jede Freigabe auf diesem Server zu durchsuchen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez la sélection vide pour analyser tous les partages de ce serveur."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja la selección vacía para analizar todos los recursos compartidos de este servidor."
+          }
         }
       }
     },
@@ -1050,6 +3152,24 @@
             "state": "translated",
             "value": "Pro připojení jako host nech uživatelské jméno a heslo prázdné. Složka se připojí k tomuto Macu a prohledá se na filmy a seriály."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lasse Benutzername und Passwort leer, um als Gast zu verbinden. Die Freigabe wird auf diesem Mac aktiviert und nach Filmen und Serien durchsucht."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez le nom d’utilisateur et le mot de passe vides pour vous connecter en tant qu’invité. Le partage est monté sur ce Mac et analysé à la recherche de films et de séries."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja el nombre de usuario y la contraseña vacíos para conectarte como invitado. El recurso compartido se monta en este Mac y se analiza en busca de películas y series."
+          }
         }
       }
     },
@@ -1059,6 +3179,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Knihovna"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediathek"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bibliothèque"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biblioteca"
           }
         }
       }
@@ -1076,6 +3214,24 @@
             "state": "translated",
             "value": "Теки бібліотеки"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediathek-Ordner"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dossiers de la bibliothèque"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carpetas de la biblioteca"
+          }
         }
       }
     },
@@ -1086,6 +3242,24 @@
             "state": "translated",
             "value": "Odkazy"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Links"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liens"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enlaces"
+          }
         }
       }
     },
@@ -1095,6 +3269,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lokální knihovna"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Mediathek"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bibliothèque locale"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biblioteca local"
           }
         }
       }
@@ -1112,6 +3304,24 @@
             "state": "translated",
             "value": "Керувати серверами…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server verwalten…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer les serveurs…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestionar servidores…"
+          }
         }
       }
     },
@@ -1121,6 +3331,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Označit jako nezhlédnuté"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als ungesehen markieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marquer comme non vu"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcar como no visto"
           }
         }
       }
@@ -1140,6 +3368,24 @@
             "state": "translated",
             "value": "Позначити як переглянуте"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als gesehen markieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marquer comme vu"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcar como visto"
+          }
         }
       }
     },
@@ -1150,6 +3396,24 @@
             "state": "translated",
             "value": "Označí tituly, které vlastníte a jsou zároveň na Netflixu, a zobrazí tituly jen z Netflixu v Objevování a Hledání. Aether pouze odkazuje — Netflix nikdy nepřehrává. Data o dostupnosti od JustWatch."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markiere Titel in deinem Besitz, die auch auf Netflix verfügbar sind, und zeige Netflix-exklusive Titel in Entdecken und der Suche. Aether verlinkt nur – es streamt Netflix nie. Verfügbarkeitsdaten von JustWatch."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiez les titres que vous possédez qui sont aussi sur Netflix, et faites apparaître les titres exclusifs à Netflix dans Découvrir et la recherche. Aether ne fait que rediriger — il ne diffuse jamais Netflix. Données de disponibilité fournies par JustWatch."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marca los títulos que posees que también están en Netflix y muestra los títulos exclusivos de Netflix en Descubrir y Buscar. Aether solo enlaza: nunca reproduce Netflix. Datos de disponibilidad de JustWatch."
+          }
         }
       }
     },
@@ -1159,6 +3423,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metadata"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Métadonnées"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadatos"
           }
         }
       }
@@ -1172,6 +3454,24 @@
             "state": "translated",
             "value": "Minimální hodnocení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestbewertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note minimale"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valoración mínima"
+          }
         }
       }
     },
@@ -1181,6 +3481,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Více informací"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Infos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus d’infos"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Más información"
           }
         }
       }
@@ -1192,6 +3510,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Filmy"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filme"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Films"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Películas"
           }
         }
       }
@@ -1209,6 +3545,24 @@
             "state": "translated",
             "value": "Фільми та серіали"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filme & Serien"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Films et séries"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Películas y series"
+          }
         }
       }
     },
@@ -1219,6 +3573,24 @@
             "state": "translated",
             "value": "Odpočet do další epizody"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Countdown zur nächsten Folge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compte à rebours du prochain épisode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuenta atrás del siguiente episodio"
+          }
         }
       }
     },
@@ -1228,6 +3600,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zatím žádná stahování"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Downloads"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun téléchargement"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay descargas"
           }
         }
       }
@@ -1245,6 +3635,24 @@
             "state": "translated",
             "value": "Поки що немає тек"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Ordner"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun dossier"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay carpetas"
+          }
         }
       }
     },
@@ -1254,6 +3662,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Žádné výsledky — zkuste upravit název nebo rok"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Ergebnisse – passe den Titel oder das Jahr an"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun résultat — essayez de modifier le titre ou l’année"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin resultados: prueba a ajustar el título o el año"
           }
         }
       }
@@ -1271,6 +3697,24 @@
             "state": "translated",
             "value": "Сервери не знайдено"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Server gefunden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun serveur trouvé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontraron servidores"
+          }
         }
       }
     },
@@ -1280,6 +3724,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zatím nejsou připojené žádné zdroje. Přidej Plex, Jellyfin, Emby nebo SMB složku a začni procházet knihovnu."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Quellen verbunden. Füge Plex, Jellyfin, Emby oder eine SMB-Freigabe hinzu, um deine Mediathek zu durchsuchen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune source connectée pour le moment. Ajoutez Plex, Jellyfin, Emby ou un partage SMB pour parcourir votre bibliothèque."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay fuentes conectadas. Añade Plex, Jellyfin, Emby o un recurso compartido SMB para explorar tu biblioteca."
           }
         }
       }
@@ -1292,6 +3754,24 @@
             "state": "translated",
             "value": "Nepřipojeno"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verbunden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non connecté"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No conectado"
+          }
         }
       }
     },
@@ -1303,6 +3783,24 @@
             "state": "translated",
             "value": "Zatím tu nic není"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nichts vorhanden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien pour le moment"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay nada"
+          }
         }
       }
     },
@@ -1313,6 +3811,24 @@
             "state": "translated",
             "value": "Vypnuto"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado"
+          }
         }
       }
     },
@@ -1322,6 +3838,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Na Netflixu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf Netflix"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur Netflix"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En Netflix"
           }
         }
       }
@@ -1339,6 +3873,24 @@
             "state": "translated",
             "value": "У вашій мережі"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In deinem Netzwerk"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur votre réseau"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En tu red"
+          }
         }
       }
     },
@@ -1351,6 +3903,24 @@
             "state": "translated",
             "value": "Otevřít nedávné"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzte Dokumente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir l'élément récent"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir reciente"
+          }
         }
       }
     },
@@ -1360,6 +3930,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Otevřete titul a klepnutím na Stáhnout jej uložte pro offline sledování."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne einen Titel und tippe auf „Download“, um ihn für die Offline-Wiedergabe zu speichern."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrez un titre et touchez Télécharger pour l'enregistrer en vue d'un visionnage hors ligne."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abre un título y toca Descargar para guardarlo y verlo sin conexión."
           }
         }
       }
@@ -1371,6 +3959,24 @@
             "state": "translated",
             "value": "Otevřít plex.tv/link"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "plex.tv/link öffnen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir plex.tv/link"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir plex.tv/link"
+          }
         }
       }
     },
@@ -1380,6 +3986,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Otevřít…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir…"
           }
         }
       }
@@ -1391,6 +4015,24 @@
             "state": "translated",
             "value": "Další zdroje"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Andere Quellen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autres sources"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otras fuentes"
+          }
         }
       }
     },
@@ -1400,6 +4042,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Heslo (volitelné)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort (optional)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe (facultatif)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña (opcional)"
           }
         }
       }
@@ -1411,6 +4071,24 @@
             "state": "translated",
             "value": "Pozastavit"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa"
+          }
         }
       }
     },
@@ -1420,6 +4098,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pozastaveno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausiert"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pause"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pausa"
           }
         }
       }
@@ -1432,6 +4128,24 @@
             "state": "translated",
             "value": "Osobní média, krásně přehraná."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönliche Medien, wunderschön wiedergegeben."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos médias personnels, superbement diffusés."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu contenido personal, reproducido a la perfección."
+          }
         }
       }
     },
@@ -1441,6 +4155,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vyber složky na tomto Macu nebo na připojeném síťovém disku. Aether je prohledá na filmy a seriály a přidá je do knihovny."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle Ordner auf diesem Mac oder einer eingebundenen Netzwerkfreigabe. Aether durchsucht sie nach Filmen und Serien und fügt sie deiner Mediathek hinzu."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez des dossiers sur ce Mac ou un partage réseau monté. Aether y recherche des films et des séries et les ajoute à votre bibliothèque."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige carpetas en este Mac o en un recurso de red montado. Aether las analiza en busca de películas y series y las añade a tu biblioteca."
           }
         }
       }
@@ -1452,6 +4184,24 @@
             "state": "translated",
             "value": "Platforma"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plattform"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plateforme"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plataforma"
+          }
         }
       }
     },
@@ -1462,6 +4212,24 @@
             "state": "translated",
             "value": "Přehrát"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducir"
+          }
         }
       }
     },
@@ -1471,6 +4239,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Přehrát hned"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt wiedergeben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire maintenant"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducir ahora"
           }
         }
       }
@@ -1484,6 +4270,24 @@
             "state": "translated",
             "value": "Přehrát od začátku"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Anfang an wiedergeben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire depuis le début"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducir desde el principio"
+          }
         }
       }
     },
@@ -1493,6 +4297,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Přehrát na Netflixu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf Netflix wiedergeben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire sur Netflix"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducir en Netflix"
           }
         }
       }
@@ -1504,6 +4326,24 @@
             "state": "translated",
             "value": "Přehrávání"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproducción"
+          }
         }
       }
     },
@@ -1513,6 +4353,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Možnosti přehrávání"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeoptionen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options de lecture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opciones de reproducción"
           }
         }
       }
@@ -1524,12 +4382,48 @@
             "state": "translated",
             "value": "Přehrává média pomocí mpv (libmpv), FFmpeg a libass — © příslušní autoři, pod GPL/LGPL."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gibt Medien mit mpv (libmpv), FFmpeg und libass wieder — © ihre jeweiligen Autoren, unter GPL/LGPL."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lit les médias avec mpv (libmpv), FFmpeg et libass — © leurs auteurs respectifs, sous GPL/LGPL."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reproduce contenido con mpv (libmpv), FFmpeg y libass — © sus respectivos autores, bajo GPL/LGPL."
+          }
         }
       }
     },
     "Plex": {
       "localizations": {
         "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "Plex"
@@ -1550,6 +4444,24 @@
             "state": "translated",
             "value": "Сервери Plex"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plex-Server"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveurs Plex"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores Plex"
+          }
         }
       }
     },
@@ -1559,6 +4471,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Karty s plakáty"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poster-Karten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cartes d'affiche"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarjetas de póster"
           }
         }
       }
@@ -1570,6 +4500,24 @@
             "state": "translated",
             "value": "Preferovaný"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bevorzugt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préféré"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preferido"
+          }
         }
       }
     },
@@ -1579,6 +4527,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hlavní server"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primärer Server"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveur principal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor principal"
           }
         }
       }
@@ -1590,6 +4556,24 @@
             "state": "translated",
             "value": "Kvalita"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualität"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualité"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad"
+          }
         }
       }
     },
@@ -1600,6 +4584,24 @@
             "state": "translated",
             "value": "Ve frontě"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Warteschlange"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En file d'attente"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En cola"
+          }
         }
       }
     },
@@ -1609,6 +4611,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odznak hodnocení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewertungs-Badge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Badge de note"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insignia de valoración"
           }
         }
       }
@@ -1626,6 +4646,24 @@
             "state": "translated",
             "value": "Доступні сервери"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erreichbare Server"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveurs accessibles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores accesibles"
+          }
         }
       }
     },
@@ -1637,6 +4675,24 @@
             "state": "translated",
             "value": "Nedávno přidané"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kürzlich hinzugefügt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouts récents"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadido recientemente"
+          }
         }
       }
     },
@@ -1646,6 +4702,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nedávno přidané, Nedávno vydané a Nejlépe hodnocené ukazují, co tě teprve čeká. Knihovna vždy ukáže všechno."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kürzlich hinzugefügt, Neu erschienen und Bestbewertet zeigen, was noch aussteht. Deine Mediathek zeigt immer alles."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouts récents, Sorties récentes et Les mieux notés montrent ce qui vous attend. Votre Bibliothèque affiche toujours tout."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadido recientemente, Estrenos recientes y Mejor valorados muestran lo que aún queda por ver. Tu Biblioteca siempre lo muestra todo."
           }
         }
       }
@@ -1658,6 +4732,24 @@
             "state": "translated",
             "value": "Nedávno vydané"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu erschienen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sorties récentes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estrenos recientes"
+          }
         }
       }
     },
@@ -1668,6 +4760,24 @@
             "state": "translated",
             "value": "Připojit znovu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut verbinden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volver a conectar"
+          }
         }
       }
     },
@@ -1677,6 +4787,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Region"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Region"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Région"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Región"
           }
         }
       }
@@ -1694,6 +4822,24 @@
             "state": "translated",
             "value": "Ретранслятор"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relais"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retransmisión"
+          }
         }
       }
     },
@@ -1703,6 +4849,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Znovu načíst"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu laden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recharger"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recargar"
           }
         }
       }
@@ -1720,6 +4884,24 @@
             "state": "translated",
             "value": "Віддалений"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À distance"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remoto"
+          }
         }
       }
     },
@@ -1735,6 +4917,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Видалити"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         }
       }
@@ -1753,6 +4953,24 @@
             "state": "translated",
             "value": "Прибрати фільтр %@"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter %@ entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le filtre %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar el filtro %@"
+          }
         }
       }
     },
@@ -1762,6 +4980,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odebrat vlastní klíč"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigenen Schlüssel entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la clé personnalisée"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar la clave personalizada"
           }
         }
       }
@@ -1780,6 +5016,24 @@
             "state": "translated",
             "value": "Прибрати з «Продовжити перегляд»"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus „Weiterschauen“ entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer de « Reprendre la lecture »"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar de «Continuar viendo»"
+          }
         }
       }
     },
@@ -1789,6 +5043,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nahlásit chybu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler melden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signaler un bug"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Informar de un error"
           }
         }
       }
@@ -1802,6 +5074,24 @@
             "state": "translated",
             "value": "Vyžádání kódu…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code wird angefordert…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande d'un code…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solicitando un código…"
+          }
         }
       }
     },
@@ -1814,6 +5104,24 @@
             "state": "translated",
             "value": "Znovu prohledat"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut scannen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réanalyser"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volver a escanear"
+          }
         }
       }
     },
@@ -1824,6 +5132,24 @@
             "state": "translated",
             "value": "Přehrát od začátku"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu starten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redémarrer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar"
+          }
         }
       }
     },
@@ -1833,6 +5159,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pokračovat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reanudar"
           }
         }
       }
@@ -1845,6 +5189,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pokračovat · %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen · %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reanudar · %@"
           }
         }
       }
@@ -1861,6 +5223,24 @@
             "state": "translated",
             "value": "SMB složka"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SMB-Freigabe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partage SMB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurso compartido SMB"
+          }
         }
       }
     },
@@ -1870,6 +5250,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "SMB složky"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SMB-Freigaben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partages SMB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recursos compartidos SMB"
           }
         }
       }
@@ -1881,6 +5279,24 @@
             "state": "translated",
             "value": "SMB složky se připojí k tomuto Macu a prohledají se na filmy a seriály, stejně jako místní složka."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SMB-Freigaben werden auf diesem Mac eingebunden und wie ein lokaler Ordner nach Filmen und Serien durchsucht."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les partages SMB sont montés sur ce Mac et analysés à la recherche de films et de séries, comme un dossier local."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los recursos compartidos SMB se montan en este Mac y se analizan en busca de películas y series, igual que una carpeta local."
+          }
         }
       }
     },
@@ -1890,6 +5306,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Přesto uložit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trotzdem sichern"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer quand même"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar de todos modos"
           }
         }
       }
@@ -1901,6 +5335,24 @@
             "state": "translated",
             "value": "Hledat"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar"
+          }
         }
       }
     },
@@ -1911,6 +5363,24 @@
             "state": "translated",
             "value": "Hledat v knihovně"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediathek durchsuchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher dans la bibliothèque"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar en la biblioteca"
+          }
         }
       }
     },
@@ -1920,6 +5390,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hledání na TMDb…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb wird durchsucht…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche sur TMDb…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando en TMDb…"
           }
         }
       }
@@ -1933,6 +5421,24 @@
             "state": "translated",
             "value": "Hledání…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando…"
+          }
         }
       }
     },
@@ -1943,6 +5449,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Série"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Staffeln"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisons"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temporadas"
           }
         }
       }
@@ -1955,6 +5479,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit vše"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle ansehen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout voir"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ver todo"
           }
         }
       }
@@ -1972,6 +5514,24 @@
             "state": "translated",
             "value": "Вибрані теки"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Ordner"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dossiers sélectionnés"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carpetas seleccionadas"
+          }
         }
       }
     },
@@ -1981,6 +5541,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odeslat diagnostiku"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose senden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer les diagnostics"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar diagnósticos"
           }
         }
       }
@@ -1992,6 +5570,24 @@
             "state": "translated",
             "value": "Server"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveur"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor"
+          }
         }
       }
     },
@@ -2001,6 +5597,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server (např. nas.local nebo 192.168.1.10)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server (z. B. nas.local oder 192.168.1.10)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveur (p. ex. nas.local ou 192.168.1.10)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor (p. ej. nas.local o 192.168.1.10)"
           }
         }
       }
@@ -2012,6 +5626,24 @@
             "state": "translated",
             "value": "Nastavení"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes"
+          }
         }
       }
     },
@@ -2021,6 +5653,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Název složky (např. Media)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabename (z. B. Media)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du partage (p. ex. Media)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del recurso compartido (p. ej. Media)"
           }
         }
       }
@@ -2032,6 +5682,24 @@
             "state": "translated",
             "value": "Zobrazit celé obsazení (%lld)"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesamte Besetzung anzeigen (%lld)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher toute la distribution (%lld)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar todo el reparto (%lld)"
+          }
         }
       }
     },
@@ -2041,6 +5709,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit méně"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weniger anzeigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher moins"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar menos"
           }
         }
       }
@@ -2052,6 +5738,24 @@
             "state": "translated",
             "value": "Zobrazit dostupnost na Netflixu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Netflix-Verfügbarkeit anzeigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la disponibilité sur Netflix"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar disponibilidad en Netflix"
+          }
         }
       }
     },
@@ -2061,6 +5765,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit tituly jen z Netflixu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur auf Netflix verfügbare Titel anzeigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les titres uniquement sur Netflix"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar títulos solo en Netflix"
           }
         }
       }
@@ -2072,6 +5794,24 @@
             "state": "translated",
             "value": "Zobrazit postranní panel"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seitenleiste einblenden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la barre latérale"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar barra lateral"
+          }
         }
       }
     },
@@ -2081,6 +5821,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazit nápis „ZHLÉDNUTO“"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Label „GESEHEN“ anzeigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher l’étiquette « VU »"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar etiqueta «VISTO»"
           }
         }
       }
@@ -2092,6 +5850,24 @@
             "state": "translated",
             "value": "Odhlásit se z Emby"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Emby abmelden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter d’Emby"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar sesión en Emby"
+          }
         }
       }
     },
@@ -2101,6 +5877,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odhlásit z Jellyfinu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Jellyfin abmelden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter de Jellyfin"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar sesión en Jellyfin"
           }
         }
       }
@@ -2112,6 +5906,24 @@
             "state": "translated",
             "value": "Odhlásit z Plexu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Plex abmelden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter de Plex"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar sesión en Plex"
+          }
         }
       }
     },
@@ -2121,6 +5933,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Přeskočit titulky"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abspann überspringen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passer le générique"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltar créditos"
           }
         }
       }
@@ -2132,6 +5962,24 @@
             "state": "translated",
             "value": "Přeskočit úvod"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intro überspringen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passer l’intro"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltar introducción"
+          }
         }
       }
     },
@@ -2141,6 +5989,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktualizace softwaru"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Softwareupdate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour logicielle"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualización de software"
           }
         }
       }
@@ -2154,6 +6020,24 @@
             "state": "translated",
             "value": "Řadit"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sortieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trier"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordenar"
+          }
         }
       }
     },
@@ -2166,6 +6050,24 @@
             "state": "translated",
             "value": "Zdrojový kód"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quellcode"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code source"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código fuente"
+          }
         }
       }
     },
@@ -2175,6 +6077,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Výchozí ze zdroje"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quellenstandard"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source par défaut"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fuente predeterminada"
           }
         }
       }
@@ -2187,6 +6107,24 @@
             "state": "translated",
             "value": "Zdrojový kód na GitHubu"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quellcode auf GitHub"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source sur GitHub"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código fuente en GitHub"
+          }
         }
       }
     },
@@ -2196,6 +6134,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Začíná za %lld s"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start in %llds"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrage dans %llds"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comienza en %llds"
           }
         }
       }
@@ -2207,6 +6163,24 @@
             "state": "translated",
             "value": "Stav"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "État"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado"
+          }
         }
       }
     },
@@ -2216,6 +6190,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Úložiště"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicher"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stockage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Almacenamiento"
           }
         }
       }
@@ -2227,6 +6219,24 @@
             "state": "translated",
             "value": "Streamovací služby"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streamingdienste"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Services de streaming"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servicios de streaming"
+          }
         }
       }
     },
@@ -2236,6 +6246,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jazyk titulků"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitelsprache"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Langue des sous-titres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idioma de subtítulos"
           }
         }
       }
@@ -2248,6 +6276,24 @@
             "state": "translated",
             "value": "Titulky"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtítulos"
+          }
         }
       }
     },
@@ -2258,6 +6304,24 @@
             "state": "translated",
             "value": "Podpora"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Support"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistance"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soporte"
+          }
         }
       }
     },
@@ -2267,6 +6331,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Systém"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Système"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sistema"
           }
         }
       }
@@ -2279,6 +6361,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Systém se řídí nastavením světlého/tmavého režimu vašeho Macu. Světlý režim se stále dolaďuje."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System folgt der Hell-/Dunkel-Einstellung deines Macs. Der helle Modus wird noch verbessert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Système suit le réglage clair/sombre de votre Mac. Le mode clair est encore en cours de peaufinage."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sistema sigue el ajuste claro/oscuro de tu Mac. El modo claro todavía se está puliendo."
           }
         }
       }
@@ -2293,6 +6393,24 @@
             "state": "translated",
             "value": "TMDb API klíč"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb-API-Schlüssel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clé API TMDb"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API de TMDb"
+          }
         }
       }
     },
@@ -2304,6 +6422,24 @@
             "state": "translated",
             "value": "Seriály"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serien"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Séries TV"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Series de TV"
+          }
         }
       }
     },
@@ -2313,6 +6449,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Technické detaily"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technische Details"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détails techniques"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detalles técnicos"
           }
         }
       }
@@ -2330,6 +6484,24 @@
             "state": "translated",
             "value": "Вкажіть Aether, що містить ця тека, щоб правильно групувати епізоди в серіали. Виберіть «Серіали» для теки із серіалами, «Фільми» для теки з фільмами або «Фільми та серіали» для автоматичного визначення."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teile Aether mit, was dieser Ordner enthält, damit Episoden korrekt zu Serien gruppiert werden. Wähle „Serien“ für einen Ordner mit Serien, „Filme“ für einen Ordner mit Filmen oder „Filme & Serien“ zur automatischen Erkennung."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indiquez à Aether ce que contient ce dossier afin qu’il regroupe correctement les épisodes en séries. Choisissez Séries TV pour un dossier de séries, Films pour un dossier de films, ou Films et séries pour une détection automatique."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dile a Aether qué contiene esta carpeta para que agrupe los episodios en series correctamente. Elige Series de TV para una carpeta de series, Películas para una carpeta de películas o Películas y TV para detectarlo automáticamente."
+          }
         }
       }
     },
@@ -2340,6 +6512,24 @@
             "state": "translated",
             "value": "Tohle nevypadá jako platný server nebo název složky."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das sieht nicht nach einem gültigen Server- oder Freigabenamen aus."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cela ne ressemble pas à un nom de serveur ou de partage valide."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eso no parece un nombre de servidor o recurso compartido válido."
+          }
         }
       }
     },
@@ -2349,6 +6539,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tato složka už je přidaná."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Freigabe wurde bereits hinzugefügt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce partage est déjà ajouté."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ese recurso compartido ya está añadido."
           }
         }
       }
@@ -2366,6 +6574,24 @@
             "state": "translated",
             "value": "Основний сервер відтворює першим, коли назва доступна на кількох серверах."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der primäre Server streamt zuerst, wenn ein Titel auf mehreren deiner Server vorhanden ist."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur principal diffuse en premier lorsqu’un titre se trouve sur plusieurs de vos serveurs."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor principal reproduce primero cuando un título está en más de uno de tus servidores."
+          }
         }
       }
     },
@@ -2375,6 +6601,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server ani složka se v síti nenašly."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server oder die Freigabe wurde im Netzwerk nicht gefunden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur ou le partage est introuvable sur le réseau."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontró el servidor o el recurso compartido en la red."
           }
         }
       }
@@ -2388,6 +6632,24 @@
             "state": "translated",
             "value": "Motiv"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erscheinungsbild"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thème"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tema"
+          }
         }
       }
     },
@@ -2397,6 +6659,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Název"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titre"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Título"
           }
         }
       }
@@ -2410,6 +6690,24 @@
             "state": "translated",
             "value": "Přepnout postranní panel"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seitenleiste ein-/ausblenden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher/Masquer la barre latérale"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar u ocultar la barra lateral"
+          }
         }
       }
     },
@@ -2421,6 +6719,24 @@
             "state": "translated",
             "value": "Nejlépe hodnocené"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestbewertet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les mieux notés"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mejor valorados"
+          }
         }
       }
     },
@@ -2431,6 +6747,24 @@
             "state": "translated",
             "value": "Výběr stop je dostupný během přehrávání"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spurauswahl während der Wiedergabe verfügbar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélection des pistes disponible pendant la lecture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selección de pistas disponible durante la reproducción"
+          }
         }
       }
     },
@@ -2440,6 +6774,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zkusit znovu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar"
           }
         }
       }
@@ -2457,6 +6809,24 @@
             "state": "translated",
             "value": "Увімkніть сервери, які хочете бачити в Бібліотеці."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiviere die Server, die du in deiner Mediathek haben möchtest."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activez les serveurs que vous souhaitez dans votre bibliothèque."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activa los servidores que quieras en tu biblioteca."
+          }
         }
       }
     },
@@ -2466,6 +6836,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Následuje"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À suivre"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A continuación"
           }
         }
       }
@@ -2477,6 +6865,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Slouží ke stažení posterů a popisů pro tvou lokální knihovnu. Nech prázdné pro klíč zabudovaný v aplikaci, nebo vlož vlastní z themoviedb.org."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird verwendet, um Poster und Beschreibungen für deine lokale Mediathek abzurufen. Leer lassen, um den in der App integrierten Schlüssel zu verwenden, oder füge deinen eigenen von themoviedb.org ein."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisé pour récupérer les affiches et les descriptions de votre bibliothèque locale. Laissez vide pour utiliser la clé intégrée à l'app, ou collez la vôtre depuis themoviedb.org."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se usa para obtener carteles y descripciones de tu biblioteca local. Déjalo en blanco para usar la clave integrada en la app, o pega la tuya desde themoviedb.org."
           }
         }
       }
@@ -2490,6 +6896,24 @@
             "state": "translated",
             "value": "Slouží k načítání plakátů a popisů pro vaši místní knihovnu. Nechte prázdné pro použití klíče vestavěného v aplikaci, nebo vložte vlastní z themoviedb.org. Potvrďte klávesou Return."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird verwendet, um Poster und Beschreibungen für deine lokale Mediathek abzurufen. Leer lassen, um den in der App integrierten Schlüssel zu verwenden, oder füge deinen eigenen von themoviedb.org ein. Drücke die Eingabetaste, um zu übernehmen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisé pour récupérer les affiches et les descriptions de votre bibliothèque locale. Laissez vide pour utiliser la clé intégrée à l'app, ou collez la vôtre depuis themoviedb.org. Appuyez sur Retour pour appliquer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se usa para obtener carteles y descripciones de tu biblioteca local. Déjalo en blanco para usar la clave integrada en la app, o pega la tuya desde themoviedb.org. Pulsa Retorno para aplicar."
+          }
         }
       }
     },
@@ -2499,6 +6923,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Slouží k načítání plakátů a popisů pro vaši místní knihovnu. Ponechte vestavěný klíč, nebo vložte vlastní z themoviedb.org — před uložením se ověří proti TMDb a poté se skryje."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird verwendet, um Poster und Beschreibungen für deine lokale Mediathek abzurufen. Behalte den integrierten Schlüssel oder füge deinen eigenen von themoviedb.org ein — er wird vor dem Speichern bei TMDb überprüft und dann ausgeblendet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisé pour récupérer les affiches et les descriptions de votre bibliothèque locale. Conservez la clé intégrée, ou collez la vôtre depuis themoviedb.org — elle est vérifiée auprès de TMDb avant d'être enregistrée, puis masquée."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se usa para obtener carteles y descripciones de tu biblioteca local. Conserva la clave integrada, o pega la tuya desde themoviedb.org — se verifica con TMDb antes de guardarla y luego se oculta."
           }
         }
       }
@@ -2510,6 +6952,24 @@
             "state": "translated",
             "value": "Uživatelské jméno (volitelné)"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzername (optional)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom d'utilisateur (facultatif)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de usuario (opcional)"
+          }
         }
       }
     },
@@ -2519,6 +6979,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ověřit a uložit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfen & sichern"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifier et enregistrer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificar y guardar"
           }
         }
       }
@@ -2530,6 +7008,24 @@
             "state": "translated",
             "value": "Ověřování s TMDb…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfung mit TMDb…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification auprès de TMDb…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando con TMDb…"
+          }
         }
       }
     },
@@ -2539,6 +7035,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ověřování…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfung…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando…"
           }
         }
       }
@@ -2550,6 +7064,24 @@
             "state": "translated",
             "value": "Verze"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión"
+          }
         }
       }
     },
@@ -2559,6 +7091,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zobrazení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ver"
           }
         }
       }
@@ -2570,6 +7120,24 @@
             "state": "translated",
             "value": "Hlasitost (%lld %%)"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lautstärke (%lld %%)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volume (%lld %%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volumen (%lld %%)"
+          }
         }
       }
     },
@@ -2579,6 +7147,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Čekání na autorizaci…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warten auf deine Autorisierung…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente de votre autorisation…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperando a que autorices…"
           }
         }
       }
@@ -2592,6 +7178,24 @@
             "state": "translated",
             "value": "Zhlédnuto"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesehen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vu"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visto"
+          }
         }
       }
     },
@@ -2601,6 +7205,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zhlédnuté tituly"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesehene Titel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titres vus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Títulos vistos"
           }
         }
       }
@@ -2614,6 +7236,24 @@
             "state": "translated",
             "value": "Web"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Website"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site web"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sitio web"
+          }
         }
       }
     },
@@ -2625,6 +7265,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rok"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jahr"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Année"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Año"
           }
         }
       }
@@ -2642,11 +7300,49 @@
             "state": "translated",
             "value": "Ваш акаунт Plex зараз не підключений до жодного доступного сервера."
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Plex-Account ist derzeit mit keinen erreichbaren Servern verbunden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre compte Plex n'est connecté à aucun serveur accessible pour le moment."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu cuenta de Plex no está conectada a ningún servidor accesible en este momento."
+          }
         }
       }
     },
     "http://192.168.1.10:8096": {
-      "shouldTranslate": false
+      "shouldTranslate": false,
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "http://192.168.1.10:8096"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "http://192.168.1.10:8096"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "http://192.168.1.10:8096"
+          }
+        }
+      }
     },
     "https://jellyfin.example.com": {
       "comment": "The placeholder text for the Jellyfin server URL field.",
@@ -2656,13 +7352,51 @@
     "·": {
       "comment": "A period used to separate a season and show title.",
       "isCommentAutoGenerated": true,
-      "shouldTranslate": false
+      "shouldTranslate": false,
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "·"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "·"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "·"
+          }
+        }
+      }
     },
     "Čeština": {
       "comment": "The Czech language.",
       "isCommentAutoGenerated": true,
       "localizations": {
         "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čeština"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čeština"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čeština"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "Čeština"

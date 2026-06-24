@@ -135,6 +135,15 @@ public protocol MediaSource: Sendable {
     /// a favorite concept.
     func setFavorite(_ id: MediaID, to favorite: Bool) async
 
+    /// Whether the source supports a server-synced **personal rating** (Plex's
+    /// `userRating`, set via `/:/rate`). Jellyfin/others don't expose it here, so
+    /// the rating control is hidden. Default: `false`.
+    var supportsUserRatings: Bool { get }
+
+    /// Set the item's personal rating on the server (Plex scale **0–10**; pass
+    /// `0` to clear). Best-effort + non-throwing. Default: no-op.
+    func setRating(_ id: MediaID, to rating: Int) async
+
     /// Whether the source exposes server-side **collections** (Plex collections
     /// / Jellyfin BoxSets) for Library browsing (#273). Default: `false`.
     var supportsCollections: Bool { get }
@@ -223,6 +232,12 @@ public extension MediaSource {
 
     /// Default: no server-side favorite to update. Jellyfin overrides.
     func setFavorite(_ id: MediaID, to favorite: Bool) async {}
+
+    /// Default: no personal-rating concept. Plex overrides.
+    var supportsUserRatings: Bool { false }
+
+    /// Default: no server-side rating to update. Plex overrides.
+    func setRating(_ id: MediaID, to rating: Int) async {}
 
     /// Default: no collections. Plex / Jellyfin override.
     var supportsCollections: Bool { false }

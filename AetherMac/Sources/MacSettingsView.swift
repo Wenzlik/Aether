@@ -33,6 +33,7 @@ private struct AccountsSettings: View {
     var session: MacSession
     @State private var signIn: SignIn?
     @State private var showPlexPicker = false
+    @State private var showPlexProfileSwitch = false
 
     private enum SignIn: String, Identifiable { case plex, jellyfin, emby, smb; var id: String { rawValue } }
 
@@ -74,6 +75,10 @@ private struct AccountsSettings: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Button("Manage Servers…") { showPlexPicker = true }
+                    if let profile = session.activePlexUser {
+                        LabeledContent("Watching as", value: profile.title)
+                        Button("Switch Profile…") { showPlexProfileSwitch = true }
+                    }
                     Button("Sign Out of Plex", role: .destructive) {
                         Task { await session.signOutPlex() }
                     }
@@ -164,6 +169,9 @@ private struct AccountsSettings: View {
             case .emby:     EmbySignInSheet(session: session) { signIn = nil }
             case .smb:      SMBAddShareSheet(session: session) { signIn = nil }
             }
+        }
+        .sheet(isPresented: $showPlexProfileSwitch) {
+            MacPlexProfileSwitchSheet(session: session) { showPlexProfileSwitch = false }
         }
         .sheet(isPresented: $showPlexPicker) {
             MacPlexServerPickerSheet(session: session)
