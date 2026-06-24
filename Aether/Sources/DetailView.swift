@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 #if canImport(UIKit)
 import UIKit   // UIViewController / UIHostingController for the visionOS cinema Info-panel tab
 #endif
@@ -638,7 +639,11 @@ struct DetailView: View {
             if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
                     if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
-                        // mkv / avi / ts — still needs VLCKit, but over HTTP now.
+                        // SMB mkv / avi / ts → VLCKit over the HTTP range proxy.
+                        // (Remux→AVPlayer is local-files-only: a seekable MP4 `moov`
+                        // needs a full metadata pass, which over SMB means reading
+                        // the whole file — prohibitive for multi-GB rips. VLCKit
+                        // demuxes on the fly and seeks via MKV Cues, so it's fast.)
                         vlcPlayback = VLCPlayback(url: proxyURL, itemID: vlcItemID, resumeAt: vlcResumeAt)
                         return
                     }

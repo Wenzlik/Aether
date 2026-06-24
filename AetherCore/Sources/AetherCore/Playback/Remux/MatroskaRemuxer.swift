@@ -81,6 +81,24 @@ public struct MatroskaRemuxer {
         // A/V track.
         guard !mediaTracks.isEmpty else { return nil }
 
+        // (E-)AC-3 tracks carry no CodecPrivate: synthesise the dac3/dec3 config
+        // and exact channel/rate/frame geometry from the first coded frame. If a
+        // frame can't be read or the codec config isn't packageable (half-rate
+        // E-AC-3, dependent substreams, …) bail the whole remux → VLCKit.
+        for i in mediaTracks.indices
+        where mediaTracks[i].kind == .audio
+            && (mediaTracks[i].audioCodec == .ac3 || mediaTracks[i].audioCodec == .eac3) {
+            let track = mediaTracks[i]
+            guard let number = idByNumber.first(where: { $0.value == track.trackID })?.key,
+                  let frame = Self.firstFrame(source, from: segment.firstClusterOffset, track: number),
+                  let codec = track.audioCodec,
+                  let parsed = AudioBitstreamConfig.parse(codec: codec, firstFrame: frame)
+            else { return nil }
+            mediaTracks[i] = track.settingAudioConfig(
+                parsed.configBox, channels: parsed.channels,
+                sampleRate: parsed.sampleRate, samplesPerFrame: parsed.samplesPerFrame)
+        }
+
         self.tracks = mediaTracks + subtitleTracks
         self.mediaTracks = mediaTracks
         self.subtitleTracks = subtitleTracks
@@ -90,6 +108,24 @@ public struct MatroskaRemuxer {
         self.trackIDByNumber = idByNumber
         self.movieTimescale = timescale
         self.totalDurationTicks = Int64(segment.info.durationTicks ?? 0)
+    }
+
+    /// Read the first non-empty coded frame of `track` by scanning clusters from
+    /// `firstClusterOffset` (bounded). Used to derive the (E-)AC-3 config, which
+    /// the bitstream syncframe carries but MKV CodecPrivate does not.
+    private static func firstFrame(_ source: any ByteSource, from firstClusterOffset: Int?,
+                                   track: UInt64) -> [UInt8]? {
+        guard var offset = firstClusterOffset else { return nil }
+        for _ in 0..<32 {   // a frame appears within the first handful of clusters
+            guard let (frames, next) = MatroskaFrameReader.readCluster(
+                source, at: offset, trackFilter: [track]) else { return nil }
+            if let frame = frames.first(where: { $0.trackNumber == track && !$0.data.isEmpty }) {
+                return frame.data
+            }
+            guard next > offset else { return nil }
+            offset = next
+        }
+        return nil
     }
 
     // MARK: - Progressive (non-fragmented) output
@@ -181,8 +217,11 @@ public struct MatroskaRemuxer {
         -> (samples: [ProgressiveMP4Writer.Sample], sourceMap: [(sourceOffset: Int, size: Int)]) {
         let sourceMap = metas.map { (sourceOffset: $0.sourceOffset, size: $0.size) }
         if track.kind == .audio {
+            // Per-codec frame duration (AAC 1024, AC-3 1536, E-AC-3 numblks*256)
+            // at the sample-rate timescale → audio stays locked to video.
+            let perFrame = track.audioSamplesPerFrame
             let samples = metas.map {
-                ProgressiveMP4Writer.Sample(size: $0.size, duration: Self.aacSamplesPerFrame,
+                ProgressiveMP4Writer.Sample(size: $0.size, duration: perFrame,
                                             compositionOffset: 0, isKeyframe: true)
             }
             return (samples, sourceMap)
