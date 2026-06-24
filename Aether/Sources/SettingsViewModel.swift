@@ -247,20 +247,18 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "The Library is now one combined grid — open straight into everything with a persistent Movies / Series toggle, browse facets above the grid, and a new \"Downloaded\" filter that works offline.",
-        "A new Watched chip hides fully-completed movies and series from the Library grid — useful for revisiting what's still in progress.",
-        "Poster cards now show a community rating badge — star + score from TMDb, Plex, or Jellyfin (your choice in Settings → Playback).",
-        "tvOS: Accounts & Sources are now large focusable tiles with brand logos; Settings opens to a category tile grid instead of a long list.",
-        "Discover shows a wide, full-bleed overlay hero on iPad and visionOS — title and metadata sit over the art on a gradient scrim.",
-        "Swipe down to close the player — the close button no longer collides with AirPlay and Picture-in-Picture controls.",
-        "Downloaded titles now play reliably offline — Aether picks the local file and the right engine instead of falling back to the server.",
-        "The Library updates instantly when you mark a title watched or unwatched — no more waiting for a relaunch.",
-        "macOS: light and dark mode now adapt correctly; a Downloads panel tracks active downloads; local library items can be matched to TMDb; and Plex multi-server management is now available in Settings."
+        "Plex Home profiles — after you sign in, choose who's watching. Each profile keeps its own watch history, libraries and ratings, and is remembered across launches. Switch profiles anytime in Settings.",
+        "Rate what you watch — set a personal star rating on the Detail screen; it syncs to Plex and every other client.",
+        "Three new languages — Aether now speaks German, French and Spanish, joining English, Čeština and Ukrainian. Pick one in Settings → Language.",
+        "Fixed: your preferred audio and subtitle language now applies reliably — tracks the server labels with three-letter codes (Czech, German, …) are matched correctly, both on the Detail screen and in playback.",
+        "Downloaded movies with Dolby Digital (AC-3) or Dolby Digital Plus (E-AC-3) soundtracks now play through the native player instead of falling back to VLCKit."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.8.3", codename: "Eridanus",
+                    summary: "A combined Library grid with a persistent Movies/Series toggle and a Watched filter, community-rating poster badges, a full-bleed Discover hero on iPad and Vision Pro, reliable offline playback, swipe-to-close player, and a batch of macOS fixes (light/dark, Downloads panel, TMDb matching, multi-server)."),
         ReleaseNote(version: "0.7.8", codename: "Draco",
                     summary: "Emby connector via Quick Connect, a refreshed app icon across every platform, and background performance fixes (VLC/AVPlayer idle, image prefetch, resume loop)."),
         ReleaseNote(version: "0.7.7", codename: "Draco",

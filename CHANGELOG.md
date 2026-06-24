@@ -4,6 +4,33 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-06-24
+
+### What's New
+
+- **Plex Home profiles (#500)** — accounts with Plex Home now pick a profile
+  after PIN sign-in ("Who's watching?", with PIN entry for protected profiles).
+  The profile's scoped token replaces the account token, so each profile keeps
+  its own watch state, libraries and restrictions. The choice is remembered
+  across launches, and **Settings ▸ Switch Profile** changes it at runtime.
+  All platforms (iOS, iPadOS, tvOS, visionOS, macOS).
+- **Personal ratings (#502)** — set your own star rating on the Detail screen
+  (1–5 → Plex's 0–10), synced to Plex via `/:/rate`. All platforms.
+- **German, French and Spanish (#504)** — Aether's UI now ships in de / fr / es
+  alongside English, Čeština and Ukrainian; choose one in Settings ▸ Language.
+- **Local Dolby Digital playback (#499)** — downloaded MKVs with AC-3 / E-AC-3
+  audio now remux to `AVPlayer` (native transport) instead of falling back to
+  VLCKit. The remuxer synthesises the `dac3`/`dec3` config from the bitstream.
+  DTS / TrueHD still use VLCKit (no AVFoundation decoder).
+
+### Fixed
+
+- **Preferred audio/subtitle language now applies (#503)** — the language
+  preference (BCP-47 `cs`) was compared raw against tracks the server labels
+  with 3-letter codes (`cze`/`ces`), so it never matched and the source default
+  (often English) stayed selected. Matching is now canonical, on the Detail
+  screen and in playback.
+
 ## [0.8.3] — 2026-06-23
 
 ### What's New
