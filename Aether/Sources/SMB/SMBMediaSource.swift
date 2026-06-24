@@ -101,6 +101,17 @@ actor SMBMediaSource: CustomDownloadSource {
         /// Key that groups a show's episodes (the series folder), stable across
         /// filename variations. Falls back to the inferred title.
         var seriesGroupKey: String { classification?.seriesKey ?? inference.title }
+        /// Grouping key for the **shows library** — distinct from `seriesGroupKey`
+        /// (which keys the per-folder override). When the user has corrected the
+        /// series title, group by that title so several season folders edited to
+        /// the same show ("ahs 07", "ahs 08" → "American Horror Story") merge into
+        /// ONE show with multiple seasons. Otherwise fall back to the folder key.
+        var seriesMergeKey: String {
+            if let t = seriesOverride?.title, !t.isEmpty {
+                return "title:" + t.lowercased()
+            }
+            return seriesGroupKey
+        }
         /// Show display name: the user's series correction wins, then the series
         /// folder name (TMDb canonical title is applied separately when matched).
         var seriesDisplayName: String {
@@ -147,7 +158,7 @@ actor SMBMediaSource: CustomDownloadSource {
             // Group a show's episodes by their series folder (#481), not by the
             // per-filename title — so filename variance doesn't fragment a show.
             let episodes = files.filter { $0.roleIsEpisode }
-            return Dictionary(grouping: episodes, by: { $0.seriesGroupKey })
+            return Dictionary(grouping: episodes, by: { $0.seriesMergeKey })
                 .map { showContainer(seriesKey: $0.key, episodes: $0.value) }
                 .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
@@ -163,7 +174,7 @@ actor SMBMediaSource: CustomDownloadSource {
         // their season number (episodes with none fold into Season 1).
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             let bySeason = Dictionary(grouping: episodes, by: { Self.effectiveSeason($0) })
             return bySeason.keys.sorted().map {
                 seasonItem(seriesKey: seriesKey, season: $0, episodes: bySeason[$0] ?? [], showEpisodes: episodes)
@@ -172,7 +183,7 @@ actor SMBMediaSource: CustomDownloadSource {
         // Season → its episodes.
         if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
             let episodes = files.filter {
-                $0.roleIsEpisode && $0.seriesGroupKey == seriesKey && Self.effectiveSeason($0) == season
+                $0.roleIsEpisode && $0.seriesMergeKey == seriesKey && Self.effectiveSeason($0) == season
             }
             return sortedEpisodes(episodes).map { episodeItem($0, parentID: id) }
         }
@@ -184,18 +195,18 @@ actor SMBMediaSource: CustomDownloadSource {
         let files = await files()
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             return episodes.isEmpty ? nil : showContainer(seriesKey: seriesKey, episodes: episodes)
         }
         if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
-            let showEpisodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let showEpisodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             let seasonEpisodes = showEpisodes.filter { Self.effectiveSeason($0) == season }
             return seasonEpisodes.isEmpty ? nil
                 : seasonItem(seriesKey: seriesKey, season: season, episodes: seasonEpisodes, showEpisodes: showEpisodes)
         }
         guard let file = files.first(where: { $0.url.absoluteString == id.rawValue }) else { return nil }
         return file.roleIsEpisode
-            ? episodeItem(file, parentID: seasonID(seriesKey: file.seriesGroupKey, season: Self.effectiveSeason(file)))
+            ? episodeItem(file, parentID: seasonID(seriesKey: file.seriesMergeKey, season: Self.effectiveSeason(file)))
             : movieItem(file)
     }
 
