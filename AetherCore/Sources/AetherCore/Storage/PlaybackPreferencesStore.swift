@@ -211,24 +211,31 @@ public extension PlaybackPreferencesStore {
     func applied(to item: MediaItem) -> MediaItem {
         var result = item
 
-        // Audio: match by language code (case-insensitive). Only override
-        // when the title has a track in the preferred language.
-        if let preferred = defaultAudioLanguage?.lowercased(),
+        // Audio: match by **canonical** language code, so the BCP-47 preference
+        // ("cs") matches whatever the source emits — Plex 639-2/B ("cze"),
+        // Jellyfin 639-2/T ("ces"), etc. A raw-string compare missed these and
+        // left the server default (often English) selected. Only override when
+        // the title actually has a track in the preferred language.
+        if let preferred = defaultAudioLanguage.map(AudioLanguage.canonical),
            let track = result.audioTracks.first(where: {
-               $0.languageCode?.lowercased() == preferred
+               AudioLanguage.canonical($0.languageCode) == preferred
            }) {
             result = result.selectingAudioTrack(track)
         }
 
         // Subtitles: "off" disables subs entirely; nil leaves whatever the
-        // source picked; a language code selects the first matching track.
+        // source picked; a language code selects the first matching track
+        // (canonical match, same reason as audio).
         if let preferred = defaultSubtitleLanguage {
             if preferred == "off" {
                 result = result.selectingSubtitleTrack(nil)
-            } else if let track = result.subtitleTracks.first(where: {
-                $0.languageCode?.lowercased() == preferred.lowercased()
-            }) {
-                result = result.selectingSubtitleTrack(track)
+            } else {
+                let canonical = AudioLanguage.canonical(preferred)
+                if let track = result.subtitleTracks.first(where: {
+                    AudioLanguage.canonical($0.languageCode) == canonical
+                }) {
+                    result = result.selectingSubtitleTrack(track)
+                }
             }
         }
 
