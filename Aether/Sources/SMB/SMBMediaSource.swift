@@ -41,6 +41,9 @@ actor SMBMediaSource: CustomDownloadSource {
     /// Cached recursive listing — the walk is expensive (network round-trips),
     /// so it's done once per source instance and reused across libraries/items.
     private var cachedFiles: [SMBFile]?
+    /// Locally-tracked watched stream-URL keys, loaded once per walk and kept in
+    /// sync on toggle (so a watched flip reflects without a full re-walk).
+    private var watchedKeys: Set<String> = []
     /// Last walk's match stats (TMDb-matched / total), for the Settings readout
     /// (#SMB info). `nil` until the library has been walked at least once.
     private var lastStats: (matched: Int, total: Int)?
@@ -89,12 +92,26 @@ actor SMBMediaSource: CustomDownloadSource {
         /// id), filled after classification. Drives the show title + the series'
         /// TMDb match, so fixing one show fixes every episode.
         var seriesOverride: SMBMetadataStore.Override?
+        /// Locally-tracked watched state (SMB has no server play state), stamped
+        /// from `SMBWatchedStore` during the walk and updated in place on toggle.
+        var isWatched: Bool = false
 
         /// Movie vs episode — the folder role wins over the filename guess.
         var roleIsEpisode: Bool { classification?.isEpisode ?? inference.isEpisode }
         /// Key that groups a show's episodes (the series folder), stable across
         /// filename variations. Falls back to the inferred title.
         var seriesGroupKey: String { classification?.seriesKey ?? inference.title }
+        /// Grouping key for the **shows library** — distinct from `seriesGroupKey`
+        /// (which keys the per-folder override). When the user has corrected the
+        /// series title, group by that title so several season folders edited to
+        /// the same show ("ahs 07", "ahs 08" → "American Horror Story") merge into
+        /// ONE show with multiple seasons. Otherwise fall back to the folder key.
+        var seriesMergeKey: String {
+            if let t = seriesOverride?.title, !t.isEmpty {
+                return "title:" + t.lowercased()
+            }
+            return seriesGroupKey
+        }
         /// Show display name: the user's series correction wins, then the series
         /// folder name (TMDb canonical title is applied separately when matched).
         var seriesDisplayName: String {
@@ -141,7 +158,7 @@ actor SMBMediaSource: CustomDownloadSource {
             // Group a show's episodes by their series folder (#481), not by the
             // per-filename title — so filename variance doesn't fragment a show.
             let episodes = files.filter { $0.roleIsEpisode }
-            return Dictionary(grouping: episodes, by: { $0.seriesGroupKey })
+            return Dictionary(grouping: episodes, by: { $0.seriesMergeKey })
                 .map { showContainer(seriesKey: $0.key, episodes: $0.value) }
                 .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
@@ -157,7 +174,7 @@ actor SMBMediaSource: CustomDownloadSource {
         // their season number (episodes with none fold into Season 1).
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             let bySeason = Dictionary(grouping: episodes, by: { Self.effectiveSeason($0) })
             return bySeason.keys.sorted().map {
                 seasonItem(seriesKey: seriesKey, season: $0, episodes: bySeason[$0] ?? [], showEpisodes: episodes)
@@ -166,7 +183,7 @@ actor SMBMediaSource: CustomDownloadSource {
         // Season → its episodes.
         if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
             let episodes = files.filter {
-                $0.roleIsEpisode && $0.seriesGroupKey == seriesKey && Self.effectiveSeason($0) == season
+                $0.roleIsEpisode && $0.seriesMergeKey == seriesKey && Self.effectiveSeason($0) == season
             }
             return sortedEpisodes(episodes).map { episodeItem($0, parentID: id) }
         }
@@ -178,18 +195,18 @@ actor SMBMediaSource: CustomDownloadSource {
         let files = await files()
         if id.rawValue.hasPrefix(Self.showPrefix) {
             let seriesKey = String(id.rawValue.dropFirst(Self.showPrefix.count))
-            let episodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let episodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             return episodes.isEmpty ? nil : showContainer(seriesKey: seriesKey, episodes: episodes)
         }
         if id.rawValue.hasPrefix(Self.seasonPrefix), let (season, seriesKey) = Self.parseSeasonID(id.rawValue) {
-            let showEpisodes = files.filter { $0.roleIsEpisode && $0.seriesGroupKey == seriesKey }
+            let showEpisodes = files.filter { $0.roleIsEpisode && $0.seriesMergeKey == seriesKey }
             let seasonEpisodes = showEpisodes.filter { Self.effectiveSeason($0) == season }
             return seasonEpisodes.isEmpty ? nil
                 : seasonItem(seriesKey: seriesKey, season: season, episodes: seasonEpisodes, showEpisodes: showEpisodes)
         }
         guard let file = files.first(where: { $0.url.absoluteString == id.rawValue }) else { return nil }
         return file.roleIsEpisode
-            ? episodeItem(file, parentID: seasonID(seriesKey: file.seriesGroupKey, season: Self.effectiveSeason(file)))
+            ? episodeItem(file, parentID: seasonID(seriesKey: file.seriesMergeKey, season: Self.effectiveSeason(file)))
             : movieItem(file)
     }
 
@@ -278,6 +295,8 @@ actor SMBMediaSource: CustomDownloadSource {
         Task { for share in sharesToWarm { await SMBRangeProxy.shared.prewarm(connection: conn, share: share) } }
         // User title/year corrections, keyed by stream URL (#213).
         let overrides = await SMBMetadataStore.shared.allOverrides()
+        // Locally-tracked watched state (SMB has no server play state).
+        watchedKeys = await SMBWatchedStore.shared.watchedKeys()
         var discovered: [SMBFile] = []
         for root in roots {
             let remaining = Self.maxFiles - discovered.count
@@ -307,6 +326,10 @@ actor SMBMediaSource: CustomDownloadSource {
         }
         Self.log.info("SMB walk: \(discovered.count, privacy: .public) video files; TMDb configured=\(self.tmdb?.isConfigured ?? false, privacy: .public)")
         classifyFolderRoles(&discovered)
+        // Stamp locally-tracked watched state onto each file.
+        for index in discovered.indices {
+            discovered[index].isWatched = watchedKeys.contains(discovered[index].url.absoluteString)
+        }
         // Attach any series-level correction (keyed by the show id) so the show
         // title + the series TMDb match reflect a fix made on the show (#213).
         for index in discovered.indices where discovered[index].roleIsEpisode {
@@ -388,6 +411,25 @@ actor SMBMediaSource: CustomDownloadSource {
             for key in pendingMisses { await store.record(nil, for: key) }
         } else if attempted > 0 {
             Self.log.error("SMB TMDb: 0/\(attempted, privacy: .public) matched — likely a rate-limited/invalid key or no network; not caching misses, will retry next browse.")
+        }
+    }
+
+    // MARK: - Watched (local — SMB has no server play state)
+
+    /// Mark a file watched / unwatched locally and reflect it in the cached
+    /// catalog in place (no re-walk), so the ✓ flips and persists across launches.
+    /// `markWatchedEverywhere` fans episode/movie ids here; for SMB an id's
+    /// `rawValue` is the file's stream URL.
+    func markWatched(_ id: MediaID) async { await setWatchedLocal(id, true) }
+    func markUnwatched(_ id: MediaID) async { await setWatchedLocal(id, false) }
+
+    private func setWatchedLocal(_ id: MediaID, _ value: Bool) async {
+        let key = id.rawValue
+        await SMBWatchedStore.shared.setWatched(key, value)
+        if value { watchedKeys.insert(key) } else { watchedKeys.remove(key) }
+        guard cachedFiles != nil else { return }
+        for index in cachedFiles!.indices where cachedFiles![index].url.absoluteString == key {
+            cachedFiles![index].isWatched = value
         }
     }
 
@@ -480,7 +522,8 @@ actor SMBMediaSource: CustomDownloadSource {
             posterURL: file.metadata?.posterURL,
             backdropURL: file.metadata?.backdropURL,
             streamURL: file.url,
-            mediaInfo: file.mediaInfo
+            mediaInfo: file.mediaInfo,
+            isWatched: file.isWatched
         )
     }
 
@@ -498,6 +541,7 @@ actor SMBMediaSource: CustomDownloadSource {
             seriesTitle: file.seriesDisplayName,
             seasonNumber: Self.effectiveSeason(file),
             episodeNumber: file.inference.episode,
+            isWatched: file.isWatched,
             parentID: parentID
         )
     }
