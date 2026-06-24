@@ -110,6 +110,26 @@ final class SettingsViewModel {
         await session.setPrimaryPlexServer(record)
     }
 
+    // MARK: - Plex Home profiles
+
+    /// The active Home profile's name, when the account has Home and a profile
+    /// was picked. `nil` for plain accounts (no "Switch Profile" affordance).
+    var activePlexProfileName: String? { session.activePlexUser?.title }
+
+    /// Whether to offer "Switch Profile" — true once a Home profile is active.
+    var hasPlexHomeProfiles: Bool { session.activePlexUser != nil }
+
+    /// Home profiles on the signed-in account (for the switcher sheet).
+    func plexHomeUsers() async -> [PlexAPI.HomeUser] {
+        await session.plexHomeUsers()
+    }
+
+    /// Switch the active Home profile (Settings). Throws `PlexHomeError.invalidPIN`
+    /// on a wrong/missing PIN.
+    func switchPlexProfile(_ user: PlexAPI.HomeUser, pin: String?) async throws {
+        try await session.switchPlexUser(user, pin: pin)
+    }
+
     // MARK: - Sources
 
     var plexSourceStatus: AetherStatus {

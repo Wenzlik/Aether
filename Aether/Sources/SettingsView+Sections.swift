@@ -337,10 +337,17 @@ extension SettingsView {
                 // the account sheet is more reliable than swapping two sheets
                 // that share the Settings anchor.
                 onChooseServer: { isPickingPlexServer = true },
+                activeProfileName: viewModel.activePlexProfileName,
+                onSwitchProfile: viewModel.hasPlexHomeProfiles ? { isSwitchingPlexProfile = true } : nil,
                 onSignOut: { Task { await performSignOut(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
             .sheet(isPresented: $isPickingPlexServer) { plexServerPicker }
+            .sheet(isPresented: $isSwitchingPlexProfile) {
+                PlexProfileSwitchSheet(viewModel: viewModel) { isSwitchingPlexProfile = false }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         case .jellyfin:
             SourceAccountSheet(
                 title: "Jellyfin",

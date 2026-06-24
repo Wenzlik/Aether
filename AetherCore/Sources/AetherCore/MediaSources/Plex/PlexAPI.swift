@@ -35,6 +35,67 @@ public enum PlexAPI {
         }
     }
 
+    /// Wrapper for `GET /api/v2/home/users` — the managed profiles on a Plex
+    /// Home account. Plex returns `{ "users": [ … ] }`.
+    public struct HomeUsersResponse: Decodable, Sendable, Equatable {
+        public let users: [HomeUser]
+        public init(users: [HomeUser]) { self.users = users }
+    }
+
+    /// One Plex Home user. Appears in the `/home/users` list (no token) and
+    /// again in the `/home/users/{uuid}/switch` response (with `authToken` —
+    /// the per-profile token used for everything after the switch).
+    public struct HomeUser: Decodable, Sendable, Equatable, Identifiable {
+        public let id: Int
+        public let uuid: String
+        public let title: String
+        public let username: String?
+        /// Avatar URL (Plex serves an absolute https URL here, not a relative path).
+        public let thumb: String?
+        public let admin: Bool
+        public let restricted: Bool
+        /// `true` when the profile is PIN-protected — the switch needs a PIN.
+        public let isProtected: Bool
+        /// Only present in the switch response; the profile-scoped token.
+        public let authToken: String?
+
+        public init(id: Int, uuid: String, title: String, username: String? = nil,
+                    thumb: String? = nil, admin: Bool = false, restricted: Bool = false,
+                    isProtected: Bool = false, authToken: String? = nil) {
+            self.id = id
+            self.uuid = uuid
+            self.title = title
+            self.username = username
+            self.thumb = thumb
+            self.admin = admin
+            self.restricted = restricted
+            self.isProtected = isProtected
+            self.authToken = authToken
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id, uuid, title, username, thumb, admin, restricted
+            case isProtected = "protected"
+            case authToken
+        }
+
+        /// Custom decode: the `/home/users` list carries `admin` / `restricted`,
+        /// but the `/switch` response omits them — decode those (and the optional
+        /// fields) leniently with `false` defaults so the switch body still parses.
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(Int.self, forKey: .id)
+            uuid = try c.decode(String.self, forKey: .uuid)
+            title = try c.decode(String.self, forKey: .title)
+            username = try c.decodeIfPresent(String.self, forKey: .username)
+            thumb = try c.decodeIfPresent(String.self, forKey: .thumb)
+            admin = (try c.decodeIfPresent(Bool.self, forKey: .admin)) ?? false
+            restricted = (try c.decodeIfPresent(Bool.self, forKey: .restricted)) ?? false
+            isProtected = (try c.decodeIfPresent(Bool.self, forKey: .isProtected)) ?? false
+            authToken = try c.decodeIfPresent(String.self, forKey: .authToken)
+        }
+    }
+
     /// One entry from `GET /api/v2/resources`. Plex returns these as a JSON
     /// array; each describes a server (or device) the user has access to.
     public struct Resource: Decodable, Sendable, Equatable {

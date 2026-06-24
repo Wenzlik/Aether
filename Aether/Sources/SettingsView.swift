@@ -49,6 +49,9 @@ struct SettingsView: View {
     /// Presents the Plex server picker — switch servers when the account can
     /// reach more than one (#323). Opened from the Plex account sheet.
     @State var isPickingPlexServer = false
+    /// Presents the Plex Home profile switcher (#326). Opened from the Plex
+    /// account sheet when the account has Home profiles.
+    @State var isSwitchingPlexProfile = false
     /// Presents the SMB folder picker for the *connected* share (add/remove
     /// folders after sign-in, #214), seeded with the current roots.
     @State var isEditingSMBFolders = false
@@ -209,7 +212,11 @@ struct SettingsView: View {
         #else
         .sheet(item: $infoSheet) { sheet in infoSheetView(for: sheet) }
         #endif
-        .sheet(item: $accountSheet) { sheet in accountSheetView(for: sheet) }
+        .sheet(item: $accountSheet) { sheet in
+            accountSheetView(for: sheet)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $isEditingTMDbToken) {
             TMDbTokenEditSheet(
                 initialToken: viewModel.userTMDbToken,

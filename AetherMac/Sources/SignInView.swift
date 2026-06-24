@@ -12,7 +12,8 @@ struct PlexSignInSheet: View {
     init(session: MacSession, onDone: @escaping () -> Void) {
         self.session = session
         self.onDone = onDone
-        _vm = State(initialValue: PlexSignInViewModel(authClient: session.plexAuthClient))
+        _vm = State(initialValue: PlexSignInViewModel(
+            authClient: session.plexAuthClient, homeClient: session.plexHomeClient))
     }
 
     var body: some View {
@@ -26,8 +27,8 @@ struct PlexSignInSheet: View {
         .frame(width: 440)
         .task { vm.start() }
         .onChange(of: vm.state) { _, state in
-            if case let .success(token) = state {
-                Task { await session.completePlexSignIn(token: token); onDone() }
+            if case let .success(result) = state {
+                Task { await session.completePlexSignIn(result: result); onDone() }
             }
         }
     }
@@ -48,6 +49,13 @@ struct PlexSignInSheet: View {
                 ProgressView().controlSize(.small)
                 Text("Waiting for you to authorize…").font(.caption).foregroundStyle(.secondary)
             }
+        case let .selectingProfile(users):
+            MacPlexProfilePicker(
+                users: users,
+                isSwitching: vm.isSwitching,
+                pinError: vm.pinError,
+                onChoose: { user, pin in vm.chooseProfile(user, pin: pin) }
+            )
         case .success:
             ProgressView("Connecting…")
         case let .failure(reason):
@@ -56,6 +64,150 @@ struct PlexSignInSheet: View {
                     .foregroundStyle(.orange)
                 Text(String(describing: reason)).font(.caption).foregroundStyle(.secondary)
                 Button("Try Again") { vm.retry() }
+            }
+        }
+    }
+}
+
+/// Plex Home profile chooser, macOS-native (used in sign-in and the Settings
+/// switcher). Self-contained PIN handling: a protected profile reveals a PIN
+/// field; others switch immediately. The owner performs the switch via
+/// `onChoose` and feeds back `isSwitching` / `pinError`.
+struct MacPlexProfilePicker: View {
+    let users: [PlexAPI.HomeUser]
+    let isSwitching: Bool
+    let pinError: Bool
+    let onChoose: (PlexAPI.HomeUser, String?) -> Void
+
+    @State private var pinUser: PlexAPI.HomeUser?
+    @State private var pin = ""
+
+    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 20)]
+
+    var body: some View {
+        if let pinUser {
+            pinEntry(for: pinUser)
+        } else {
+            VStack(spacing: 16) {
+                Text("Who's watching?").font(.headline)
+                LazyVGrid(columns: columns, spacing: 20) {
+                    ForEach(users) { user in
+                        Button {
+                            if user.isProtected { pin = ""; pinUser = user }
+                            else { onChoose(user, nil) }
+                        } label: {
+                            VStack(spacing: 8) {
+                                avatar(for: user)
+                                Text(user.title).font(.callout).lineLimit(1)
+                                if user.isProtected {
+                                    Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSwitching)
+                    }
+                }
+            }
+        }
+    }
+
+    private func pinEntry(for user: PlexAPI.HomeUser) -> some View {
+        VStack(spacing: 14) {
+            avatar(for: user)
+            Text(user.title).font(.headline)
+            Text("Enter this profile's PIN").font(.caption).foregroundStyle(.secondary)
+            SecureField("PIN", text: $pin)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 160)
+                .multilineTextAlignment(.center)
+                .onSubmit { submit(user) }
+            if pinError {
+                Text("Wrong PIN. Try again.").font(.caption).foregroundStyle(.red)
+            }
+            HStack(spacing: 12) {
+                Button("Back") { pinUser = nil; pin = "" }
+                Button("Continue") { submit(user) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(pin.isEmpty || isSwitching)
+            }
+            if isSwitching { ProgressView().controlSize(.small) }
+        }
+    }
+
+    private func avatar(for user: PlexAPI.HomeUser) -> some View {
+        ZStack {
+            Circle().fill(Color.accentColor.opacity(0.18))
+            if let thumb = user.thumb, let url = URL(string: thumb) {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Text(String(user.title.prefix(1)).uppercased()).font(.title.bold())
+                }
+                .clipShape(Circle())
+            } else {
+                Text(String(user.title.prefix(1)).uppercased()).font(.title.bold())
+            }
+        }
+        .frame(width: 80, height: 80)
+    }
+
+    private func submit(_ user: PlexAPI.HomeUser) {
+        guard !pin.isEmpty, !isSwitching else { return }
+        onChoose(user, pin)
+    }
+}
+
+/// Settings sheet that swaps the active Plex Home profile at runtime (macOS).
+struct MacPlexProfileSwitchSheet: View {
+    let session: MacSession
+    let onDone: () -> Void
+
+    @State private var users: [PlexAPI.HomeUser] = []
+    @State private var loading = true
+    @State private var isSwitching = false
+    @State private var pinError = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Switch Profile").font(.title2.bold())
+            if loading {
+                ProgressView()
+            } else if users.count <= 1 {
+                Text("No other profiles on this account.").foregroundStyle(.secondary)
+            } else {
+                MacPlexProfilePicker(
+                    users: users,
+                    isSwitching: isSwitching,
+                    pinError: pinError,
+                    onChoose: choose
+                )
+            }
+            Button("Done") { onDone() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(40)
+        .frame(width: 460)
+        .task {
+            users = await session.plexHomeUsers()
+            loading = false
+        }
+    }
+
+    private func choose(_ user: PlexAPI.HomeUser, _ pin: String?) {
+        isSwitching = true
+        pinError = false
+        Task {
+            do {
+                try await session.switchPlexUser(user, pin: pin)
+                isSwitching = false
+                onDone()
+            } catch PlexHomeError.invalidPIN {
+                isSwitching = false
+                pinError = true
+            } catch {
+                isSwitching = false
+                onDone()
             }
         }
     }
