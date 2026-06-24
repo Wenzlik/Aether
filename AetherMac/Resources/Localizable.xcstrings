@@ -688,6 +688,16 @@
         }
       }
     },
+    "Couldn't reach the share in time — is the server on and on this network?": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ke složce se nepodařilo včas připojit — je server zapnutý a ve stejné síti?"
+          }
+        }
+      }
+    },
     "Couldn't sign in — check the username and password.": {
       "localizations": {
         "cs": {

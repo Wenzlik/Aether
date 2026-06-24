@@ -17,11 +17,18 @@ enum SMBMounter {
         /// NetFS returned a non-zero status. The value is its POSIX-style code
         /// (e.g. `EAUTH`/`ENOENT`); we surface a friendly message per case.
         case mountFailed(Int32)
+        /// The mount didn't finish within the timeout — `NetFSMountURLSync` can
+        /// block for a very long time when the server is slow to negotiate
+        /// (asleep, a different subnet / VPN, a flaky link). We fail fast so the
+        /// library doesn't sit silently empty waiting on it.
+        case timedOut
 
         var errorDescription: String? {
             switch self {
             case .invalidShare:
                 return String(localized: "That doesn't look like a valid server or share name.")
+            case .timedOut:
+                return String(localized: "Couldn't reach the share in time — is the server on and on this network?")
             case .mountFailed(let status):
                 switch status {
                 case Int32(EAUTH), Int32(EACCES), Int32(EPERM):
@@ -45,12 +52,30 @@ enum SMBMounter {
     /// queue. If the share is already mounted (e.g. the user mounted it in
     /// Finder, or a previous launch left it mounted), NetFS returns the existing
     /// mountpoint rather than failing.
-    static func mount(_ share: SMBShare) async throws -> URL {
+    static func mount(_ share: SMBShare, timeout: Duration = .seconds(20)) async throws -> URL {
         guard let url = share.mountURL else { throw MountError.invalidShare }
         let username = share.username?.isEmpty == false ? share.username : nil
         let password = share.password?.isEmpty == false ? share.password : nil
 
-        return try await withCheckedThrowingContinuation { continuation in
+        // Race the blocking NetFS mount against a timeout so a slow/hung server
+        // surfaces a clear error instead of leaving the library empty forever.
+        // (A timed-out NetFS call keeps running detached until it returns; the
+        // continuation result is then discarded — bounded and harmless.)
+        return try await withThrowingTaskGroup(of: URL.self) { group in
+            group.addTask { try await rawMount(url, username: username, password: password) }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw MountError.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw MountError.timedOut }
+            return result
+        }
+    }
+
+    /// The blocking `NetFSMountURLSync` call, hopped onto a background queue.
+    private static func rawMount(_ url: URL, username: String?, password: String?) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 // No UI: an auto-mount on launch must never pop a system dialog,
                 // and a bad/again-needed credential should come back as an error
