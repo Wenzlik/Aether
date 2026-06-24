@@ -15,6 +15,10 @@ actor LocalFolderSource: MediaSource {
     nonisolated let displayName = "Local Library"
 
     private let folders: [URL]
+    /// Per-folder content hint (Movies / TV / Both), keyed by the configured
+    /// folder URL. Missing → `.both` (auto-detect), so folders added before this
+    /// existed keep the original heuristic. Fed to `SMBFolderClassifier`.
+    private let content: [URL: SMBRootContent]
     private let tmdb: TMDbClient?
     private var scanned: Scan?
 
@@ -30,8 +34,9 @@ actor LocalFolderSource: MediaSource {
 
     /// `tmdb` (when a TMDb key is configured) enriches scanned movies/shows with
     /// posters, backdrops, and overviews — otherwise they show title-only cards.
-    init(folders: [URL], tmdb: TMDbClient? = nil) {
+    init(folders: [URL], content: [URL: SMBRootContent] = [:], tmdb: TMDbClient? = nil) {
         self.folders = folders
+        self.content = content
         self.tmdb = tmdb
     }
 
@@ -111,37 +116,76 @@ actor LocalFolderSource: MediaSource {
     private struct Scan {
         var movies: [MediaItem] = []
         var shows: [MediaItem] = []
+        /// Episodes keyed by their **series folder** (the classifier's seriesKey),
+        /// stable across filename variations — not by the per-filename title.
         var episodesByShow: [String: [MediaItem]] = [:]
         var byID: [String: MediaItem] = [:]
     }
 
     private struct RawMovie { let title: String; let year: Int?; let url: URL; let path: String }
 
+    /// One enumerated video file plus the signals the folder-role classifier
+    /// needs (the folder path leading to it + a per-filename episode guess +
+    /// the configured root's content choice).
+    private struct RawFile {
+        let url: URL, path: String, stem: String
+        let episode: Episode?
+        let folderComponents: [String]
+        let content: SMBRootContent
+    }
+
     private func scan() async -> Scan {
         if let scanned { return scanned }
         var result = Scan()
-        var rawMovies: [RawMovie] = []
         let fm = FileManager.default
+
+        // First pass — enumerate every video file under each folder.
+        var raws: [RawFile] = []
         for folder in folders {
+            let rootContent = content[folder] ?? .both
             let e = fm.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey],
                                   options: [.skipsHiddenFiles])
             while let url = e?.nextObject() as? URL {
                 guard Self.videoExtensions.contains(url.pathExtension.lowercased()) else { continue }
-                let path = url.path
                 let stem = url.deletingPathExtension().lastPathComponent
-                if let ep = Self.parseEpisode(stem) {
-                    let item = MediaItem(
-                        id: .init(source: id, rawValue: path),
-                        title: ep.title.isEmpty ? stem : ep.title,
-                        kind: .episode, streamURL: url,
-                        seriesTitle: ep.series, seasonNumber: ep.season, episodeNumber: ep.episode
-                    )
-                    result.episodesByShow[ep.series, default: []].append(item)
-                    result.byID[path] = item
-                } else {
-                    let movie = Self.parseMovie(stem)
-                    rawMovies.append(RawMovie(title: movie.title, year: movie.year, url: url, path: path))
-                }
+                raws.append(RawFile(
+                    url: url, path: url.path, stem: stem,
+                    episode: Self.parseEpisode(stem),
+                    folderComponents: url.deletingLastPathComponent().pathComponents,
+                    content: rootContent
+                ))
+            }
+        }
+
+        // Folder-role classification (#481, shared AetherCore logic — parity with
+        // iOS SMB): the folder decides movie-vs-episode, so a series folder groups
+        // every file into one show and a movies folder never fragments into bogus
+        // shows. `.both` auto-detects; `.movies`/`.series` force the role.
+        let roles = SMBFolderClassifier.classify(raws.map {
+            .init(folderComponents: $0.folderComponents, isEpisode: $0.episode != nil, content: $0.content)
+        })
+
+        var rawMovies: [RawMovie] = []
+        var showNames: [String: String] = [:]   // seriesKey → display name
+        for (raw, role) in zip(raws, roles) {
+            if role.isEpisode {
+                let seriesKey = role.seriesKey ?? raw.episode?.series ?? raw.stem
+                let display = role.seriesName ?? raw.episode?.series ?? seriesKey
+                let epTitle = raw.episode?.title ?? ""
+                let item = MediaItem(
+                    id: .init(source: id, rawValue: raw.path),
+                    title: epTitle.isEmpty ? raw.stem : epTitle,
+                    kind: .episode, streamURL: raw.url,
+                    seriesTitle: display,
+                    seasonNumber: raw.episode?.season ?? 1,   // forced/unparsed → Season 1
+                    episodeNumber: raw.episode?.episode
+                )
+                result.episodesByShow[seriesKey, default: []].append(item)
+                result.byID[raw.path] = item
+                showNames[seriesKey] = display
+            } else {
+                let movie = Self.parseMovie(raw.stem)
+                rawMovies.append(RawMovie(title: movie.title, year: movie.year, url: raw.url, path: raw.path))
             }
         }
 
@@ -153,8 +197,7 @@ actor LocalFolderSource: MediaSource {
         })
         for m in result.movies { result.byID[m.id.rawValue] = m }
 
-        let seriesNames = result.episodesByShow.keys.sorted()
-        result.shows = await matchedShows(seriesNames)
+        result.shows = await matchedShows(showNames)
 
         scanned = result
         return result
@@ -258,16 +301,19 @@ actor LocalFolderSource: MediaSource {
         }
     }
 
-    /// One show container per series, with a TMDb (TV) poster when matched.
-    private func matchedShows(_ series: [String]) async -> [MediaItem] {
+    /// One show container per series folder, with a TMDb (TV) poster when
+    /// matched. Keyed by the classifier's seriesKey (stable), matched + titled by
+    /// the folder display name.
+    private func matchedShows(_ shows: [String: String]) async -> [MediaItem] {
         var out: [MediaItem] = []
-        for chunk in series.chunked(8) {
+        let entries = shows.sorted { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }
+        for chunk in entries.chunked(8) {
             let items = await withTaskGroup(of: MediaItem.self) { group in
-                for name in chunk {
+                for (key, name) in chunk {
                     group.addTask { [tmdb, id] in
                         let meta = await tmdb?.match(title: name, year: nil, isEpisode: true)
                         return MediaItem(
-                            id: .init(source: id, rawValue: Self.showPrefix + name),
+                            id: .init(source: id, rawValue: Self.showPrefix + key),
                             title: name, kind: .show,
                             summary: meta?.overview, posterURL: meta?.posterURL,
                             backdropURL: meta?.backdropURL

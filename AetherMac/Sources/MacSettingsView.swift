@@ -109,6 +109,15 @@ private struct AccountsSettings: View {
                                 }
                             }
                             Spacer()
+                            Picker("", selection: Binding(
+                                get: { share.contentChoice },
+                                set: { c in Task { await session.setSMBShareContent(share, c) } }
+                            )) {
+                                ForEach(SMBRootContent.allCases, id: \.self) { Text($0.macDisplayName).tag($0) }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
                             Button(role: .destructive) {
                                 Task { await session.removeSMBShare(share) }
                             } label: { Image(systemName: "minus.circle") }
@@ -117,7 +126,7 @@ private struct AccountsSettings: View {
                     }
                     if session.smbMountErrors.values.contains(where: { !$0.isEmpty }) {
                         Button("Reconnect", systemImage: "arrow.clockwise") {
-                            Task { await session.remountSMBShares() }
+                            session.remountSMBShares()
                         }
                     }
                     Text("SMB shares are mounted on this Mac and scanned for movies and shows, just like a local folder.")
@@ -203,6 +212,15 @@ private struct GeneralSettings: View {
                     HStack {
                         Label(url.lastPathComponent, systemImage: "folder")
                         Spacer()
+                        Picker("", selection: Binding(
+                            get: { session.localFolderContent[url.path] ?? .both },
+                            set: { session.setLocalFolderContent(url, $0) }
+                        )) {
+                            ForEach(SMBRootContent.allCases, id: \.self) { Text($0.macDisplayName).tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
                         Button(role: .destructive) {
                             session.removeLocalFolder(url)
                         } label: { Image(systemName: "minus.circle") }

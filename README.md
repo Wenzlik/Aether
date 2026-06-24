@@ -144,4 +144,13 @@ Aether does not bundle Plex or Synology branding in its app name, icon, or in-ap
 
 ## License
 
-[MIT](LICENSE).
+Copyright © 2026 Vašek Zmrhal. All rights reserved.
+
+Aether is **source-available, not open-source**: the code is published for
+transparency and reference, but it is proprietary. You may view, study, and
+build it locally for personal, non-commercial evaluation — you may not copy,
+modify, redistribute, or sell it, or use it to build a competing product. See
+[LICENSE](LICENSE) for the full terms. Bundled third-party components (libmpv,
+FFmpeg, libass, VLCKit, …) remain under their own licenses.
+
+For commercial licensing, contact vasek@aetherplayer.com.

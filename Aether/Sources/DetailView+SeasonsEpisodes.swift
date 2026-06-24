@@ -425,6 +425,14 @@ extension DetailView {
                         Task { await viewModel.toggleFavorite() }
                     }
                 }
+                // SMB shows carry no metadata — let the user correct the series
+                // title/year here (the whole-show edit), which re-matches every
+                // episode (#213). The per-episode pencil lives on episode rows.
+                if isSMBSource(activeItem.id.source) {
+                    AetherIconButton(systemImage: "pencil", accessibilityLabel: "Edit title and year") {
+                        presentedSelector = .smbEditMetadata
+                    }
+                }
                 Spacer(minLength: 0)
             }
         }

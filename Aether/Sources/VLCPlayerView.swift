@@ -25,6 +25,12 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     /// preference disables subtitles. `nil` = leave VLC's defaults.
     var preferredAudioLanguage: String? = nil
     var preferredSubtitleLanguage: String? = nil
+    /// Resume position in seconds — the player seeks here once playback starts.
+    /// `nil` (or ≤ a few seconds) starts from the beginning.
+    var resumeAtSeconds: Double? = nil
+    /// Throttled playback-position report (position, duration in seconds) so the
+    /// caller can persist a resume point — VLCKit has no built-in resume.
+    var onProgress: ((Double, Double) -> Void)? = nil
     let onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> VLCPlaybackController {
@@ -34,6 +40,8 @@ struct VLCPlayerView: UIViewControllerRepresentable {
             mediaTitle: mediaTitle,
             preferredAudioLanguage: preferredAudioLanguage,
             preferredSubtitleLanguage: preferredSubtitleLanguage,
+            resumeAtSeconds: resumeAtSeconds,
+            onProgress: onProgress,
             onDismiss: onDismiss
         )
     }
@@ -47,6 +55,12 @@ final class VLCPlaybackController: UIViewController {
     private let preferredAudioLanguage: String?
     private let preferredSubtitleLanguage: String?
     private var appliedPreferredTracks = false
+    /// Resume support (#476 fast-follow): seek here once playing, then report
+    /// position periodically so the caller persists a resume point.
+    private let resumeAtSeconds: Double?
+    private let onProgress: ((Double, Double) -> Void)?
+    private var didSeekToResume = false
+    private var lastReportedSeconds: Double = -100
     private let onDismiss: () -> Void
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
@@ -150,6 +164,8 @@ final class VLCPlaybackController: UIViewController {
         mediaTitle: String = "",
         preferredAudioLanguage: String? = nil,
         preferredSubtitleLanguage: String? = nil,
+        resumeAtSeconds: Double? = nil,
+        onProgress: ((Double, Double) -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.url = url
@@ -157,10 +173,42 @@ final class VLCPlaybackController: UIViewController {
         self.mediaTitle = mediaTitle
         self.preferredAudioLanguage = preferredAudioLanguage
         self.preferredSubtitleLanguage = preferredSubtitleLanguage
+        self.resumeAtSeconds = resumeAtSeconds
+        self.onProgress = onProgress
         self.onDismiss = onDismiss
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
+
+    // MARK: - Resume (VLCKit has no built-in resume)
+
+    /// Seek to the saved resume point once playback starts, then report position
+    /// (throttled to ~5s) so the caller persists a resume point. Called each tick.
+    private func updateResumeProgress() {
+        if !didSeekToResume, player.isPlaying {
+            didSeekToResume = true
+            if let resume = resumeAtSeconds, resume > 5 {
+                let totalMs = totalTime?.intValue ?? 0
+                // Don't seek to the very end (would instantly "finish").
+                if totalMs == 0 || Int32(resume * 1000) < totalMs - 5000 {
+                    player.time = VLCTime(int: Int32(resume * 1000))
+                }
+            }
+        }
+        guard let totalMs = totalTime?.intValue, totalMs > 0 else { return }
+        let secs = Double(player.time.intValue) / 1000.0
+        if abs(secs - lastReportedSeconds) >= 5 {
+            lastReportedSeconds = secs
+            onProgress?(secs, Double(totalMs) / 1000.0)
+        }
+    }
+
+    /// One last position report on dismiss, so a resume point is saved even
+    /// between throttle ticks.
+    private func reportFinalProgress() {
+        guard let totalMs = totalTime?.intValue, totalMs > 0 else { return }
+        onProgress?(Double(player.time.intValue) / 1000.0, Double(totalMs) / 1000.0)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -329,6 +377,7 @@ final class VLCPlaybackController: UIViewController {
     }
 
     @objc private func done() {
+        reportFinalProgress()
         if player.isPlaying { player.stop() }
         onDismiss()
     }
@@ -490,6 +539,7 @@ final class VLCPlaybackController: UIViewController {
 
     private func tick() {
         updateSpinner()
+        updateResumeProgress()
         applyPreferredTracksIfNeeded()
         progress.setProgress(Float(player.position), animated: false)
         let glyph = player.isPlaying ? "pause.fill" : "play.fill"
