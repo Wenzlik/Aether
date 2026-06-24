@@ -44,9 +44,27 @@ final class MacSession {
     private var smbMountpoints: [UUID: URL] = [:]
     private(set) var smbMountErrors: [UUID: String] = [:]
 
+    /// Per-folder content hint (Movies / TV / Both) for user-picked local
+    /// folders, keyed by path. Drives `SMBFolderClassifier` via
+    /// `LocalFolderSource`; missing → `.both`. Persisted in UserDefaults.
+    private(set) var localFolderContent: [String: SMBRootContent] = MacSession.loadLocalFolderContent()
+
     /// Every folder fed into the local-library scan: user-picked folders plus
     /// the mountpoints of currently-mounted SMB shares.
     private var scanFolders: [URL] { localFolders + Array(smbMountpoints.values) }
+
+    /// Content hint per scan folder, combining local-folder choices with each
+    /// mounted SMB share's choice (keyed by the share's mountpoint URL).
+    private var folderContentMap: [URL: SMBRootContent] {
+        var map: [URL: SMBRootContent] = [:]
+        for url in localFolders {
+            if let c = localFolderContent[url.path] { map[url] = c }
+        }
+        for share in smbShares {
+            if let mountpoint = smbMountpoints[share.id] { map[mountpoint] = share.contentChoice }
+        }
+        return map
+    }
 
     /// Bumped whenever the set of sources or local folders changes, so the
     /// library/discover views reload (their `.task(id:)` keys on it). Needed
@@ -266,8 +284,14 @@ final class MacSession {
     // MARK: Local library (folder scan)
 
     private static let localFoldersKey = "local.folders"
+    private static let localFolderContentKey = "local.folderContent"
     private static func loadLocalFolders() -> [URL] {
         (UserDefaults.standard.stringArray(forKey: localFoldersKey) ?? []).map { URL(fileURLWithPath: $0) }
+    }
+    private static func loadLocalFolderContent() -> [String: SMBRootContent] {
+        guard let data = UserDefaults.standard.data(forKey: localFolderContentKey),
+              let decoded = try? JSONDecoder().decode([String: SMBRootContent].self, from: data) else { return [:] }
+        return decoded
     }
 
     /// Add a folder to the local library and rescan.
@@ -280,7 +304,22 @@ final class MacSession {
 
     func removeLocalFolder(_ url: URL) {
         localFolders.removeAll { $0 == url }
+        localFolderContent[url.path] = nil
+        persistLocalFolderContent()
         persistLocalFolders()
+    }
+
+    /// Set what a local folder holds (Movies / TV / Both) and rescan.
+    func setLocalFolderContent(_ url: URL, _ content: SMBRootContent) {
+        localFolderContent[url.path] = content
+        persistLocalFolderContent()
+        rebuildLocalSource()
+    }
+
+    private func persistLocalFolderContent() {
+        if let data = try? JSONEncoder().encode(localFolderContent) {
+            UserDefaults.standard.set(data, forKey: Self.localFolderContentKey)
+        }
     }
 
     /// Re-scan the local folders (picks up files added/removed on disk and a
@@ -300,7 +339,7 @@ final class MacSession {
             libraryToken &+= 1
             return
         }
-        let source = LocalFolderSource(folders: folders, tmdb: makeTMDbClient())
+        let source = LocalFolderSource(folders: folders, content: folderContentMap, tmdb: makeTMDbClient())
         localSource = source
         libraryToken &+= 1
         // Scan in the background and report progress → result in Settings.
@@ -561,7 +600,8 @@ final class MacSession {
     /// before saving anything), then persist and fold its mountpoint into the
     /// local-library scan. Returns a user-facing error message on failure, or
     /// `nil` on success. Nothing is persisted if the mount fails.
-    func addSMBShare(host: String, shareName: String, username: String?, password: String?) async -> String? {
+    func addSMBShare(host: String, shareName: String, username: String?, password: String?,
+                     content: SMBRootContent = .both) async -> String? {
         let host = host.trimmingCharacters(in: .whitespaces)
         let shareName = shareName.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
         guard !host.isEmpty, !shareName.isEmpty else {
@@ -572,7 +612,8 @@ final class MacSession {
             && $0.shareName.caseInsensitiveCompare(shareName) == .orderedSame }) {
             return String(localized: "That share is already added.")
         }
-        let share = SMBShare(host: host, shareName: shareName, username: username, password: password)
+        let share = SMBShare(host: host, shareName: shareName, username: username,
+                             password: password, content: content)
         do {
             let mountpoint = try await SMBMounter.mount(share)
             smbShares.append(share)
@@ -594,6 +635,15 @@ final class MacSession {
         if let mountpoint = smbMountpoints.removeValue(forKey: share.id) {
             SMBMounter.unmount(mountpoint)
         }
+        try? await smbShareStore.write(smbShares)
+        rebuildLocalSource()
+    }
+
+    /// Change what an SMB share holds (Movies / TV / Both) and rescan its
+    /// mounted folder with the new hint.
+    func setSMBShareContent(_ share: SMBShare, _ content: SMBRootContent) async {
+        guard let index = smbShares.firstIndex(where: { $0.id == share.id }) else { return }
+        smbShares[index].content = content
         try? await smbShareStore.write(smbShares)
         rebuildLocalSource()
     }

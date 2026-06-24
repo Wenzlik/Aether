@@ -13,6 +13,7 @@ struct SMBAddShareSheet: View {
     @State private var shareName = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var contentKind: SMBRootContent = .both
     @State private var step: Step = .entry
 
     private enum Step: Equatable {
@@ -54,6 +55,11 @@ struct SMBAddShareSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { if canConnect { connect() } }
 
+                Picker("Contains", selection: $contentKind) {
+                    ForEach(SMBRootContent.allCases, id: \.self) { Text($0.macDisplayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
                 if case let .failed(message) = step {
                     Label(message, systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
@@ -82,7 +88,8 @@ struct SMBAddShareSheet: View {
                 host: host,
                 shareName: shareName,
                 username: username.isEmpty ? nil : username,
-                password: password.isEmpty ? nil : password
+                password: password.isEmpty ? nil : password,
+                content: contentKind
             )
             if let error {
                 step = .failed(error)
