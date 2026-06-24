@@ -52,30 +52,21 @@ enum SMBMounter {
     /// queue. If the share is already mounted (e.g. the user mounted it in
     /// Finder, or a previous launch left it mounted), NetFS returns the existing
     /// mountpoint rather than failing.
-    static func mount(_ share: SMBShare, timeout: Duration = .seconds(20)) async throws -> URL {
+    static func mount(_ share: SMBShare, timeout: TimeInterval = 20) async throws -> URL {
         guard let url = share.mountURL else { throw MountError.invalidShare }
         let username = share.username?.isEmpty == false ? share.username : nil
         let password = share.password?.isEmpty == false ? share.password : nil
 
-        // Race the blocking NetFS mount against a timeout so a slow/hung server
-        // surfaces a clear error instead of leaving the library empty forever.
-        // (A timed-out NetFS call keeps running detached until it returns; the
-        // continuation result is then discarded — bounded and harmless.)
-        return try await withThrowingTaskGroup(of: URL.self) { group in
-            group.addTask { try await rawMount(url, username: username, password: password) }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                throw MountError.timedOut
+        // `NetFSMountURLSync` is blocking and NOT cancellation-aware, so a task
+        // group would deadlock waiting for the hung child even after a timeout.
+        // Instead: one continuation, resumed by whichever finishes first — the
+        // mount or the timeout. The loser's resume is dropped via `Once`. A
+        // timed-out NetFS call keeps running detached until it returns; harmless.
+        let once = Once()
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                if once.claim() { cont.resume(throwing: MountError.timedOut) }
             }
-            defer { group.cancelAll() }
-            guard let result = try await group.next() else { throw MountError.timedOut }
-            return result
-        }
-    }
-
-    /// The blocking `NetFSMountURLSync` call, hopped onto a background queue.
-    private static func rawMount(_ url: URL, username: String?, password: String?) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 // No UI: an auto-mount on launch must never pop a system dialog,
                 // and a bad/again-needed credential should come back as an error
@@ -91,19 +82,33 @@ enum SMBMounter {
                     nil,                                   // default mount options
                     &mountpoints
                 )
+                guard once.claim() else { return }        // timeout already won
                 guard status == 0 else {
-                    continuation.resume(throwing: MountError.mountFailed(status))
+                    cont.resume(throwing: MountError.mountFailed(status))
                     return
                 }
                 let paths = (mountpoints?.takeRetainedValue() as NSArray?) as? [String]
                 guard let first = paths?.first else {
                     // Success with no path is unexpected; treat as a failure so
                     // the caller doesn't register a bogus folder.
-                    continuation.resume(throwing: MountError.mountFailed(status))
+                    cont.resume(throwing: MountError.mountFailed(status))
                     return
                 }
-                continuation.resume(returning: URL(fileURLWithPath: first))
+                cont.resume(returning: URL(fileURLWithPath: first))
             }
+        }
+    }
+
+    /// One-shot gate: the first caller to `claim()` wins, the rest get `false`.
+    /// Lets the mount and the timeout race for a single continuation resume.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func claim() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if done { return false }
+            done = true
+            return true
         }
     }
 
