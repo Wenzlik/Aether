@@ -1,5 +1,6 @@
 import SwiftUI
 import AetherCore
+import Network
 
 /// The macOS app session — reuses AetherCore's source/auth layer to sign into
 /// Plex + Jellyfin, expose the connected sources for browsing, and resolve a
@@ -43,6 +44,15 @@ final class MacSession {
     private(set) var smbShares: [SMBShare] = []
     private var smbMountpoints: [UUID: URL] = [:]
     private(set) var smbMountErrors: [UUID: String] = [:]
+    /// Shares whose mount is currently in flight — `NetFSMountURLSync` can take
+    /// up to the timeout, so this guards against a network/foreground retry
+    /// stacking a second attempt on top of one already running.
+    private var smbMountsInFlight: Set<UUID> = []
+    /// Watches for network changes (getting home, VPN up) to auto-remount shares
+    /// that aren't mounted yet — so a NAS that was unreachable at launch comes
+    /// online without the user hitting Reconnect by hand.
+    private let smbPathMonitor = NWPathMonitor()
+    private var smbPathMonitorStarted = false
 
     /// Per-folder content hint (Movies / TV / Both) for user-picked local
     /// folders, keyed by path. Drives `SMBFolderClassifier` via
@@ -432,6 +442,9 @@ final class MacSession {
             for share in shares {
                 Task { await mountAndRegister(share) }
             }
+            // Auto-remount on network changes so an unreachable NAS comes online
+            // later without a manual Reconnect.
+            startSMBAutoRemount()
         }
         // Sources are wired up now — bump the token so any view that ran its
         // initial load before restore finished (Home/Discover race the library
@@ -652,6 +665,11 @@ final class MacSession {
     /// source so its titles appear. On failure, record a status string Settings
     /// can show (e.g. NAS off-network) without dropping the saved share.
     private func mountAndRegister(_ share: SMBShare) async {
+        // One attempt at a time per share — a blocking mount can run up to the
+        // timeout, and network/foreground retries fire while it's in flight.
+        guard !smbMountsInFlight.contains(share.id) else { return }
+        smbMountsInFlight.insert(share.id)
+        defer { smbMountsInFlight.remove(share.id) }
         do {
             let mountpoint = try await SMBMounter.mount(share)
             // Guard against a removal that raced the mount.
@@ -667,12 +685,29 @@ final class MacSession {
         }
     }
 
-    /// Re-attempt mounting any shares that aren't currently mounted — used by a
-    /// "Reconnect" affordance when a NAS comes back online.
-    func remountSMBShares() async {
-        for share in smbShares where smbMountpoints[share.id] == nil {
-            await mountAndRegister(share)
+    /// Re-attempt every share that isn't mounted yet (skipping any already in
+    /// flight). Fire-and-forget — used by the manual "Reconnect" button, the
+    /// network-change monitor, and app re-activation.
+    func retryUnmountedShares() {
+        for share in smbShares where smbMountpoints[share.id] == nil && !smbMountsInFlight.contains(share.id) {
+            Task { await mountAndRegister(share) }
         }
+    }
+
+    /// Manual "Reconnect" — same as the automatic retry.
+    func remountSMBShares() { retryUnmountedShares() }
+
+    /// Start watching for network changes so shares that were unreachable at
+    /// launch (NAS asleep, away from the LAN, VPN not up) auto-mount once the
+    /// path comes back — no manual Reconnect needed. Idempotent.
+    private func startSMBAutoRemount() {
+        guard !smbPathMonitorStarted else { return }
+        smbPathMonitorStarted = true
+        smbPathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in self?.retryUnmountedShares() }
+        }
+        smbPathMonitor.start(queue: DispatchQueue(label: "cz.zmrhal.aether.smb.path"))
     }
 
     // MARK: Library + playback

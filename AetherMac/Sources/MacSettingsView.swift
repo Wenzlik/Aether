@@ -126,7 +126,7 @@ private struct AccountsSettings: View {
                     }
                     if session.smbMountErrors.values.contains(where: { !$0.isEmpty }) {
                         Button("Reconnect", systemImage: "arrow.clockwise") {
-                            Task { await session.remountSMBShares() }
+                            session.remountSMBShares()
                         }
                     }
                     Text("SMB shares are mounted on this Mac and scanned for movies and shows, just like a local folder.")
