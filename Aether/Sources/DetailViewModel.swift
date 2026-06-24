@@ -52,6 +52,9 @@ final class DetailViewModel {
     /// `nil` = use the item's own `isWatched`. Reset when the active source changes.
     var watchedOverride: Bool?
     var favoriteOverride: Bool?
+    /// Optimistic personal rating (Plex 0–10), so the stars flip instantly.
+    /// `nil` = use the item's own `userRating`. Reset when the source changes.
+    var ratingOverride: Double?
     var playbackItem: MediaItem?
     /// Where the presented player should begin. `nil` resumes from the saved
     /// point ("Resume"); `0` forces a restart ("Play From Beginning").
@@ -385,6 +388,11 @@ final class DetailViewModel {
     /// heart flips instantly on tap.
     var isFavorite: Bool { favoriteOverride ?? current.isFavorite }
 
+    /// Whether the active source supports a personal rating (Plex only).
+    var supportsUserRatings: Bool { source?.supportsUserRatings ?? false }
+    /// The user's personal rating on the Plex 0–10 scale (`nil` = unrated).
+    var userRating: Double? { ratingOverride ?? current.userRating }
+
     // MARK: - Mutators (#241 inc 3)
 
     /// Switch the screen to another source that has this title (from "Available
@@ -405,6 +413,7 @@ final class DetailViewModel {
         resume = nil
         watchedOverride = nil   // the new source carries its own watched state
         favoriteOverride = nil  // …and its own favorite state
+        ratingOverride = nil    // …and its own personal rating
         overrideItem = (src.item.id == item.id) ? nil : src.item
     }
 
@@ -415,6 +424,14 @@ final class DetailViewModel {
         let next = !isFavorite
         favoriteOverride = next   // optimistic
         await source.setFavorite(activeItem.id, to: next)
+    }
+
+    /// Set (or clear) the user's personal rating on the Plex 0–10 scale; `0`
+    /// clears it. Optimistic — the stars update before the server confirms.
+    func setRating(_ rating: Int) async {
+        guard let source, source.supportsUserRatings else { return }
+        ratingOverride = rating > 0 ? Double(rating) : nil
+        await source.setRating(activeItem.id, to: rating)
     }
 
     // MARK: - Downloads (#241 inc 3)

@@ -31,6 +31,8 @@ struct MediaDetailView: View {
     @State private var parentShow: MediaItem?
     @State private var isLoading = false
     @State private var tmdbRating: Double?
+    /// Optimistic personal rating (Plex 0–10) so the stars update instantly.
+    @State private var ratingOverride: Double?
     /// Cast rail collapses to the top billing until "Show All" (point 5).
     @State private var showAllCast = false
     /// Saved resume position (seconds) for a playable item — drives Resume.
@@ -182,6 +184,9 @@ struct MediaDetailView: View {
                 if let tmdb = tmdbRating ?? current.tmdbRating, tmdb > 0 {
                     Label("TMDb \(String(format: "%.1f", tmdb))", systemImage: "tv")
                 }
+                if session.source(for: current)?.supportsUserRatings == true {
+                    ratingMenu
+                }
             }
             .font(.title2)
             .foregroundStyle(.white.opacity(0.85))
@@ -194,6 +199,48 @@ struct MediaDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Personal rating
+
+    /// The user's personal rating on the Plex 0–10 scale (`nil` = unrated).
+    private var userRating: Double? { ratingOverride ?? current.userRating }
+
+    /// Star-rating `Menu` shown in the metadata line: fills when rated, offers
+    /// 1–5 stars (mapped to Plex's 0–10) and Clear.
+    private var ratingMenu: some View {
+        let rated = userRating != nil
+        let currentStars = Int(((userRating ?? 0) / 2).rounded())
+        return Menu {
+            ForEach(Array((1...5).reversed()), id: \.self) { stars in
+                Button {
+                    Task { await rate(stars * 2) }
+                } label: {
+                    if stars == currentStars {
+                        Label { Text(verbatim: String(repeating: "★", count: stars)) }
+                            icon: { Image(systemName: "checkmark") }
+                    } else {
+                        Text(verbatim: String(repeating: "★", count: stars))
+                    }
+                }
+            }
+            if rated {
+                Button("Clear Rating", role: .destructive) { Task { await rate(0) } }
+            }
+        } label: {
+            Label {
+                rated ? Text(verbatim: String(repeating: "★", count: currentStars)) : Text("Rate")
+            } icon: {
+                Image(systemName: rated ? "star.fill" : "star")
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func rate(_ rating: Int) async {
+        ratingOverride = rating > 0 ? Double(rating) : nil
+        await session.setRating(current, to: rating)
     }
 
     // MARK: Play + controls
