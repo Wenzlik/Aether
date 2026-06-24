@@ -10,17 +10,18 @@ import AetherCore
 /// off the flow to another device if they want.
 struct PlexSignInView: View {
     @State private var viewModel: PlexSignInViewModel
-    let onSuccess: (String) -> Void
+    let onSuccess: (PlexSignInResult) -> Void
     let onCancel: () -> Void
 
     @Environment(\.openURL) private var openURL
 
     init(
         authClient: PlexAuthClient,
-        onSuccess: @escaping (String) -> Void,
+        homeClient: PlexHomeClient,
+        onSuccess: @escaping (PlexSignInResult) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self._viewModel = State(initialValue: PlexSignInViewModel(authClient: authClient))
+        self._viewModel = State(initialValue: PlexSignInViewModel(authClient: authClient, homeClient: homeClient))
         self.onSuccess = onSuccess
         self.onCancel = onCancel
     }
@@ -49,8 +50,8 @@ struct PlexSignInView: View {
             }
         }
         .onChange(of: stateIsSuccess) { _, isSuccess in
-            if isSuccess, case let .success(token) = viewModel.state {
-                onSuccess(token)
+            if isSuccess, case let .success(result) = viewModel.state {
+                onSuccess(result)
             }
         }
     }
@@ -83,6 +84,9 @@ struct PlexSignInView: View {
 
         case let .awaitingUser(pin, url):
             awaitingUserView(pin: pin, url: url)
+
+        case let .selectingProfile(users):
+            profileSelectionView(users: users)
 
         case .success:
             successView
@@ -161,6 +165,23 @@ struct PlexSignInView: View {
                 Text("Waiting for you to enter the code…")
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
+            }
+        }
+    }
+
+    private func profileSelectionView(users: [PlexAPI.HomeUser]) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+            Text("Who's watching?")
+                .font(AetherDesign.Typography.sectionTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            ScrollView {
+                PlexProfilePickerView(
+                    users: users,
+                    isSwitching: viewModel.isSwitching,
+                    pinError: viewModel.pinError,
+                    onChoose: { user, pin in viewModel.chooseProfile(user, pin: pin) }
+                )
+                .padding(.vertical, AetherDesign.Spacing.s)
             }
         }
     }

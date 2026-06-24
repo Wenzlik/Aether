@@ -16,6 +16,7 @@ final class MacSession {
     private let jellyfinConfiguration: JellyfinConfiguration
     private let embyConfiguration: EmbyConfiguration
     let plexAuthClient: PlexAuthClient
+    let plexHomeClient: PlexHomeClient
     let jellyfinAuthClient: JellyfinAuthClient
     let embyAuthClient: EmbyAuthClient
     private let plexResourceClient: PlexResourceClient
@@ -28,6 +29,9 @@ final class MacSession {
     /// The enabled Plex servers, primary first — kept so the Settings server
     /// picker can reorder them (#325). Mirrors `plexSources`.
     private(set) var plexServerRecords: [PlexServerRecord] = []
+    /// The active Plex Home profile, when the account has Home and a profile was
+    /// picked. `nil` for plain accounts. Drives the Settings "Switch Profile" UI.
+    private(set) var activePlexUser: PlexHomeUserRef?
     private(set) var jellyfinSource: JellyfinMediaSource?
     private(set) var embySource: EmbyMediaSource?
 
@@ -369,6 +373,8 @@ final class MacSession {
     }
 
     private static let plexTokenKey = "plex.authToken"
+    private static let plexAdminTokenKey = "plex.adminToken"
+    private static let plexHomeUserKey = "plex.homeUser"
     private static let plexClientIDKey = "plex.clientIdentifier"
     private static let jellyfinDeviceIDKey = "jellyfin.deviceID"
     private static let embyDeviceIDKey = "emby.deviceID"
@@ -397,6 +403,7 @@ final class MacSession {
             client: "Aether", version: "0.7.2", deviceName: host, deviceID: embyDeviceID
         )
         plexAuthClient = PlexAuthClient(api: api, configuration: plexConfiguration)
+        plexHomeClient = PlexHomeClient(api: api, configuration: plexConfiguration)
         jellyfinAuthClient = JellyfinAuthClient(api: api, configuration: jellyfinConfiguration)
         embyAuthClient = EmbyAuthClient(api: api, configuration: embyConfiguration)
         plexResourceClient = PlexResourceClient(api: api, configuration: plexConfiguration)
@@ -424,6 +431,13 @@ final class MacSession {
             plexServerRecords = records
             plexSources = records.map(makePlexSource)
             plexServerNames = records.map(\.name)
+        }
+        // Restore the active Plex Home profile (the working token was already
+        // persisted, so playback resumes as that profile).
+        if let json = try? await keychain.string(for: Self.plexHomeUserKey),
+           let data = json.data(using: .utf8),
+           let ref = try? JSONDecoder().decode(PlexHomeUserRef.self, from: data) {
+            activePlexUser = ref
         }
         if let record = try? await jellyfinServerStore.read(), let source = makeJellyfinSource(record) {
             jellyfinSource = source
@@ -466,10 +480,20 @@ final class MacSession {
 
     // MARK: Plex
 
-    /// Called with the token from `PlexSignInViewModel`'s `.success`. Persists it,
-    /// discovers reachable servers, and builds the live sources.
-    func completePlexSignIn(token: String) async {
-        try? await keychain.setString(token, for: Self.plexTokenKey)
+    /// Called with the `PlexSignInResult` from `PlexSignInViewModel`'s `.success`
+    /// (working token = the picked Plex Home profile's scoped token, or the
+    /// account token). Persists tokens + active profile, discovers reachable
+    /// servers, and builds the live sources.
+    func completePlexSignIn(result: PlexSignInResult) async {
+        try? await keychain.setString(result.token, for: Self.plexTokenKey)
+        try? await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
+        await persistActivePlexUser(result.user)
+        await discoverPlexServers(token: result.token)
+    }
+
+    /// Fetch resources for `token`, pick + persist the reachable servers, build
+    /// the live sources. Shared by sign-in and profile switching.
+    private func discoverPlexServers(token: String) async {
         guard let resources = try? await plexResourceClient.resources(token: token) else { return }
         let records = PlexServerSelector().rankedSelections(from: resources).map { $0.makeRecord() }
         guard !records.isEmpty else { return }
@@ -480,8 +504,45 @@ final class MacSession {
         libraryToken &+= 1
     }
 
+    /// The Plex Home profiles on the signed-in account (for the Settings
+    /// switcher). Empty when Home isn't enabled or the account token is missing.
+    func plexHomeUsers() async -> [PlexAPI.HomeUser] {
+        guard let admin = try? await keychain.string(for: Self.plexAdminTokenKey), !admin.isEmpty
+        else { return [] }
+        return (try? await plexHomeClient.users(adminToken: admin)) ?? []
+    }
+
+    /// Switch the active Plex Home profile (Settings). Swaps the working token,
+    /// re-runs discovery and rebuilds sources. Throws `PlexHomeError.invalidPIN`.
+    func switchPlexUser(_ user: PlexAPI.HomeUser, pin: String?) async throws {
+        guard let admin = try? await keychain.string(for: Self.plexAdminTokenKey), !admin.isEmpty
+        else { return }
+        let token = try await plexHomeClient.switchUser(uuid: user.uuid, pin: pin, adminToken: admin)
+        try? await keychain.setString(token, for: Self.plexTokenKey)
+        await persistActivePlexUser(user)
+        try? await plexServerStore.clear()
+        plexServerRecords = []
+        plexSources = []
+        plexServerNames = []
+        await discoverPlexServers(token: token)
+    }
+
+    /// Persist (or clear) the active Home profile ref + update the property.
+    private func persistActivePlexUser(_ user: PlexAPI.HomeUser?) async {
+        activePlexUser = user.map(PlexHomeUserRef.init)
+        if let ref = activePlexUser,
+           let data = try? JSONEncoder().encode(ref),
+           let json = String(data: data, encoding: .utf8) {
+            try? await keychain.setString(json, for: Self.plexHomeUserKey)
+        } else {
+            try? await keychain.removeValue(for: Self.plexHomeUserKey)
+        }
+    }
+
     func signOutPlex() async {
         try? await keychain.removeValue(for: Self.plexTokenKey)
+        try? await keychain.removeValue(for: Self.plexAdminTokenKey)
+        await persistActivePlexUser(nil)
         try? await plexServerStore.clear()
         plexServerRecords = []
         plexSources = []

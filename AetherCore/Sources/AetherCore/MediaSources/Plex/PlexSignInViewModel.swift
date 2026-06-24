@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Drives the Plex PIN sign-in flow for the view layer.
+/// Drives the Plex PIN sign-in flow, including Plex Home profile selection.
 ///
 /// State machine:
 /// ```
@@ -12,19 +12,18 @@ import Observation
 ///    │  on success
 ///    ▼
 ///   awaitingUser(pin, url)  poll /api/v2/pins/{id} in background
-///    │             │
-///    │             ├── token arrives ───► success(token)
-///    │             ├── pin expires   ───► failure(.expired)
-///    │             ├── timeout       ───► failure(.timedOut)
-///    │             └── cancel()      ───► idle
-///    ▼
-///   failure(reason)
-///    └── retry() ─► start()
+///    │  token arrives → GET /api/v2/home/users
+///    │
+///    ├── 0–1 profiles ─────────────────────► success(account token)
+///    └── 2+ profiles ──► selectingProfile(users)
+///                          │  selectProfile(u)
+///                          ├── unprotected ─► switch ─► success(profile token)
+///                          └── protected ──► PIN entry ─► switch ─► success
+///                                              └─ wrong PIN → pinError, stay
 /// ```
 ///
-/// `@MainActor` because the view reads `state` directly. The polling itself
-/// lives on `PlexAuthClient` (an actor); we just `await` it and update state
-/// when it returns.
+/// `@MainActor` because the view reads state directly. Network work hops to the
+/// `PlexAuthClient` / `PlexHomeClient` actors.
 @MainActor
 @Observable
 public final class PlexSignInViewModel {
@@ -33,7 +32,8 @@ public final class PlexSignInViewModel {
         case idle
         case requesting
         case awaitingUser(pin: PlexAPI.PIN, linkURL: URL)
-        case success(token: String)
+        case selectingProfile(users: [PlexAPI.HomeUser])
+        case success(result: PlexSignInResult)
         case failure(reason: FailureReason)
     }
 
@@ -45,17 +45,26 @@ public final class PlexSignInViewModel {
 
     public private(set) var state: State = .idle
 
+    /// Set after a wrong PIN so the profile picker can show "try again".
+    public private(set) var pinError = false
+    /// A profile switch is in flight (disable the grid / show a spinner).
+    public private(set) var isSwitching = false
+
     private let authClient: PlexAuthClient
+    private let homeClient: PlexHomeClient
     private let pollInterval: Duration
     private let pollTimeout: Duration
     private var flowTask: Task<Void, Never>?
+    private(set) var adminToken: String?
 
     public init(
         authClient: PlexAuthClient,
+        homeClient: PlexHomeClient,
         pollInterval: Duration = .seconds(2),
         pollTimeout: Duration = .seconds(300)
     ) {
         self.authClient = authClient
+        self.homeClient = homeClient
         self.pollInterval = pollInterval
         self.pollTimeout = pollTimeout
     }
@@ -64,6 +73,9 @@ public final class PlexSignInViewModel {
     public func start() {
         flowTask?.cancel()
         state = .requesting
+        pinError = false
+        isSwitching = false
+        adminToken = nil
         flowTask = Task { [weak self] in
             await self?.run()
         }
@@ -82,6 +94,34 @@ public final class PlexSignInViewModel {
         start()
     }
 
+    // MARK: - Profile selection
+
+    /// Switch to the chosen Home profile (the picker gathers the PIN for
+    /// protected profiles and passes it here, or `nil`). On a wrong PIN sets
+    /// `pinError` and stays on the picker; on success transitions to `.success`.
+    public func chooseProfile(_ user: PlexAPI.HomeUser, pin: String?) {
+        guard let adminToken else { return }
+        isSwitching = true
+        pinError = false
+        flowTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let token = try await self.homeClient.switchUser(uuid: user.uuid, pin: pin, adminToken: adminToken)
+                guard !Task.isCancelled else { return }
+                self.isSwitching = false
+                self.state = .success(result: PlexSignInResult(token: token, adminToken: adminToken, user: user))
+            } catch PlexHomeError.invalidPIN {
+                self.isSwitching = false
+                self.pinError = true
+            } catch is CancellationError {
+                return
+            } catch {
+                self.isSwitching = false
+                self.state = .failure(reason: .network(message: error.localizedDescription))
+            }
+        }
+    }
+
     // MARK: - Flow body
 
     private func run() async {
@@ -97,7 +137,19 @@ public final class PlexSignInViewModel {
                 timeout: pollTimeout
             )
             guard !Task.isCancelled else { return }
-            state = .success(token: token)
+            adminToken = token
+
+            // Plex Home: if the account has multiple profiles, let the user pick
+            // one (its scoped token replaces the account token). A non-Home
+            // account — or a home lookup that fails — just signs in as the
+            // account, so the home step never blocks a normal sign-in.
+            let users = (try? await homeClient.users(adminToken: token)) ?? []
+            guard !Task.isCancelled else { return }
+            if users.count > 1 {
+                state = .selectingProfile(users: users)
+            } else {
+                state = .success(result: PlexSignInResult(token: token, adminToken: token, user: nil))
+            }
         } catch is CancellationError {
             // Explicit cancel — leave state untouched (cancel() already set it).
             return
