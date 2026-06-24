@@ -334,8 +334,19 @@ struct ProgressiveMP4Writer {
         w.u16(16)
         w.u16(0); w.u16(0)
         w.u32(track.sampleRate << 16)
-        w.append(esds(asc: track.codecConfig, esID: UInt16(truncatingIfNeeded: track.trackID)))
-        return MP4Box.box("mp4a", w.bytes)
+        switch track.audioCodec {
+        case .ac3:
+            // ETSI TS 102 366 Annex F.4: 'ac-3' sample entry + 'dac3' config.
+            w.append(MP4Box.box("dac3", track.codecConfig))
+            return MP4Box.box("ac-3", w.bytes)
+        case .eac3:
+            // Annex F.6: 'ec-3' sample entry + 'dec3' config.
+            w.append(MP4Box.box("dec3", track.codecConfig))
+            return MP4Box.box("ec-3", w.bytes)
+        default:
+            w.append(esds(asc: track.codecConfig, esID: UInt16(truncatingIfNeeded: track.trackID)))
+            return MP4Box.box("mp4a", w.bytes)
+        }
     }
 
     private func webVTTSampleEntry() -> [UInt8] {

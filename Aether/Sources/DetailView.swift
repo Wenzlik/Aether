@@ -639,17 +639,11 @@ struct DetailView: View {
             if rawURL.scheme == "smb", let smbSource = source as? SMBMediaSource {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
                     if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
-                        // #476: try the AVFoundation remux path for an SMB MKV whose
-                        // codecs AVFoundation can decode — native transport, resume,
-                        // audio/subtitle menus, no VLCKit. The asset parses the MKV
-                        // over SMB off the main thread; it returns nil when not
-                        // remuxable, so we fall back to VLCKit over HTTP (with resume).
-                        if remuxLocalMKVEnabled,
-                           let remux = await Self.makeSMBRemuxAsset(proxyURL: proxyURL) {
-                            remuxPlayback = RemuxPlayback(asset: remux)
-                            return
-                        }
-                        // mkv / avi / ts not remuxable — still VLCKit, but over HTTP.
+                        // SMB mkv / avi / ts → VLCKit over the HTTP range proxy.
+                        // (Remux→AVPlayer is local-files-only: a seekable MP4 `moov`
+                        // needs a full metadata pass, which over SMB means reading
+                        // the whole file — prohibitive for multi-GB rips. VLCKit
+                        // demuxes on the fly and seeks via MKV Cues, so it's fast.)
                         vlcPlayback = VLCPlayback(url: proxyURL, itemID: vlcItemID, resumeAt: vlcResumeAt)
                         return
                     }
@@ -677,28 +671,6 @@ struct DetailView: View {
 
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
-        }
-    }
-
-    /// Build a remux asset for an SMB MKV off the main thread — parsing reads the
-    /// MKV header/index over SMB synchronously (via `SMBByteSource` → the range
-    /// proxy's pooled client). Returns nil if the file isn't a remuxable Matroska,
-    /// so the caller falls back to VLCKit.
-    private static func makeSMBRemuxAsset(proxyURL: URL) async -> RemuxedLocalAsset? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb-remux")  // TEMP
-                let t0 = Date()  // TEMP
-                guard let source = SMBByteSource(proxyURL: proxyURL) else {
-                    log.error("⏱ SMBByteSource init FAILED (no Content-Length) for \(proxyURL.lastPathComponent, privacy: .public)")  // TEMP
-                    continuation.resume(returning: nil); return
-                }
-                log.notice("⏱ SMBByteSource ok, count=\(source.count, privacy: .public) in \(Date().timeIntervalSince(t0), privacy: .public)s — building remuxer…")  // TEMP
-                let name = proxyURL.deletingPathExtension().lastPathComponent
-                let asset = RemuxedLocalAsset(byteSource: source, name: name)
-                log.notice("⏱ RemuxedLocalAsset \(asset == nil ? "NIL (not remuxable)" : "built ✓", privacy: .public) in \(Date().timeIntervalSince(t0), privacy: .public)s")  // TEMP
-                continuation.resume(returning: asset)
-            }
         }
     }
 
