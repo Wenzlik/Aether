@@ -9,6 +9,7 @@ import AetherCore
 @main
 struct AetherMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @State private var recents = RecentsStore()
     @State private var session = MacSession()
     // In-app auto-update (#405). @StateObject so the updater (and its scheduled
@@ -21,6 +22,11 @@ struct AetherMacApp: App {
                 .frame(minWidth: 820, minHeight: 520)
                 .environment(session.watchAvailability)   // Netflix badges (#360)
                 .environmentObject(updater)               // Settings ▸ About toggle (#405)
+                // Returning to the app retries any SMB share that isn't mounted
+                // (e.g. the NAS woke, or you're back on its network).
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { session.retryUnmountedShares() }
+                }
         }
         .commands {
             // "Check for Updates…" right under "About Aether" in the app menu.

@@ -22,14 +22,24 @@ struct SMBShare: Codable, Identifiable, Hashable, Sendable {
     /// Optional credentials. An empty/`nil` username mounts as guest.
     var username: String?
     var password: String?
+    /// What the share holds (Movies / TV / Both), fed to `SMBFolderClassifier`
+    /// via `LocalFolderSource`. Optional so shares saved before this existed
+    /// decode cleanly; `contentChoice` resolves `nil` to `.both`.
+    var content: SMBRootContent?
 
-    init(id: UUID = UUID(), host: String, shareName: String, username: String?, password: String?) {
+    init(id: UUID = UUID(), host: String, shareName: String,
+         username: String?, password: String?, content: SMBRootContent = .both) {
         self.id = id
         self.host = host
         self.shareName = shareName
         self.username = username
         self.password = password
+        self.content = content
     }
+
+    /// The content choice, defaulting to `.both` for shares saved before the
+    /// field existed.
+    var contentChoice: SMBRootContent { content ?? .both }
 
     /// What the Settings row shows — e.g. "Media on nas.local".
     var displayName: String { "\(shareName) on \(host)" }
@@ -45,6 +55,18 @@ struct SMBShare: Codable, Identifiable, Hashable, Sendable {
         let share = shareName.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
         components.path = "/" + share
         return components.url
+    }
+}
+
+extension SMBRootContent {
+    /// Picker label for what a folder / share holds — matches the iOS SMB
+    /// folder picker ("Movies & TV" / "Movies" / "TV Shows").
+    var macDisplayName: String {
+        switch self {
+        case .both:   String(localized: "Movies & TV")
+        case .movies: String(localized: "Movies")
+        case .series: String(localized: "TV Shows")
+        }
     }
 }
 
