@@ -1019,6 +1019,13 @@ final class MacSession {
         connectedSources.first { $0.id == item.id.source }
     }
 
+    /// Set (or clear with `0`) the user's personal rating (Plex 0–10) on the
+    /// item's source. Best-effort + non-throwing.
+    func setRating(_ item: MediaItem, to rating: Int) async {
+        guard let src = source(for: item), src.supportsUserRatings else { return }
+        await src.setRating(item.id, to: rating)
+    }
+
     /// A container's children — a show's seasons, a season's episodes — for the
     /// Detail drill-down. `[]` on failure / no source.
     func children(of item: MediaItem) async -> [MediaItem] {

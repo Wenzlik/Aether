@@ -1009,6 +1009,7 @@ public actor PlexMediaSource: MediaSource {
             genres: dto.genres,
             cast: cast,
             communityRating: dto.audienceRating ?? dto.rating,
+            userRating: dto.userRating,
             contentRating: dto.contentRating?.nonEmptyTrimmed,
             releaseDate: dto.releaseDate,
             dateAdded: dto.dateAdded,
@@ -1047,6 +1048,27 @@ public actor PlexMediaSource: MediaSource {
             path: "/:/unscrobble",
             queryItems: [
                 URLQueryItem(name: "key", value: id.rawValue),
+                URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
+            ]
+        )
+        _ = try? await api.data(for: request)
+    }
+
+    // MARK: - Personal rating
+
+    public nonisolated var supportsUserRatings: Bool { true }
+
+    /// Set (or clear) the user's personal rating on the server via Plex's
+    /// `/:/rate` endpoint, so it syncs to Plex and every other client. `rating`
+    /// is the Plex 0–10 scale; `0` clears it. Best-effort + non-throwing.
+    public func setRating(_ id: MediaID, to rating: Int) async {
+        guard id.source == self.id, let base = try? await resolveBaseURL() else { return }
+        let request = request(
+            base: base,
+            path: "/:/rate",
+            queryItems: [
+                URLQueryItem(name: "key", value: id.rawValue),
+                URLQueryItem(name: "rating", value: String(max(0, min(10, rating)))),
                 URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
             ]
         )

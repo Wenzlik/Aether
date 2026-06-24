@@ -162,6 +162,9 @@ extension DetailView {
                 Task { await viewModel.toggleFavorite() }
             }
         }
+        if viewModel.supportsUserRatings {
+            ratingMenu
+        }
         // Source switching is not a tertiary icon here: it lived as a cryptic,
         // width-shifting, blue-tinted glyph that collided with "blue = active"
         // (#356). It now has a labelled home in the body — the compact
@@ -196,6 +199,41 @@ extension DetailView {
                 presentedSelector = .smbEditMetadata
             }
         }
+    }
+
+    /// Personal rating as a compact icon `Menu` (Plex `userRating`). The glyph
+    /// fills when rated; the menu offers 1–5 stars (mapped to Plex's 0–10) and
+    /// Clear. A Menu (not five inline taps) keeps the action row tidy and stays
+    /// a single focusable element on tvOS.
+    private var ratingMenu: some View {
+        let rated = viewModel.userRating != nil
+        let currentStars = Int(((viewModel.userRating ?? 0) / 2).rounded())
+        return Menu {
+            ForEach(Array((1...5).reversed()), id: \.self) { stars in
+                Button {
+                    Task { await viewModel.setRating(stars * 2) }
+                } label: {
+                    if stars == currentStars {
+                        Label { Text(verbatim: String(repeating: "★", count: stars)) }
+                            icon: { Image(systemName: "checkmark") }
+                    } else {
+                        Text(verbatim: String(repeating: "★", count: stars))
+                    }
+                }
+            }
+            if rated {
+                Button("Clear Rating", role: .destructive) {
+                    Task { await viewModel.setRating(0) }
+                }
+            }
+        } label: {
+            AetherIconCircleLabel(
+                systemImage: rated ? "star.fill" : "star",
+                isActive: rated
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Your rating")
     }
 
     /// Download as a compact icon `Menu`: the glyph reflects the current state,

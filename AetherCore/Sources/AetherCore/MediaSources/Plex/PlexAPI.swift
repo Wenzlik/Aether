@@ -386,6 +386,9 @@ public enum PlexAPI {
         /// Audience / critic rating (0–10).
         public let audienceRating: Double?
         public let rating: Double?
+        /// The signed-in user's **personal** rating (0–10), present when the item
+        /// has been rated. JSON key `userRating`. Set via `/:/rate`.
+        public let userRating: Double?
         /// Age / content classification, e.g. `"PG-13"`, `"TV-MA"`, `"15"`.
         /// Plex JSON key `contentRating`.
         public let contentRating: String?
@@ -533,6 +536,7 @@ public enum PlexAPI {
             originallyAvailableAt: String? = nil,
             audienceRating: Double? = nil,
             rating: Double? = nil,
+            userRating: Double? = nil,
             contentRating: String? = nil,
             genreTags: [Tag]? = nil,
             roles: [Role]? = nil,
@@ -563,6 +567,7 @@ public enum PlexAPI {
             self.originallyAvailableAt = originallyAvailableAt
             self.audienceRating = audienceRating
             self.rating = rating
+            self.userRating = userRating
             self.contentRating = contentRating
             self.genreTags = genreTags
             self.roles = roles
@@ -690,6 +695,7 @@ public enum PlexAPI {
             case ratingKey, type, title, summary, year, duration, thumb, art
             case grandparentTitle, parentIndex, parentRatingKey, index, viewCount, viewOffset, lastViewedAt
             case childCount, leafCount, viewedLeafCount, addedAt, originallyAvailableAt, audienceRating, rating
+            case userRating
             case contentRating
             case media = "Media"
             case externalGuids = "Guid"
