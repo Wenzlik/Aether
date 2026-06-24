@@ -359,16 +359,29 @@ struct RemuxEngineRoutingTests {
         #expect(resolver.resolve(d) == .vlc)
     }
 
-    @Test("MKV with decodable-but-not-packageable audio (E-AC-3) falls to VLC")
+    @Test("MKV with decodable-but-not-packageable audio (MP3) falls to VLC")
     func nonPackageableAudioToVLC() {
-        // E-AC-3 is AVFoundation-decodable, but the muxer can't build an ec-3
-        // sample entry yet — remuxing would drop the audio. Route to VLC, not
-        // to silent-video remux.
-        let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [.eac3])
-        #expect(AudioCodec.eac3.isAVFoundationDecodable)        // decodable…
-        #expect(!AudioCodec.eac3.isRemuxPackageable)            // …but not packageable yet
+        // MP3 is AVFoundation-decodable, but the muxer doesn't build an MP3
+        // sample entry — remuxing would drop the audio. Route to VLC, not to
+        // silent-video remux. (AC-3 / E-AC-3 used to live here too, but are now
+        // packageable — see `dolbyAudioRemuxes`.)
+        let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [.mp3])
+        #expect(AudioCodec.mp3.isAVFoundationDecodable)        // decodable…
+        #expect(!AudioCodec.mp3.isRemuxPackageable)            // …but not packageable
         #expect(!RemuxEngine().canPlay(d))
         #expect(resolver.resolve(d) == .vlc)
+    }
+
+    @Test("MKV with AC-3 / E-AC-3 audio is packageable → remux (#499)")
+    func dolbyAudioRemuxes() {
+        // (E-)AC-3 now gets an ac-3/ec-3 sample entry with a dac3/dec3 box
+        // synthesised from the bitstream, so it remuxes to AVPlayer.
+        for codec in [AudioCodec.ac3, .eac3] {
+            #expect(codec.isRemuxPackageable)
+            let d = MediaDescriptor(container: "mkv", videoCodec: .h264, audioCodecs: [codec])
+            #expect(RemuxEngine().canPlay(d))
+            #expect(resolver.resolve(d) == .remux)
+        }
     }
 
     @Test("MKV with unknown codecs (un-probed) stays on VLC — today's behaviour")
