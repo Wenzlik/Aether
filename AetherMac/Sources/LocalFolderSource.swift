@@ -21,6 +21,10 @@ actor LocalFolderSource: MediaSource {
     private let content: [URL: SMBRootContent]
     private let tmdb: TMDbClient?
     private var scanned: Scan?
+    /// On-device watched keys (file paths), loaded once per scan and updated in
+    /// place on toggle — SMB/local have no server play state. Shared store with
+    /// the iOS SMB source (`SMBWatchedStore`).
+    private var watchedKeys: Set<String> = []
 
     private static let overridesKey = "localLibrary.tmdbOverrides"
 
@@ -125,11 +129,11 @@ actor LocalFolderSource: MediaSource {
     private struct RawMovie { let title: String; let year: Int?; let url: URL; let path: String }
 
     /// One enumerated video file plus the signals the folder-role classifier
-    /// needs (the folder path leading to it + a per-filename episode guess +
+    /// needs (the folder path leading to it + the shared `TitleInference` parse +
     /// the configured root's content choice).
     private struct RawFile {
-        let url: URL, path: String, stem: String
-        let episode: Episode?
+        let url: URL, path: String
+        let inference: TitleInference
         let folderComponents: [String]
         let content: SMBRootContent
     }
@@ -138,8 +142,11 @@ actor LocalFolderSource: MediaSource {
         if let scanned { return scanned }
         var result = Scan()
         let fm = FileManager.default
+        watchedKeys = await SMBWatchedStore.shared.watchedKeys()
 
-        // First pass — enumerate every video file under each folder.
+        // First pass — enumerate every video file and parse each name with the
+        // shared `TitleInference` (same parser the iOS SMB source uses), feeding
+        // it the enclosing folder names for Season-folder + title fallback hints.
         var raws: [RawFile] = []
         for folder in folders {
             let rootContent = content[folder] ?? .both
@@ -147,11 +154,11 @@ actor LocalFolderSource: MediaSource {
                                   options: [.skipsHiddenFiles])
             while let url = e?.nextObject() as? URL {
                 guard Self.videoExtensions.contains(url.pathExtension.lowercased()) else { continue }
-                let stem = url.deletingPathExtension().lastPathComponent
+                let folderComponents = url.deletingLastPathComponent().pathComponents
                 raws.append(RawFile(
-                    url: url, path: url.path, stem: stem,
-                    episode: Self.parseEpisode(stem),
-                    folderComponents: url.deletingLastPathComponent().pathComponents,
+                    url: url, path: url.path,
+                    inference: TitleInference(filename: url.lastPathComponent, pathComponents: folderComponents),
+                    folderComponents: folderComponents,
                     content: rootContent
                 ))
             }
@@ -162,30 +169,35 @@ actor LocalFolderSource: MediaSource {
         // every file into one show and a movies folder never fragments into bogus
         // shows. `.both` auto-detects; `.movies`/`.series` force the role.
         let roles = SMBFolderClassifier.classify(raws.map {
-            .init(folderComponents: $0.folderComponents, isEpisode: $0.episode != nil, content: $0.content)
+            .init(folderComponents: $0.folderComponents, isEpisode: $0.inference.isEpisode, content: $0.content)
         })
 
         var rawMovies: [RawMovie] = []
         var showNames: [String: String] = [:]   // seriesKey → display name
         for (raw, role) in zip(raws, roles) {
             if role.isEpisode {
-                let seriesKey = role.seriesKey ?? raw.episode?.series ?? raw.stem
-                let display = role.seriesName ?? raw.episode?.series ?? seriesKey
-                let epTitle = raw.episode?.title ?? ""
+                let fallbackName = raw.inference.title.isEmpty
+                    ? raw.url.deletingPathExtension().lastPathComponent : raw.inference.title
+                let seriesKey = role.seriesKey ?? fallbackName
+                let display = role.seriesName ?? fallbackName
                 let item = MediaItem(
                     id: .init(source: id, rawValue: raw.path),
-                    title: epTitle.isEmpty ? raw.stem : epTitle,
-                    kind: .episode, streamURL: raw.url,
+                    title: Self.episodeDisplayTitle(raw.inference),
+                    kind: .episode,
+                    year: raw.inference.year,
+                    streamURL: raw.url,
+                    mediaInfo: Self.buildMediaInfo(url: raw.url, path: raw.path),
                     seriesTitle: display,
-                    seasonNumber: raw.episode?.season ?? 1,   // forced/unparsed → Season 1
-                    episodeNumber: raw.episode?.episode
+                    seasonNumber: raw.inference.season ?? 1,   // forced/unparsed → Season 1
+                    episodeNumber: raw.inference.episode,
+                    isWatched: watchedKeys.contains(raw.path)
                 )
                 result.episodesByShow[seriesKey, default: []].append(item)
                 result.byID[raw.path] = item
                 showNames[seriesKey] = display
             } else {
-                let movie = Self.parseMovie(raw.stem)
-                rawMovies.append(RawMovie(title: movie.title, year: movie.year, url: raw.url, path: raw.path))
+                rawMovies.append(RawMovie(title: raw.inference.title, year: raw.inference.year,
+                                          url: raw.url, path: raw.path))
             }
         }
 
@@ -206,6 +218,7 @@ actor LocalFolderSource: MediaSource {
     /// Build movie `MediaItem`s, looking up TMDb metadata in batches of 8.
     private func matched(_ raws: [RawMovie]) async -> [MediaItem] {
         let overrides = Self.loadOverrides()
+        let watched = watchedKeys
         var out: [MediaItem] = []
         for chunk in raws.chunked(8) {
             let items = await withTaskGroup(of: MediaItem.self) { group in
@@ -228,6 +241,7 @@ actor LocalFolderSource: MediaSource {
                             streamURL: r.url,
                             mediaInfo: Self.buildMediaInfo(url: r.url, path: r.path),
                             guids: MediaGuids(tmdb: meta.map { "\($0.tmdbID)" }),
+                            isWatched: watched.contains(r.path),
                             communityRating: meta?.rating
                         )
                     }
@@ -329,45 +343,37 @@ actor LocalFolderSource: MediaSource {
         return out.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
-    // MARK: Filename parsing
+    // MARK: Watched (local — no server play state, shared SMBWatchedStore)
 
-    private struct Episode { let series: String; let season: Int; let episode: Int; let title: String }
+    func markWatched(_ id: MediaID) async { await setWatchedLocal(id, true) }
+    func markUnwatched(_ id: MediaID) async { await setWatchedLocal(id, false) }
 
-    /// Parse `Show.Name.S01E02.Episode.Title` → series/season/episode/title.
-    private static func parseEpisode(_ stem: String) -> Episode? {
-        guard let m = try? NSRegularExpression(pattern: "^(.*?)[ ._-]*[sS](\\d{1,2})[ ._-]*[eE](\\d{1,2})(.*)$"),
-              let match = m.firstMatch(in: stem, range: NSRange(stem.startIndex..., in: stem)),
-              let seriesR = Range(match.range(at: 1), in: stem),
-              let seasonR = Range(match.range(at: 2), in: stem),
-              let episodeR = Range(match.range(at: 3), in: stem) else { return nil }
-        let series = clean(String(stem[seriesR]))
-        let season = Int(stem[seasonR]) ?? 0
-        let episode = Int(stem[episodeR]) ?? 0
-        var title = ""
-        if let titleR = Range(match.range(at: 4), in: stem) { title = clean(String(stem[titleR])) }
-        guard !series.isEmpty else { return nil }
-        return Episode(series: series, season: season, episode: episode, title: title)
-    }
-
-    /// Parse `Movie.Name.2021.1080p…` → title + year.
-    private static func parseMovie(_ stem: String) -> (title: String, year: Int?) {
-        if let m = try? NSRegularExpression(pattern: "^(.*?)[ ._(]+((?:19|20)\\d{2})\\b"),
-           let match = m.firstMatch(in: stem, range: NSRange(stem.startIndex..., in: stem)),
-           let titleR = Range(match.range(at: 1), in: stem),
-           let yearR = Range(match.range(at: 2), in: stem) {
-            let title = clean(String(stem[titleR]))
-            if !title.isEmpty { return (title, Int(stem[yearR])) }
+    /// Toggle watched for a file id (its raw value is the file path), persist to
+    /// the shared store, and patch the cached scan so the change shows without a
+    /// full rescan. Container ids (show/season) have no file and are no-ops here.
+    private func setWatchedLocal(_ id: MediaID, _ value: Bool) async {
+        let key = id.rawValue
+        await SMBWatchedStore.shared.setWatched(key, value)
+        if value { watchedKeys.insert(key) } else { watchedKeys.remove(key) }
+        guard var scan = scanned, let existing = scan.byID[key] else { return }
+        let updated = existing.markedWatched(value)
+        scan.byID[key] = updated
+        scan.movies = scan.movies.map { $0.id == id ? updated : $0 }
+        for (series, eps) in scan.episodesByShow {
+            scan.episodesByShow[series] = eps.map { $0.id == id ? updated : $0 }
         }
-        return (clean(stem), nil)
+        scanned = scan
     }
 
-    /// Turn `Some.Movie_Name` separators into spaces and tidy whitespace.
-    fileprivate static func clean(_ s: String) -> String {
-        s.replacingOccurrences(of: ".", with: " ")
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-            .replacingOccurrences(of: "  ", with: " ")
+    // MARK: Display
+
+    /// Episode row title: `S1E2` when numbered (parity with iOS SMB), else the
+    /// inferred title.
+    private static func episodeDisplayTitle(_ inference: TitleInference) -> String {
+        if let season = inference.season, let episode = inference.episode {
+            return "S\(season)E\(episode)"
+        }
+        return inference.title
     }
 }
 

@@ -279,7 +279,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         subtitleTracks: [MediaSubtitleTrack]? = nil,
         selectedSubtitleTrackID: String?? = nil,
         explicitTrackSelection: Bool?? = nil,
-        selectedQuality: PlaybackQuality? = nil
+        selectedQuality: PlaybackQuality? = nil,
+        isWatched: Bool? = nil
     ) -> MediaItem {
         MediaItem(
             id: id,
@@ -304,7 +305,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
             episodeNumber: episodeNumber,
             selectedQuality: selectedQuality ?? self.selectedQuality,
             guids: guids,
-            isWatched: isWatched,
+            isWatched: isWatched ?? self.isWatched,
             isFavorite: isFavorite,
             parentID: parentID,
             genres: genres,
@@ -363,6 +364,13 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// Play priority; everything else biases the request toward a transcode.
     public func selectingQuality(_ quality: PlaybackQuality) -> MediaItem {
         copy(selectedQuality: quality)
+    }
+
+    /// Return a copy with the watched flag toggled — for on-device sources
+    /// (Local Library, SMB) that track watched state themselves and patch their
+    /// cached items when the user marks something watched.
+    public func markedWatched(_ value: Bool) -> MediaItem {
+        copy(isWatched: value)
     }
 
     public enum Kind: String, Sendable, Hashable {
