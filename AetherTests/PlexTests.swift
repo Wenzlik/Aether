@@ -266,13 +266,19 @@ struct PlexSignInViewModelTests {
             data: Data(#"{"id":1,"code":"AAAA","authToken":"the-token","expiresAt":"2099-01-01T00:00:00Z"}"#.utf8),
             statusCode: 200, headers: [:]
         ))
+        // home/users: no Plex Home → sign in as the account (single working token).
+        await api.enqueue(.init(
+            data: Data(#"{"users":[]}"#.utf8),
+            statusCode: 200, headers: [:]
+        ))
 
         let auth = PlexAuthClient(api: api, configuration: Self.config)
-        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
+        let home = PlexHomeClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, homeClient: home, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
 
         vm.start()
         try await waitFor({ vm.state }) { state in
-            if case .success(token: "the-token") = state { return true }
+            if case .success(let result) = state, result.token == "the-token" { return true }
             return false
         }
     }
@@ -290,7 +296,8 @@ struct PlexSignInViewModelTests {
         ))
 
         let auth = PlexAuthClient(api: api, configuration: Self.config)
-        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
+        let home = PlexHomeClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, homeClient: home, pollInterval: .milliseconds(10), pollTimeout: .seconds(2))
 
         vm.start()
         try await waitFor({ vm.state }) { state in
@@ -315,7 +322,8 @@ struct PlexSignInViewModelTests {
         ))
 
         let auth = PlexAuthClient(api: api, configuration: Self.config)
-        let vm = PlexSignInViewModel(authClient: auth, pollInterval: .seconds(5), pollTimeout: .seconds(10))
+        let home = PlexHomeClient(api: api, configuration: Self.config)
+        let vm = PlexSignInViewModel(authClient: auth, homeClient: home, pollInterval: .seconds(5), pollTimeout: .seconds(10))
 
         vm.start()
         try await waitFor({ vm.state }) { state in
