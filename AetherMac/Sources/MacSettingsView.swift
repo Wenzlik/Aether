@@ -34,20 +34,20 @@ private struct AccountsSettings: View {
     @State private var signIn: SignIn?
     @State private var showPlexPicker = false
 
-    private enum SignIn: String, Identifiable { case plex, jellyfin, emby; var id: String { rawValue } }
+    private enum SignIn: String, Identifiable { case plex, jellyfin, emby, smb; var id: String { rawValue } }
 
     private var isPlexConnected: Bool { session.isPlexConnected }
     private var isJellyfinConnected: Bool { session.jellyfinServerName != nil }
     private var isEmbyConnected: Bool { session.embyServerName != nil }
+    private var isSMBConnected: Bool { session.isSMBConnected }
 
-    private var hasConnectedSource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected }
-    private var hasAddableSource: Bool { !isPlexConnected || !isJellyfinConnected || !isEmbyConnected }
+    private var hasConnectedSource: Bool { isPlexConnected || isJellyfinConnected || isEmbyConnected || isSMBConnected }
 
     var body: some View {
         Form {
             if !hasConnectedSource {
                 Section {
-                    Text("No sources connected yet. Add Plex, Jellyfin, or Emby to start browsing your library.")
+                    Text("No sources connected yet. Add Plex, Jellyfin, Emby, or an SMB share to start browsing your library.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -98,21 +98,57 @@ private struct AccountsSettings: View {
                 }
             }
 
-            if hasAddableSource {
-                Section {
-                    Menu {
-                        if !isPlexConnected {
-                            Button("Plex") { signIn = .plex }
+            if isSMBConnected {
+                Section("SMB Shares") {
+                    ForEach(session.smbShares) { share in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Label(share.displayName, systemImage: "externaldrive.connected.to.line.below")
+                                if let error = session.smbMountErrors[share.id] {
+                                    Text(error).font(.caption).foregroundStyle(.orange)
+                                }
+                            }
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { share.contentChoice },
+                                set: { c in Task { await session.setSMBShareContent(share, c) } }
+                            )) {
+                                ForEach(SMBRootContent.allCases, id: \.self) { Text($0.macDisplayName).tag($0) }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                            Button(role: .destructive) {
+                                Task { await session.removeSMBShare(share) }
+                            } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.borderless)
                         }
-                        if !isJellyfinConnected {
-                            Button("Jellyfin") { signIn = .jellyfin }
-                        }
-                        if !isEmbyConnected {
-                            Button("Emby") { signIn = .emby }
-                        }
-                    } label: {
-                        Label("Add Source", systemImage: "plus")
                     }
+                    if session.smbMountErrors.values.contains(where: { !$0.isEmpty }) {
+                        Button("Reconnect", systemImage: "arrow.clockwise") {
+                            session.remountSMBShares()
+                        }
+                    }
+                    Text("SMB shares are mounted on this Mac and scanned for movies and shows, just like a local folder.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                Menu {
+                    if !isPlexConnected {
+                        Button("Plex") { signIn = .plex }
+                    }
+                    if !isJellyfinConnected {
+                        Button("Jellyfin") { signIn = .jellyfin }
+                    }
+                    if !isEmbyConnected {
+                        Button("Emby") { signIn = .emby }
+                    }
+                    // SMB shares can always be added — a Mac can mount several.
+                    Button("SMB Share") { signIn = .smb }
+                } label: {
+                    Label("Add Source", systemImage: "plus")
                 }
             }
 
@@ -126,6 +162,7 @@ private struct AccountsSettings: View {
             case .plex:     PlexSignInSheet(session: session) { signIn = nil }
             case .jellyfin: JellyfinSignInSheet(session: session) { signIn = nil }
             case .emby:     EmbySignInSheet(session: session) { signIn = nil }
+            case .smb:      SMBAddShareSheet(session: session) { signIn = nil }
             }
         }
         .sheet(isPresented: $showPlexPicker) {
@@ -175,6 +212,15 @@ private struct GeneralSettings: View {
                     HStack {
                         Label(url.lastPathComponent, systemImage: "folder")
                         Spacer()
+                        Picker("", selection: Binding(
+                            get: { session.localFolderContent[url.path] ?? .both },
+                            set: { session.setLocalFolderContent(url, $0) }
+                        )) {
+                            ForEach(SMBRootContent.allCases, id: \.self) { Text($0.macDisplayName).tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .fixedSize()
                         Button(role: .destructive) {
                             session.removeLocalFolder(url)
                         } label: { Image(systemName: "minus.circle") }

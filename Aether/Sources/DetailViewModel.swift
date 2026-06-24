@@ -177,6 +177,21 @@ final class DetailViewModel {
         resume = await resumeStore.point(for: activeItem.id)
     }
 
+    /// Persist playback progress for the VLCKit path (it has no built-in resume).
+    /// Near the end → finished (clear the point so it leaves Continue Watching);
+    /// otherwise record the position. Keyed by the played item's id.
+    func recordPlaybackProgress(itemID: MediaID, seconds: Double, total: Double) async {
+        guard total > 0, seconds > 0 else { return }
+        if seconds / total >= 0.92 {
+            await resumeStore.clear(for: itemID)
+        } else if seconds > 5 {
+            await resumeStore.record(ResumePoint(mediaID: itemID, position: .seconds(seconds)))
+        }
+        if itemID == activeItem.id {
+            resume = await resumeStore.point(for: itemID)
+        }
+    }
+
     private func loadChildrenIfNeeded() async {
         guard activeItem.kind.isContainer, let source, children.isEmpty else { return }
         isLoadingChildren = true

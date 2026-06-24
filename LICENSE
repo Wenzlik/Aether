@@ -1,21 +1,69 @@
-MIT License
+Aether — Proprietary Software License
 
-Copyright (c) 2026 Wenzlik
+Copyright © 2026 Vašek Zmrhal. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+"Aether" and the Aether name, logo, icon, and brand assets are trademarks of
+Vašek Zmrhal and are not licensed under this agreement.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Source availability
+   The source code of Aether (the "Software") is published for transparency and
+   reference only. Publication does not place the Software in the public domain
+   and does not grant any open-source license.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Grant
+   You are granted a limited, non-exclusive, non-transferable, revocable
+   permission to view and study this source code, and to build it locally for
+   your own personal, non-commercial evaluation. No other rights are granted.
+
+3. Restrictions
+   Except as expressly permitted in Section 2, you may not:
+   (a) copy, reproduce, or store the Software other than as strictly necessary
+       to view it;
+   (b) modify, adapt, translate, or create derivative works of the Software;
+   (c) redistribute, publish, sublicense, sell, rent, lease, or otherwise make
+       the Software (in source or binary form, in whole or in part) available
+       to any third party;
+   (d) use the Software, in whole or in part, to build, train, or operate any
+       product or service — whether or not commercial — including any product
+       or service that competes with Aether;
+   (e) remove, obscure, or alter any copyright, trademark, or other proprietary
+       notice contained in the Software.
+
+4. Contributions
+   Any contribution you submit (for example, via a pull request) is offered to
+   the copyright holder under the terms of this license, and you grant the
+   copyright holder a perpetual, worldwide, royalty-free, irrevocable license
+   to use, reproduce, modify, distribute, and otherwise exploit that
+   contribution as part of the Software. The copyright holder is under no
+   obligation to accept or use any contribution.
+
+5. Third-party components
+   The Software incorporates or links third-party components (including, among
+   others, libmpv, FFmpeg, libass, and VLCKit) that are licensed separately by
+   their respective authors under their own terms (for example, the GPL or
+   LGPL). Nothing in this license modifies, supersedes, or restricts your
+   rights or obligations under those third-party licenses with respect to those
+   components; each such component remains governed solely by its own license.
+
+6. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+7. Limitation of liability
+   IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+   ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+8. Termination
+   The permission in Section 2 terminates automatically if you breach any term
+   of this license. Upon termination you must cease all use of the Software and
+   destroy any copies in your possession or control.
+
+9. Reservation of rights
+   All rights not expressly granted in this license are reserved by the
+   copyright holder.
+
+For any other use — including commercial licensing or distribution rights —
+contact: vasek@aetherplayer.com

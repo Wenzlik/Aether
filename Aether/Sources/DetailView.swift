@@ -508,7 +508,13 @@ struct DetailView: View {
                 options: playback.options,
                 mediaTitle: current.title,
                 preferredAudioLanguage: playbackPreferences?.defaultAudioLanguage,
-                preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage
+                preferredSubtitleLanguage: playbackPreferences?.defaultSubtitleLanguage,
+                resumeAtSeconds: playback.resumeAt,
+                onProgress: { seconds, total in
+                    if let id = playback.itemID {
+                        Task { await viewModel.recordPlaybackProgress(itemID: id, seconds: seconds, total: total) }
+                    }
+                }
             ) { vlcPlayback = nil }
                 .ignoresSafeArea()
         }
@@ -548,6 +554,10 @@ struct DetailView: View {
         let url: URL
         /// VLCKit media options (SMB credentials + caching) — empty for local files.
         var options: [String] = []
+        /// The played item's id (to key its resume point).
+        var itemID: MediaID? = nil
+        /// Resume position in seconds (nil = from the start).
+        var resumeAt: Double? = nil
     }
 
     /// Identifies a local MKV played through the AVFoundation remux path (#476).
@@ -578,6 +588,13 @@ struct DetailView: View {
         await viewModel.ensureConfiguredForPlayback()
         playbackItem = current
 
+        // Resume context for the VLCKit path (it has no built-in resume): the
+        // played item's id + the saved position (unless the user forced a restart).
+        let vlcItemID = current.id
+        let vlcResumeAt: Double? = fromStart
+            ? nil
+            : viewModel.resume.map { Double($0.position.components.seconds) }
+
         // Prefer a completed local download over any server stream — play the
         // bytes the user already has (works offline, and saves bandwidth even
         // when online). Pick the engine from the *downloaded file's* container,
@@ -602,7 +619,7 @@ struct DetailView: View {
                     return
                 }
                 // Local file — no SMB credentials / caching options needed.
-                vlcPlayback = VLCPlayback(url: localURL)
+                vlcPlayback = VLCPlayback(url: localURL, itemID: vlcItemID, resumeAt: vlcResumeAt)
                 return
             }
             // `.system` container (mp4/m4v/…): the windowed AVPlayer path's
@@ -623,18 +640,17 @@ struct DetailView: View {
                 if let proxyURL = await smbSource.proxyURL(for: rawURL) {
                     if VideoEngineResolver.standard.engine(for: proxyURL) == .vlc {
                         // #476: try the AVFoundation remux path for an SMB MKV whose
-                        // codecs AVFoundation can decode (H.264/HEVC + AAC) — native
-                        // transport, resume, audio/subtitle menus, no VLCKit. The
-                        // asset parses the MKV over SMB off the main thread; it
-                        // returns nil when not remuxable, so we fall back to VLCKit
-                        // over HTTP and nothing regresses.
+                        // codecs AVFoundation can decode — native transport, resume,
+                        // audio/subtitle menus, no VLCKit. The asset parses the MKV
+                        // over SMB off the main thread; it returns nil when not
+                        // remuxable, so we fall back to VLCKit over HTTP (with resume).
                         if remuxLocalMKVEnabled,
                            let remux = await Self.makeSMBRemuxAsset(proxyURL: proxyURL) {
                             remuxPlayback = RemuxPlayback(asset: remux)
                             return
                         }
                         // mkv / avi / ts not remuxable — still VLCKit, but over HTTP.
-                        vlcPlayback = VLCPlayback(url: proxyURL)
+                        vlcPlayback = VLCPlayback(url: proxyURL, itemID: vlcItemID, resumeAt: vlcResumeAt)
                         return
                     }
                     // mp4 / m4v over SMB → AVPlayer via proxy (fast path).
@@ -646,11 +662,11 @@ struct DetailView: View {
                     return
                 }
                 // Proxy failed — fall back to direct smb:// with credentials.
-                vlcPlayback = VLCPlayback(url: rawURL, options: smbSource.vlcMediaOptions)
+                vlcPlayback = VLCPlayback(url: rawURL, options: smbSource.vlcMediaOptions, itemID: vlcItemID, resumeAt: vlcResumeAt)
                 return
             }
             // Local files (non-SMB smb-scheme files don't exist, but guard anyway).
-            vlcPlayback = VLCPlayback(url: rawURL)
+            vlcPlayback = VLCPlayback(url: rawURL, itemID: vlcItemID, resumeAt: vlcResumeAt)
             return
         }
 
