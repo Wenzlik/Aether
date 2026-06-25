@@ -197,6 +197,54 @@ public actor JellyfinMediaSource: MediaSource {
         _ = try? await api.data(for: request)
     }
 
+    // MARK: - Identify (#identify)
+
+    /// Ask the server's metadata providers for matches for a mis- or
+    /// unidentified item — the same lookup the web "Identify" dialog runs.
+    /// `POST /Items/RemoteSearch/Movie` (or `/Series`). Unlike most calls here
+    /// this **throws**: the UI needs to distinguish "no matches" from "the
+    /// request failed" (e.g. a non-admin token gets 403). `name`/`year` are the
+    /// cleaned query (caller runs `TitleInference` over the raw title first).
+    public func identifyCandidates(
+        for id: MediaID,
+        kind: MediaItem.Kind,
+        name: String,
+        year: Int?
+    ) async throws -> [JellyfinAPI.RemoteSearchResult] {
+        let path = kind == .show ? "/Items/RemoteSearch/Series" : "/Items/RemoteSearch/Movie"
+        var request = makeRequest(path: path)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let query = JellyfinAPI.RemoteSearchQuery(
+            itemId: id.rawValue,
+            searchInfo: .init(name: name, year: year)
+        )
+        request.httpBody = try JSONEncoder().encode(query)
+        return try await api.decode([JellyfinAPI.RemoteSearchResult].self, from: request, decoder: decoder)
+    }
+
+    /// Apply a chosen candidate: `POST /Items/RemoteSearch/Apply/{itemId}` sends
+    /// the result back, and the server pulls full metadata + artwork from its
+    /// `providerIds` and refreshes the item — the title is now matched server-side
+    /// for every client. Throws so the UI can report a failure.
+    public func applyIdentification(
+        _ id: MediaID,
+        result: JellyfinAPI.RemoteSearchResult,
+        replaceImages: Bool = true
+    ) async throws {
+        var request = makeRequest(
+            path: "/Items/RemoteSearch/Apply/\(id.rawValue)",
+            queryItems: [URLQueryItem(name: "replaceAllImages", value: replaceImages ? "true" : "false")]
+        )
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(result)
+        let (_, response) = try await api.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw APIClientError.unexpectedStatus(response.statusCode)
+        }
+    }
+
     /// Skip segments via Jellyfin's MediaSegments API (10.10+). Returns `[]` on
     /// older servers / no data — skip controls then stay hidden.
     public func segments(for id: MediaID) async -> [PlaybackSegment] {

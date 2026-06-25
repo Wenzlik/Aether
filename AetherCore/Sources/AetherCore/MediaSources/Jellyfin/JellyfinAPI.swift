@@ -62,6 +62,85 @@ public enum JellyfinAPI {
         }
     }
 
+    // MARK: - Identify (RemoteSearch)
+
+    /// Body for `POST /Items/RemoteSearch/Movie` (or `/Series`) — asks the
+    /// server's metadata providers (TMDb, etc.) for matches, the same call the
+    /// web "Identify" dialog makes. The server uses `ItemId` to scope providers
+    /// and `SearchInfo` (a cleaned name + optional year) as the query.
+    public struct RemoteSearchQuery: Encodable, Sendable {
+        public var searchInfo: SearchInfo
+        public var itemId: String
+        public var includeDisabledProviders: Bool
+
+        public struct SearchInfo: Encodable, Sendable {
+            public var name: String
+            public var year: Int?
+
+            public init(name: String, year: Int?) {
+                self.name = name
+                self.year = year
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case name = "Name"
+                case year = "Year"
+            }
+        }
+
+        public init(itemId: String, searchInfo: SearchInfo, includeDisabledProviders: Bool = true) {
+            self.itemId = itemId
+            self.searchInfo = searchInfo
+            self.includeDisabledProviders = includeDisabledProviders
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case searchInfo = "SearchInfo"
+            case itemId = "ItemId"
+            case includeDisabledProviders = "IncludeDisabledProviders"
+        }
+    }
+
+    /// One candidate returned by RemoteSearch. It's **`Codable`** because the
+    /// chosen result is sent back verbatim to `POST /Items/RemoteSearch/Apply/
+    /// {itemId}`, which fetches full metadata from `providerIds` and refreshes
+    /// the item — exactly what the web dialog does. We model the fields the Apply
+    /// call needs plus what the picker shows (poster, year, overview, provider).
+    public struct RemoteSearchResult: Codable, Sendable, Equatable, Identifiable {
+        public var name: String? = nil
+        public var productionYear: Int? = nil
+        public var imageURL: String? = nil
+        public var overview: String? = nil
+        public var searchProviderName: String? = nil
+        public var premiereDate: String? = nil
+        public var indexNumber: Int? = nil
+        public var parentIndexNumber: Int? = nil
+        public var providerIds: [String: String]? = nil
+
+        public init() {}
+
+        /// Stable identity for the picker — provider ids are unique per candidate;
+        /// fall back to name+year when a provider returns none.
+        public var id: String {
+            if let providerIds, !providerIds.isEmpty {
+                return providerIds.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+            }
+            return "\(name ?? "?")-\(productionYear.map(String.init) ?? "?")"
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name = "Name"
+            case productionYear = "ProductionYear"
+            case imageURL = "ImageUrl"
+            case overview = "Overview"
+            case searchProviderName = "SearchProviderName"
+            case premiereDate = "PremiereDate"
+            case indexNumber = "IndexNumber"
+            case parentIndexNumber = "ParentIndexNumber"
+            case providerIds = "ProviderIds"
+        }
+    }
+
     // MARK: - Items
 
     /// `GET /Users/{id}/Items` and `/Users/{id}/Views` wrap items in this.

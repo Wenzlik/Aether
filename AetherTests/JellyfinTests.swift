@@ -446,3 +446,92 @@ struct JellyfinMediaSegmentsTests {
         #expect(segs[0].kind == .intro)
     }
 }
+
+@Suite("Jellyfin — identify (RemoteSearch)")
+struct JellyfinIdentifyTests {
+    private let base = URL(string: "http://jelly.test:8096")!
+
+    private func makeSource(api: any APIClient) -> JellyfinMediaSource {
+        JellyfinMediaSource(
+            serverID: "http://jelly.test:8096",
+            displayName: "Den",
+            baseURL: base,
+            accessToken: "tok",
+            userID: "u1",
+            configuration: JellyfinConfiguration(client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"),
+            api: api
+        )
+    }
+
+    @Test("identifyCandidates POSTs to the Movie endpoint with name+year and parses results")
+    func searchMovies() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        [{"Name":"Dune","ProductionYear":2021,"ImageUrl":"http://img/x.jpg",
+          "Overview":"Paul.","SearchProviderName":"TheMovieDb","ProviderIds":{"Tmdb":"438631","Imdb":"tt1160419"}}]
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        let results = try await source.identifyCandidates(for: id, kind: .movie, name: "Dune", year: 2021)
+
+        let first = try #require(results.first)
+        #expect(first.name == "Dune")
+        #expect(first.productionYear == 2021)
+        #expect(first.providerIds?["Tmdb"] == "438631")
+        #expect(first.id == "Imdb=tt1160419&Tmdb=438631")   // stable, provider-id derived
+
+        let request = try #require(await api.requests.first)
+        #expect(request.url?.path == "/Items/RemoteSearch/Movie")
+        #expect(request.httpMethod == "POST")
+        let body = try #require(request.httpBody)
+        let sent = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(sent?["ItemId"] as? String == "item42")
+        #expect((sent?["SearchInfo"] as? [String: Any])?["Name"] as? String == "Dune")
+        #expect((sent?["SearchInfo"] as? [String: Any])?["Year"] as? Int == 2021)
+    }
+
+    @Test("identifyCandidates routes shows to the Series endpoint")
+    func searchSeries() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("[]".utf8), statusCode: 200, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "s1")
+        _ = try await source.identifyCandidates(for: id, kind: .show, name: "Severance", year: nil)
+        #expect(await api.requests.first?.url?.path == "/Items/RemoteSearch/Series")
+    }
+
+    @Test("applyIdentification POSTs the chosen result to Apply/{itemId} with the provider ids")
+    func apply() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(), statusCode: 204, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        var result = JellyfinAPI.RemoteSearchResult()
+        result.name = "Dune"
+        result.productionYear = 2021
+        result.providerIds = ["Tmdb": "438631"]
+
+        try await source.applyIdentification(id, result: result)
+
+        let request = try #require(await api.requests.first)
+        #expect(request.url?.path == "/Items/RemoteSearch/Apply/item42")
+        #expect(request.url?.query?.contains("replaceAllImages=true") == true)
+        #expect(request.httpMethod == "POST")
+        let sent = try JSONSerialization.jsonObject(with: try #require(request.httpBody)) as? [String: Any]
+        #expect((sent?["ProviderIds"] as? [String: Any])?["Tmdb"] as? String == "438631")
+        #expect(sent?["Name"] as? String == "Dune")
+    }
+
+    @Test("applyIdentification throws on a non-2xx (e.g. a non-admin 403)")
+    func applyForbidden() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(), statusCode: 403, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        await #expect(throws: APIClientError.unexpectedStatus(403)) {
+            try await source.applyIdentification(id, result: JellyfinAPI.RemoteSearchResult())
+        }
+    }
+}
