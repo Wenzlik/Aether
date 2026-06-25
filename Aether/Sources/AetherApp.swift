@@ -701,6 +701,14 @@ final class AppSession {
         libraryRevision &+= 1
     }
 
+    /// Call after a server-side catalog mutation made from the app (e.g. a
+    /// Jellyfin identify changed a title's metadata) so Library / grid / Detail
+    /// surfaces drop the stale cached item and re-read the server's fresh state.
+    func libraryDidChangeExternally(kinds: [MediaItem.Kind] = [.movie, .show]) async {
+        await makeUnifiedLibrary().invalidate(kinds: kinds)
+        libraryRevision &+= 1
+    }
+
     /// Remove a title from Continue Watching on **every connected source** that
     /// has it, *without* marking it watched — backs the Home context-menu
     /// "Remove from Continue Watching" (#368). Reports a zero playhead so the

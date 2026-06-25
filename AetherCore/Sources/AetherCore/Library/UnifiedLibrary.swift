@@ -244,6 +244,16 @@ public actor UnifiedLibrary {
         await snapshotStore.clearAll()
     }
 
+    /// Drop the cached + persisted catalog for `kinds` so the next
+    /// `unifiedItems(kind:)` re-reads the server. Call after an external
+    /// server-side mutation made from the app (e.g. a Jellyfin identify changed
+    /// a title's metadata) so surfaces don't keep showing the stale item.
+    public func invalidate(kinds: [MediaItem.Kind]) async {
+        let keys = kinds.map { cacheKey(kind: $0) }
+        await UnifiedLibraryCache.shared.remove(for: keys)
+        await snapshotStore.clear(for: keys)
+    }
+
     /// Cache key for `unifiedItems(kind:)` — the kind plus the sorted connected
     /// source ids, so a different source set (sign-in/out, source switch) is a
     /// natural cache miss rather than serving another account's catalog.
