@@ -251,9 +251,38 @@ struct JellyfinSignInSheet: View {
                 TextField("https://jellyfin.example.com", text: $model.urlString)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 320)
-                Button("Connect") { model.connect() }
-                    .controlSize(.large)
-                    .disabled(model.urlString.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                Picker("Sign-in method", selection: $model.method) {
+                    Text("Quick Connect").tag(JellyfinQuickConnectModel.Method.quickConnect)
+                    Text("Username & password").tag(JellyfinQuickConnectModel.Method.password)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 320)
+
+                if model.method == .password {
+                    TextField("Username", text: $model.username)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 320)
+                    SecureField("Password", text: $model.password)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 320)
+                        .onSubmit { model.signInWithPassword() }
+                }
+
+                switch model.method {
+                case .quickConnect:
+                    Button("Connect") { model.connect() }
+                        .controlSize(.large)
+                        .disabled(model.urlString.trimmingCharacters(in: .whitespaces).isEmpty)
+                case .password:
+                    Button("Sign In") { model.signInWithPassword() }
+                        .controlSize(.large)
+                        .disabled(
+                            model.urlString.trimmingCharacters(in: .whitespaces).isEmpty
+                            || model.username.trimmingCharacters(in: .whitespaces).isEmpty
+                        )
+                }
             }
         case .connecting:
             ProgressView("Contacting server…")
@@ -397,8 +426,14 @@ final class JellyfinQuickConnectModel {
         case failed(String)
     }
 
+    /// Which sign-in flow the user picked.
+    enum Method: Hashable { case quickConnect, password }
+
     var urlString = ""
     var step: Step = .enterURL
+    var method: Method = .quickConnect
+    var username = ""
+    var password = ""
     /// Set once authenticated — the view watches it to finish + persist.
     var record: JellyfinServerRecord?
 
@@ -427,6 +462,33 @@ final class JellyfinQuickConnectModel {
                     userID: result.user.id,
                     serverName: info.serverName ?? baseURL.host ?? "Jellyfin"
                 )
+            } catch {
+                step = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Sign in with a username and password (`/Users/AuthenticateByName`) — the
+    /// alternative to Quick Connect, no code to approve.
+    func signInWithPassword() {
+        let raw = urlString.trimmingCharacters(in: .whitespaces)
+        let normalized = raw.contains("://") ? raw : "http://\(raw)"
+        guard let baseURL = URL(string: normalized) else { step = .failed("Invalid URL"); return }
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else { step = .failed("Enter your Jellyfin username."); return }
+        step = .connecting
+        Task {
+            do {
+                let info = try await auth.publicInfo(baseURL: baseURL)
+                let result = try await auth.authenticateByName(baseURL: baseURL, username: user, password: password)
+                record = JellyfinServerRecord(
+                    baseURLString: baseURL.absoluteString,
+                    accessToken: result.accessToken,
+                    userID: result.user.id,
+                    serverName: info.serverName ?? baseURL.host ?? "Jellyfin"
+                )
+            } catch JellyfinAuthError.invalidCredentials {
+                step = .failed("Wrong username or password. Check your details and try again.")
             } catch {
                 step = .failed(error.localizedDescription)
             }
