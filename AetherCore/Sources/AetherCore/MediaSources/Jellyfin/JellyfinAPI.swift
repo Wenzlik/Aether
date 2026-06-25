@@ -62,6 +62,46 @@ public enum JellyfinAPI {
         }
     }
 
+    // MARK: - PlaybackInfo
+
+    /// `POST /Items/{id}/PlaybackInfo` — the canonical "how do I play this?"
+    /// negotiation. We send a device profile; the server decides direct-play vs
+    /// transcode and hands back the exact, authorized URL (`TranscodingUrl`)
+    /// plus a `PlaySessionId`. Hand-built HLS URLs with `startTimeTicks` get
+    /// rejected as `NSURLErrorDomain -1008`, so resume playback must go through
+    /// this.
+    public struct PlaybackInfoResponse: Decodable, Sendable {
+        public let mediaSources: [MediaSourceInfo]
+        public let playSessionID: String?
+
+        public struct MediaSourceInfo: Decodable, Sendable {
+            public let id: String?
+            public let supportsDirectPlay: Bool?
+            public let supportsDirectStream: Bool?
+            public let supportsTranscoding: Bool?
+            /// Server-built HLS transcode URL (relative to the base URL). Present
+            /// when the server chose to transcode; already carries the offset,
+            /// PlaySessionId and api_key.
+            public let transcodingURL: String?
+            /// Direct-stream URL (relative) for remux/passthrough, when offered.
+            public let directStreamURL: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id = "Id"
+                case supportsDirectPlay = "SupportsDirectPlay"
+                case supportsDirectStream = "SupportsDirectStream"
+                case supportsTranscoding = "SupportsTranscoding"
+                case transcodingURL = "TranscodingUrl"
+                case directStreamURL = "DirectStreamUrl"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaSources = "MediaSources"
+            case playSessionID = "PlaySessionId"
+        }
+    }
+
     // MARK: - Items
 
     /// `GET /Users/{id}/Items` and `/Users/{id}/Views` wrap items in this.
