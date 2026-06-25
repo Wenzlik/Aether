@@ -331,6 +331,7 @@ public actor JellyfinMediaSource: MediaSource {
     }
 
     public func resolvePlayback(_ request: PlaybackRequest) async throws -> ResolvedPlayback {
+        let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
         switch request.mode {
         case .directPlay:
             // Hybrid (#68): the static direct-play stream ships the container
@@ -338,34 +339,134 @@ public actor JellyfinMediaSource: MediaSource {
             // reroutes to the transcoder, which muxes the chosen streams.
             // Default selections keep the cheaper direct play.
             if request.hasExplicitTrackSelection {
-                let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
-                if let url = transcodeURL(
-                    itemID: request.itemID.rawValue,
-                    audioStreamID: request.audioStreamID,
-                    subtitleStreamID: request.subtitleStreamID,
-                    offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
-                ) {
-                    return ResolvedPlayback(
-                        url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
-                        decision: .transcode
-                    )
-                }
+                return try await resolveTranscode(request, offsetSeconds: offsetSeconds)
             }
             guard let url = request.directPlayURL else { throw PlaybackResolveError.noPlayableStream }
             return ResolvedPlayback(url: url, isServerTranscode: false, baseOffsetSeconds: 0, decision: .directPlay)
 
         case .transcode:
-            let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
-            guard let url = transcodeURL(
-                itemID: request.itemID.rawValue,
-                audioStreamID: request.audioStreamID,
-                subtitleStreamID: request.subtitleStreamID,
-                offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
-            ) else {
-                throw PlaybackResolveError.noPlayableStream
-            }
-            return ResolvedPlayback(url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds)
+            return try await resolveTranscode(request, offsetSeconds: offsetSeconds)
         }
+    }
+
+    /// Resolve a transcode. **From zero** uses the hand-built HLS URL directly —
+    /// it's proven, has no extra round-trip, and (unlike the PlaybackInfo
+    /// TranscodingUrl) doesn't loop the first segments. **Resume** (offset > 0)
+    /// must negotiate via `PlaybackInfo`: a hand-built `master.m3u8?startTimeTicks`
+    /// is rejected by the server with `NSURLErrorDomain -1008`, so we ask the
+    /// server for the exact authorized `TranscodingUrl` (offset + `PlaySessionId`
+    /// baked in). PlaybackInfo failures fall back to the hand-built URL.
+    private func resolveTranscode(_ request: PlaybackRequest, offsetSeconds: Double) async throws -> ResolvedPlayback {
+        if offsetSeconds > 0,
+           let resolved = try? await playbackInfoTranscode(
+               itemID: request.itemID.rawValue,
+               offsetSeconds: offsetSeconds,
+               audioStreamID: request.audioStreamID,
+               subtitleStreamID: request.subtitleStreamID
+           ) {
+            return resolved
+        }
+        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS.
+        guard let url = transcodeURL(
+            itemID: request.itemID.rawValue,
+            audioStreamID: request.audioStreamID,
+            subtitleStreamID: request.subtitleStreamID,
+            offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
+        ) else {
+            throw PlaybackResolveError.noPlayableStream
+        }
+        return ResolvedPlayback(url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds, decision: .transcode)
+    }
+
+    /// `POST /Items/{id}/PlaybackInfo` → use the server's authorized URL. Returns
+    /// `nil`-free by throwing when the server offers no usable stream, so the
+    /// caller can fall back.
+    private func playbackInfoTranscode(
+        itemID: String,
+        offsetSeconds: Double,
+        audioStreamID: String?,
+        subtitleStreamID: String?
+    ) async throws -> ResolvedPlayback {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/Items/\(itemID)/PlaybackInfo"),
+            resolvingAgainstBaseURL: false
+        )!
+        var query = [
+            URLQueryItem(name: "UserId", value: userID),
+            URLQueryItem(name: "api_key", value: accessToken),
+            URLQueryItem(name: "MaxStreamingBitrate", value: "120000000"),
+            URLQueryItem(name: "MediaSourceId", value: itemID)
+        ]
+        if offsetSeconds > 0 {
+            query.append(URLQueryItem(name: "StartTimeTicks", value: String(Int64(offsetSeconds.rounded()) * 10_000_000)))
+        }
+        if let audioStreamID {
+            query.append(URLQueryItem(name: "AudioStreamIndex", value: audioStreamID))
+        }
+        if let subtitleStreamID, subtitleStreamID != "0" {
+            query.append(URLQueryItem(name: "SubtitleStreamIndex", value: subtitleStreamID))
+        }
+        components.queryItems = query
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (key, value) in configuration.commonHeaders(token: accessToken) {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        // Device profile: direct-play mp4/m4v/mov, otherwise transcode to HLS
+        // (h264/aac) so mkv etc. come back with a TranscodingUrl.
+        let deviceProfile: [String: Any] = [
+            "MaxStreamingBitrate": 120_000_000,
+            "DirectPlayProfiles": [
+                ["Container": "mp4,m4v,mov", "Type": "Video",
+                 "VideoCodec": "h264,hevc", "AudioCodec": "aac,mp3,ac3,eac3"]
+            ],
+            "TranscodingProfiles": [
+                ["Container": "ts", "Type": "Video", "Protocol": "hls",
+                 "VideoCodec": "h264", "AudioCodec": "aac,mp3",
+                 "Context": "Streaming", "MinSegments": 1]
+            ]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["DeviceProfile": deviceProfile])
+
+        let info = try await api.decode(JellyfinAPI.PlaybackInfoResponse.self, from: request, decoder: decoder)
+        guard let media = info.mediaSources.first else { throw PlaybackResolveError.noPlayableStream }
+
+        if let transcoding = media.transcodingURL, let url = absolutePlaybackURL(transcoding) {
+            return ResolvedPlayback(
+                url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+                transcodeSessionID: info.playSessionID, decision: .transcode
+            )
+        }
+        if let direct = media.directStreamURL, let url = absolutePlaybackURL(direct) {
+            return ResolvedPlayback(
+                url: url, isServerTranscode: false, baseOffsetSeconds: 0,
+                clientSeekSeconds: offsetSeconds > 0 ? offsetSeconds : nil, decision: .directPlay
+            )
+        }
+        throw PlaybackResolveError.noPlayableStream
+    }
+
+    /// Resolve a server-relative playback URL (`TranscodingUrl` / `DirectStreamUrl`)
+    /// against the connected base URL, preserving any reverse-proxy base path and
+    /// ensuring the `api_key` is present.
+    private func absolutePlaybackURL(_ relative: String) -> URL? {
+        guard var components = URLComponents(string: relative) else { return nil }
+        guard let base = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
+        components.scheme = base.scheme
+        components.host = base.host
+        components.port = base.port
+        let basePath = base.path
+        if !basePath.isEmpty, basePath != "/", !components.path.hasPrefix(basePath) {
+            components.path = basePath + components.path
+        }
+        var items = components.queryItems ?? []
+        if !items.contains(where: { $0.name.lowercased() == "api_key" }) {
+            items.append(URLQueryItem(name: "api_key", value: accessToken))
+        }
+        components.queryItems = items
+        return components.url
     }
 
     // MARK: - Downloads
