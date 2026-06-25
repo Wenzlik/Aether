@@ -132,7 +132,7 @@ struct JellyfinDecodingTests {
     }
 }
 
-@Suite("Jellyfin — Quick Connect flow")
+@Suite("Jellyfin — auth flow")
 struct JellyfinAuthFlowTests {
     private static let config = JellyfinConfiguration(
         client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"
@@ -153,6 +153,28 @@ struct JellyfinAuthFlowTests {
         )
         #expect(result.accessToken == "abc")
         #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName exchanges username/password for a token")
+    func passwordSignInSucceeds() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(#"{"AccessToken":"abc","ServerId":"s1","User":{"Id":"u1","Name":"me"}}"#.utf8), statusCode: 200, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        let result = try await client.authenticateByName(baseURL: base, username: "me", password: "pw")
+        #expect(result.accessToken == "abc")
+        #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName maps a 401 to invalidCredentials")
+    func passwordSignInRejectsBadCredentials() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("Unauthorized".utf8), statusCode: 401, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        await #expect(throws: JellyfinAuthError.invalidCredentials) {
+            try await client.authenticateByName(baseURL: base, username: "me", password: "wrong")
+        }
     }
 }
 
