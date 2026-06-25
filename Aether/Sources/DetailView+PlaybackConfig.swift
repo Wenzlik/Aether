@@ -114,6 +114,16 @@ extension DetailView {
                 presentedSelector = nil
                 localEditToken = UUID()   // re-hydrate Detail with the corrected match
             }
+        case .identifyJellyfin:
+            JellyfinIdentifySheet(
+                itemID: activeItem.id,
+                currentTitle: current.title,
+                currentYear: current.year,
+                kind: activeItem.kind == .show ? .show : .movie
+            ) {
+                presentedSelector = nil
+                localEditToken = UUID()   // re-hydrate Detail with the applied match
+            }
         #if !os(tvOS)
         case .editMetadata:
             LocalMetadataEditSheet(itemID: activeItem.id.rawValue) {

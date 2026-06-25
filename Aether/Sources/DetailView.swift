@@ -281,6 +281,7 @@ struct DetailView: View {
     enum PlaybackSelector: Identifiable {
         case audio, subtitles, quality, downloadQuality, technicalDetails
         case smbEditMetadata
+        case identifyJellyfin
         #if !os(tvOS)
         case editMetadata
         #endif
@@ -292,6 +293,7 @@ struct DetailView: View {
             case .downloadQuality: return "downloadQuality"
             case .technicalDetails: return "technicalDetails"
             case .smbEditMetadata: return "smbEditMetadata"
+            case .identifyJellyfin: return "identifyJellyfin"
             #if !os(tvOS)
             case .editMetadata: return "editMetadata"
             #endif
@@ -306,6 +308,12 @@ struct DetailView: View {
     /// Whether a source id is an SMB share (drives the title/year editor, #213).
     func isSMBSource(_ source: MediaSourceID) -> Bool {
         if case .smb = source { return true }
+        return false
+    }
+
+    /// Whether a source id is a Jellyfin server (drives the Identify action).
+    func isJellyfinSource(_ source: MediaSourceID) -> Bool {
+        if case .jellyfin = source { return true }
         return false
     }
 
