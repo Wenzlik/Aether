@@ -349,26 +349,24 @@ public actor JellyfinMediaSource: MediaSource {
         }
     }
 
-    /// Resolve a transcode through Jellyfin's `PlaybackInfo` negotiation, with a
-    /// fall back to a hand-built HLS URL.
-    ///
-    /// Why PlaybackInfo: a hand-built `master.m3u8?startTimeTicks=…` is rejected
-    /// by the server with `NSURLErrorDomain -1008` (from-zero works, resume does
-    /// not). `POST /Items/{id}/PlaybackInfo` with a device profile makes the
-    /// server pick the codecs and return the exact, authorized `TranscodingUrl`
-    /// (offset + `PlaySessionId` baked in) that actually plays. If that call
-    /// fails (older server / permissions), we fall back to the legacy URL so
-    /// from-zero playback still works.
+    /// Resolve a transcode. **From zero** uses the hand-built HLS URL directly —
+    /// it's proven, has no extra round-trip, and (unlike the PlaybackInfo
+    /// TranscodingUrl) doesn't loop the first segments. **Resume** (offset > 0)
+    /// must negotiate via `PlaybackInfo`: a hand-built `master.m3u8?startTimeTicks`
+    /// is rejected by the server with `NSURLErrorDomain -1008`, so we ask the
+    /// server for the exact authorized `TranscodingUrl` (offset + `PlaySessionId`
+    /// baked in). PlaybackInfo failures fall back to the hand-built URL.
     private func resolveTranscode(_ request: PlaybackRequest, offsetSeconds: Double) async throws -> ResolvedPlayback {
-        if let resolved = try? await playbackInfoTranscode(
-            itemID: request.itemID.rawValue,
-            offsetSeconds: offsetSeconds,
-            audioStreamID: request.audioStreamID,
-            subtitleStreamID: request.subtitleStreamID
-        ) {
+        if offsetSeconds > 0,
+           let resolved = try? await playbackInfoTranscode(
+               itemID: request.itemID.rawValue,
+               offsetSeconds: offsetSeconds,
+               audioStreamID: request.audioStreamID,
+               subtitleStreamID: request.subtitleStreamID
+           ) {
             return resolved
         }
-        // Fallback: legacy hand-built HLS. Works from zero; may -1008 on resume.
+        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS.
         guard let url = transcodeURL(
             itemID: request.itemID.rawValue,
             audioStreamID: request.audioStreamID,
