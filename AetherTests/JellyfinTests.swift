@@ -132,7 +132,7 @@ struct JellyfinDecodingTests {
     }
 }
 
-@Suite("Jellyfin — Quick Connect flow")
+@Suite("Jellyfin — auth flow")
 struct JellyfinAuthFlowTests {
     private static let config = JellyfinConfiguration(
         client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"
@@ -153,6 +153,28 @@ struct JellyfinAuthFlowTests {
         )
         #expect(result.accessToken == "abc")
         #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName exchanges username/password for a token")
+    func passwordSignInSucceeds() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(#"{"AccessToken":"abc","ServerId":"s1","User":{"Id":"u1","Name":"me"}}"#.utf8), statusCode: 200, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        let result = try await client.authenticateByName(baseURL: base, username: "me", password: "pw")
+        #expect(result.accessToken == "abc")
+        #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName maps a 401 to invalidCredentials")
+    func passwordSignInRejectsBadCredentials() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("Unauthorized".utf8), statusCode: 401, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        await #expect(throws: JellyfinAuthError.invalidCredentials) {
+            try await client.authenticateByName(baseURL: base, username: "me", password: "wrong")
+        }
     }
 }
 
@@ -533,5 +555,70 @@ struct JellyfinIdentifyTests {
         await #expect(throws: APIClientError.unexpectedStatus(403)) {
             try await source.applyIdentification(id, result: JellyfinAPI.RemoteSearchResult())
         }
+    }
+}
+
+@Suite("Jellyfin — PlaybackInfo resume")
+struct JellyfinPlaybackInfoTests {
+    private let base = URL(string: "http://jelly.test:8096")!
+
+    private func makeSource(api: any APIClient) -> JellyfinMediaSource {
+        JellyfinMediaSource(
+            serverID: "http://jelly.test:8096",
+            displayName: "Den",
+            baseURL: base,
+            accessToken: "tok",
+            userID: "u1",
+            configuration: JellyfinConfiguration(client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"),
+            api: api
+        )
+    }
+
+    private func transcodeItem() -> MediaItem {
+        // An .m3u8 streamURL makes `isServerTranscode` true → the transcode path.
+        MediaItem(
+            id: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "ep1"),
+            title: "Episode 1", kind: .episode,
+            streamURL: URL(string: "http://jelly.test:8096/Videos/ep1/master.m3u8?api_key=tok")!
+        )
+    }
+
+    @Test("Resume goes through PlaybackInfo and uses the server's TranscodingUrl")
+    func usesPlaybackInfo() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        {"MediaSources":[{"Id":"ep1","SupportsTranscoding":true,
+          "TranscodingUrl":"/videos/ep1/master.m3u8?api_key=tok&PlaySessionId=abc&VideoCodec=h264"}],
+         "PlaySessionId":"abc"}
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(item: transcodeItem(), startTime: .seconds(120))
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.transcodeSessionID == "abc")
+        let urlString = resolved.url.absoluteString
+        #expect(urlString.hasPrefix("http://jelly.test:8096/videos/ep1/master.m3u8"))
+        #expect(urlString.contains("PlaySessionId=abc"))
+
+        let req = try #require(await api.requests.first)
+        #expect(req.url?.path == "/Items/ep1/PlaybackInfo")
+        #expect(req.httpMethod == "POST")
+        #expect(req.url?.query?.contains("StartTimeTicks=1200000000") == true)
+    }
+
+    @Test("PlaybackInfo failure falls back to the hand-built HLS URL")
+    func fallsBackOnFailure() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("err".utf8), statusCode: 500, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(item: transcodeItem(), startTime: .seconds(120))
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.url.path == "/Videos/ep1/master.m3u8")   // legacy hand-built
     }
 }

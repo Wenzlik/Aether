@@ -5,9 +5,18 @@ import AetherCore
 /// code in the Jellyfin dashboard. Presented from the sign-in sheet when the
 /// user taps "Jellyfin" in Settings → Sources.
 struct JellyfinSignInView: View {
+    /// Which Jellyfin sign-in flow the user picked.
+    private enum SignInMethod: Hashable {
+        case quickConnect
+        case password
+    }
+
     @Bindable var session: AppSession
     @State private var viewModel: JellyfinSignInViewModel
     @State private var urlText: String = ""
+    @State private var method: SignInMethod = .quickConnect
+    @State private var username: String = ""
+    @State private var password: String = ""
 
     init(session: AppSession) {
         self.session = session
@@ -42,7 +51,7 @@ struct JellyfinSignInView: View {
                 Text("Connect Jellyfin")
                     .font(AetherDesign.Typography.heroTitle)
                     .foregroundStyle(AetherDesign.Palette.textPrimary)
-                Text("Enter your server address, then approve the code in Jellyfin.")
+                Text("Enter your server address, then sign in with Quick Connect or your username and password.")
                     .font(AetherDesign.Typography.metadata)
                     .foregroundStyle(AetherDesign.Palette.textSecondary)
             }
@@ -94,6 +103,17 @@ struct JellyfinSignInView: View {
                 .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
                 .foregroundStyle(AetherDesign.Palette.textPrimary)
 
+            Picker("Sign-in method", selection: $method) {
+                Text("Quick Connect").tag(SignInMethod.quickConnect)
+                Text("Username & password").tag(SignInMethod.password)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if method == .password {
+                credentialFields
+            }
+
             if let error {
                 Text(error)
                     .font(AetherDesign.Typography.metadata)
@@ -101,9 +121,41 @@ struct JellyfinSignInView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            AetherButton("Connect", systemImage: "arrow.right", role: .primary) {
-                viewModel.connect(to: urlText)
+            switch method {
+            case .quickConnect:
+                AetherButton("Connect", systemImage: "arrow.right", role: .primary) {
+                    viewModel.connect(to: urlText)
+                }
+            case .password:
+                AetherButton("Sign In", systemImage: "arrow.right", role: .primary) {
+                    viewModel.signInWithPassword(to: urlText, username: username, password: password)
+                }
             }
+        }
+    }
+
+    private var credentialFields: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            TextField("Username", text: $username)
+                .textContentType(.username)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .font(AetherDesign.Typography.body)
+                .padding(AetherDesign.Spacing.m)
+                .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+
+            SecureField("Password", text: $password)
+                .textContentType(.password)
+                .font(AetherDesign.Typography.body)
+                .padding(AetherDesign.Spacing.m)
+                .background(AetherDesign.Palette.surface, in: RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+                .onSubmit {
+                    viewModel.signInWithPassword(to: urlText, username: username, password: password)
+                }
         }
     }
 
