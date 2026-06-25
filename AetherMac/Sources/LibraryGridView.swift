@@ -445,18 +445,25 @@ struct LibraryBrowseView: View {
         defer { isLoading = false }
         let library = session.makeLibrary()
         let fresh: [UnifiedMediaItem]
+        let newShowIDs: Set<String>
         if let kind {
             fresh = await library.unifiedItems(kind: kind, forceRefresh: forceRefresh)
-            showIDs = []
+            newShowIDs = []
         } else {
             async let moviesTask = library.unifiedItems(kind: .movie, forceRefresh: forceRefresh)
             async let showsTask = library.unifiedItems(kind: .show, forceRefresh: forceRefresh)
             let (movies, shows) = await (moviesTask, showsTask)
             fresh = movies + shows
-            showIDs = Set(shows.map(\.id))
+            newShowIDs = Set(shows.map(\.id))
         }
         // Don't blank existing content on a transient empty result (iOS parity).
-        if !fresh.isEmpty || items.isEmpty { items = fresh }
+        // showIDs must move in lockstep with items — clobbering it to an empty
+        // set on an empty refresh would strand the Series toggle (the catalog
+        // stays, but every id falls out of the show set) until the next reload.
+        if !fresh.isEmpty || items.isEmpty {
+            items = fresh
+            showIDs = newShowIDs
+        }
         guard !forceRefresh else { return }
         // Stale-while-revalidate: the snapshot painted instantly above; refresh
         // quietly if it's past the freshness window.
