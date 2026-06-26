@@ -478,8 +478,10 @@ public actor JellyfinMediaSource: MediaSource {
            ) {
             return resolved
         }
-        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS.
-        guard let url = transcodeURL(
+        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS. Surface
+        // the baked PlaySessionId as the transcodeSessionID so teardown can stop
+        // the encoding instead of leaving it for the server to time out.
+        guard let built = transcodeURL(
             itemID: request.itemID.rawValue,
             audioStreamID: request.audioStreamID,
             subtitleStreamID: request.subtitleStreamID,
@@ -487,7 +489,10 @@ public actor JellyfinMediaSource: MediaSource {
         ) else {
             throw PlaybackResolveError.noPlayableStream
         }
-        return ResolvedPlayback(url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds, decision: .transcode)
+        return ResolvedPlayback(
+            url: built.url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+            transcodeSessionID: built.playSessionID, decision: .transcode
+        )
     }
 
     /// `POST /Items/{id}/PlaybackInfo` → use the server's authorized URL. Returns
@@ -581,6 +586,31 @@ public actor JellyfinMediaSource: MediaSource {
         return components.url
     }
 
+    /// Tear down a server-side transcode (`DELETE /Videos/ActiveEncodings`),
+    /// keyed by the same `deviceId` + `playSessionId` the transcode was started
+    /// with. Without this Jellyfin keeps the ffmpeg process alive until its own
+    /// idle timeout — wasted CPU after a track switch or an abrupt stop. Plex has
+    /// the equivalent `/transcode/universal/stop`; this brings Jellyfin to parity.
+    /// `sessionID` comes from `ResolvedPlayback.transcodeSessionID` (the hand-built
+    /// URL's PlaySessionId, or PlaybackInfo's). Best-effort + non-throwing.
+    public func stopTranscode(sessionID: String) async {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/Videos/ActiveEncodings"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "deviceId", value: configuration.deviceID),
+            URLQueryItem(name: "playSessionId", value: sessionID)
+        ]
+        guard let url = components?.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        for (key, value) in configuration.commonHeaders(token: accessToken) {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        _ = try? await api.data(for: request)
+    }
+
     // MARK: - Downloads
 
     /// Jellyfin supports downloads. Synchronous flag so Detail's Download
@@ -654,7 +684,9 @@ public actor JellyfinMediaSource: MediaSource {
         if let container = dto.container?.lowercased(), Self.directPlayContainers.contains(container) {
             return directStreamURL(itemID: dto.id, mediaSourceID: dto.mediaSourceID)
         }
-        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)
+        // The baked stream URL on a list item is just a playable candidate; its
+        // throwaway session isn't tracked (no teardown handle needed here).
+        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)?.url
     }
 
     private func directStreamURL(itemID: String, mediaSourceID: String?) -> URL? {
@@ -670,15 +702,18 @@ public actor JellyfinMediaSource: MediaSource {
         return components?.url
     }
 
-    /// Build a fresh HLS transcode URL. A new `PlaySessionId` every call so a
-    /// reaped server-side transcode can't resurface (same philosophy as the
-    /// Plex `session` regeneration that fixed -1008).
+    /// Build a fresh HLS transcode URL plus the `PlaySessionId` baked into it. A
+    /// new session every call so a reaped server-side transcode can't resurface
+    /// (same philosophy as the Plex `session` regeneration that fixed -1008), and
+    /// returning it lets `resolveTranscode` hand it back as the
+    /// `transcodeSessionID` so teardown can stop the encoding (`stopTranscode`).
     private func transcodeURL(
         itemID: String,
         audioStreamID: String?,
         subtitleStreamID: String?,
-        offsetSeconds: Double?
-    ) -> URL? {
+        offsetSeconds: Double?,
+        playSessionID: String = UUID().uuidString
+    ) -> (url: URL, playSessionID: String)? {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/Videos/\(itemID)/master.m3u8"),
             resolvingAgainstBaseURL: false
@@ -687,7 +722,7 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "MediaSourceId", value: itemID),
             URLQueryItem(name: "api_key", value: accessToken),
             URLQueryItem(name: "DeviceId", value: configuration.deviceID),
-            URLQueryItem(name: "PlaySessionId", value: UUID().uuidString),
+            URLQueryItem(name: "PlaySessionId", value: playSessionID),
             URLQueryItem(name: "VideoCodec", value: "h264"),
             URLQueryItem(name: "AudioCodec", value: "aac,mp3"),
             URLQueryItem(name: "TranscodingProtocol", value: "hls"),
@@ -706,7 +741,8 @@ public actor JellyfinMediaSource: MediaSource {
             queryItems.append(URLQueryItem(name: "startTimeTicks", value: String(Int64(offsetSeconds.rounded()) * 10_000_000)))
         }
         components?.queryItems = queryItems
-        return components?.url
+        guard let url = components?.url else { return nil }
+        return (url, playSessionID)
     }
 
     // MARK: - Images

@@ -287,6 +287,37 @@ struct JellyfinMediaSourceTests {
         #expect(resolved.isServerTranscode == false)
     }
 
+    @Test("from-zero transcode exposes its PlaySessionId as the transcodeSessionID")
+    func transcodeSurfacesSession() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let request = PlaybackRequest(
+            itemID: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "42"),
+            mode: .transcode
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        // The teardown handle must equal the session baked into the URL, so
+        // stopTranscode targets the encoding this URL actually started.
+        let session = try #require(resolved.transcodeSessionID)
+        let urlSession = URLComponents(url: resolved.url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "PlaySessionId" }?.value
+        #expect(session == urlSession)
+    }
+
+    @Test("stopTranscode issues DELETE /Videos/ActiveEncodings keyed by device + session")
+    func stopTranscodeTearsDown() async throws {
+        let api = RecordingAPIClient()
+        let source = makeSource(api: api)
+        await source.stopTranscode(sessionID: "sess-123")
+
+        let req = try #require(await api.requests.first)
+        #expect(req.httpMethod == "DELETE")
+        #expect(req.url?.path == "/Videos/ActiveEncodings")
+        let q = try #require(URLComponents(url: req.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(q.first { $0.name == "deviceId" }?.value == "dev-1")
+        #expect(q.first { $0.name == "playSessionId" }?.value == "sess-123")
+    }
+
     @Test("supports downloads; Original uses /Items/{id}/Download, caps use a progressive mp4")
     func downloads() async throws {
         let source = makeSource(api: RecordingAPIClient())
