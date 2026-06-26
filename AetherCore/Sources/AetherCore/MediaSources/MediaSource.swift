@@ -168,9 +168,11 @@ public protocol MediaSource: Sendable {
     /// Best-effort. Default: none.
     func items(withPerson person: MediaPerson) async -> [MediaItem]
 
-    /// Whether the source can filter a library by audio language **server-side**
-    /// (#295). Plex can (`?audioLanguage=`); Jellyfin carries audio tracks in its
-    /// list responses, so the unified layer filters it client-side instead.
+    /// Whether the source advertises server-side audio languages for **option
+    /// gathering** (#295). Plex does (`/audioLanguage` filter values). Jellyfin
+    /// leaves this `false` — its options come from the audio tracks its list
+    /// responses already carry — yet it *still* filters server-side per query
+    /// (see `items(in:audioLanguage:)`) on servers new enough to support it.
     /// Default: `false`.
     var supportsAudioLanguageFilter: Bool { get }
 

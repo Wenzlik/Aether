@@ -18,6 +18,11 @@ public actor JellyfinMediaSource: MediaSource {
     private let api: any APIClient
     private let decoder: JSONDecoder
 
+    /// Memoized result of the `/Items/Filters2` audio-language capability probe
+    /// (#295). `nil` = not yet probed; set once the server gives a definitive
+    /// answer. A failed probe stays `nil` so the next filter attempt retries.
+    private var cachedAudioFilterSupport: Bool?
+
     public init(
         serverID: String,
         displayName: String,
@@ -115,6 +120,65 @@ public actor JellyfinMediaSource: MediaSource {
         // This endpoint returns a single item, not a wrapped list.
         let dto = try await api.decode(JellyfinAPI.BaseItemDto.self, from: request, decoder: decoder)
         return mapItem(dto)
+    }
+
+    // MARK: - Audio-language filter (#295)
+
+    /// Server-side audio-language-filtered listing. Jellyfin gained a real
+    /// `?AudioLanguages=` filter in jellyfin/jellyfin#9787 (~10.11.x); on servers
+    /// that have it we filter server-side (parity with Plex, and the cheap path
+    /// for the Library audio chips' membership queries). Older servers silently
+    /// ignore the param and would return an *unfiltered* list dressed up as
+    /// filtered — so we gate on a capability probe and return `nil` when it's
+    /// unsupported, letting `UnifiedLibrary` fall back to client-side filtering.
+    public func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]? {
+        guard await supportsServerAudioFilter() else { return nil }
+
+        // The filter matches the stored 3-letter stream language exactly (OR
+        // across the list), so expand the canonical 2-letter key into every
+        // variant the server might hold (e.g. cs → cs,ces,cze).
+        let values = AudioLanguage.variants(of: code).joined(separator: ",")
+        let (sortBy, sortOrder) = Self.jellyfinSort(.default)
+        let request = makeRequest(
+            path: "/Users/\(userID)/Items",
+            queryItems: [
+                URLQueryItem(name: "ParentId", value: libraryID.rawValue),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+                URLQueryItem(name: "SortBy", value: sortBy),
+                URLQueryItem(name: "SortOrder", value: sortOrder),
+                URLQueryItem(name: "AudioLanguages", value: values)
+            ]
+        )
+        let response = try await api.decode(JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder)
+        return response.items.compactMap { mapItem($0) }
+    }
+
+    /// Whether this server supports the `?AudioLanguages=` filter, probed once
+    /// via `/Items/Filters2` and memoized. The facet's presence in the response
+    /// is the signal — it shipped in the same PR as the query param, so the two
+    /// are coupled. A probe that throws returns `false` *without* caching, so a
+    /// later attempt retries (a transient failure shouldn't permanently disable
+    /// the fast path).
+    private func supportsServerAudioFilter() async -> Bool {
+        if let cached = cachedAudioFilterSupport { return cached }
+        let request = makeRequest(
+            path: "/Items/Filters2",
+            queryItems: [
+                URLQueryItem(name: "UserId", value: userID),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series")
+            ]
+        )
+        guard let filters = try? await api.decode(
+            JellyfinAPI.QueryFiltersResponse.self, from: request, decoder: decoder
+        ) else {
+            return false   // transient — don't memoize, let the next attempt retry
+        }
+        let supported = filters.audioLanguages != nil
+        cachedAudioFilterSupport = supported
+        return supported
     }
 
     /// Mark watched on the server: `POST /Users/{userId}/PlayedItems/{itemId}`
