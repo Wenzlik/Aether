@@ -360,6 +360,8 @@ extension SettingsView {
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin),
                 isSigningOut: isSigningOutJellyfin,
                 onSetActive: { viewModel.setActive(.jellyfin); accountSheet = nil },
+                servers: viewModel.jellyfinServersList,
+                onRemoveServer: { id in Task { await viewModel.removeJellyfinServer(id) } },
                 onSignOut: { Task { await performSignOutJellyfin(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
@@ -371,6 +373,8 @@ extension SettingsView {
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.emby),
                 isSigningOut: isSigningOutEmby,
                 onSetActive: { viewModel.setActive(.emby); accountSheet = nil },
+                servers: viewModel.embyServersList,
+                onRemoveServer: { id in Task { await viewModel.removeEmbyServer(id) } },
                 onSignOut: { Task { await performSignOutEmby(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )

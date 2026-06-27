@@ -21,8 +21,18 @@ struct SourceAccountSheet: View {
     var activeProfileName: String? = nil
     /// When set, a **Switch Profile** row is shown (Plex Home). Opens the profile picker.
     var onSwitchProfile: (() -> Void)? = nil
+    /// Connected servers for a multi-server source (Jellyfin / Emby). When more
+    /// than one is present, each is listed with a Remove action; a single server
+    /// just shows the "Server" row above.
+    var servers: [ConnectedServer] = []
+    var onRemoveServer: ((String) -> Void)? = nil
     let onSignOut: () -> Void
     let onClose: () -> Void
+
+    struct ConnectedServer: Identifiable, Equatable {
+        let id: String
+        let name: String
+    }
 
     /// Sign Out is destructive and easy to hit by accident — gate it behind a
     /// confirmation (#441), matching the tvOS source-detail screen.
@@ -48,6 +58,19 @@ struct SourceAccountSheet: View {
                             value: nil,
                             action: onChooseServer
                         )
+                    }
+                }
+
+                if servers.count > 1, let onRemoveServer {
+                    AetherSettingsSection("Servers") {
+                        ForEach(servers) { server in
+                            AetherSettingsRow(
+                                label: server.name,
+                                description: "Remove this server — its titles leave your library.",
+                                systemImage: "minus.circle",
+                                actionRole: .destructive
+                            ) { onRemoveServer(server.id) }
+                        }
                     }
                 }
 

@@ -153,6 +153,13 @@ final class SettingsViewModel {
         isJellyfinSignedIn ? .connected : .notConnected
     }
 
+    /// Connected Jellyfin servers for the account sheet's remove list.
+    var jellyfinServersList: [SourceAccountSheet.ConnectedServer] {
+        session.jellyfinServers.map { .init(id: $0.baseURLString, name: $0.serverName) }
+    }
+
+    func removeJellyfinServer(_ id: String) async { await session.removeJellyfinServer(id) }
+
     var isEmbySignedIn: Bool { session.isEmbySignedIn }
 
     /// Trailing label for the Emby row: the server name, or "N servers" when
@@ -165,6 +172,13 @@ final class SettingsViewModel {
         default: return "\(servers.count) servers"
         }
     }
+
+    /// Connected Emby servers for the account sheet's remove list.
+    var embyServersList: [SourceAccountSheet.ConnectedServer] {
+        session.embyServers.map { .init(id: $0.baseURLString, name: $0.serverName) }
+    }
+
+    func removeEmbyServer(_ id: String) async { await session.removeEmbyServer(id) }
 
     var embySourceStatus: AetherStatus {
         isEmbySignedIn ? .connected : .notConnected
