@@ -25,14 +25,16 @@ extension SettingsView {
         .task { await loadSMBMatchSummary() }
         #if !os(tvOS)
         .confirmationDialog("Add Source", isPresented: $isAddingSource) {
-            if !viewModel.isPlexSignedIn {
-                Button("Plex") { viewModel.connect() }
+            // Plex supports several accounts — offer it even when signed in so a
+            // second account (and its servers) can be added.
+            Button(viewModel.isPlexSignedIn ? "Add Plex Account" : "Plex") { viewModel.connect() }
+            // Jellyfin / Emby support several servers — offer them even when one
+            // is already connected so a second server can be added.
+            Button(viewModel.isJellyfinSignedIn ? "Add Jellyfin Server" : "Jellyfin") {
+                viewModel.connectJellyfin()
             }
-            if !viewModel.isJellyfinSignedIn {
-                Button("Jellyfin") { viewModel.connectJellyfin() }
-            }
-            if !viewModel.isEmbySignedIn {
-                Button("Emby") { viewModel.connectEmby() }
+            Button(viewModel.isEmbySignedIn ? "Add Emby Server" : "Emby") {
+                viewModel.connectEmby()
             }
             if !viewModel.isSMBConnected {
                 Button("SMB") { viewModel.connectSMB() }
@@ -304,7 +306,9 @@ extension SettingsView {
     }
 
     private var hasAddableSource: Bool {
-        !viewModel.isPlexSignedIn || !viewModel.isJellyfinSignedIn || !viewModel.isEmbySignedIn || !viewModel.isSMBConnected
+        // Jellyfin / Emby can always take another server, so a source is always
+        // addable — the "Add Source" entry stays available.
+        true
     }
 
     /// The Plex multi-server manager (#325) — enable/disable servers and pick the
@@ -356,6 +360,8 @@ extension SettingsView {
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin),
                 isSigningOut: isSigningOutJellyfin,
                 onSetActive: { viewModel.setActive(.jellyfin); accountSheet = nil },
+                servers: viewModel.jellyfinServersList,
+                onRemoveServer: { id in Task { await viewModel.removeJellyfinServer(id) } },
                 onSignOut: { Task { await performSignOutJellyfin(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
@@ -367,6 +373,8 @@ extension SettingsView {
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.emby),
                 isSigningOut: isSigningOutEmby,
                 onSetActive: { viewModel.setActive(.emby); accountSheet = nil },
+                servers: viewModel.embyServersList,
+                onRemoveServer: { id in Task { await viewModel.removeEmbyServer(id) } },
                 onSignOut: { Task { await performSignOutEmby(); accountSheet = nil } },
                 onClose: { accountSheet = nil }
             )
