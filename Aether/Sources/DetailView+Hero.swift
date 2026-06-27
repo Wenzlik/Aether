@@ -172,7 +172,7 @@ extension DetailView {
         HStack(spacing: AetherDesign.Spacing.xs) {
             Text(metadataParts.joined(separator: " • "))
                 .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .foregroundStyle(.white.opacity(0.88))
             if let rating = current.contentRating {
                 metadataDot
                 contentRatingBadge(rating)
@@ -191,10 +191,13 @@ extension DetailView {
                 metadataDot
                 Text(inlineTechParts.joined(separator: " • "))
                     .font(AetherDesign.Typography.metadata)
-                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .foregroundStyle(.white.opacity(0.88))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The metadata line sits over the hero backdrop — keep it light (not the
+        // dim secondary grey) with a soft shadow so it reads over any artwork.
+        .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
     }
 
     /// Compact rating chip — star + value for community, label + value for TMDb.
@@ -210,14 +213,14 @@ extension DetailView {
             Text(String(format: "%.1f", value))
         }
         .font(AetherDesign.Typography.metadata)
-        .foregroundStyle(AetherDesign.Palette.textSecondary)
+        .foregroundStyle(.white.opacity(0.88))
     }
 
     /// The "•" separator used to splice the badge / tech tail into the line.
     private var metadataDot: some View {
         Text("•")
             .font(AetherDesign.Typography.metadata)
-            .foregroundStyle(AetherDesign.Palette.textTertiary)
+            .foregroundStyle(.white.opacity(0.5))
     }
 
     /// Resolution + HDR/DV + audio (codec + channels), folded into the metadata
@@ -248,12 +251,12 @@ extension DetailView {
     private func contentRatingBadge(_ rating: String) -> some View {
         Text(rating)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .foregroundStyle(.white.opacity(0.9))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(AetherDesign.Palette.textTertiary.opacity(0.6), lineWidth: 1)
+                    .stroke(.white.opacity(0.45), lineWidth: 1)
             )
     }
 
@@ -265,8 +268,9 @@ extension DetailView {
         if !current.genres.isEmpty {
             Text(current.genres.prefix(4).joined(separator: " • "))
                 .font(AetherDesign.Typography.metadata)
-                .foregroundStyle(AetherDesign.Palette.textTertiary)
+                .foregroundStyle(.white.opacity(0.72))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .shadow(color: .black.opacity(0.4), radius: 5, y: 1)
         }
     }
 
