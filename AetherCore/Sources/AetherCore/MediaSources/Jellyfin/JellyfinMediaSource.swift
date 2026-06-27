@@ -18,6 +18,11 @@ public actor JellyfinMediaSource: MediaSource {
     private let api: any APIClient
     private let decoder: JSONDecoder
 
+    /// Memoized result of the `/Items/Filters2` audio-language capability probe
+    /// (#295). `nil` = not yet probed; set once the server gives a definitive
+    /// answer. A failed probe stays `nil` so the next filter attempt retries.
+    private var cachedAudioFilterSupport: Bool?
+
     public init(
         serverID: String,
         displayName: String,
@@ -115,6 +120,65 @@ public actor JellyfinMediaSource: MediaSource {
         // This endpoint returns a single item, not a wrapped list.
         let dto = try await api.decode(JellyfinAPI.BaseItemDto.self, from: request, decoder: decoder)
         return mapItem(dto)
+    }
+
+    // MARK: - Audio-language filter (#295)
+
+    /// Server-side audio-language-filtered listing. Jellyfin gained a real
+    /// `?AudioLanguages=` filter in jellyfin/jellyfin#9787 (~10.11.x); on servers
+    /// that have it we filter server-side (parity with Plex, and the cheap path
+    /// for the Library audio chips' membership queries). Older servers silently
+    /// ignore the param and would return an *unfiltered* list dressed up as
+    /// filtered — so we gate on a capability probe and return `nil` when it's
+    /// unsupported, letting `UnifiedLibrary` fall back to client-side filtering.
+    public func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]? {
+        guard await supportsServerAudioFilter() else { return nil }
+
+        // The filter matches the stored 3-letter stream language exactly (OR
+        // across the list), so expand the canonical 2-letter key into every
+        // variant the server might hold (e.g. cs → cs,ces,cze).
+        let values = AudioLanguage.variants(of: code).joined(separator: ",")
+        let (sortBy, sortOrder) = Self.jellyfinSort(.default)
+        let request = makeRequest(
+            path: "/Users/\(userID)/Items",
+            queryItems: [
+                URLQueryItem(name: "ParentId", value: libraryID.rawValue),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+                URLQueryItem(name: "Fields", value: "Overview,MediaSources,MediaStreams,ProductionYear,ProviderIds,Genres,DateCreated,PremiereDate,EndDate,CommunityRating,ChildCount,RecursiveItemCount,Status,OfficialRating"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+                URLQueryItem(name: "SortBy", value: sortBy),
+                URLQueryItem(name: "SortOrder", value: sortOrder),
+                URLQueryItem(name: "AudioLanguages", value: values)
+            ]
+        )
+        let response = try await api.decode(JellyfinAPI.ItemsResponse.self, from: request, decoder: decoder)
+        return response.items.compactMap { mapItem($0) }
+    }
+
+    /// Whether this server supports the `?AudioLanguages=` filter, probed once
+    /// via `/Items/Filters2` and memoized. The facet's presence in the response
+    /// is the signal — it shipped in the same PR as the query param, so the two
+    /// are coupled. A probe that throws returns `false` *without* caching, so a
+    /// later attempt retries (a transient failure shouldn't permanently disable
+    /// the fast path).
+    private func supportsServerAudioFilter() async -> Bool {
+        if let cached = cachedAudioFilterSupport { return cached }
+        let request = makeRequest(
+            path: "/Items/Filters2",
+            queryItems: [
+                URLQueryItem(name: "UserId", value: userID),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series")
+            ]
+        )
+        guard let filters = try? await api.decode(
+            JellyfinAPI.QueryFiltersResponse.self, from: request, decoder: decoder
+        ) else {
+            return false   // transient — don't memoize, let the next attempt retry
+        }
+        let supported = filters.audioLanguages != nil
+        cachedAudioFilterSupport = supported
+        return supported
     }
 
     /// Mark watched on the server: `POST /Users/{userId}/PlayedItems/{itemId}`
@@ -414,8 +478,10 @@ public actor JellyfinMediaSource: MediaSource {
            ) {
             return resolved
         }
-        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS.
-        guard let url = transcodeURL(
+        // From zero (or PlaybackInfo unavailable): legacy hand-built HLS. Surface
+        // the baked PlaySessionId as the transcodeSessionID so teardown can stop
+        // the encoding instead of leaving it for the server to time out.
+        guard let built = transcodeURL(
             itemID: request.itemID.rawValue,
             audioStreamID: request.audioStreamID,
             subtitleStreamID: request.subtitleStreamID,
@@ -423,7 +489,10 @@ public actor JellyfinMediaSource: MediaSource {
         ) else {
             throw PlaybackResolveError.noPlayableStream
         }
-        return ResolvedPlayback(url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds, decision: .transcode)
+        return ResolvedPlayback(
+            url: built.url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+            transcodeSessionID: built.playSessionID, decision: .transcode
+        )
     }
 
     /// `POST /Items/{id}/PlaybackInfo` → use the server's authorized URL. Returns
@@ -517,6 +586,31 @@ public actor JellyfinMediaSource: MediaSource {
         return components.url
     }
 
+    /// Tear down a server-side transcode (`DELETE /Videos/ActiveEncodings`),
+    /// keyed by the same `deviceId` + `playSessionId` the transcode was started
+    /// with. Without this Jellyfin keeps the ffmpeg process alive until its own
+    /// idle timeout — wasted CPU after a track switch or an abrupt stop. Plex has
+    /// the equivalent `/transcode/universal/stop`; this brings Jellyfin to parity.
+    /// `sessionID` comes from `ResolvedPlayback.transcodeSessionID` (the hand-built
+    /// URL's PlaySessionId, or PlaybackInfo's). Best-effort + non-throwing.
+    public func stopTranscode(sessionID: String) async {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/Videos/ActiveEncodings"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "deviceId", value: configuration.deviceID),
+            URLQueryItem(name: "playSessionId", value: sessionID)
+        ]
+        guard let url = components?.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        for (key, value) in configuration.commonHeaders(token: accessToken) {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        _ = try? await api.data(for: request)
+    }
+
     // MARK: - Downloads
 
     /// Jellyfin supports downloads. Synchronous flag so Detail's Download
@@ -590,7 +684,9 @@ public actor JellyfinMediaSource: MediaSource {
         if let container = dto.container?.lowercased(), Self.directPlayContainers.contains(container) {
             return directStreamURL(itemID: dto.id, mediaSourceID: dto.mediaSourceID)
         }
-        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)
+        // The baked stream URL on a list item is just a playable candidate; its
+        // throwaway session isn't tracked (no teardown handle needed here).
+        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)?.url
     }
 
     private func directStreamURL(itemID: String, mediaSourceID: String?) -> URL? {
@@ -606,15 +702,18 @@ public actor JellyfinMediaSource: MediaSource {
         return components?.url
     }
 
-    /// Build a fresh HLS transcode URL. A new `PlaySessionId` every call so a
-    /// reaped server-side transcode can't resurface (same philosophy as the
-    /// Plex `session` regeneration that fixed -1008).
+    /// Build a fresh HLS transcode URL plus the `PlaySessionId` baked into it. A
+    /// new session every call so a reaped server-side transcode can't resurface
+    /// (same philosophy as the Plex `session` regeneration that fixed -1008), and
+    /// returning it lets `resolveTranscode` hand it back as the
+    /// `transcodeSessionID` so teardown can stop the encoding (`stopTranscode`).
     private func transcodeURL(
         itemID: String,
         audioStreamID: String?,
         subtitleStreamID: String?,
-        offsetSeconds: Double?
-    ) -> URL? {
+        offsetSeconds: Double?,
+        playSessionID: String = UUID().uuidString
+    ) -> (url: URL, playSessionID: String)? {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/Videos/\(itemID)/master.m3u8"),
             resolvingAgainstBaseURL: false
@@ -623,7 +722,7 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "MediaSourceId", value: itemID),
             URLQueryItem(name: "api_key", value: accessToken),
             URLQueryItem(name: "DeviceId", value: configuration.deviceID),
-            URLQueryItem(name: "PlaySessionId", value: UUID().uuidString),
+            URLQueryItem(name: "PlaySessionId", value: playSessionID),
             URLQueryItem(name: "VideoCodec", value: "h264"),
             URLQueryItem(name: "AudioCodec", value: "aac,mp3"),
             URLQueryItem(name: "TranscodingProtocol", value: "hls"),
@@ -642,7 +741,8 @@ public actor JellyfinMediaSource: MediaSource {
             queryItems.append(URLQueryItem(name: "startTimeTicks", value: String(Int64(offsetSeconds.rounded()) * 10_000_000)))
         }
         components?.queryItems = queryItems
-        return components?.url
+        guard let url = components?.url else { return nil }
+        return (url, playSessionID)
     }
 
     // MARK: - Images

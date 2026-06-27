@@ -287,6 +287,37 @@ struct JellyfinMediaSourceTests {
         #expect(resolved.isServerTranscode == false)
     }
 
+    @Test("from-zero transcode exposes its PlaySessionId as the transcodeSessionID")
+    func transcodeSurfacesSession() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let request = PlaybackRequest(
+            itemID: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "42"),
+            mode: .transcode
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        // The teardown handle must equal the session baked into the URL, so
+        // stopTranscode targets the encoding this URL actually started.
+        let session = try #require(resolved.transcodeSessionID)
+        let urlSession = URLComponents(url: resolved.url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "PlaySessionId" }?.value
+        #expect(session == urlSession)
+    }
+
+    @Test("stopTranscode issues DELETE /Videos/ActiveEncodings keyed by device + session")
+    func stopTranscodeTearsDown() async throws {
+        let api = RecordingAPIClient()
+        let source = makeSource(api: api)
+        await source.stopTranscode(sessionID: "sess-123")
+
+        let req = try #require(await api.requests.first)
+        #expect(req.httpMethod == "DELETE")
+        #expect(req.url?.path == "/Videos/ActiveEncodings")
+        let q = try #require(URLComponents(url: req.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(q.first { $0.name == "deviceId" }?.value == "dev-1")
+        #expect(q.first { $0.name == "playSessionId" }?.value == "sess-123")
+    }
+
     @Test("supports downloads; Original uses /Items/{id}/Download, caps use a progressive mp4")
     func downloads() async throws {
         let source = makeSource(api: RecordingAPIClient())
@@ -311,6 +342,66 @@ struct JellyfinMediaSourceTests {
         #expect(cappedQuery.contains { $0.name == "VideoBitrate" && $0.value == "8000000" })
         #expect(cappedQuery.contains { $0.name == "MaxHeight" && $0.value == "1080" })
         #expect(cappedQuery.contains { $0.name == "static" && $0.value == "false" })
+    }
+
+    // MARK: - Server-side audio-language filter (#295)
+
+    private let lib = Library.ID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "lib1")
+
+    @Test("audioLanguage filter: a server with the facet filters server-side, expanding code variants")
+    func audioLanguageServerSide() async throws {
+        let api = RecordingAPIClient()
+        // /Items/Filters2 advertises the AudioLanguages facet → capability = yes.
+        await api.enqueue(.init(data: Data(#"{"AudioLanguages":[{"Name":"Czech","Value":"ces"}]}"#.utf8), statusCode: 200, headers: [:]))
+        // The filtered /Items listing.
+        await api.enqueue(.init(data: Data(#"{"Items":[{"Id":"42","Name":"Film","Type":"Movie"}],"TotalRecordCount":1}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let items = try await source.items(in: lib, audioLanguage: "cs")
+
+        // Non-nil → unified layer uses it instead of falling back client-side.
+        #expect(try #require(items).map(\.title) == ["Film"])
+
+        let reqs = await api.requests
+        #expect(reqs.contains { $0.url?.path == "/Items/Filters2" })
+        let listed = try #require(reqs.first { $0.url?.path == "/Users/u1/Items" })
+        let q = try #require(URLComponents(url: listed.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        let audioParam = try #require(q.first { $0.name == "AudioLanguages" }?.value)
+        // Canonical "cs" expands to its 2-letter key + both 639-2 forms, OR-matched.
+        let sent = Set(audioParam.split(separator: ",").map(String.init))
+        #expect(sent == ["cs", "ces", "cze"])
+    }
+
+    @Test("audioLanguage filter: an old server (no facet) returns nil → client-side fallback")
+    func audioLanguageUnsupported() async throws {
+        let api = RecordingAPIClient()
+        // Filters2 without the AudioLanguages field — pre-#9787 server.
+        await api.enqueue(.init(data: Data(#"{"Genres":[{"Name":"Drama","Value":"Drama"}]}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let items = try await source.items(in: lib, audioLanguage: "cs")
+
+        #expect(items == nil)   // signals UnifiedLibrary to filter client-side
+        // Only the probe ran — no (pointless, unfiltered) listing fetch.
+        let reqs = await api.requests
+        #expect(reqs.allSatisfy { $0.url?.path == "/Items/Filters2" })
+        #expect(reqs.count == 1)
+    }
+
+    @Test("audioLanguage filter: capability is probed once, then memoized")
+    func audioLanguageProbeMemoized() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(#"{"AudioLanguages":[]}"#.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data(#"{"Items":[],"TotalRecordCount":0}"#.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data(#"{"Items":[],"TotalRecordCount":0}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        _ = try await source.items(in: lib, audioLanguage: "en")
+        _ = try await source.items(in: lib, audioLanguage: "fr")
+
+        // Two filter calls, but Filters2 was hit exactly once.
+        let probes = await api.requests.filter { $0.url?.path == "/Items/Filters2" }
+        #expect(probes.count == 1)
     }
 }
 

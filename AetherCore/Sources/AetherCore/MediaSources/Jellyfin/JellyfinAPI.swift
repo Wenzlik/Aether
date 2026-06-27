@@ -194,6 +194,30 @@ public enum JellyfinAPI {
         }
     }
 
+    // MARK: - Query filters (audio-language filter capability — #295)
+
+    /// `GET /Items/Filters2` — the server's available filter facets for a query.
+    /// We only decode `AudioLanguages`: its **presence** is the capability probe
+    /// for server-side audio-language filtering. The field was added alongside
+    /// the `?AudioLanguages=` query param (jellyfin/jellyfin#9787, ~10.11.x), so
+    /// older servers omit it entirely → decodes to `nil` → we fall back to
+    /// client-side filtering. A present-but-empty array still means "supported".
+    public struct QueryFiltersResponse: Decodable, Sendable {
+        public let audioLanguages: [NameValuePair]?
+        enum CodingKeys: String, CodingKey { case audioLanguages = "AudioLanguages" }
+    }
+
+    /// Jellyfin's `{ "Name": ..., "Value": ... }` filter pair. We only need the
+    /// shape to confirm the facet decodes; `Value` carries the language code.
+    public struct NameValuePair: Decodable, Sendable, Equatable {
+        public let name: String?
+        public let value: String?
+        enum CodingKeys: String, CodingKey {
+            case name = "Name"
+            case value = "Value"
+        }
+    }
+
     // MARK: - Media segments (Skip Intro / Credits)
 
     /// `GET /MediaSegments/{itemId}` wraps segments in this (QueryResult shape).

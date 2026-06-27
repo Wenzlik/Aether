@@ -103,6 +103,20 @@ public enum AudioLanguage {
         return lower
     }
 
+    /// Every raw language-code variant a source might have stored for a
+    /// canonical code: the 2-letter key itself plus all ISO 639-2 forms
+    /// (bibliographic *and* terminological) that fold to it — e.g. `cs` →
+    /// `["cs", "ces", "cze"]`, `en` → `["en", "eng"]`.
+    ///
+    /// Jellyfin's `?AudioLanguages=` filter (#295) does an **exact**, OR-combined
+    /// match against the stored 3-letter `MediaStream.Language`, so we hand it
+    /// every variant rather than the canonical 2-letter key it wouldn't match.
+    public static func variants(of canonical: String) -> [String] {
+        var values = [canonical]
+        for (three, one) in iso3to1 where one == canonical { values.append(three) }
+        return values
+    }
+
     /// A localized display name for a canonical code, e.g. `en` → "English".
     /// Falls back to the uppercased code when the system can't localize it.
     ///
