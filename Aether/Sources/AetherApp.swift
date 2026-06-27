@@ -765,15 +765,65 @@ final class AppSession {
     /// discovery so the onboarding flow moves directly into the next step
     /// without the user having to tap a separate "Discover servers" button.
     func completePlexSignIn(result: PlexSignInResult) async {
-        do {
-            try await keychain.setString(result.token, for: Self.plexTokenKey)
-            try await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
-        } catch { }
-        await persistActivePlexUser(result.user)
-        isPlexSignedIn = true
-        await discoverPlexServers()
+        if await plexPrimaryToken() != nil {
+            // An additional account: keep the primary account (and its Home
+            // profiles) intact, just record this account's token so discovery
+            // merges its servers. The user enables them in Manage Servers.
+            var extras = await plexExtraAccountTokens()
+            if result.token != (await plexPrimaryToken()), !extras.contains(result.token) {
+                extras.append(result.token)
+            }
+            await setPlexExtraAccountTokens(extras)
+            isPlexSignedIn = true
+            await discoverPlexServers()
+        } else {
+            do {
+                try await keychain.setString(result.token, for: Self.plexTokenKey)
+                try await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
+            } catch { }
+            await persistActivePlexUser(result.user)
+            isPlexSignedIn = true
+            await discoverPlexServers()
+        }
         // A fresh Plex sign-in becomes the active source.
         if plexSource != nil { setActiveSource(.plex) }
+        isSignInPresented = false
+    }
+
+    // MARK: - Plex accounts (multi-account, additive over the primary)
+
+    /// The primary Plex account token (non-empty), or `nil`.
+    private func plexPrimaryToken() async -> String? {
+        guard let token = (try? await keychain.string(for: Self.plexTokenKey)) ?? nil,
+              !token.isEmpty else { return nil }
+        return token
+    }
+
+    /// Additional account tokens (beyond the primary).
+    private func plexExtraAccountTokens() async -> [String] {
+        guard let json = (try? await keychain.string(for: Self.plexExtraAccountTokensKey)) ?? nil,
+              let data = json.data(using: .utf8),
+              let tokens = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return tokens
+    }
+
+    private func setPlexExtraAccountTokens(_ tokens: [String]) async {
+        if tokens.isEmpty {
+            try? await keychain.removeValue(for: Self.plexExtraAccountTokensKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(tokens),
+           let json = String(data: data, encoding: .utf8) {
+            try? await keychain.setString(json, for: Self.plexExtraAccountTokensKey)
+        }
+    }
+
+    /// Every Plex account token to discover servers from: primary first, then extras.
+    private func allPlexAccountTokens() async -> [String] {
+        var tokens: [String] = []
+        if let primary = await plexPrimaryToken() { tokens.append(primary) }
+        tokens.append(contentsOf: await plexExtraAccountTokens())
+        return tokens
     }
 
     /// Persist (or clear) the active Home profile ref + update the published
@@ -825,6 +875,7 @@ final class AppSession {
     func signOutOfPlex() async {
         do { try await keychain.removeValue(for: Self.plexTokenKey) } catch { }
         do { try await keychain.removeValue(for: Self.plexAdminTokenKey) } catch { }
+        await setPlexExtraAccountTokens([])
         await persistActivePlexUser(nil)
         do { try await plexServerStore?.clear() } catch { }
         // Drop the cross-launch library snapshot so a signed-out account's
@@ -900,15 +951,23 @@ final class AppSession {
     /// Plex isn't set up or no token is on file; throws only on the network /
     /// decode failure, so the caller can show "couldn't load servers".
     func availablePlexServers() async throws -> [PlexServerRecord] {
-        guard let resourceClient = plexResourceClient,
-              let token = try? await keychain.string(for: Self.plexTokenKey),
-              !token.isEmpty
-        else { return [] }
+        guard let resourceClient = plexResourceClient else { return [] }
+        let tokens = await allPlexAccountTokens()
+        guard !tokens.isEmpty else { return [] }
 
-        let resources = try await resourceClient.resources(token: token)
-        return PlexServerSelector()
-            .rankedSelections(from: resources)
-            .map { $0.makeRecord() }
+        // Merge the servers reachable from every connected account, de-duplicated
+        // by clientIdentifier (the same server seen via two accounts shows once).
+        // A single account's fetch failing doesn't drop the others.
+        var seen = Set<String>()
+        var merged: [PlexServerRecord] = []
+        for token in tokens {
+            let resources = (try? await resourceClient.resources(token: token)) ?? []
+            for record in PlexServerSelector().rankedSelections(from: resources).map({ $0.makeRecord() })
+            where seen.insert(record.clientIdentifier).inserted {
+                merged.append(record)
+            }
+        }
+        return merged
     }
 
     /// Currently-enabled server ids — marks the toggled rows in the picker.
@@ -1322,6 +1381,10 @@ final class AppSession {
     static let plexAdminTokenKey = "plex.adminToken"
     /// JSON `PlexHomeUserRef` of the active Home profile (for restore + display).
     static let plexHomeUserKey = "plex.homeUser"
+    /// Additional Plex **account** tokens beyond the primary (`plexTokenKey`), as
+    /// a JSON string array. Discovery merges every account's servers; the primary
+    /// account keeps Home-profile support, the extras contribute their servers.
+    static let plexExtraAccountTokensKey = "plex.extraAccountTokens"
     static let jellyfinDeviceIDKey = "jellyfin.deviceID"
     static let embyDeviceIDKey = "emby.deviceID"
     static let activeSourceKey = "active.source"

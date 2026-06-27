@@ -25,9 +25,9 @@ extension SettingsView {
         .task { await loadSMBMatchSummary() }
         #if !os(tvOS)
         .confirmationDialog("Add Source", isPresented: $isAddingSource) {
-            if !viewModel.isPlexSignedIn {
-                Button("Plex") { viewModel.connect() }
-            }
+            // Plex supports several accounts — offer it even when signed in so a
+            // second account (and its servers) can be added.
+            Button(viewModel.isPlexSignedIn ? "Add Plex Account" : "Plex") { viewModel.connect() }
             // Jellyfin / Emby support several servers — offer them even when one
             // is already connected so a second server can be added.
             Button(viewModel.isJellyfinSignedIn ? "Add Jellyfin Server" : "Jellyfin") {
