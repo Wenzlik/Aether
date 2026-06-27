@@ -149,7 +149,9 @@ struct SettingsView: View {
                 // use padding + maxWidth so content sizes off the real container.
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
-                        header
+                        // On iPad the floating top tab bar is the chrome — an inline
+                        // wordmark would slide under it (#settings-wordmark).
+                        if !usesTopBarChrome { header }
                         settingsIndex
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
@@ -501,6 +503,18 @@ struct SettingsView: View {
         .premiumFocus()
     }
     #endif
+
+    /// iPad regular width shows the brand mark on the floating top tab bar, so
+    /// the inline wordmark header is dropped there to avoid it sliding under the
+    /// bar (matches Home / Library / Discover's `usesTopBarChrome`). iPhone
+    /// (compact) and tvOS / visionOS keep the inline wordmark.
+    private var usesTopBarChrome: Bool {
+        #if os(iOS)
+        hSizeClass == .regular
+        #else
+        false
+        #endif
+    }
 
     /// `true` on roomy surfaces (iPad regular width, tvOS, visionOS) → render
     /// the two-column dashboard. iPhone (compact) stays single-column.
