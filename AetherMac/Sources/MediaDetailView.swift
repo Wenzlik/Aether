@@ -41,6 +41,7 @@ struct MediaDetailView: View {
     @State private var watchedOverride: Bool?
     @State private var favoriteOverride: Bool?
     @State private var showFixMatch = false
+    @State private var showIdentify = false
     /// Loaded clearLogo, gated on luminance — a too-dark mark falls back to text.
     @State private var heroLogo: AetherPlatformImage?
     /// Non-nil when the user has picked a different source via the switcher.
@@ -432,6 +433,24 @@ struct MediaDetailView: View {
                                 tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
                             }
                         }
+                    }
+                }
+            }
+
+            // Identify on Jellyfin — match a mis/unidentified title against the
+            // server's metadata providers (movies, episodes, and shows).
+            if case .jellyfin = item.id.source,
+               item.kind == .show || !item.kind.isContainer {
+                Button {
+                    showIdentify = true
+                } label: {
+                    Label("Identify", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.bordered)
+                .sheet(isPresented: $showIdentify) {
+                    JellyfinIdentifySheet(item: current, session: session) {
+                        // libraryDidChangeExternally bumps libraryToken → the
+                        // detail's load task re-runs and picks up the applied match.
                     }
                 }
             }

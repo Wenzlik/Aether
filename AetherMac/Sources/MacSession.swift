@@ -652,6 +652,25 @@ final class MacSession {
         libraryToken &+= 1
     }
 
+    /// The connected Jellyfin source whose server matches `id` (for source-scoped
+    /// actions like Identify), built from the matching record. Falls back to the
+    /// first connected Jellyfin source.
+    func jellyfinSource(for id: MediaID) -> JellyfinMediaSource? {
+        guard case let .jellyfin(serverID) = id.source,
+              let record = jellyfinServers.first(where: { ($0.baseURL?.host ?? $0.baseURLString) == serverID }),
+              let source = makeJellyfinSource(record) else {
+            return jellyfinSource
+        }
+        return source
+    }
+
+    /// Drop the cached catalog after a server-side mutation made from the app
+    /// (e.g. a Jellyfin identify) so surfaces re-read the fresh metadata.
+    func libraryDidChangeExternally() async {
+        await makeLibrary().invalidate(kinds: [.movie, .show])
+        libraryToken &+= 1
+    }
+
     /// Trailing label: the server name, or "N servers" when several are connected.
     static func serverSummary(_ names: [String]) -> String? {
         switch names.count {
