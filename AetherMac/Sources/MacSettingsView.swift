@@ -85,18 +85,36 @@ private struct AccountsSettings: View {
                 }
             }
 
-            if let name = session.jellyfinServerName {
+            if !session.jellyfinServers.isEmpty {
                 Section("Jellyfin") {
-                    LabeledContent("Server", value: name)
+                    ForEach(session.jellyfinServers, id: \.baseURLString) { server in
+                        HStack {
+                            Label(server.serverName, systemImage: "server.rack")
+                            Spacer()
+                            Button(role: .destructive) {
+                                Task { await session.removeJellyfinServer(server.baseURLString) }
+                            } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.borderless)
+                        }
+                    }
                     Button("Sign Out of Jellyfin", role: .destructive) {
                         Task { await session.signOutJellyfin() }
                     }
                 }
             }
 
-            if let name = session.embyServerName {
+            if !session.embyServers.isEmpty {
                 Section("Emby") {
-                    LabeledContent("Server", value: name)
+                    ForEach(session.embyServers, id: \.baseURLString) { server in
+                        HStack {
+                            Label(server.serverName, systemImage: "server.rack")
+                            Spacer()
+                            Button(role: .destructive) {
+                                Task { await session.removeEmbyServer(server.baseURLString) }
+                            } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.borderless)
+                        }
+                    }
                     Button("Sign Out of Emby", role: .destructive) {
                         Task { await session.signOutEmby() }
                     }
@@ -144,12 +162,10 @@ private struct AccountsSettings: View {
                     if !isPlexConnected {
                         Button("Plex") { signIn = .plex }
                     }
-                    if !isJellyfinConnected {
-                        Button("Jellyfin") { signIn = .jellyfin }
-                    }
-                    if !isEmbyConnected {
-                        Button("Emby") { signIn = .emby }
-                    }
+                    // Jellyfin / Emby support several servers — offer them even when
+                    // one is already connected so a second can be added.
+                    Button(isJellyfinConnected ? "Add Jellyfin Server" : "Jellyfin") { signIn = .jellyfin }
+                    Button(isEmbyConnected ? "Add Emby Server" : "Emby") { signIn = .emby }
                     // SMB shares can always be added — a Mac can mount several.
                     Button("SMB Share") { signIn = .smb }
                 } label: {
