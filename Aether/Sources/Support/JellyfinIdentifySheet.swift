@@ -218,7 +218,7 @@ struct JellyfinIdentifySheet: View {
     }
 
     private func search() async {
-        guard let source = session.jellyfinSource else {
+        guard let source = session.jellyfinSource(for: itemID) else {
             errorMessage = "Jellyfin isn't connected."
             step = .pick
             return
@@ -238,7 +238,7 @@ struct JellyfinIdentifySheet: View {
     }
 
     private func apply(_ candidate: JellyfinAPI.RemoteSearchResult) async {
-        guard let source = session.jellyfinSource else { return }
+        guard let source = session.jellyfinSource(for: itemID) else { return }
         errorMessage = nil
         step = .applying
         do {

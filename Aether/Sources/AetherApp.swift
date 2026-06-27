@@ -1052,6 +1052,19 @@ final class AppSession {
         }
     }
 
+    /// The connected Jellyfin source whose server matches `id` (for source-scoped
+    /// actions like Identify), falling back to the first when none matches.
+    /// Resolved via the records (`JellyfinMediaSource` is an actor, so its `id`
+    /// isn't readable synchronously) — builds the source for the matching server.
+    func jellyfinSource(for id: MediaID) -> JellyfinMediaSource? {
+        guard case let .jellyfin(serverID) = id.source,
+              let record = jellyfinServers.first(where: { $0.baseURLString == serverID }),
+              let source = makeJellyfinSource(from: record) else {
+            return jellyfinSource
+        }
+        return source
+    }
+
     /// Remove one connected Jellyfin server by id (`baseURLString`), keeping the
     /// others. Used by the Settings server list.
     func removeJellyfinServer(_ serverID: String) async {

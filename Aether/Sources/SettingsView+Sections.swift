@@ -28,11 +28,13 @@ extension SettingsView {
             if !viewModel.isPlexSignedIn {
                 Button("Plex") { viewModel.connect() }
             }
-            if !viewModel.isJellyfinSignedIn {
-                Button("Jellyfin") { viewModel.connectJellyfin() }
+            // Jellyfin / Emby support several servers — offer them even when one
+            // is already connected so a second server can be added.
+            Button(viewModel.isJellyfinSignedIn ? "Add Jellyfin Server" : "Jellyfin") {
+                viewModel.connectJellyfin()
             }
-            if !viewModel.isEmbySignedIn {
-                Button("Emby") { viewModel.connectEmby() }
+            Button(viewModel.isEmbySignedIn ? "Add Emby Server" : "Emby") {
+                viewModel.connectEmby()
             }
             if !viewModel.isSMBConnected {
                 Button("SMB") { viewModel.connectSMB() }
@@ -304,7 +306,9 @@ extension SettingsView {
     }
 
     private var hasAddableSource: Bool {
-        !viewModel.isPlexSignedIn || !viewModel.isJellyfinSignedIn || !viewModel.isEmbySignedIn || !viewModel.isSMBConnected
+        // Jellyfin / Emby can always take another server, so a source is always
+        // addable — the "Add Source" entry stays available.
+        true
     }
 
     /// The Plex multi-server manager (#325) — enable/disable servers and pick the
