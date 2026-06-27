@@ -401,20 +401,6 @@ struct DiscoverView: View {
             .padding(.bottom, AetherDesign.Spacing.xl)
             .frame(maxWidth: 640, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Continue-watching bar along the very bottom edge.
-            if let fraction = heroProgress[item.id] {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Rectangle().fill(Color.white.opacity(0.22))
-                        Rectangle()
-                            .fill(AetherDesign.Gradients.progress)
-                            .frame(width: max(4, geo.size.width * CGFloat(fraction)))
-                    }
-                }
-                .frame(height: 3)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)
