@@ -391,8 +391,13 @@ final class AppSession {
     private(set) var jellyfinConfiguration: JellyfinConfiguration?
     private(set) var jellyfinAuthClient: JellyfinAuthClient?
     private(set) var jellyfinServerStore: JellyfinServerStore?
-    var jellyfinServer: JellyfinServerRecord?
-    private(set) var jellyfinSource: JellyfinMediaSource?
+    /// All connected Jellyfin servers + their live sources (multi-server). The
+    /// full set rides `connectedSources`; `jellyfinServer`/`jellyfinSource` are
+    /// `.first` conveniences for the many single-server call sites.
+    private(set) var jellyfinServers: [JellyfinServerRecord] = []
+    private(set) var jellyfinSources: [JellyfinMediaSource] = []
+    var jellyfinServer: JellyfinServerRecord? { jellyfinServers.first }
+    var jellyfinSource: JellyfinMediaSource? { jellyfinSources.first }
     var isJellyfinSignedIn: Bool = false
 
     // MARK: - Emby
@@ -400,8 +405,11 @@ final class AppSession {
     private(set) var embyConfiguration: EmbyConfiguration?
     private(set) var embyAuthClient: EmbyAuthClient?
     private(set) var embyServerStore: EmbyServerStore?
-    var embyServer: EmbyServerRecord?
-    private(set) var embySource: EmbyMediaSource?
+    /// All connected Emby servers + their live sources (multi-server).
+    private(set) var embyServers: [EmbyServerRecord] = []
+    private(set) var embySources: [EmbyMediaSource] = []
+    var embyServer: EmbyServerRecord? { embyServers.first }
+    var embySource: EmbyMediaSource? { embySources.first }
     var isEmbySignedIn: Bool = false
 
     // MARK: - SMB (#214)
@@ -659,8 +667,8 @@ final class AppSession {
         // All enabled Plex servers — the Unified Library merges + dedupes them
         // (and Jellyfin/SMB/Local) by shared external ids (#325).
         list.append(contentsOf: plexSources)
-        if let jellyfinSource { list.append(jellyfinSource) }
-        if let embySource { list.append(embySource) }
+        list.append(contentsOf: jellyfinSources)
+        list.append(contentsOf: embySources)
         // SMB is LAN-only — surface it only while the NAS is actually reachable,
         // so off-network it goes dormant (no failed walks, not shown in the
         // Library) and auto-reappears when you're back on the network (#214).
@@ -990,10 +998,10 @@ final class AppSession {
     private func restoreJellyfinServer() async {
         guard let store = jellyfinServerStore else { return }
         do {
-            guard let record = try await store.read() else { return }
-            jellyfinServer = record
-            jellyfinSource = makeJellyfinSource(from: record)
-            isJellyfinSignedIn = jellyfinSource != nil
+            let records = try await store.readAll()
+            jellyfinServers = records
+            jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+            isJellyfinSignedIn = !jellyfinSources.isEmpty
             refreshActiveSource()
         } catch {
             // Corrupted record shouldn't break launch — leave Jellyfin disconnected.
@@ -1013,21 +1021,27 @@ final class AppSession {
         )
     }
 
-    /// Called by `JellyfinSignInView` after a successful Quick Connect exchange.
+    /// Called by `JellyfinSignInView` after a successful sign-in. Appends the
+    /// server to the connected set (re-adding the same server URL replaces it),
+    /// so several Jellyfin servers can be connected at once.
     func completeJellyfinSignIn(record: JellyfinServerRecord) async {
-        do { try await jellyfinServerStore?.write(record) } catch { }
-        jellyfinServer = record
-        jellyfinSource = makeJellyfinSource(from: record)
-        isJellyfinSignedIn = jellyfinSource != nil
+        var records = jellyfinServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+        do { try await jellyfinServerStore?.writeAll(records) } catch { }
+        isJellyfinSignedIn = !jellyfinSources.isEmpty
         if jellyfinSource != nil { setActiveSource(.jellyfin) }
         isSignInPresented = false
+        libraryRevision &+= 1
     }
 
+    /// Disconnect every Jellyfin server.
     func signOutOfJellyfin() async {
         do { try await jellyfinServerStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
-        jellyfinServer = nil
-        jellyfinSource = nil
+        jellyfinServers = []
+        jellyfinSources = []
         isJellyfinSignedIn = false
         if activeSourceKind == .jellyfin {
             if isPlexSignedIn { setActiveSource(.plex) }
@@ -1036,6 +1050,23 @@ final class AppSession {
         } else {
             refreshActiveSource()
         }
+    }
+
+    /// Remove one connected Jellyfin server by id (`baseURLString`), keeping the
+    /// others. Used by the Settings server list.
+    func removeJellyfinServer(_ serverID: String) async {
+        let records = jellyfinServers.filter { $0.baseURLString != serverID }
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+        if records.isEmpty {
+            await signOutOfJellyfin()
+            return
+        }
+        do { try await jellyfinServerStore?.writeAll(records) } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        isJellyfinSignedIn = true
+        refreshActiveSource()
+        libraryRevision &+= 1
     }
 
     func presentSignIn(_ target: SignInTarget = .plex) {
@@ -1074,10 +1105,10 @@ final class AppSession {
     private func restoreEmbyServer() async {
         guard let store = embyServerStore else { return }
         do {
-            guard let record = try await store.read() else { return }
-            embyServer = record
-            embySource = makeEmbySource(from: record)
-            isEmbySignedIn = embySource != nil
+            let records = try await store.readAll()
+            embyServers = records
+            embySources = records.compactMap { makeEmbySource(from: $0) }
+            isEmbySignedIn = !embySources.isEmpty
             refreshActiveSource()
         } catch {
             // Corrupted record shouldn't break launch — leave Emby disconnected.
@@ -1097,21 +1128,26 @@ final class AppSession {
         )
     }
 
-    /// Called by `EmbySignInView` after a successful Quick Connect exchange.
+    /// Called by `EmbySignInView` after a successful sign-in. Appends the server
+    /// (re-adding the same server URL replaces it) so several can connect at once.
     func completeEmbySignIn(record: EmbyServerRecord) async {
-        do { try await embyServerStore?.write(record) } catch { }
-        embyServer = record
-        embySource = makeEmbySource(from: record)
-        isEmbySignedIn = embySource != nil
+        var records = embyServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource(from: $0) }
+        do { try await embyServerStore?.writeAll(records) } catch { }
+        isEmbySignedIn = !embySources.isEmpty
         if embySource != nil { setActiveSource(.emby) }
         isSignInPresented = false
+        libraryRevision &+= 1
     }
 
+    /// Disconnect every Emby server.
     func signOutOfEmby() async {
         do { try await embyServerStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
-        embyServer = nil
-        embySource = nil
+        embyServers = []
+        embySources = []
         isEmbySignedIn = false
         if activeSourceKind == .emby {
             if isPlexSignedIn { setActiveSource(.plex) }
@@ -1120,6 +1156,22 @@ final class AppSession {
         } else {
             refreshActiveSource()
         }
+    }
+
+    /// Remove one connected Emby server by id (`baseURLString`), keeping the rest.
+    func removeEmbyServer(_ serverID: String) async {
+        let records = embyServers.filter { $0.baseURLString != serverID }
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource(from: $0) }
+        if records.isEmpty {
+            await signOutOfEmby()
+            return
+        }
+        do { try await embyServerStore?.writeAll(records) } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        isEmbySignedIn = true
+        refreshActiveSource()
+        libraryRevision &+= 1
     }
 
     // MARK: - SMB (#214)
