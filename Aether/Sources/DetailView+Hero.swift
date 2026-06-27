@@ -126,6 +126,9 @@ extension DetailView {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: heroLogoMaxWidth, maxHeight: heroLogoMaxHeight, alignment: .leading)
+                // Soft shadow so a light logo still separates from a bright
+                // backdrop. (Predominantly dark logos fall back to text upstream.)
+                .shadow(color: .black.opacity(0.55), radius: 10, y: 3)
                 .accessibilityLabel(Text(activeItem.title))
         } else if item.kind == .season {
             // The formatter, not the raw title — a Czech-localized Plex sends
