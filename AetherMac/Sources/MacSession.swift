@@ -32,8 +32,14 @@ final class MacSession {
     /// The active Plex Home profile, when the account has Home and a profile was
     /// picked. `nil` for plain accounts. Drives the Settings "Switch Profile" UI.
     private(set) var activePlexUser: PlexHomeUserRef?
-    private(set) var jellyfinSource: JellyfinMediaSource?
-    private(set) var embySource: EmbyMediaSource?
+    /// All connected Jellyfin / Emby servers + their live sources (multi-server,
+    /// parity with iOS). `jellyfinSource`/`embySource` are `.first` conveniences.
+    private(set) var jellyfinServers: [JellyfinServerRecord] = []
+    private(set) var jellyfinSources: [JellyfinMediaSource] = []
+    var jellyfinSource: JellyfinMediaSource? { jellyfinSources.first }
+    private(set) var embyServers: [EmbyServerRecord] = []
+    private(set) var embySources: [EmbyMediaSource] = []
+    var embySource: EmbyMediaSource? { embySources.first }
 
     /// User-picked local/network folders scanned into a library, and the source
     /// built from them. Folders persist as paths in UserDefaults.
@@ -289,8 +295,8 @@ final class MacSession {
     var connectedSources: [any MediaSource] {
         var list: [any MediaSource] = []
         list.append(contentsOf: plexSources)
-        if let jellyfinSource { list.append(jellyfinSource) }
-        if let embySource { list.append(embySource) }
+        list.append(contentsOf: jellyfinSources)
+        list.append(contentsOf: embySources)
         if let localSource { list.append(localSource) }
         return list
     }
@@ -439,13 +445,15 @@ final class MacSession {
            let ref = try? JSONDecoder().decode(PlexHomeUserRef.self, from: data) {
             activePlexUser = ref
         }
-        if let record = try? await jellyfinServerStore.read(), let source = makeJellyfinSource(record) {
-            jellyfinSource = source
-            jellyfinServerName = record.serverName
+        if let records = try? await jellyfinServerStore.readAll(), !records.isEmpty {
+            jellyfinServers = records
+            jellyfinSources = records.compactMap { makeJellyfinSource($0) }
+            jellyfinServerName = Self.serverSummary(records.map(\.serverName))
         }
-        if let record = try? await embyServerStore.read(), let source = makeEmbySource(record) {
-            embySource = source
-            embyServerName = record.serverName
+        if let records = try? await embyServerStore.readAll(), !records.isEmpty {
+            embyServers = records
+            embySources = records.compactMap { makeEmbySource($0) }
+            embyServerName = Self.serverSummary(records.map(\.serverName))
         }
         if let shares = try? await smbShareStore.read(), !shares.isEmpty {
             smbShares = shares
@@ -612,18 +620,45 @@ final class MacSession {
 
     // MARK: Jellyfin
 
+    /// Append a Jellyfin server (re-adding the same URL replaces it) — multiple
+    /// servers can be connected at once.
     func completeJellyfinSignIn(_ record: JellyfinServerRecord) async {
-        try? await jellyfinServerStore.write(record)
-        jellyfinSource = makeJellyfinSource(record)
-        jellyfinServerName = record.serverName
+        var records = jellyfinServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource($0) }
+        try? await jellyfinServerStore.writeAll(records)
+        jellyfinServerName = Self.serverSummary(records.map(\.serverName))
         libraryToken &+= 1
     }
 
+    /// Disconnect every Jellyfin server.
     func signOutJellyfin() async {
         try? await jellyfinServerStore.clear()
-        jellyfinSource = nil
+        jellyfinServers = []
+        jellyfinSources = []
         jellyfinServerName = nil
         libraryToken &+= 1
+    }
+
+    /// Remove one Jellyfin server by id (`baseURLString`), keeping the others.
+    func removeJellyfinServer(_ serverID: String) async {
+        let records = jellyfinServers.filter { $0.baseURLString != serverID }
+        if records.isEmpty { await signOutJellyfin(); return }
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource($0) }
+        try? await jellyfinServerStore.writeAll(records)
+        jellyfinServerName = Self.serverSummary(records.map(\.serverName))
+        libraryToken &+= 1
+    }
+
+    /// Trailing label: the server name, or "N servers" when several are connected.
+    static func serverSummary(_ names: [String]) -> String? {
+        switch names.count {
+        case 0:  return nil
+        case 1:  return names[0]
+        default: return "\(names.count) servers"
+        }
     }
 
     private func makeJellyfinSource(_ record: JellyfinServerRecord) -> JellyfinMediaSource? {
@@ -641,17 +676,34 @@ final class MacSession {
 
     // MARK: Emby
 
+    /// Append an Emby server (re-adding the same URL replaces it).
     func completeEmbySignIn(_ record: EmbyServerRecord) async {
-        try? await embyServerStore.write(record)
-        embySource = makeEmbySource(record)
-        embyServerName = record.serverName
+        var records = embyServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource($0) }
+        try? await embyServerStore.writeAll(records)
+        embyServerName = Self.serverSummary(records.map(\.serverName))
         libraryToken &+= 1
     }
 
+    /// Disconnect every Emby server.
     func signOutEmby() async {
         try? await embyServerStore.clear()
-        embySource = nil
+        embyServers = []
+        embySources = []
         embyServerName = nil
+        libraryToken &+= 1
+    }
+
+    /// Remove one Emby server by id (`baseURLString`), keeping the others.
+    func removeEmbyServer(_ serverID: String) async {
+        let records = embyServers.filter { $0.baseURLString != serverID }
+        if records.isEmpty { await signOutEmby(); return }
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource($0) }
+        try? await embyServerStore.writeAll(records)
+        embyServerName = Self.serverSummary(records.map(\.serverName))
         libraryToken &+= 1
     }
 
