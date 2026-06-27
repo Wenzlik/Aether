@@ -378,18 +378,30 @@ struct DiscoverView: View {
                 .frame(height: height)
                 .clipped()
 
-            // Scrims: a strong leading wash so the title block reads over the art,
-            // plus a bottom wash that grounds the hero into the rails below.
+            // Scrims fade the artwork into the *page background colour* (not pure
+            // black) so the hero melts seamlessly into the screen — no hard panel
+            // edges. Leading wash carries the title block; bottom wash dissolves
+            // into the rails; a soft top wash blends the upper edge.
             LinearGradient(
-                colors: [.black.opacity(0.92), .black.opacity(0.5), .clear],
+                colors: [
+                    AetherDesign.Palette.background.opacity(0.95),
+                    AetherDesign.Palette.background.opacity(0.4),
+                    .clear
+                ],
                 startPoint: .leading, endPoint: .trailing
             )
             LinearGradient(
-                colors: [.clear, .black.opacity(0.9)],
+                colors: [.clear, AetherDesign.Palette.background.opacity(0.6), AetherDesign.Palette.background],
                 startPoint: .top, endPoint: .bottom
             )
-            .frame(height: height * 0.6)
+            .frame(height: height * 0.7)
             .frame(maxHeight: .infinity, alignment: .bottom)
+            LinearGradient(
+                colors: [AetherDesign.Palette.background.opacity(0.7), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: height * 0.22)
+            .frame(maxHeight: .infinity, alignment: .top)
 
             // Title lockup + metadata + actions, lower-left like the reference.
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
