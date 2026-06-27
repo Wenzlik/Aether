@@ -433,6 +433,15 @@ extension DetailView {
                         presentedSelector = .smbEditMetadata
                     }
                 }
+                // Identify a mis/unidentified Jellyfin series ("Season Unknown")
+                // against the server's providers. The action row (with the
+                // compact Identify button) isn't shown for shows, so it lives
+                // here on the show header.
+                if isJellyfinSource(activeItem.id.source) {
+                    AetherIconButton(systemImage: "wand.and.stars", accessibilityLabel: "Identify on Jellyfin") {
+                        presentedSelector = .identifyJellyfin
+                    }
+                }
                 Spacer(minLength: 0)
             }
         }
