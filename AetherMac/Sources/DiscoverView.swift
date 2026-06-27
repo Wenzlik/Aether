@@ -197,13 +197,6 @@ struct DiscoverView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 )
-                // Leading wash so the title lockup reads over the artwork.
-                .overlay(
-                    LinearGradient(
-                        colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                )
                 .overlay(alignment: .bottom) {
                     if let progress {
                         GeometryReader { geo in
@@ -220,17 +213,10 @@ struct DiscoverView: View {
                 }
 
             VStack(alignment: .leading, spacing: 10) {
-                // clearLogo wordmark when the title has one, else the title text.
-                if let logo = item.logoURL() {
-                    CachedAsyncImage(url: logo, contentMode: .fit)
-                        .frame(maxWidth: 360, maxHeight: 96, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .shadow(color: .black.opacity(0.5), radius: 8, y: 3)
-                } else {
-                    Text(item.title)
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                Text(item.title)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
                 HStack(spacing: 10) {
                     if let year = item.year { Text(String(year)) }
                     if !item.genres.isEmpty { Text(item.genres.prefix(3).joined(separator: " · ")) }
