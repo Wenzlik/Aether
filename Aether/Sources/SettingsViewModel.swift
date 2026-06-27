@@ -138,7 +138,16 @@ final class SettingsViewModel {
 
     var isJellyfinSignedIn: Bool { session.isJellyfinSignedIn }
 
-    var jellyfinServerName: String? { session.jellyfinServer?.serverName }
+    /// Trailing label for the Jellyfin row: the server name, or "N servers" when
+    /// several are connected at once.
+    var jellyfinServerName: String? {
+        let servers = session.jellyfinServers
+        switch servers.count {
+        case 0:  return nil
+        case 1:  return servers[0].serverName
+        default: return "\(servers.count) servers"
+        }
+    }
 
     var jellyfinSourceStatus: AetherStatus {
         isJellyfinSignedIn ? .connected : .notConnected
@@ -146,7 +155,16 @@ final class SettingsViewModel {
 
     var isEmbySignedIn: Bool { session.isEmbySignedIn }
 
-    var embyServerName: String? { session.embyServer?.serverName }
+    /// Trailing label for the Emby row: the server name, or "N servers" when
+    /// several are connected at once.
+    var embyServerName: String? {
+        let servers = session.embyServers
+        switch servers.count {
+        case 0:  return nil
+        case 1:  return servers[0].serverName
+        default: return "\(servers.count) servers"
+        }
+    }
 
     var embySourceStatus: AetherStatus {
         isEmbySignedIn ? .connected : .notConnected
