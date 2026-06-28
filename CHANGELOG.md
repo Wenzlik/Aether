@@ -21,6 +21,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Auto-Play Next keeps your audio/subtitle language (#546)** — advancing to the
+  next episode reverted to the source's default track (e.g. English) instead of
+  the language you'd chosen. The next episode is now hydrated before the
+  selection carries over, so the language match has tracks to match against.
 - **Auto-Play Next no longer fails on tvOS (#523)** — when the Up Next countdown
   reached zero, advancing to the next episode aborted with a cancelled-request
   error ("Couldn't resolve a playback URL … cancelled"). The countdown was
