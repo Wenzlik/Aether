@@ -1,24 +1,8 @@
 import SwiftUI
 import AetherCore
 
-/// One **Ask Aether** answer: direct library matches for the words the user
-/// typed, plus a grounded recommendation when the request reads as a vibe/genre
-/// ask. The field both *finds* titles and *recommends* — one screen, no mode
-/// switch. A pure title lookup ("Inception") shows only the matches; a vibe
-/// request ("a scary movie under 2 hours") shows the suggestion.
-struct AskResult: Equatable {
-    /// Titles whose name (or cast/director) matches the query.
-    var libraryMatches: [UnifiedMediaItem]
-    /// The recommendation, when the request had a vibe/genre/runtime intent (or
-    /// nothing else surfaced). `nil` for a plain lookup.
-    var recommendation: RecommendationResult?
-    /// Owned titles TMDb considers similar to the title the request points at.
-    var similar: [UnifiedMediaItem] = []
-    /// The anchor title for `similar`, for the section header ("More like …").
-    var similarTo: String? = nil
-    /// The request this answer was produced for.
-    var query: String
-}
+// `AskResult` + the `AskAether` query logic now live in AetherCore (shared with
+// macOS). This file is just the iOS result surface.
 
 /// The Ask Aether result surface, shown in `SearchView` after submit. Every row
 /// is a real `UnifiedMediaItem`, so it navigates into Detail (Play / Resume) via

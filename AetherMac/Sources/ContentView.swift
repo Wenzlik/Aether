@@ -14,6 +14,11 @@ struct HomeView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismissWindow
     @State private var searchText = ""
+    /// Ask Aether answer (library matches + optional recommendation), shown after
+    /// the user submits a request. Sticky while refining; dropped when cleared.
+    @State private var askResult: AskResult?
+    /// On-device inference in flight.
+    @State private var isAsking = false
     /// Drives sidebar collapse state — SwiftUI writes this when the split view
     /// collapses the sidebar column (e.g. sidebar toggle or window resize).
     @State private var columnVisibility = NavigationSplitViewVisibility.all
@@ -145,8 +150,12 @@ struct HomeView: View {
             // section — it lives here, always reachable.
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search", text: $searchText)
+                TextField("Ask Aether…", text: $searchText)
                     .textFieldStyle(.plain)
+                    .onSubmit { Task { await ask() } }
+                    .onChange(of: searchText) { _, v in
+                        if v.trimmingCharacters(in: .whitespaces).isEmpty { askResult = nil }
+                    }
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -196,9 +205,19 @@ struct HomeView: View {
     private var detail: some View {
         NavigationStack(path: $path) {
             Group {
-                if isSearching {
+                if isAsking {
+                    ProgressView("Asking Aether…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cinematicBackground()
+                        .navigationTitle("Ask Aether")
+                } else if let askResult {
+                    MacAskResults(session: session, result: askResult, pendingQuery: askPending)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cinematicBackground()
+                        .navigationTitle("Ask Aether")
+                } else if isSearching {
                     // Typing in the sidebar field surfaces unified results over
-                    // whatever section is selected.
+                    // whatever section is selected; Return runs an Ask Aether request.
                     MacSearchResults(session: session, query: searchText)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .cinematicBackground()
@@ -211,11 +230,11 @@ struct HomeView: View {
                     }
                 }
             }
-            // Stable identity per pane (incl. the search overlay) so switching
-            // fully replaces the view — otherwise the previous pane's
+            // Stable identity per pane (incl. the search / ask overlays) so
+            // switching fully replaces the view — otherwise the previous pane's
             // title/toolbar lingers in the titlebar (the stray "Settings" + gear
             // over the traffic lights, #432).
-            .id(isSearching ? AnyHashable("search") : AnyHashable(session.section))
+            .id(askPaneID)
             .navigationDestination(for: MediaItem.self) { mediaItem in
                 MediaDetailView(session: session, item: mediaItem, onPlay: playServerItem)
             }
@@ -236,6 +255,32 @@ struct HomeView: View {
     /// Whether the sidebar search field has a query — drives the search overlay.
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Stable identity for the detail pane across discovery / search / ask states.
+    private var askPaneID: AnyHashable {
+        if isAsking || askResult != nil { return AnyHashable("ask") }
+        return isSearching ? AnyHashable("search") : AnyHashable(session.section)
+    }
+
+    /// Run an Ask Aether request from the sidebar field. Mirrors iOS.
+    private func ask() async {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, session.hasAnySource, !isAsking else { return }
+        isAsking = true
+        defer { isAsking = false }
+        let answer = await AskAether.answer(
+            query: trimmed, sources: session.connectedSources, tmdb: session.tmdbClient
+        )
+        guard searchText.trimmingCharacters(in: .whitespaces) == trimmed else { return }
+        askResult = answer
+    }
+
+    /// Edited-but-not-resubmitted request → "press Return to ask" hint.
+    private var askPending: String? {
+        guard let askResult else { return nil }
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        return (!trimmed.isEmpty && trimmed != askResult.query) ? trimmed : nil
     }
 
     // MARK: Open
