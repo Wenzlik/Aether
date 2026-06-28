@@ -4,6 +4,38 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **tvOS: collapsible side menu (#527)** — Apple TV's primary navigation moves
+  from the top tab bar to a leading **sidebar**, matching the Apple TV app:
+  collapsed to a pill on the left edge, it expands when focus moves to it and
+  collapses back once you pick a tab and move into content. Same tabs (Home /
+  Library / Discover / Search / Settings); native `.sidebarAdaptable`, so the
+  focus engine drives it. iPhone (bottom bar) and visionOS (ornament) are
+  unchanged.
+- **Clearer "Active" source (#525)** — a source's account sheet now explains that
+  the active source only sets what **Library** and **Search** browse; titles that
+  exist on more than one server always play from a fixed preferred copy, which you
+  switch per title on its page. The note shows for the active source too, so the
+  badge is no longer mistaken for a playback switch.
+
+### Fixed
+
+- **Auto-Play Next no longer fails on tvOS (#523)** — when the Up Next countdown
+  reached zero, advancing to the next episode aborted with a cancelled-request
+  error ("Couldn't resolve a playback URL … cancelled"). The countdown was
+  cancelling the very task it used to start the next episode, so the resolve ran
+  under a cancelled task. The next episode now plays cleanly.
+- **tvOS: player prompts are now selectable (#529)** — Skip Intro, Skip Credits,
+  and the Up Next "play next episode" prompt could be seen but not focused with
+  the Siri Remote (they were SwiftUI overlays the player view controller wouldn't
+  give focus to). They're now native, focusable on-screen actions. iOS and
+  visionOS are unchanged.
+- **tvOS: the menu stays reachable while the library loads (#531)** — during
+  "Loading your library…" the side menu couldn't be focused (the loading screen
+  had no focus target, so the Siri Remote had nothing to navigate from). The menu
+  is now always reachable.
+
 ## [0.8.5] — 2026-06-28
 
 ### What's New

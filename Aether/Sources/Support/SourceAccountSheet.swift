@@ -12,6 +12,13 @@ struct SourceAccountSheet: View {
     /// True when this source is connected but not the active one (and more than
     /// one source is connected) — i.e. switching to it is meaningful (#224).
     var canSetActive: Bool = false
+    /// True when more than one source is connected, so the "Active" concept is
+    /// meaningful. Drives an explanatory footer clarifying that Active only sets
+    /// what Library/Search *browse* — it doesn't reroute playback of titles that
+    /// exist on several servers (those follow a fixed source preference; switch
+    /// them per title on Detail). Shown even for the already-active source, where
+    /// `canSetActive` is false (#525).
+    var explainsActiveSource: Bool = false
     let isSigningOut: Bool
     var onSetActive: (() -> Void)? = nil
     /// When set, a **Choose Server** row is shown — for accounts that can reach
@@ -89,14 +96,24 @@ struct SourceAccountSheet: View {
                     }
                 }
 
-                if canSetActive, let onSetActive {
-                    AetherSettingsSection("Library") {
-                        AetherSettingsRow(
-                            label: "Set as Active Source",
-                            description: "Browse this server in your Library.",
-                            actionRole: .primary,
-                            action: onSetActive
-                        )
+                if explainsActiveSource {
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                        if canSetActive, let onSetActive {
+                            AetherSettingsSection("Library") {
+                                AetherSettingsRow(
+                                    label: "Set as Active Source",
+                                    description: "Browse this server in Library and Search.",
+                                    actionRole: .primary,
+                                    action: onSetActive
+                                )
+                            }
+                        }
+                        Text("Active only sets which server you browse in Library and Search. A title on more than one server always plays from your preferred copy — switch it on the title’s page.")
+                            .font(AetherDesign.Typography.caption)
+                            .foregroundStyle(AetherDesign.Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.m)
                     }
                 }
 

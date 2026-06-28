@@ -115,6 +115,8 @@ struct PlayerView: View {
                     preferExpanded: preferExpanded,
                     redockToken: redockToken,
                     makeCinemaInfoControllers: makeCinemaInfoControllers,
+                    contextualPromptTitle: contextualPlayerPrompt?.title,
+                    onContextualPrompt: contextualPlayerPrompt?.action,
                     onDismiss: {
                         Task { await dismissPlayer() }
                     }
@@ -274,12 +276,17 @@ struct PlayerView: View {
             Spacer()
             HStack {
                 Spacer()
+                // tvOS surfaces Skip Intro / Credits as a focusable native
+                // contextual action (`contextualPlayerPrompt`) — a SwiftUI button
+                // here can't take focus over the player VC (#529).
+                #if !os(tvOS)
                 if introMode == .button, let intro = activeIntro {
                     skipButton("Skip Intro", to: intro.end)
                 } else if creditsMode == .button, let credits = activeCredits, countdownRemaining == nil {
                     // The Next Episode countdown card supersedes Skip Credits.
                     skipButton("Skip Credits", to: credits.end)
                 }
+                #endif
             }
         }
         .padding(AetherDesign.Spacing.xl)
@@ -299,6 +306,32 @@ struct PlayerView: View {
     /// auto-play has its own setting).
     private var creditsForNext: PlaybackSegment? {
         viewModel.segments.creditsSegment(at: viewModel.currentSeconds)
+    }
+
+    /// tvOS only: the single transient prompt active right now, surfaced as a
+    /// *focusable* native contextual action by `SystemVideoPlayer` — the SwiftUI
+    /// buttons in `skipOverlay` / `nextEpisodeOverlay` can't take focus over the
+    /// player VC on tvOS (#529). Precedence mirrors those overlays: Skip Intro,
+    /// then the Up Next countdown, then Skip Credits. `nil` on every other
+    /// platform, which keep their working SwiftUI overlays.
+    private var contextualPlayerPrompt: (title: String, action: () -> Void)? {
+        #if os(tvOS)
+        if introMode == .button, let intro = activeIntro {
+            return (String(localized: "Skip Intro"),
+                    { Task { await viewModel.skip(toContentSeconds: intro.end) } })
+        }
+        if countdownRemaining != nil, nextItem != nil {
+            return (String(localized: "Play Next Episode"),
+                    { Task { await playNext() } })
+        }
+        if creditsMode == .button, let credits = activeCredits {
+            return (String(localized: "Skip Credits"),
+                    { Task { await viewModel.skip(toContentSeconds: credits.end) } })
+        }
+        return nil
+        #else
+        return nil
+        #endif
     }
 
     /// Bottom-trailing "Up Next" card with a live countdown — shown while inside
@@ -321,6 +354,11 @@ struct PlayerView: View {
                         Text("Starting in \(remaining)s")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
+                        // tvOS: the card is display-only — "Play Next Episode" is a
+                        // focusable native contextual action (`contextualPlayerPrompt`),
+                        // since a SwiftUI button can't take focus over the player VC
+                        // (#529). iOS / visionOS keep the in-card buttons.
+                        #if !os(tvOS)
                         HStack(spacing: AetherDesign.Spacing.s) {
                             AetherButton("Play Now", systemImage: "play.fill", role: .primary) {
                                 Task { await playNext() }
@@ -330,6 +368,7 @@ struct PlayerView: View {
                             }
                         }
                         .padding(.top, AetherDesign.Spacing.xs)
+                        #endif
                     }
                     .padding(AetherDesign.Spacing.l)
                     .frame(maxWidth: 380, alignment: .leading)
@@ -386,7 +425,14 @@ struct PlayerView: View {
     /// the one after it.
     private func playNext() async {
         guard let next = nextItem else { return }
-        cancelCountdown()
+        // Clear the countdown UI, but do NOT cancel `countdownTask` — `playNext`
+        // runs *inside* it (see `startCountdown`). `cancelCountdown()` would call
+        // `countdownTask?.cancel()`, cancelling the very task we're executing in;
+        // every `await` below then runs under a cancelled task, so the next
+        // episode's resolve aborts with NSURLErrorCancelled (-999) on Plex's
+        // `/transcode/universal/decision` request (#523).
+        countdownTask = nil
+        countdownRemaining = nil
         let finished = viewModel.state.item ?? item
         await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
