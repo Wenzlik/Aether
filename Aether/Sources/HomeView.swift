@@ -70,6 +70,12 @@ struct HomeView: View {
     /// iOS / visionOS: the header shows a magnifying-glass button by default and
     /// only reveals the search field once tapped — no permanent search bar.
     @State private var isSearchActive = false
+    /// Ask Aether answer (library matches + optional recommendation), shown after
+    /// the user submits a request. Sticky while refining; dropped when the field
+    /// is cleared. Same behaviour as the Search tab (see `AskAether`).
+    @State private var askResult: AskResult?
+    /// On-device inference in flight.
+    @State private var isAsking = false
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
@@ -152,6 +158,13 @@ struct HomeView: View {
                 Text("This title is in progress. Marking it watched removes it from Continue Watching.")
             }
         }
+        // Return in any of the search fields submits an Ask Aether request
+        // (bubbles up from whichever field is on screen for this layout).
+        .onSubmit { Task { await ask() } }
+        // Clearing the field drops the answer, back to rails.
+        .onChange(of: searchQuery) { _, newValue in
+            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { askResult = nil }
+        }
         // Reload when the connected set changes (sign-in / discovery / sign-out).
         .task(id: taskKey) { await load() }
         // Auto-refresh when the app returns to the foreground — keeps content on
@@ -198,7 +211,7 @@ struct HomeView: View {
             // search button would be an extra focus hop with no keyboard win).
             AetherWordmark(.medium)
             Spacer(minLength: AetherDesign.Spacing.l)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
                 .frame(maxWidth: AetherDesign.headerSearchWidth)
             AetherTVReloadButton { Task { await load() } }
                 .frame(width: 260)
@@ -206,7 +219,7 @@ struct HomeView: View {
             // iOS / visionOS: brand mark + a search *button*; the field only
             // appears once tapped, so the rails aren't topped by a permanent bar.
             if isSearchActive {
-                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
                 Button("Cancel") {
                     searchQuery = ""
                     searchFocused = false
@@ -280,7 +293,7 @@ struct HomeView: View {
     /// search button live in the tab-bar toolbar).
     private var iPadSearchRow: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
             Button("Cancel") {
                 searchQuery = ""
                 searchFocused = false
@@ -302,10 +315,34 @@ struct HomeView: View {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Ask Aether from Home — find titles + recommend. Mirrors the Search tab.
+    private func ask() async {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !connectedSources.isEmpty, !isAsking else { return }
+        searchFocused = false
+        isAsking = true
+        defer { isAsking = false }
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources)
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
+        askResult = answer
+    }
+
+    /// Edited-but-not-resubmitted request → "press Return to ask" hint.
+    private var askPending: String? {
+        guard let askResult else { return nil }
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (!trimmed.isEmpty && trimmed != askResult.query) ? trimmed : nil
+    }
+
     @ViewBuilder
     private var content: some View {
-        if isSearching {
-            // Unified search across every connected source.
+        if isAsking {
+            AetherLoadingDots(caption: "Asking Aether…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let askResult {
+            RecommendationResultsView(result: askResult, pendingQuery: askPending)
+        } else if isSearching {
+            // Live title search while typing, before an ask.
             MediaSearchResults(sources: connectedSources, query: searchQuery)
         } else if let loadError {
             AetherCenteredScrollState { errorState(loadError) }
