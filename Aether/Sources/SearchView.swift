@@ -184,8 +184,10 @@ struct SearchView: View {
                 HStack(spacing: AetherDesign.Spacing.s) {
                     ForEach(recentSearches.recent, id: \.self) { recentQuery in
                         Button {
+                            // Recent entries are "Ask Aether" requests, so tapping
+                            // one re-runs the recommendation (not a title search).
                             query = recentQuery
-                            searchFocused = false
+                            Task { await ask() }
                         } label: {
                             Text(recentQuery)
                                 .font(AetherDesign.Typography.metadata)
