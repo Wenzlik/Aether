@@ -35,6 +35,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   "Loading your library…" the side menu couldn't be focused (the loading screen
   had no focus target, so the Siri Remote had nothing to navigate from). The menu
   is now always reachable.
+- **tvOS: the side menu no longer shows during playback (#534)** — the menu pill
+  stayed drawn over the player; the player now presents full-screen and covers it.
+- **tvOS: a single Up Next prompt (#534)** — the "play next episode" prompt
+  appeared twice (a card plus the native action); only the native, focusable
+  prompt shows now.
 
 ## [0.8.5] — 2026-06-28
 

@@ -400,25 +400,22 @@ struct DetailView: View {
             }
             .opacity(isPlayerPresented ? 0 : 1)
 
+            // iOS / visionOS present the player inline: iOS needs it in the
+            // hierarchy for swipe-down-to-dismiss (#288), visionOS for immersive-
+            // space docking. tvOS uses a `.fullScreenCover` instead (below) — an
+            // inline overlay can't hide the `.sidebarAdaptable` menu pill, which
+            // `.toolbar(.hidden, for: .tabBar)` doesn't remove, so it stayed drawn
+            // on top of the player (#527 follow-up).
+            #if !os(tvOS)
             if isPlayerPresented {
-                PlayerView(
-                    item: playbackItem ?? activeItem,
-                    source: source,
-                    session: playbackSession,
-                    startAt: playbackStartAt,
-                    preferExpanded: launchingInCinema,
-                    redockToken: cinemaRedockToken,
-                    makeCinemaInfoControllers: makeCinemaInfoControllers,
-                    playbackPreferences: playbackPreferences,
-                    onDismiss: dismissPlayer,
-                    onAdvance: { advancedItem = $0 }
-                )
-                .transition(.opacity)
-                .zIndex(10)
-                #if os(iOS)
-                .statusBarHidden()
-                #endif
+                playerView
+                    .transition(.opacity)
+                    .zIndex(10)
+                    #if os(iOS)
+                    .statusBarHidden()
+                    #endif
             }
+            #endif
         }
         // `cinematicDetailBackground` is the screen background now (#290); it
         // carries its own base colour, so no flat `aetherScreenBackground` here.
@@ -428,6 +425,15 @@ struct DetailView: View {
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .navigationBar)
         #endif
         .toolbar(isPlayerPresented ? .hidden : .automatic, for: .tabBar)
+        #if os(tvOS)
+        // tvOS: present the player as a full-screen cover so it covers the whole
+        // scene — including the `.sidebarAdaptable` menu pill, which an inline
+        // overlay leaves visible (#527 follow-up). Bound to the same
+        // `isPlayerPresented`, so `dismissPlayer()` dismisses it.
+        .fullScreenCover(isPresented: $isPlayerPresented) {
+            playerView
+        }
+        #endif
         // Keyed on the active item: re-runs when the user switches source via
         // "Available Sources", re-hydrating + reloading resume/children for the
         // newly-selected server.
@@ -680,6 +686,24 @@ struct DetailView: View {
         withAnimation(reduceMotion ? nil : AetherDesign.Motion.hero) {
             isPlayerPresented = true
         }
+    }
+
+    /// The native player, shared by the iOS/visionOS inline overlay and the tvOS
+    /// `.fullScreenCover`. Built from current playback state each presentation.
+    @ViewBuilder
+    private var playerView: some View {
+        PlayerView(
+            item: playbackItem ?? activeItem,
+            source: source,
+            session: playbackSession,
+            startAt: playbackStartAt,
+            preferExpanded: launchingInCinema,
+            redockToken: cinemaRedockToken,
+            makeCinemaInfoControllers: makeCinemaInfoControllers,
+            playbackPreferences: playbackPreferences,
+            onDismiss: dismissPlayer,
+            onAdvance: { advancedItem = $0 }
+        )
     }
 
     private func dismissPlayer() {
