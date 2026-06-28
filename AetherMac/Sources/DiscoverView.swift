@@ -176,8 +176,8 @@ struct DiscoverView: View {
     private func heroCarousel(_ items: [UnifiedMediaItem]) -> some View {
         let idx = min(heroIndex, items.count - 1)
         VStack(alignment: .leading, spacing: 10) {
-            AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
-                .padding(.horizontal, 24)
+            // No "Featured" header — the hero is the banner. It stretches to the
+            // content edges instead of sitting in a centred 1100-wide card.
             heroSlide(items[idx], progress: heroProgress[items[idx].id], items: items, currentIndex: idx)
             if items.count > 1 {
                 heroPageDots(count: items.count, current: idx)
@@ -216,11 +216,20 @@ struct DiscoverView: View {
                 Text(item.title)
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
                 HStack(spacing: 10) {
                     if let year = item.year { Text(String(year)) }
                     if !item.genres.isEmpty { Text(item.genres.prefix(3).joined(separator: " · ")) }
                     if let r = item.communityRating, r > 0 {
                         Label(String(format: "%.1f", r), systemImage: "star.fill")
+                    }
+                    if let quality = base?.mediaInfo?.videoResolution {
+                        heroBadge(quality)
+                    }
+                    if base?.mediaInfo?.isDolbyVision == true {
+                        heroBadge("Dolby Vision")
+                    } else if base?.mediaInfo?.isHDR == true {
+                        heroBadge("HDR")
                     }
                 }
                 .font(.callout).foregroundStyle(.white.opacity(0.85))
@@ -267,12 +276,20 @@ struct DiscoverView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .frame(maxWidth: 1100)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .id(item.id)
         .transition(.opacity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: heroIndex)
+    }
+
+    private func heroBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(.white.opacity(0.3), lineWidth: 0.75))
     }
 
     private func heroPageDots(count: Int, current: Int) -> some View {

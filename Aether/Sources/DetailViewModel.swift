@@ -361,44 +361,11 @@ final class DetailViewModel {
         // Some titles ship a predominantly *dark* logo (e.g. black lettering),
         // which vanishes against a bright backdrop — fall back to the legible
         // text title for those rather than showing an unreadable mark.
-        if let image, Self.logoIsTooDark(image) {
+        if let image, image.aetherLogoIsTooDark() {
             heroLogo = nil
         } else {
             heroLogo = image
         }
-    }
-
-    /// Average luminance of a logo's *visible* pixels (alpha-weighted). Returns
-    /// `true` when the mark is so dark it won't read over a backdrop, so the hero
-    /// can fall back to the text title. Cheap: samples a 24×24 downscale.
-    nonisolated static func logoIsTooDark(_ image: AetherPlatformImage) -> Bool {
-        #if canImport(UIKit)
-        guard let cg = image.cgImage else { return false }
-        let side = 24
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        guard let ctx = CGContext(
-            data: &pixels, width: side, height: side, bitsPerComponent: 8,
-            bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return false }
-        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
-
-        var lumSum = 0.0, alphaSum = 0.0
-        for i in stride(from: 0, to: pixels.count, by: 4) {
-            let a = Double(pixels[i + 3]) / 255.0
-            guard a > 0.05 else { continue }              // skip transparent areas
-            // Un-premultiply to recover the mark's true colour.
-            let r = Double(pixels[i]) / 255.0 / a
-            let g = Double(pixels[i + 1]) / 255.0 / a
-            let b = Double(pixels[i + 2]) / 255.0 / a
-            lumSum += (0.299 * r + 0.587 * g + 0.114 * b) * a
-            alphaSum += a
-        }
-        guard alphaSum > 0 else { return false }
-        return (lumSum / alphaSum) < 0.42
-        #else
-        return false
-        #endif
     }
 
     /// Outcome of a local-metadata-edit refresh — the view decides whether to

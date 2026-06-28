@@ -159,9 +159,9 @@ private struct AccountsSettings: View {
 
             Section {
                 Menu {
-                    if !isPlexConnected {
-                        Button("Plex") { signIn = .plex }
-                    }
+                    // Plex supports several accounts — offer it even when signed in
+                    // so a second account (and its servers) can be added.
+                    Button(isPlexConnected ? "Add Plex Account" : "Plex") { signIn = .plex }
                     // Jellyfin / Emby support several servers — offer them even when
                     // one is already connected so a second can be added.
                     Button(isJellyfinConnected ? "Add Jellyfin Server" : "Jellyfin") { signIn = .jellyfin }

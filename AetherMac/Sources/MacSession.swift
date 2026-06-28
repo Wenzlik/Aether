@@ -380,6 +380,8 @@ final class MacSession {
 
     private static let plexTokenKey = "plex.authToken"
     private static let plexAdminTokenKey = "plex.adminToken"
+    /// Additional Plex account tokens beyond the primary, as a JSON string array.
+    private static let plexExtraAccountTokensKey = "plex.extraAccountTokens"
     private static let plexHomeUserKey = "plex.homeUser"
     private static let plexClientIDKey = "plex.clientIdentifier"
     private static let jellyfinDeviceIDKey = "jellyfin.deviceID"
@@ -493,10 +495,50 @@ final class MacSession {
     /// account token). Persists tokens + active profile, discovers reachable
     /// servers, and builds the live sources.
     func completePlexSignIn(result: PlexSignInResult) async {
-        try? await keychain.setString(result.token, for: Self.plexTokenKey)
-        try? await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
-        await persistActivePlexUser(result.user)
-        await discoverPlexServers(token: result.token)
+        if let primary = await plexPrimaryToken() {
+            // Additional account: keep the primary (and its Home profiles) intact,
+            // record this account's token so its servers appear in Manage Servers.
+            var extras = await plexExtraAccountTokens()
+            if result.token != primary, !extras.contains(result.token) { extras.append(result.token) }
+            await setPlexExtraAccountTokens(extras)
+            await discoverPlexServers(token: primary)   // refresh; extras surface in the picker
+        } else {
+            try? await keychain.setString(result.token, for: Self.plexTokenKey)
+            try? await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
+            await persistActivePlexUser(result.user)
+            await discoverPlexServers(token: result.token)
+        }
+    }
+
+    // MARK: Plex accounts (multi-account, additive over the primary)
+
+    private func plexPrimaryToken() async -> String? {
+        guard let token = (try? await keychain.string(for: Self.plexTokenKey)) ?? nil, !token.isEmpty else { return nil }
+        return token
+    }
+
+    private func plexExtraAccountTokens() async -> [String] {
+        guard let json = (try? await keychain.string(for: Self.plexExtraAccountTokensKey)) ?? nil,
+              let data = json.data(using: .utf8),
+              let tokens = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return tokens
+    }
+
+    private func setPlexExtraAccountTokens(_ tokens: [String]) async {
+        if tokens.isEmpty {
+            try? await keychain.removeValue(for: Self.plexExtraAccountTokensKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(tokens), let json = String(data: data, encoding: .utf8) {
+            try? await keychain.setString(json, for: Self.plexExtraAccountTokensKey)
+        }
+    }
+
+    private func allPlexAccountTokens() async -> [String] {
+        var tokens: [String] = []
+        if let primary = await plexPrimaryToken() { tokens.append(primary) }
+        tokens.append(contentsOf: await plexExtraAccountTokens())
+        return tokens
     }
 
     /// Fetch resources for `token`, pick + persist the reachable servers, build
@@ -550,6 +592,7 @@ final class MacSession {
     func signOutPlex() async {
         try? await keychain.removeValue(for: Self.plexTokenKey)
         try? await keychain.removeValue(for: Self.plexAdminTokenKey)
+        await setPlexExtraAccountTokens([])
         await persistActivePlexUser(nil)
         try? await plexServerStore.clear()
         plexServerRecords = []
@@ -582,10 +625,22 @@ final class MacSession {
     /// best-first by `PlexServerSelector`. Returns `nil` on network / auth
     /// failure so the caller can distinguish "error" from "no servers found".
     func loadReachablePlexServers() async -> [PlexServerRecord]? {
-        guard let token = try? await keychain.string(for: Self.plexTokenKey) else { return nil }
-        guard let resources = try? await plexResourceClient.resources(token: token) else { return nil }
-        let selected = PlexServerSelector().rankedSelections(from: resources)
-        return selected.map { $0.makeRecord() }
+        let tokens = await allPlexAccountTokens()
+        guard !tokens.isEmpty else { return nil }
+        // Merge the servers reachable from every connected account, de-duped by
+        // clientIdentifier (same server via two accounts shows once).
+        var seen = Set<String>()
+        var merged: [PlexServerRecord] = []
+        var anySucceeded = false
+        for token in tokens {
+            guard let resources = try? await plexResourceClient.resources(token: token) else { continue }
+            anySucceeded = true
+            for record in PlexServerSelector().rankedSelections(from: resources).map({ $0.makeRecord() })
+            where seen.insert(record.clientIdentifier).inserted {
+                merged.append(record)
+            }
+        }
+        return anySucceeded ? merged : nil
     }
 
     /// Add or remove `record` from the active streaming set. At least one server
@@ -649,6 +704,25 @@ final class MacSession {
         jellyfinSources = records.compactMap { makeJellyfinSource($0) }
         try? await jellyfinServerStore.writeAll(records)
         jellyfinServerName = Self.serverSummary(records.map(\.serverName))
+        libraryToken &+= 1
+    }
+
+    /// The connected Jellyfin source whose server matches `id` (for source-scoped
+    /// actions like Identify), built from the matching record. Falls back to the
+    /// first connected Jellyfin source.
+    func jellyfinSource(for id: MediaID) -> JellyfinMediaSource? {
+        guard case let .jellyfin(serverID) = id.source,
+              let record = jellyfinServers.first(where: { ($0.baseURL?.host ?? $0.baseURLString) == serverID }),
+              let source = makeJellyfinSource(record) else {
+            return jellyfinSource
+        }
+        return source
+    }
+
+    /// Drop the cached catalog after a server-side mutation made from the app
+    /// (e.g. a Jellyfin identify) so surfaces re-read the fresh metadata.
+    func libraryDidChangeExternally() async {
+        await makeLibrary().invalidate(kinds: [.movie, .show])
         libraryToken &+= 1
     }
 
