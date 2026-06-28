@@ -26,6 +26,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   error ("Couldn't resolve a playback URL … cancelled"). The countdown was
   cancelling the very task it used to start the next episode, so the resolve ran
   under a cancelled task. The next episode now plays cleanly.
+- **tvOS: player prompts are now selectable (#529)** — Skip Intro, Skip Credits,
+  and the Up Next "play next episode" prompt could be seen but not focused with
+  the Siri Remote (they were SwiftUI overlays the player view controller wouldn't
+  give focus to). They're now native, focusable on-screen actions. iOS and
+  visionOS are unchanged.
 
 ## [0.8.5] — 2026-06-28
 
