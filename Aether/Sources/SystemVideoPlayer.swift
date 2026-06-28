@@ -58,18 +58,30 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
     /// `.expanded` (a quick re-dock). `nil` / unchanged → no re-dock; windowed
     /// playback leaves it `nil`.
     let redockToken: UUID?
+    /// tvOS only: the single transient player prompt active right now (Skip Intro
+    /// / Skip Credits / Play Next Episode), surfaced as a **focusable**
+    /// `AVPlayerViewController` contextual action — the only surface that can take
+    /// focus over the tvOS player (a SwiftUI overlay button can't, the player VC
+    /// owns the remote). `nil` clears it. Unused on iOS / visionOS, which keep
+    /// their working SwiftUI overlays. (#529)
+    let contextualPromptTitle: String?
+    let onContextualPrompt: (() -> Void)?
 
     init(
         player: AVPlayer,
         preferExpanded: Bool = false,
         redockToken: UUID? = nil,
         makeCinemaInfoControllers: (() -> [UIViewController])? = nil,
+        contextualPromptTitle: String? = nil,
+        onContextualPrompt: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void = {}
     ) {
         self.player = player
         self.preferExpanded = preferExpanded
         self.redockToken = redockToken
         self.makeCinemaInfoControllers = makeCinemaInfoControllers
+        self.contextualPromptTitle = contextualPromptTitle
+        self.onContextualPrompt = onContextualPrompt
         self.onDismiss = onDismiss
     }
 
@@ -156,6 +168,28 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         if controller.player !== player {
             controller.player = player
         }
+        #if os(tvOS)
+        // Drive the active player prompt (Skip Intro / Skip Credits / Play Next
+        // Episode) as a focusable native contextual action — shown while the
+        // transport bar is hidden, which is exactly when these prompts appear.
+        // A SwiftUI overlay button can't take focus over the player VC (#529).
+        context.coordinator.onContextualPrompt = onContextualPrompt
+        if context.coordinator.currentPromptTitle != contextualPromptTitle {
+            context.coordinator.currentPromptTitle = contextualPromptTitle
+            if let contextualPromptTitle {
+                controller.contextualActions = [
+                    UIAction(
+                        title: contextualPromptTitle,
+                        image: UIImage(systemName: "forward.end.fill")
+                    ) { [weak coordinator = context.coordinator] _ in
+                        coordinator?.onContextualPrompt?()
+                    }
+                ]
+            } else {
+                controller.contextualActions = []
+            }
+        }
+        #endif
         #if os(visionOS)
         // Auto-expand once, after the controller is in the hierarchy: transition
         // to the expanded experience so it docks into the open immersive space
@@ -201,6 +235,10 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         var didRequestExpand = false
         /// Last re-dock token acted on, so each size/seat change re-docks once.
         var lastRedockToken: UUID?
+        /// tvOS: the current contextual-prompt action + the title it was built
+        /// for, so the action is rebuilt only when the prompt changes (#529).
+        var onContextualPrompt: (() -> Void)?
+        var currentPromptTitle: String?
 
         init(onDismiss: @escaping () -> Void) {
             self.onDismiss = onDismiss
