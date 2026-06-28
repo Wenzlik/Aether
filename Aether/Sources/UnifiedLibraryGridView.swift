@@ -866,10 +866,11 @@ struct UnifiedLibraryGridView: View {
         let library = UnifiedLibrary(sources: connectedSources, downloads: downloadStore)
         // Always the full catalog — audio + genre are client-side filters (#319).
         let fetched: [UnifiedMediaItem]
+        let newShowIDs: Set<String>
         if let kind {
             fetched = await library.unifiedItems(kind: kind, forceRefresh: forceRefresh)
             guard key == sourcesKey else { return }
-            showIDs = []
+            newShowIDs = []
         } else {
             // All-kinds mode: load Movies + TV Shows and remember which ids are
             // shows so the Type toggle can split them client-side.
@@ -879,9 +880,19 @@ struct UnifiedLibraryGridView: View {
             let shows = await showsTask
             guard key == sourcesKey else { return }
             fetched = movies + shows
-            showIDs = Set(shows.map(\.id))
+            newShowIDs = Set(shows.map(\.id))
         }
+        // The fan-out is fault-tolerant and never caches an empty result — an
+        // empty fetch means "couldn't see the catalog right now", not "the
+        // library is empty" (see UnifiedLibrary). A pull-to-refresh that comes
+        // back empty (e.g. a Jellyfin server momentarily returning nothing under
+        // the concurrent force-refresh, while the cache still holds the real
+        // catalog) must not blank a populated grid — that flashed "Nothing here"
+        // until you navigated away and back and the cache repainted. Keep the
+        // last-good catalog instead of clearing it.
+        guard !(fetched.isEmpty && !items.isEmpty) else { return }
         items = fetched
+        showIDs = newShowIDs
         // Warm the artwork cache for the first screenful of the grid.
         AetherImageCache.shared.prefetch(fetched.prefix(40).map(\.posterURL))
     }

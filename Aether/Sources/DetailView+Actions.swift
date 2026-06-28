@@ -199,6 +199,15 @@ extension DetailView {
                 presentedSelector = .smbEditMetadata
             }
         }
+        // Identify on Jellyfin — match a mis/unidentified title against the
+        // server's metadata providers and apply it server-side, so you don't have
+        // to open the Jellyfin web dashboard. Movies, episodes, and shows
+        // (identifying a show fixes the whole series); not seasons.
+        if isJellyfinSource(activeItem.id.source), activeItem.kind == .show || !activeItem.kind.isContainer {
+            AetherIconButton(systemImage: "wand.and.stars", accessibilityLabel: "Identify on Jellyfin") {
+                presentedSelector = .identifyJellyfin
+            }
+        }
     }
 
     /// Personal rating as a compact icon `Menu` (Plex `userRating`). The glyph

@@ -41,6 +41,9 @@ struct MediaDetailView: View {
     @State private var watchedOverride: Bool?
     @State private var favoriteOverride: Bool?
     @State private var showFixMatch = false
+    @State private var showIdentify = false
+    /// Loaded clearLogo, gated on luminance — a too-dark mark falls back to text.
+    @State private var heroLogo: AetherPlatformImage?
     /// Non-nil when the user has picked a different source via the switcher.
     @State private var overrideItem: MediaItem?
 
@@ -113,6 +116,13 @@ struct MediaDetailView: View {
         // a season's episode rows + the show's Next Up reflect freshly-marked
         // state instead of a stale fetch.
         .task(id: "\(baseItem.id.rawValue)-\(session.libraryToken)") { await load() }
+        // Load the clearLogo and gate on luminance — a predominantly dark mark
+        // would vanish over the backdrop, so fall back to the text title (#516).
+        .task(id: current.logoURL()) {
+            guard current.kind != .episode, let url = current.logoURL() else { heroLogo = nil; return }
+            let image = await AetherImageCache.shared.image(for: url, maxPixel: ArtworkTier.logo.maxPixel)
+            heroLogo = (image?.aetherLogoIsTooDark() == true) ? nil : image
+        }
         // Refresh the Resume position after the player closes (it bumps
         // resumeRevision on every write), so the button reflects where you
         // stopped — and the screen we return to after playback (#8) stays current.
@@ -165,10 +175,13 @@ struct MediaDetailView: View {
             // Title as the clearLogo wordmark when the source has one, else the
             // title text (iOS-style "special text"). `.fit` so a wide logo scales
             // within its box instead of overflowing onto the metadata below.
-            if let logo = current.logoURL() {
-                CachedAsyncImage(url: logo, contentMode: .fit)
+            if let heroLogo {
+                Image(nsImage: heroLogo)
+                    .resizable()
+                    .scaledToFit()
                     .frame(maxWidth: 640, maxHeight: 200, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    .shadow(color: .black.opacity(0.5), radius: 10, y: 3)
             } else {
                 Text(current.title)
                     .font(.system(size: 64, weight: .bold))
@@ -420,6 +433,24 @@ struct MediaDetailView: View {
                                 tmdbRating = await session.fetchTMDbRating(tmdbID: tmdbID, type: type)
                             }
                         }
+                    }
+                }
+            }
+
+            // Identify on Jellyfin — match a mis/unidentified title against the
+            // server's metadata providers (movies, episodes, and shows).
+            if case .jellyfin = item.id.source,
+               item.kind == .show || !item.kind.isContainer {
+                Button {
+                    showIdentify = true
+                } label: {
+                    Label("Identify", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.bordered)
+                .sheet(isPresented: $showIdentify) {
+                    JellyfinIdentifySheet(item: current, session: session) {
+                        // libraryDidChangeExternally bumps libraryToken → the
+                        // detail's load task re-runs and picks up the applied match.
                     }
                 }
             }

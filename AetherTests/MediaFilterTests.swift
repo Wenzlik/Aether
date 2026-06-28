@@ -48,6 +48,22 @@ struct MediaFilterTests {
         #expect(options.allSatisfy { !$0.displayName.isEmpty })
     }
 
+    // MARK: - Code variants (Jellyfin server-side filter)
+
+    @Test("variants(of:) expands a canonical key to its 2- and 3-letter forms")
+    func variantsExpansion() {
+        // cs → itself + both ISO 639-2 forms (terminological + bibliographic).
+        #expect(Set(AudioLanguage.variants(of: "cs")) == ["cs", "ces", "cze"])
+        #expect(Set(AudioLanguage.variants(of: "en")) == ["en", "eng"])
+        #expect(Set(AudioLanguage.variants(of: "de")) == ["de", "deu", "ger"])
+        // A canonical key with no 3-letter mapping just returns itself.
+        #expect(AudioLanguage.variants(of: "xx") == ["xx"])
+        // Every variant folds back to the canonical key it came from (round-trip).
+        for code in ["cs", "en", "de", "fr", "ja"] {
+            #expect(AudioLanguage.variants(of: code).allSatisfy { AudioLanguage.canonical($0) == code })
+        }
+    }
+
     // MARK: - Local matching
 
     private func item(languages: [String?]) -> MediaItem {

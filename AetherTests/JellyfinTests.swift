@@ -132,7 +132,7 @@ struct JellyfinDecodingTests {
     }
 }
 
-@Suite("Jellyfin — Quick Connect flow")
+@Suite("Jellyfin — auth flow")
 struct JellyfinAuthFlowTests {
     private static let config = JellyfinConfiguration(
         client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"
@@ -153,6 +153,28 @@ struct JellyfinAuthFlowTests {
         )
         #expect(result.accessToken == "abc")
         #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName exchanges username/password for a token")
+    func passwordSignInSucceeds() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(#"{"AccessToken":"abc","ServerId":"s1","User":{"Id":"u1","Name":"me"}}"#.utf8), statusCode: 200, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        let result = try await client.authenticateByName(baseURL: base, username: "me", password: "pw")
+        #expect(result.accessToken == "abc")
+        #expect(result.user.id == "u1")
+    }
+
+    @Test("authenticateByName maps a 401 to invalidCredentials")
+    func passwordSignInRejectsBadCredentials() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("Unauthorized".utf8), statusCode: 401, headers: [:]))
+
+        let client = JellyfinAuthClient(api: api, configuration: Self.config)
+        await #expect(throws: JellyfinAuthError.invalidCredentials) {
+            try await client.authenticateByName(baseURL: base, username: "me", password: "wrong")
+        }
     }
 }
 
@@ -265,6 +287,37 @@ struct JellyfinMediaSourceTests {
         #expect(resolved.isServerTranscode == false)
     }
 
+    @Test("from-zero transcode exposes its PlaySessionId as the transcodeSessionID")
+    func transcodeSurfacesSession() async throws {
+        let source = makeSource(api: RecordingAPIClient())
+        let request = PlaybackRequest(
+            itemID: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "42"),
+            mode: .transcode
+        )
+        let resolved = try await source.resolvePlayback(request)
+
+        // The teardown handle must equal the session baked into the URL, so
+        // stopTranscode targets the encoding this URL actually started.
+        let session = try #require(resolved.transcodeSessionID)
+        let urlSession = URLComponents(url: resolved.url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "PlaySessionId" }?.value
+        #expect(session == urlSession)
+    }
+
+    @Test("stopTranscode issues DELETE /Videos/ActiveEncodings keyed by device + session")
+    func stopTranscodeTearsDown() async throws {
+        let api = RecordingAPIClient()
+        let source = makeSource(api: api)
+        await source.stopTranscode(sessionID: "sess-123")
+
+        let req = try #require(await api.requests.first)
+        #expect(req.httpMethod == "DELETE")
+        #expect(req.url?.path == "/Videos/ActiveEncodings")
+        let q = try #require(URLComponents(url: req.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(q.first { $0.name == "deviceId" }?.value == "dev-1")
+        #expect(q.first { $0.name == "playSessionId" }?.value == "sess-123")
+    }
+
     @Test("supports downloads; Original uses /Items/{id}/Download, caps use a progressive mp4")
     func downloads() async throws {
         let source = makeSource(api: RecordingAPIClient())
@@ -289,6 +342,66 @@ struct JellyfinMediaSourceTests {
         #expect(cappedQuery.contains { $0.name == "VideoBitrate" && $0.value == "8000000" })
         #expect(cappedQuery.contains { $0.name == "MaxHeight" && $0.value == "1080" })
         #expect(cappedQuery.contains { $0.name == "static" && $0.value == "false" })
+    }
+
+    // MARK: - Server-side audio-language filter (#295)
+
+    private let lib = Library.ID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "lib1")
+
+    @Test("audioLanguage filter: a server with the facet filters server-side, expanding code variants")
+    func audioLanguageServerSide() async throws {
+        let api = RecordingAPIClient()
+        // /Items/Filters2 advertises the AudioLanguages facet → capability = yes.
+        await api.enqueue(.init(data: Data(#"{"AudioLanguages":[{"Name":"Czech","Value":"ces"}]}"#.utf8), statusCode: 200, headers: [:]))
+        // The filtered /Items listing.
+        await api.enqueue(.init(data: Data(#"{"Items":[{"Id":"42","Name":"Film","Type":"Movie"}],"TotalRecordCount":1}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let items = try await source.items(in: lib, audioLanguage: "cs")
+
+        // Non-nil → unified layer uses it instead of falling back client-side.
+        #expect(try #require(items).map(\.title) == ["Film"])
+
+        let reqs = await api.requests
+        #expect(reqs.contains { $0.url?.path == "/Items/Filters2" })
+        let listed = try #require(reqs.first { $0.url?.path == "/Users/u1/Items" })
+        let q = try #require(URLComponents(url: listed.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        let audioParam = try #require(q.first { $0.name == "AudioLanguages" }?.value)
+        // Canonical "cs" expands to its 2-letter key + both 639-2 forms, OR-matched.
+        let sent = Set(audioParam.split(separator: ",").map(String.init))
+        #expect(sent == ["cs", "ces", "cze"])
+    }
+
+    @Test("audioLanguage filter: an old server (no facet) returns nil → client-side fallback")
+    func audioLanguageUnsupported() async throws {
+        let api = RecordingAPIClient()
+        // Filters2 without the AudioLanguages field — pre-#9787 server.
+        await api.enqueue(.init(data: Data(#"{"Genres":[{"Name":"Drama","Value":"Drama"}]}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let items = try await source.items(in: lib, audioLanguage: "cs")
+
+        #expect(items == nil)   // signals UnifiedLibrary to filter client-side
+        // Only the probe ran — no (pointless, unfiltered) listing fetch.
+        let reqs = await api.requests
+        #expect(reqs.allSatisfy { $0.url?.path == "/Items/Filters2" })
+        #expect(reqs.count == 1)
+    }
+
+    @Test("audioLanguage filter: capability is probed once, then memoized")
+    func audioLanguageProbeMemoized() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(#"{"AudioLanguages":[]}"#.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data(#"{"Items":[],"TotalRecordCount":0}"#.utf8), statusCode: 200, headers: [:]))
+        await api.enqueue(.init(data: Data(#"{"Items":[],"TotalRecordCount":0}"#.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        _ = try await source.items(in: lib, audioLanguage: "en")
+        _ = try await source.items(in: lib, audioLanguage: "fr")
+
+        // Two filter calls, but Filters2 was hit exactly once.
+        let probes = await api.requests.filter { $0.url?.path == "/Items/Filters2" }
+        #expect(probes.count == 1)
     }
 }
 
@@ -444,5 +557,159 @@ struct JellyfinMediaSegmentsTests {
         let segs = resp.items.compactMap(\.segment)
         #expect(segs.count == 1)          // unknown type dropped
         #expect(segs[0].kind == .intro)
+    }
+}
+
+@Suite("Jellyfin — identify (RemoteSearch)")
+struct JellyfinIdentifyTests {
+    private let base = URL(string: "http://jelly.test:8096")!
+
+    private func makeSource(api: any APIClient) -> JellyfinMediaSource {
+        JellyfinMediaSource(
+            serverID: "http://jelly.test:8096",
+            displayName: "Den",
+            baseURL: base,
+            accessToken: "tok",
+            userID: "u1",
+            configuration: JellyfinConfiguration(client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"),
+            api: api
+        )
+    }
+
+    @Test("identifyCandidates POSTs to the Movie endpoint with name+year and parses results")
+    func searchMovies() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        [{"Name":"Dune","ProductionYear":2021,"ImageUrl":"http://img/x.jpg",
+          "Overview":"Paul.","SearchProviderName":"TheMovieDb","ProviderIds":{"Tmdb":"438631","Imdb":"tt1160419"}}]
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        let results = try await source.identifyCandidates(for: id, kind: .movie, name: "Dune", year: 2021)
+
+        let first = try #require(results.first)
+        #expect(first.name == "Dune")
+        #expect(first.productionYear == 2021)
+        #expect(first.providerIds?["Tmdb"] == "438631")
+        #expect(first.id == "Imdb=tt1160419&Tmdb=438631")   // stable, provider-id derived
+
+        let request = try #require(await api.requests.first)
+        #expect(request.url?.path == "/Items/RemoteSearch/Movie")
+        #expect(request.httpMethod == "POST")
+        let body = try #require(request.httpBody)
+        let sent = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(sent?["ItemId"] as? String == "item42")
+        #expect((sent?["SearchInfo"] as? [String: Any])?["Name"] as? String == "Dune")
+        #expect((sent?["SearchInfo"] as? [String: Any])?["Year"] as? Int == 2021)
+    }
+
+    @Test("identifyCandidates routes shows to the Series endpoint")
+    func searchSeries() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("[]".utf8), statusCode: 200, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "s1")
+        _ = try await source.identifyCandidates(for: id, kind: .show, name: "Severance", year: nil)
+        #expect(await api.requests.first?.url?.path == "/Items/RemoteSearch/Series")
+    }
+
+    @Test("applyIdentification POSTs the chosen result to Apply/{itemId} with the provider ids")
+    func apply() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(), statusCode: 204, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        var result = JellyfinAPI.RemoteSearchResult()
+        result.name = "Dune"
+        result.productionYear = 2021
+        result.providerIds = ["Tmdb": "438631"]
+
+        try await source.applyIdentification(id, result: result)
+
+        let request = try #require(await api.requests.first)
+        #expect(request.url?.path == "/Items/RemoteSearch/Apply/item42")
+        #expect(request.url?.query?.contains("replaceAllImages=true") == true)
+        #expect(request.httpMethod == "POST")
+        let sent = try JSONSerialization.jsonObject(with: try #require(request.httpBody)) as? [String: Any]
+        #expect((sent?["ProviderIds"] as? [String: Any])?["Tmdb"] as? String == "438631")
+        #expect(sent?["Name"] as? String == "Dune")
+    }
+
+    @Test("applyIdentification throws on a non-2xx (e.g. a non-admin 403)")
+    func applyForbidden() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data(), statusCode: 403, headers: [:]))
+        let source = makeSource(api: api)
+        let id = MediaID(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "item42")
+        await #expect(throws: APIClientError.unexpectedStatus(403)) {
+            try await source.applyIdentification(id, result: JellyfinAPI.RemoteSearchResult())
+        }
+    }
+}
+
+@Suite("Jellyfin — PlaybackInfo resume")
+struct JellyfinPlaybackInfoTests {
+    private let base = URL(string: "http://jelly.test:8096")!
+
+    private func makeSource(api: any APIClient) -> JellyfinMediaSource {
+        JellyfinMediaSource(
+            serverID: "http://jelly.test:8096",
+            displayName: "Den",
+            baseURL: base,
+            accessToken: "tok",
+            userID: "u1",
+            configuration: JellyfinConfiguration(client: "Aether", version: "0.2.0", deviceName: "Test", deviceID: "dev-1"),
+            api: api
+        )
+    }
+
+    private func transcodeItem() -> MediaItem {
+        // An .m3u8 streamURL makes `isServerTranscode` true → the transcode path.
+        MediaItem(
+            id: .init(source: .jellyfin(serverID: "http://jelly.test:8096"), rawValue: "ep1"),
+            title: "Episode 1", kind: .episode,
+            streamURL: URL(string: "http://jelly.test:8096/Videos/ep1/master.m3u8?api_key=tok")!
+        )
+    }
+
+    @Test("Resume goes through PlaybackInfo and uses the server's TranscodingUrl")
+    func usesPlaybackInfo() async throws {
+        let api = RecordingAPIClient()
+        let json = #"""
+        {"MediaSources":[{"Id":"ep1","SupportsTranscoding":true,
+          "TranscodingUrl":"/videos/ep1/master.m3u8?api_key=tok&PlaySessionId=abc&VideoCodec=h264"}],
+         "PlaySessionId":"abc"}
+        """#
+        await api.enqueue(.init(data: Data(json.utf8), statusCode: 200, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(item: transcodeItem(), startTime: .seconds(120))
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.transcodeSessionID == "abc")
+        let urlString = resolved.url.absoluteString
+        #expect(urlString.hasPrefix("http://jelly.test:8096/videos/ep1/master.m3u8"))
+        #expect(urlString.contains("PlaySessionId=abc"))
+
+        let req = try #require(await api.requests.first)
+        #expect(req.url?.path == "/Items/ep1/PlaybackInfo")
+        #expect(req.httpMethod == "POST")
+        #expect(req.url?.query?.contains("StartTimeTicks=1200000000") == true)
+    }
+
+    @Test("PlaybackInfo failure falls back to the hand-built HLS URL")
+    func fallsBackOnFailure() async throws {
+        let api = RecordingAPIClient()
+        await api.enqueue(.init(data: Data("err".utf8), statusCode: 500, headers: [:]))
+
+        let source = makeSource(api: api)
+        let request = PlaybackRequest(item: transcodeItem(), startTime: .seconds(120))
+        let resolved = try await source.resolvePlayback(request)
+
+        #expect(resolved.isServerTranscode)
+        #expect(resolved.url.path == "/Videos/ep1/master.m3u8")   // legacy hand-built
     }
 }

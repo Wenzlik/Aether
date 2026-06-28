@@ -95,6 +95,33 @@ public actor JellyfinAuthClient {
         return try await api.decode(JellyfinAPI.AuthenticationResult.self, from: request, decoder: decoder)
     }
 
+    // MARK: - Username / password
+
+    /// Sign in directly with a username and password via
+    /// `POST /Users/AuthenticateByName` — the classic Jellyfin login, for users
+    /// who don't want (or whose server doesn't enable) Quick Connect. Returns the
+    /// same `AuthenticationResult` as the Quick Connect path, so the caller
+    /// persists it identically. The pre-auth `MediaBrowser` header (no token) is
+    /// what scopes the new session to this device. Throws
+    /// `.invalidCredentials` on a 401 (wrong username/password), `.invalidServer`
+    /// if the address isn't a reachable Jellyfin server.
+    public func authenticateByName(
+        baseURL: URL,
+        username: String,
+        password: String
+    ) async throws -> JellyfinAPI.AuthenticationResult {
+        var request = URLRequest(url: baseURL.appendingPathComponent("/Users/AuthenticateByName"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyHeaders(to: &request)
+        request.httpBody = try JSONEncoder().encode(["Username": username, "Pw": password])
+        do {
+            return try await api.decode(JellyfinAPI.AuthenticationResult.self, from: request, decoder: decoder)
+        } catch APIClientError.unexpectedStatus(401) {
+            throw JellyfinAuthError.invalidCredentials
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeRequest(baseURL: URL, path: String) -> URLRequest {
@@ -114,4 +141,5 @@ public enum JellyfinAuthError: Error, Sendable, Equatable {
     case invalidServer
     case notEnabled
     case timedOut
+    case invalidCredentials
 }

@@ -391,8 +391,13 @@ final class AppSession {
     private(set) var jellyfinConfiguration: JellyfinConfiguration?
     private(set) var jellyfinAuthClient: JellyfinAuthClient?
     private(set) var jellyfinServerStore: JellyfinServerStore?
-    var jellyfinServer: JellyfinServerRecord?
-    private(set) var jellyfinSource: JellyfinMediaSource?
+    /// All connected Jellyfin servers + their live sources (multi-server). The
+    /// full set rides `connectedSources`; `jellyfinServer`/`jellyfinSource` are
+    /// `.first` conveniences for the many single-server call sites.
+    private(set) var jellyfinServers: [JellyfinServerRecord] = []
+    private(set) var jellyfinSources: [JellyfinMediaSource] = []
+    var jellyfinServer: JellyfinServerRecord? { jellyfinServers.first }
+    var jellyfinSource: JellyfinMediaSource? { jellyfinSources.first }
     var isJellyfinSignedIn: Bool = false
 
     // MARK: - Emby
@@ -400,8 +405,11 @@ final class AppSession {
     private(set) var embyConfiguration: EmbyConfiguration?
     private(set) var embyAuthClient: EmbyAuthClient?
     private(set) var embyServerStore: EmbyServerStore?
-    var embyServer: EmbyServerRecord?
-    private(set) var embySource: EmbyMediaSource?
+    /// All connected Emby servers + their live sources (multi-server).
+    private(set) var embyServers: [EmbyServerRecord] = []
+    private(set) var embySources: [EmbyMediaSource] = []
+    var embyServer: EmbyServerRecord? { embyServers.first }
+    var embySource: EmbyMediaSource? { embySources.first }
     var isEmbySignedIn: Bool = false
 
     // MARK: - SMB (#214)
@@ -659,8 +667,8 @@ final class AppSession {
         // All enabled Plex servers — the Unified Library merges + dedupes them
         // (and Jellyfin/SMB/Local) by shared external ids (#325).
         list.append(contentsOf: plexSources)
-        if let jellyfinSource { list.append(jellyfinSource) }
-        if let embySource { list.append(embySource) }
+        list.append(contentsOf: jellyfinSources)
+        list.append(contentsOf: embySources)
         // SMB is LAN-only — surface it only while the NAS is actually reachable,
         // so off-network it goes dormant (no failed walks, not shown in the
         // Library) and auto-reappears when you're back on the network (#214).
@@ -698,6 +706,14 @@ final class AppSession {
         // `markWatchedEverywhere` invalidated the shared unified caches; nudge the
         // library/grid surfaces to re-read so the poster badge updates now instead
         // of after the next relaunch / pull-to-refresh.
+        libraryRevision &+= 1
+    }
+
+    /// Call after a server-side catalog mutation made from the app (e.g. a
+    /// Jellyfin identify changed a title's metadata) so Library / grid / Detail
+    /// surfaces drop the stale cached item and re-read the server's fresh state.
+    func libraryDidChangeExternally(kinds: [MediaItem.Kind] = [.movie, .show]) async {
+        await makeUnifiedLibrary().invalidate(kinds: kinds)
         libraryRevision &+= 1
     }
 
@@ -749,15 +765,65 @@ final class AppSession {
     /// discovery so the onboarding flow moves directly into the next step
     /// without the user having to tap a separate "Discover servers" button.
     func completePlexSignIn(result: PlexSignInResult) async {
-        do {
-            try await keychain.setString(result.token, for: Self.plexTokenKey)
-            try await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
-        } catch { }
-        await persistActivePlexUser(result.user)
-        isPlexSignedIn = true
-        await discoverPlexServers()
+        if await plexPrimaryToken() != nil {
+            // An additional account: keep the primary account (and its Home
+            // profiles) intact, just record this account's token so discovery
+            // merges its servers. The user enables them in Manage Servers.
+            var extras = await plexExtraAccountTokens()
+            if result.token != (await plexPrimaryToken()), !extras.contains(result.token) {
+                extras.append(result.token)
+            }
+            await setPlexExtraAccountTokens(extras)
+            isPlexSignedIn = true
+            await discoverPlexServers()
+        } else {
+            do {
+                try await keychain.setString(result.token, for: Self.plexTokenKey)
+                try await keychain.setString(result.adminToken, for: Self.plexAdminTokenKey)
+            } catch { }
+            await persistActivePlexUser(result.user)
+            isPlexSignedIn = true
+            await discoverPlexServers()
+        }
         // A fresh Plex sign-in becomes the active source.
         if plexSource != nil { setActiveSource(.plex) }
+        isSignInPresented = false
+    }
+
+    // MARK: - Plex accounts (multi-account, additive over the primary)
+
+    /// The primary Plex account token (non-empty), or `nil`.
+    private func plexPrimaryToken() async -> String? {
+        guard let token = (try? await keychain.string(for: Self.plexTokenKey)) ?? nil,
+              !token.isEmpty else { return nil }
+        return token
+    }
+
+    /// Additional account tokens (beyond the primary).
+    private func plexExtraAccountTokens() async -> [String] {
+        guard let json = (try? await keychain.string(for: Self.plexExtraAccountTokensKey)) ?? nil,
+              let data = json.data(using: .utf8),
+              let tokens = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return tokens
+    }
+
+    private func setPlexExtraAccountTokens(_ tokens: [String]) async {
+        if tokens.isEmpty {
+            try? await keychain.removeValue(for: Self.plexExtraAccountTokensKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(tokens),
+           let json = String(data: data, encoding: .utf8) {
+            try? await keychain.setString(json, for: Self.plexExtraAccountTokensKey)
+        }
+    }
+
+    /// Every Plex account token to discover servers from: primary first, then extras.
+    private func allPlexAccountTokens() async -> [String] {
+        var tokens: [String] = []
+        if let primary = await plexPrimaryToken() { tokens.append(primary) }
+        tokens.append(contentsOf: await plexExtraAccountTokens())
+        return tokens
     }
 
     /// Persist (or clear) the active Home profile ref + update the published
@@ -809,6 +875,7 @@ final class AppSession {
     func signOutOfPlex() async {
         do { try await keychain.removeValue(for: Self.plexTokenKey) } catch { }
         do { try await keychain.removeValue(for: Self.plexAdminTokenKey) } catch { }
+        await setPlexExtraAccountTokens([])
         await persistActivePlexUser(nil)
         do { try await plexServerStore?.clear() } catch { }
         // Drop the cross-launch library snapshot so a signed-out account's
@@ -884,15 +951,23 @@ final class AppSession {
     /// Plex isn't set up or no token is on file; throws only on the network /
     /// decode failure, so the caller can show "couldn't load servers".
     func availablePlexServers() async throws -> [PlexServerRecord] {
-        guard let resourceClient = plexResourceClient,
-              let token = try? await keychain.string(for: Self.plexTokenKey),
-              !token.isEmpty
-        else { return [] }
+        guard let resourceClient = plexResourceClient else { return [] }
+        let tokens = await allPlexAccountTokens()
+        guard !tokens.isEmpty else { return [] }
 
-        let resources = try await resourceClient.resources(token: token)
-        return PlexServerSelector()
-            .rankedSelections(from: resources)
-            .map { $0.makeRecord() }
+        // Merge the servers reachable from every connected account, de-duplicated
+        // by clientIdentifier (the same server seen via two accounts shows once).
+        // A single account's fetch failing doesn't drop the others.
+        var seen = Set<String>()
+        var merged: [PlexServerRecord] = []
+        for token in tokens {
+            let resources = (try? await resourceClient.resources(token: token)) ?? []
+            for record in PlexServerSelector().rankedSelections(from: resources).map({ $0.makeRecord() })
+            where seen.insert(record.clientIdentifier).inserted {
+                merged.append(record)
+            }
+        }
+        return merged
     }
 
     /// Currently-enabled server ids — marks the toggled rows in the picker.
@@ -982,10 +1057,10 @@ final class AppSession {
     private func restoreJellyfinServer() async {
         guard let store = jellyfinServerStore else { return }
         do {
-            guard let record = try await store.read() else { return }
-            jellyfinServer = record
-            jellyfinSource = makeJellyfinSource(from: record)
-            isJellyfinSignedIn = jellyfinSource != nil
+            let records = try await store.readAll()
+            jellyfinServers = records
+            jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+            isJellyfinSignedIn = !jellyfinSources.isEmpty
             refreshActiveSource()
         } catch {
             // Corrupted record shouldn't break launch — leave Jellyfin disconnected.
@@ -1005,21 +1080,27 @@ final class AppSession {
         )
     }
 
-    /// Called by `JellyfinSignInView` after a successful Quick Connect exchange.
+    /// Called by `JellyfinSignInView` after a successful sign-in. Appends the
+    /// server to the connected set (re-adding the same server URL replaces it),
+    /// so several Jellyfin servers can be connected at once.
     func completeJellyfinSignIn(record: JellyfinServerRecord) async {
-        do { try await jellyfinServerStore?.write(record) } catch { }
-        jellyfinServer = record
-        jellyfinSource = makeJellyfinSource(from: record)
-        isJellyfinSignedIn = jellyfinSource != nil
+        var records = jellyfinServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+        do { try await jellyfinServerStore?.writeAll(records) } catch { }
+        isJellyfinSignedIn = !jellyfinSources.isEmpty
         if jellyfinSource != nil { setActiveSource(.jellyfin) }
         isSignInPresented = false
+        libraryRevision &+= 1
     }
 
+    /// Disconnect every Jellyfin server.
     func signOutOfJellyfin() async {
         do { try await jellyfinServerStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
-        jellyfinServer = nil
-        jellyfinSource = nil
+        jellyfinServers = []
+        jellyfinSources = []
         isJellyfinSignedIn = false
         if activeSourceKind == .jellyfin {
             if isPlexSignedIn { setActiveSource(.plex) }
@@ -1028,6 +1109,36 @@ final class AppSession {
         } else {
             refreshActiveSource()
         }
+    }
+
+    /// The connected Jellyfin source whose server matches `id` (for source-scoped
+    /// actions like Identify), falling back to the first when none matches.
+    /// Resolved via the records (`JellyfinMediaSource` is an actor, so its `id`
+    /// isn't readable synchronously) — builds the source for the matching server.
+    func jellyfinSource(for id: MediaID) -> JellyfinMediaSource? {
+        guard case let .jellyfin(serverID) = id.source,
+              let record = jellyfinServers.first(where: { $0.baseURLString == serverID }),
+              let source = makeJellyfinSource(from: record) else {
+            return jellyfinSource
+        }
+        return source
+    }
+
+    /// Remove one connected Jellyfin server by id (`baseURLString`), keeping the
+    /// others. Used by the Settings server list.
+    func removeJellyfinServer(_ serverID: String) async {
+        let records = jellyfinServers.filter { $0.baseURLString != serverID }
+        jellyfinServers = records
+        jellyfinSources = records.compactMap { makeJellyfinSource(from: $0) }
+        if records.isEmpty {
+            await signOutOfJellyfin()
+            return
+        }
+        do { try await jellyfinServerStore?.writeAll(records) } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        isJellyfinSignedIn = true
+        refreshActiveSource()
+        libraryRevision &+= 1
     }
 
     func presentSignIn(_ target: SignInTarget = .plex) {
@@ -1066,10 +1177,10 @@ final class AppSession {
     private func restoreEmbyServer() async {
         guard let store = embyServerStore else { return }
         do {
-            guard let record = try await store.read() else { return }
-            embyServer = record
-            embySource = makeEmbySource(from: record)
-            isEmbySignedIn = embySource != nil
+            let records = try await store.readAll()
+            embyServers = records
+            embySources = records.compactMap { makeEmbySource(from: $0) }
+            isEmbySignedIn = !embySources.isEmpty
             refreshActiveSource()
         } catch {
             // Corrupted record shouldn't break launch — leave Emby disconnected.
@@ -1089,21 +1200,26 @@ final class AppSession {
         )
     }
 
-    /// Called by `EmbySignInView` after a successful Quick Connect exchange.
+    /// Called by `EmbySignInView` after a successful sign-in. Appends the server
+    /// (re-adding the same server URL replaces it) so several can connect at once.
     func completeEmbySignIn(record: EmbyServerRecord) async {
-        do { try await embyServerStore?.write(record) } catch { }
-        embyServer = record
-        embySource = makeEmbySource(from: record)
-        isEmbySignedIn = embySource != nil
+        var records = embyServers.filter { $0.baseURLString != record.baseURLString }
+        records.append(record)
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource(from: $0) }
+        do { try await embyServerStore?.writeAll(records) } catch { }
+        isEmbySignedIn = !embySources.isEmpty
         if embySource != nil { setActiveSource(.emby) }
         isSignInPresented = false
+        libraryRevision &+= 1
     }
 
+    /// Disconnect every Emby server.
     func signOutOfEmby() async {
         do { try await embyServerStore?.clear() } catch { }
         await UnifiedLibrarySnapshotStore.shared.clearAll()
-        embyServer = nil
-        embySource = nil
+        embyServers = []
+        embySources = []
         isEmbySignedIn = false
         if activeSourceKind == .emby {
             if isPlexSignedIn { setActiveSource(.plex) }
@@ -1112,6 +1228,22 @@ final class AppSession {
         } else {
             refreshActiveSource()
         }
+    }
+
+    /// Remove one connected Emby server by id (`baseURLString`), keeping the rest.
+    func removeEmbyServer(_ serverID: String) async {
+        let records = embyServers.filter { $0.baseURLString != serverID }
+        embyServers = records
+        embySources = records.compactMap { makeEmbySource(from: $0) }
+        if records.isEmpty {
+            await signOutOfEmby()
+            return
+        }
+        do { try await embyServerStore?.writeAll(records) } catch { }
+        await UnifiedLibrarySnapshotStore.shared.clearAll()
+        isEmbySignedIn = true
+        refreshActiveSource()
+        libraryRevision &+= 1
     }
 
     // MARK: - SMB (#214)
@@ -1249,6 +1381,10 @@ final class AppSession {
     static let plexAdminTokenKey = "plex.adminToken"
     /// JSON `PlexHomeUserRef` of the active Home profile (for restore + display).
     static let plexHomeUserKey = "plex.homeUser"
+    /// Additional Plex **account** tokens beyond the primary (`plexTokenKey`), as
+    /// a JSON string array. Discovery merges every account's servers; the primary
+    /// account keeps Home-profile support, the extras contribute their servers.
+    static let plexExtraAccountTokensKey = "plex.extraAccountTokens"
     static let jellyfinDeviceIDKey = "jellyfin.deviceID"
     static let embyDeviceIDKey = "emby.deviceID"
     static let activeSourceKey = "active.source"

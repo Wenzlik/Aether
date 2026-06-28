@@ -267,6 +267,30 @@ struct DiscoverView: View {
     /// auto-advancing entirely under Reduce Motion. Pagination dots underneath.
     @ViewBuilder
     private var heroCarousel: some View {
+        Group {
+            #if !os(tvOS)
+            if isWideHero {
+                // Cinematic full-bleed banner: no section header, pagination dots
+                // overlaid in the lower-center of the artwork.
+                touchFeaturedCarousel
+                    .overlay(alignment: .bottom) {
+                        if heroItems.count > 1 {
+                            heroPageDots.padding(.bottom, AetherDesign.Spacing.m)
+                        }
+                    }
+            } else {
+                compactHeroStack
+            }
+            #else
+            compactHeroStack
+            #endif
+        }
+        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
+    }
+
+    /// iPhone / tvOS: a labelled "Featured" section with the carousel and the
+    /// pagination dots beneath it.
+    private var compactHeroStack: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
             #if os(tvOS)
@@ -279,7 +303,6 @@ struct DiscoverView: View {
                     .padding(.horizontal, AetherDesign.Spacing.l)
             }
         }
-        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
     }
 
     /// Pagination dots — accent for the current slide. One accessibility element
@@ -348,70 +371,140 @@ struct DiscoverView: View {
     /// title + metadata are overlaid on a gradient scrim at the bottom edge, and a
     /// thin progress bar runs along the very bottom for in-progress titles.
     private func wideHeroSlide(_ item: UnifiedMediaItem, height: CGFloat) -> some View {
-        CachedAsyncImage(url: item.backdropURL ?? item.posterURL)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .clipped()
-            // Bottom gradient scrim + overlaid title / metadata
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.xxs) {
-                    Text(item.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-                        .lineLimit(2)
-                    if let meta = featuredMetaLine(item) {
-                        Text(meta)
-                            .font(AetherDesign.Typography.metadata)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.m)
-                // Extra bottom clearance when the progress bar is visible
-                .padding(.bottom, heroProgress[item.id] != nil
-                         ? AetherDesign.Spacing.m + 7
-                         : AetherDesign.Spacing.m)
+        ZStack(alignment: .bottomLeading) {
+            // Full-bleed backdrop (no rounded card frame) — the cinematic banner.
+            CachedAsyncImage(url: item.backdropURL(.backdrop) ?? item.backdropURL ?? item.posterURL)
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .clipped()
+
+            // Scrims fade the artwork into the *page background colour* (not pure
+            // black) so the hero melts seamlessly into the screen — no hard panel
+            // edges. Leading wash carries the title block; bottom wash dissolves
+            // into the rails; a soft top wash blends the upper edge.
+            LinearGradient(
+                colors: [
+                    AetherDesign.Palette.background.opacity(0.95),
+                    AetherDesign.Palette.background.opacity(0.4),
+                    .clear
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+            LinearGradient(
+                colors: [.clear, AetherDesign.Palette.background.opacity(0.6), AetherDesign.Palette.background],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: height * 0.7)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            LinearGradient(
+                colors: [AetherDesign.Palette.background.opacity(0.7), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: height * 0.22)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            // Title lockup + metadata + actions, lower-left like the reference.
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                heroTitleLockup(item)
+                heroMetaRow(item)
+                heroActionRow(item)
+            }
+            .padding(.horizontal, AetherDesign.Spacing.xl)
+            .padding(.bottom, AetherDesign.Spacing.xl)
+            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .clipped()
+    }
+
+    /// The title's clearLogo when the artwork carries one (the cinematic logo
+    /// treatment), else a light, wide-tracked text fallback.
+    @ViewBuilder
+    private func heroTitleLockup(_ item: UnifiedMediaItem) -> some View {
+        if let logo = item.logoURL() {
+            CachedAsyncImage(url: logo, contentMode: .fit)
+                .frame(maxWidth: 380, maxHeight: 116, alignment: .bottomLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background {
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.72)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: height * 0.55)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                }
+        } else {
+            Text(item.title)
+                .font(.system(size: 46, weight: .light))
+                .tracking(1.5)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
+        }
+    }
+
+    /// Year · runtime · rating, then quality + dynamic-range badges (4K · Dolby
+    /// Vision / HDR) pulled from the title's media info.
+    private func heroMetaRow(_ item: UnifiedMediaItem) -> some View {
+        // Media info comes from the lead source (offline → plex → jellyfin → …).
+        let info = item.sources.first?.item.mediaInfo
+        return HStack(spacing: AetherDesign.Spacing.s) {
+            if let meta = featuredMetaLine(item) {
+                Text(meta)
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
             }
-            // Rating badge — top-leading, consistent with AetherCard
-            .overlay(alignment: .topLeading) {
-                if let rating = item.posterRating(source: posterRatingSource), rating > 0 {
-                    Text(String(format: "%.1f", rating))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay { Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5) }
-                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                        .padding(AetherDesign.Spacing.xs)
-                }
+            if let quality = info?.videoResolution {
+                heroBadge(quality)
             }
-            // Continue-watching bar along the very bottom edge
-            .overlay(alignment: .bottom) {
-                if let fraction = heroProgress[item.id] {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Rectangle().fill(Color.white.opacity(0.25))
-                            Rectangle()
-                                .fill(AetherDesign.Gradients.progress)
-                                .frame(width: max(4, geo.size.width * CGFloat(fraction)))
-                        }
-                    }
-                    .frame(height: 3)
-                }
+            if info?.isDolbyVision == true {
+                heroBadge("Dolby Vision", tint: AetherDesign.Palette.warning)
+            } else if info?.isHDR == true {
+                heroBadge("HDR")
             }
-            .clipShape(RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous))
+        }
+    }
+
+    private func heroBadge(_ text: String, tint: Color = .white) -> some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .semibold))
+            .tracking(0.4)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(tint.opacity(0.35), lineWidth: 0.75)
+            }
+    }
+
+    /// A Play affordance + Watchlist glyph. The whole slide is a `NavigationLink`
+    /// to Detail (which owns resume / track selection / playback), so these read
+    /// as the call-to-action without nesting interactive controls inside the link.
+    private func heroActionRow(_ item: UnifiedMediaItem) -> some View {
+        HStack(spacing: AetherDesign.Spacing.m) {
+            HStack(spacing: AetherDesign.Spacing.s) {
+                Image(systemName: "play.fill")
+                Text(heroProgress[item.id] != nil ? "Resume" : "Play")
+                    .fontWeight(.semibold)
+            }
+            .font(.system(size: 16))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 13)
+            .background(
+                LinearGradient(colors: [.white, Color(white: 0.88)], startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
+
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+        }
+        .padding(.top, AetherDesign.Spacing.xs)
     }
 
     /// `true` on the wide layouts (iPad regular width / visionOS) where the hero
@@ -430,7 +523,7 @@ struct DiscoverView: View {
     /// Cinematic ratio for the wide hero so a full-width banner stays a sensible
     /// height; the compact iPhone hero keeps the backdrop's native 16:9.
     private var heroAspect: CGFloat {
-        isWideHero ? 2.7 : 16.0 / 9.0
+        isWideHero ? 2.4 : 16.0 / 9.0
     }
 
     /// Hero height. Wide layouts derive it from the measured content width at the

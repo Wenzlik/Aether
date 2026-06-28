@@ -62,6 +62,125 @@ public enum JellyfinAPI {
         }
     }
 
+    // MARK: - Identify (RemoteSearch)
+
+    /// Body for `POST /Items/RemoteSearch/Movie` (or `/Series`) — asks the
+    /// server's metadata providers (TMDb, etc.) for matches, the same call the
+    /// web "Identify" dialog makes. The server uses `ItemId` to scope providers
+    /// and `SearchInfo` (a cleaned name + optional year) as the query.
+    public struct RemoteSearchQuery: Encodable, Sendable {
+        public var searchInfo: SearchInfo
+        public var itemId: String
+        public var includeDisabledProviders: Bool
+
+        public struct SearchInfo: Encodable, Sendable {
+            public var name: String
+            public var year: Int?
+
+            public init(name: String, year: Int?) {
+                self.name = name
+                self.year = year
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case name = "Name"
+                case year = "Year"
+            }
+        }
+
+        public init(itemId: String, searchInfo: SearchInfo, includeDisabledProviders: Bool = true) {
+            self.itemId = itemId
+            self.searchInfo = searchInfo
+            self.includeDisabledProviders = includeDisabledProviders
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case searchInfo = "SearchInfo"
+            case itemId = "ItemId"
+            case includeDisabledProviders = "IncludeDisabledProviders"
+        }
+    }
+
+    /// One candidate returned by RemoteSearch. It's **`Codable`** because the
+    /// chosen result is sent back verbatim to `POST /Items/RemoteSearch/Apply/
+    /// {itemId}`, which fetches full metadata from `providerIds` and refreshes
+    /// the item — exactly what the web dialog does. We model the fields the Apply
+    /// call needs plus what the picker shows (poster, year, overview, provider).
+    public struct RemoteSearchResult: Codable, Sendable, Equatable, Identifiable {
+        public var name: String? = nil
+        public var productionYear: Int? = nil
+        public var imageURL: String? = nil
+        public var overview: String? = nil
+        public var searchProviderName: String? = nil
+        public var premiereDate: String? = nil
+        public var indexNumber: Int? = nil
+        public var parentIndexNumber: Int? = nil
+        public var providerIds: [String: String]? = nil
+
+        public init() {}
+
+        /// Stable identity for the picker — provider ids are unique per candidate;
+        /// fall back to name+year when a provider returns none.
+        public var id: String {
+            if let providerIds, !providerIds.isEmpty {
+                return providerIds.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+            }
+            return "\(name ?? "?")-\(productionYear.map(String.init) ?? "?")"
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name = "Name"
+            case productionYear = "ProductionYear"
+            case imageURL = "ImageUrl"
+            case overview = "Overview"
+            case searchProviderName = "SearchProviderName"
+            case premiereDate = "PremiereDate"
+            case indexNumber = "IndexNumber"
+            case parentIndexNumber = "ParentIndexNumber"
+            case providerIds = "ProviderIds"
+        }
+    }
+
+    // MARK: - PlaybackInfo
+
+    /// `POST /Items/{id}/PlaybackInfo` — the canonical "how do I play this?"
+    /// negotiation. We send a device profile; the server decides direct-play vs
+    /// transcode and hands back the exact, authorized URL (`TranscodingUrl`)
+    /// plus a `PlaySessionId`. Hand-built HLS URLs with `startTimeTicks` get
+    /// rejected as `NSURLErrorDomain -1008`, so resume playback must go through
+    /// this.
+    public struct PlaybackInfoResponse: Decodable, Sendable {
+        public let mediaSources: [MediaSourceInfo]
+        public let playSessionID: String?
+
+        public struct MediaSourceInfo: Decodable, Sendable {
+            public let id: String?
+            public let supportsDirectPlay: Bool?
+            public let supportsDirectStream: Bool?
+            public let supportsTranscoding: Bool?
+            /// Server-built HLS transcode URL (relative to the base URL). Present
+            /// when the server chose to transcode; already carries the offset,
+            /// PlaySessionId and api_key.
+            public let transcodingURL: String?
+            /// Direct-stream URL (relative) for remux/passthrough, when offered.
+            public let directStreamURL: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id = "Id"
+                case supportsDirectPlay = "SupportsDirectPlay"
+                case supportsDirectStream = "SupportsDirectStream"
+                case supportsTranscoding = "SupportsTranscoding"
+                case transcodingURL = "TranscodingUrl"
+                case directStreamURL = "DirectStreamUrl"
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mediaSources = "MediaSources"
+            case playSessionID = "PlaySessionId"
+        }
+    }
+
     // MARK: - Items
 
     /// `GET /Users/{id}/Items` and `/Users/{id}/Views` wrap items in this.
@@ -72,6 +191,30 @@ public enum JellyfinAPI {
         enum CodingKeys: String, CodingKey {
             case items = "Items"
             case totalRecordCount = "TotalRecordCount"
+        }
+    }
+
+    // MARK: - Query filters (audio-language filter capability — #295)
+
+    /// `GET /Items/Filters2` — the server's available filter facets for a query.
+    /// We only decode `AudioLanguages`: its **presence** is the capability probe
+    /// for server-side audio-language filtering. The field was added alongside
+    /// the `?AudioLanguages=` query param (jellyfin/jellyfin#9787, ~10.11.x), so
+    /// older servers omit it entirely → decodes to `nil` → we fall back to
+    /// client-side filtering. A present-but-empty array still means "supported".
+    public struct QueryFiltersResponse: Decodable, Sendable {
+        public let audioLanguages: [NameValuePair]?
+        enum CodingKeys: String, CodingKey { case audioLanguages = "AudioLanguages" }
+    }
+
+    /// Jellyfin's `{ "Name": ..., "Value": ... }` filter pair. We only need the
+    /// shape to confirm the facet decodes; `Value` carries the language code.
+    public struct NameValuePair: Decodable, Sendable, Equatable {
+        public let name: String?
+        public let value: String?
+        enum CodingKeys: String, CodingKey {
+            case name = "Name"
+            case value = "Value"
         }
     }
 

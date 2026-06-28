@@ -356,7 +356,16 @@ final class DetailViewModel {
             heroLogo = nil
             return
         }
-        heroLogo = await AetherImageCache.shared.image(for: url, maxPixel: ArtworkTier.logo.maxPixel)
+        let image = await AetherImageCache.shared.image(for: url, maxPixel: ArtworkTier.logo.maxPixel)
+        // A clearLogo is meant to read as light wordmark art over the backdrop.
+        // Some titles ship a predominantly *dark* logo (e.g. black lettering),
+        // which vanishes against a bright backdrop — fall back to the legible
+        // text title for those rather than showing an unreadable mark.
+        if let image, image.aetherLogoIsTooDark() {
+            heroLogo = nil
+        } else {
+            heroLogo = image
+        }
     }
 
     /// Outcome of a local-metadata-edit refresh — the view decides whether to

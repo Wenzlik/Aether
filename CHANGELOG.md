@@ -4,6 +4,43 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-06-28
+
+### What's New
+
+- **Connect more than one server (#518, #519, #520)** — add several **Jellyfin**
+  or **Emby** servers, and a **second Plex account**; every server's content
+  merges into one unified library. Manage them in Settings ▸ Accounts & Sources
+  (each server lists with a Remove action). All platforms.
+- **Identify on Jellyfin (#511, #515, #520)** — fix a mis-matched or
+  unrecognized Jellyfin title (movie, episode, or whole series) straight from
+  the Detail screen: search the server's metadata providers, pick the right
+  match, and Aether applies it on the server — no web dashboard. iOS + macOS.
+- **Sign in to Jellyfin with a username and password (#509)** — alongside Quick
+  Connect, for servers that don't use it. All platforms.
+- **A bolder, cinematic Discover (#517)** — the featured banner fills the width
+  and fades into the background, with the title's logo art and quality / Dolby
+  Vision badges.
+
+### Fixed
+
+- **Resuming a transcoded Jellyfin title (#512)** — playback no longer fails
+  with a "resource unavailable" error; Aether negotiates the stream through
+  Jellyfin's PlaybackInfo so it picks up exactly where you left off.
+- **The library no longer flashes "Nothing here" (#510)** — a pull-to-refresh
+  that momentarily comes back empty keeps the titles you already had instead of
+  blanking the grid.
+- **The Detail title stays readable (#516)** — a title whose logo art is too dark
+  to read over the backdrop falls back to legible text.
+- **Settings on iPad (#514)** — the Aether wordmark no longer hides under the
+  top tab bar.
+
+### Under the hood
+
+- **Server-side audio-language filter for Jellyfin (#513)** — newer Jellyfin
+  servers filter by audio language on the server; older ones fall back to
+  client-side, as before.
+
 ## [0.8.4] — 2026-06-24
 
 ### What's New

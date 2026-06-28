@@ -47,19 +47,8 @@ final class JellyfinSignInViewModel {
         state = .validating
         task?.cancel()
         task = Task {
-            // The user may type a hostname (often HTTPS behind a reverse proxy)
-            // or an IP:port (usually plain HTTP). Probe each candidate scheme and
-            // use the first that answers as a real Jellyfin server, instead of
-            // hard-coding http:// and reporting a reachable server as "invalid".
-            var resolved: (url: URL, name: String?)?
-            for url in candidates {
+            guard let resolved = await Self.resolveServer(authClient: authClient, candidates: candidates) else {
                 if Task.isCancelled { return }
-                if let info = try? await authClient.publicInfo(baseURL: url) {
-                    resolved = (url, info.serverName)
-                    break
-                }
-            }
-            guard let resolved else {
                 state = .failed(message: "Couldn't reach a Jellyfin server at that address. Check the address and that the server is on.")
                 return
             }
@@ -94,9 +83,79 @@ final class JellyfinSignInViewModel {
         }
     }
 
+    /// Sign in with a username and password (`/Users/AuthenticateByName`), the
+    /// alternative to Quick Connect. Resolves the server the same way, then
+    /// authenticates directly — no code to approve, so it goes straight from
+    /// `.validating` to `.success`.
+    func signInWithPassword(to urlString: String, username: String, password: String) {
+        guard let authClient else {
+            state = .failed(message: "Jellyfin isn't ready yet. Try again in a moment.")
+            return
+        }
+        let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUser.isEmpty else {
+            state = .failed(message: "Enter your Jellyfin username.")
+            return
+        }
+        let candidates = Self.candidateURLs(urlString)
+        guard !candidates.isEmpty else {
+            state = .failed(message: "Enter a server address, like 192.168.1.10:8096 or jellyfin.example.com")
+            return
+        }
+
+        state = .validating
+        task?.cancel()
+        task = Task {
+            guard let resolved = await Self.resolveServer(authClient: authClient, candidates: candidates) else {
+                if Task.isCancelled { return }
+                state = .failed(message: "Couldn't reach a Jellyfin server at that address. Check the address and that the server is on.")
+                return
+            }
+
+            do {
+                let auth = try await authClient.authenticateByName(
+                    baseURL: resolved.url,
+                    username: trimmedUser,
+                    password: password
+                )
+                guard !Task.isCancelled else { return }
+                state = .success(JellyfinServerRecord(
+                    baseURLString: resolved.url.absoluteString,
+                    accessToken: auth.accessToken,
+                    userID: auth.user.id,
+                    serverName: resolved.name ?? "Jellyfin"
+                ))
+            } catch is CancellationError {
+                // View went away; nothing to do.
+            } catch JellyfinAuthError.invalidCredentials {
+                state = .failed(message: "Wrong username or password. Check your details and try again.")
+            } catch {
+                state = .failed(message: "Couldn't sign in. Check the server and your details, then try again.")
+            }
+        }
+    }
+
     func reset() {
         task?.cancel()
         state = .enterURL
+    }
+
+    /// Probe the candidate base URLs and return the first that answers as a real
+    /// Jellyfin server (with its server name). The user may type a hostname
+    /// (often HTTPS behind a reverse proxy) or an IP:port (usually plain HTTP),
+    /// so we try each scheme rather than hard-coding one and reporting a
+    /// reachable server as "invalid". Returns `nil` if none answer.
+    private static func resolveServer(
+        authClient: JellyfinAuthClient,
+        candidates: [URL]
+    ) async -> (url: URL, name: String?)? {
+        for url in candidates {
+            if Task.isCancelled { return nil }
+            if let info = try? await authClient.publicInfo(baseURL: url) {
+                return (url, info.serverName)
+            }
+        }
+        return nil
     }
 
     /// Turn the typed address into ordered base-URL candidates to probe.
