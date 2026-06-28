@@ -434,10 +434,16 @@ struct PlayerView: View {
         // `/transcode/universal/decision` request (#523).
         countdownTask = nil
         countdownRemaining = nil
+        // Clear `nextItem` BEFORE the awaits below. Otherwise a time-tick during
+        // `markWatchedEverywhere` / `open` sees (nextItem != nil, countdownRemaining
+        // == nil) while the old item is still at its credits position, and
+        // `updateNextEpisodePrompt` restarts a second countdown that only clears
+        // once the next episode finally loads — the "countdown shows again, then
+        // switches" flicker (#537). `next` is already captured above.
+        nextItem = nil
         let finished = viewModel.state.item ?? item
         await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
-        nextItem = nil
         // Carry the session's audio/subtitle/quality choices onto the next
         // episode (language-matched), with the app defaults as the base —
         // episode 2 used to revert to the container's default track (#68).
