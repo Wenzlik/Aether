@@ -2158,40 +2158,6 @@
         }
       }
     },
-    "Browse this server in your Library." : {
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Procházejte tento server ve své knihovně."
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Переглядайте цей сервер у своїй бібліотеці."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diesen Server in deiner Mediathek durchsuchen."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Parcourir ce serveur dans votre bibliothèque."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explora este servidor en tu biblioteca."
-          }
-        }
-      }
-    },
     "Build" : {
       "localizations" : {
         "cs" : {
@@ -15867,6 +15833,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu cuenta de Plex no está conectada a ningún servidor accesible en este momento. Si un servidor debería estar visible, comprueba que esté encendido y con la sesión iniciada en la misma cuenta de Plex."
+          }
+        }
+      }
+    },
+    "Browse this server in Library and Search." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Procházejte tento server v sekcích Knihovna a Hledat."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перегляд цього сервера в розділах Бібліотека та Пошук."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesen Server in Mediathek und Suchen durchsuchen."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parcourir ce serveur dans Bibliothèque et Rechercher."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Explora este servidor en Biblioteca y Buscar."
+          }
+        }
+      }
+    },
+    "Active only sets which server you browse in Library and Search. A title on more than one server always plays from your preferred copy — switch it on the title’s page." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volba „Aktivní“ určuje pouze to, který server procházíte v sekcích Knihovna a Hledat. Titul dostupný na více serverech se vždy přehrává z preferované kopie — změníte ji na stránce titulu."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Активний» лише визначає, який сервер ви переглядаєте в розділах Бібліотека та Пошук. Тайтл на кількох серверах завжди відтворюється з обраної копії — змініть її на сторінці тайтла."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Aktiv“ legt nur fest, welchen Server du in Mediathek und Suchen durchsuchst. Ein Titel auf mehreren Servern wird immer von deiner bevorzugten Kopie wiedergegeben – ändere sie auf der Seite des Titels."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« Actif » définit seulement le serveur que vous parcourez dans Bibliothèque et Rechercher. Un titre présent sur plusieurs serveurs est toujours lu depuis votre copie préférée — changez-la sur la page du titre."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Activo» solo define qué servidor exploras en Biblioteca y Buscar. Un título disponible en varios servidores siempre se reproduce desde tu copia preferida: cámbiala en la página del título."
           }
         }
       }

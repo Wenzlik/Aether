@@ -334,6 +334,7 @@ extension SettingsView {
                 serverName: viewModel.plexServerSummary,
                 status: (viewModel.canSwitchSources && viewModel.isActiveSource(.plex)) ? .neutral("Active") : .connected,
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.plex),
+                explainsActiveSource: viewModel.canSwitchSources,
                 isSigningOut: isSigningOut,
                 onSetActive: { viewModel.setActive(.plex); accountSheet = nil },
                 // Present the server picker *on top* of this sheet (#325), so
@@ -358,6 +359,7 @@ extension SettingsView {
                 serverName: viewModel.jellyfinServerName,
                 status: (viewModel.canSwitchSources && viewModel.isActiveSource(.jellyfin)) ? .neutral("Active") : .connected,
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.jellyfin),
+                explainsActiveSource: viewModel.canSwitchSources,
                 isSigningOut: isSigningOutJellyfin,
                 onSetActive: { viewModel.setActive(.jellyfin); accountSheet = nil },
                 servers: viewModel.jellyfinServersList,
@@ -371,6 +373,7 @@ extension SettingsView {
                 serverName: viewModel.embyServerName,
                 status: (viewModel.canSwitchSources && viewModel.isActiveSource(.emby)) ? .neutral("Active") : .connected,
                 canSetActive: viewModel.canSwitchSources && !viewModel.isActiveSource(.emby),
+                explainsActiveSource: viewModel.canSwitchSources,
                 isSigningOut: isSigningOutEmby,
                 onSetActive: { viewModel.setActive(.emby); accountSheet = nil },
                 servers: viewModel.embyServersList,
