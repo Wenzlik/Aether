@@ -27,6 +27,7 @@ struct SearchView: View {
     let playbackPreferences: PlaybackPreferencesStore?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @Environment(AppSession.self) private var appSession
 
     @State private var query = ""
     /// Owns keyboard focus so taps outside the field, scrolling the results, or
@@ -259,7 +260,7 @@ struct SearchView: View {
         isAsking = true
         defer { isAsking = false }
 
-        let answer = await AskAether.answer(query: trimmed, sources: connectedSources)
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
 
         // The user may have edited the field while inference ran — only keep the
         // answer if it still matches what's in the box.

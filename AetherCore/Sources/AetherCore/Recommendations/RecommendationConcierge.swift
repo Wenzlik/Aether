@@ -63,16 +63,21 @@ public struct RecommendationConcierge: Sendable {
     /// Recommend a title for a free-text request. Never throws — it always
     /// returns a result (possibly empty), degrading to the deterministic path
     /// when the model is unavailable or errors.
+    /// - Parameter enrich: optional async hook that, given the engine's shortlist,
+    ///   returns extra per-item context keyed by `UnifiedMediaItem.id` (e.g. TMDb
+    ///   keywords) to fold into the model's candidate descriptions. Lets the app
+    ///   inject network-backed metadata without `AetherCore` depending on TMDb.
     public func recommend(
         query: String,
         in library: [UnifiedMediaItem],
         engine: RecommendationEngine = RecommendationEngine(),
-        parser: RecommendationQueryParser = RecommendationQueryParser()
+        parser: RecommendationQueryParser = RecommendationQueryParser(),
+        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? = nil
     ) async -> RecommendationResult {
         #if canImport(FoundationModels)
         if #available(iOS 26, macOS 26, visionOS 26, *), Self.isAvailable {
             do {
-                return try await aiRecommend(query: query, in: library, engine: engine)
+                return try await aiRecommend(query: query, in: library, engine: engine, enrich: enrich)
             } catch {
                 // Fall through to the deterministic path on any inference error.
             }
@@ -117,7 +122,8 @@ public struct RecommendationConcierge: Sendable {
     private func aiRecommend(
         query: String,
         in library: [UnifiedMediaItem],
-        engine: RecommendationEngine
+        engine: RecommendationEngine,
+        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])?
     ) async throws -> RecommendationResult {
         let availableGenres = engine.availableGenres(in: library)
 
@@ -142,12 +148,21 @@ public struct RecommendationConcierge: Sendable {
             return RecommendationResult(pick: nil, reason: nil, shortlist: [], usedAI: true)
         }
 
+        // Optional themed metadata (e.g. TMDb keywords) for the shortlist, so the
+        // model can reason thematically ("a heist movie" → favours a heist-tagged
+        // candidate). Injected by the app; empty when unavailable.
+        let topShortlist = Array(shortlist.prefix(10))
+        let keywordMap = await enrich?(topShortlist) ?? [:]
+
         // Step 2 — pick + explain, grounded to the shortlist (by id).
-        let candidates = shortlist.prefix(10).map { item -> String in
+        let candidates = topShortlist.map { item -> String in
             let rating = item.tmdbRating ?? item.communityRating ?? 0
             let year = item.year.map { " (\($0))" } ?? ""
             let synopsis = item.overview.map { String($0.prefix(160)) } ?? ""
-            return "id=\(item.id) | \(item.title)\(year) | rating \(rating) | \(synopsis)"
+            let themes = (keywordMap[item.id]?.isEmpty == false)
+                ? " | themes: \(keywordMap[item.id]!.joined(separator: ", "))"
+                : ""
+            return "id=\(item.id) | \(item.title)\(year) | rating \(rating) | \(synopsis)\(themes)"
         }.joined(separator: "\n")
 
         let pickSession = LanguageModelSession {

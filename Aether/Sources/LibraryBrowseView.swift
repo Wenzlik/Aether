@@ -39,6 +39,7 @@ struct LibraryBrowseView: View {
     let playbackPreferences: PlaybackPreferencesStore?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @Environment(AppSession.self) private var appSession
 
     /// When non-empty, the library swaps its grid for unified `MediaSearchResults`.
     @State private var searchQuery = ""
@@ -292,7 +293,7 @@ struct LibraryBrowseView: View {
         searchFocused = false
         isAsking = true
         defer { isAsking = false }
-        let answer = await AskAether.answer(query: trimmed, sources: connectedSources)
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
         guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
         askResult = answer
     }

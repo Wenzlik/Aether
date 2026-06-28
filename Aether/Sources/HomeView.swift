@@ -322,7 +322,7 @@ struct HomeView: View {
         searchFocused = false
         isAsking = true
         defer { isAsking = false }
-        let answer = await AskAether.answer(query: trimmed, sources: connectedSources)
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
         guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
         askResult = answer
     }

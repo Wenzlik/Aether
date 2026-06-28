@@ -7,11 +7,15 @@ import AetherCore
 /// switch. A pure title lookup ("Inception") shows only the matches; a vibe
 /// request ("a scary movie under 2 hours") shows the suggestion.
 struct AskResult: Equatable {
-    /// Titles whose name matches the query (diacritic- and case-insensitive).
+    /// Titles whose name (or cast/director) matches the query.
     var libraryMatches: [UnifiedMediaItem]
     /// The recommendation, when the request had a vibe/genre/runtime intent (or
-    /// nothing matched by title). `nil` for a plain title lookup.
+    /// nothing else surfaced). `nil` for a plain lookup.
     var recommendation: RecommendationResult?
+    /// Owned titles TMDb considers similar to the title the request points at.
+    var similar: [UnifiedMediaItem] = []
+    /// The anchor title for `similar`, for the section header ("More like …").
+    var similarTo: String? = nil
     /// The request this answer was produced for.
     var query: String
 }
@@ -31,7 +35,7 @@ struct RecommendationResultsView: View {
     private var pick: UnifiedMediaItem? { result.recommendation?.pick }
 
     var body: some View {
-        if matches.isEmpty && pick == nil {
+        if matches.isEmpty && pick == nil && result.similar.isEmpty {
             AetherEmptyState(
                 glyph: "sparkles",
                 title: "Nothing found",
@@ -43,6 +47,7 @@ struct RecommendationResultsView: View {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                     if let pendingQuery { pendingHint(pendingQuery) }
                     if !matches.isEmpty { librarySection }
+                    if !result.similar.isEmpty { similarSection }
                     if let pick { recommendationSection(pick) }
                 }
                 .padding(.vertical, AetherDesign.Spacing.l)
@@ -83,6 +88,32 @@ struct RecommendationResultsView: View {
                 }
             }
             .padding(.horizontal, AetherDesign.Spacing.l)
+        }
+    }
+
+    // MARK: - More like this (TMDb)
+
+    private var similarSection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: result.similarTo.map { "More like \($0)" } ?? "More like this")
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: AetherDesign.Spacing.l) {
+                    ForEach(result.similar) { item in
+                        NavigationLink(value: item) {
+                            AetherCard.poster(
+                                title: item.title,
+                                posterURL: item.posterURL,
+                                isWatched: item.isFullyWatched,
+                                netflixLogoURL: availability?.netflixLogoURL(for: item)
+                            )
+                            .frame(width: cardWidth)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, AetherDesign.Spacing.l)
+                .padding(.vertical, AetherDesign.Spacing.xs)
+            }
         }
     }
 
