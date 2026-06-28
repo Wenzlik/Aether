@@ -2178,3 +2178,75 @@ struct AppLanguagePreferenceTests {
         #expect(!AppLanguage.system.displayName.isEmpty)
     }
 }
+
+// MARK: - nextEpisode(after:) cross-season rollover (#540)
+
+/// Show → seasons → episodes hierarchy for the generic `nextEpisode(after:)`.
+/// `children(of:)` deliberately returns items in a **shuffled** order (mimicking
+/// Jellyfin's `SortName` child ordering), so the test proves the resolver sorts
+/// by `seasonNumber` / `episodeNumber` rather than trusting server order.
+private struct StubSeasonsSource: MediaSource {
+    let id: MediaSourceID = .mock
+    let displayName = "Seasons"
+
+    let showID = MediaID(source: .mock, rawValue: "show")
+    // Two seasons, S1 (2 eps) and S2 (2 eps).
+    private func season(_ n: Int) -> MediaItem {
+        MediaItem(id: .init(source: .mock, rawValue: "s\(n)"), title: "Season \(n)",
+                  kind: .season, seasonNumber: n, parentID: showID)
+    }
+    private func ep(_ s: Int, _ e: Int) -> MediaItem {
+        MediaItem(id: .init(source: .mock, rawValue: "s\(s)e\(e)"), title: "S\(s)E\(e)",
+                  kind: .episode, seasonNumber: s, episodeNumber: e,
+                  parentID: .init(source: .mock, rawValue: "s\(s)"))
+    }
+
+    func libraries() async throws -> [Library] { [] }
+    func items(in library: Library.ID) async throws -> [MediaItem] { [] }
+
+    func item(for id: MediaID) async throws -> MediaItem? {
+        switch id.rawValue {
+        case "show": return MediaItem(id: showID, title: "Show", kind: .show)
+        case "s1": return season(1)
+        case "s2": return season(2)
+        case "s1e1": return ep(1, 1)
+        case "s1e2": return ep(1, 2)
+        case "s2e1": return ep(2, 1)
+        case "s2e2": return ep(2, 2)
+        default: return nil
+        }
+    }
+
+    func children(of id: MediaID) async throws -> [MediaItem] {
+        switch id.rawValue {
+        case "show": return [season(2), season(1)]            // shuffled
+        case "s1": return [ep(1, 2), ep(1, 1)]                // shuffled
+        case "s2": return [ep(2, 2), ep(2, 1)]                // shuffled
+        default: return []
+        }
+    }
+}
+
+@Suite("AetherCore — nextEpisode rollover")
+struct NextEpisodeRolloverTests {
+    private let source = StubSeasonsSource()
+    private func id(_ raw: String) -> MediaID { .init(source: .mock, rawValue: raw) }
+
+    @Test("mid-season returns the next episode by number, not server order")
+    func midSeason() async {
+        let next = await source.nextEpisode(after: id("s1e1"))
+        #expect(next?.id.rawValue == "s1e2")
+    }
+
+    @Test("last episode of a season rolls over to the next season's first episode")
+    func crossSeason() async {
+        let next = await source.nextEpisode(after: id("s1e2"))
+        #expect(next?.id.rawValue == "s2e1")
+    }
+
+    @Test("last episode of the last season has no next")
+    func endOfShow() async {
+        let next = await source.nextEpisode(after: id("s2e2"))
+        #expect(next == nil)
+    }
+}

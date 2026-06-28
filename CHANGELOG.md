@@ -4,6 +4,13 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-Play Next rolls over between seasons (#540)** — finishing the last
+  episode of a season now continues to the first episode of the next season
+  instead of stopping. Works on Plex and Jellyfin (ordered by season/episode
+  number, so it's correct even where the server returns children out of order).
+
 ### Changed
 
 - **tvOS: collapsible side menu (#527)** — Apple TV's primary navigation moves
