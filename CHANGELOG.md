@@ -50,6 +50,11 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **Auto-Play Next no longer double-counts (#537)** — the Up Next countdown
   restarted once when it hit zero (a second countdown flashed before the next
   episode loaded). It now advances after a single countdown.
+- **Auto-Play Next advances exactly once (#543)** — tapping "Play Next Episode"
+  while the countdown was still running advanced twice (skipping an episode, and
+  the second carried the wrong audio track). All advance triggers — countdown,
+  the tvOS prompt, the iOS Play Now button, and end-of-playback — now go through
+  one idempotent path.
 
 ## [0.8.5] — 2026-06-28
 
