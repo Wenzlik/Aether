@@ -176,8 +176,8 @@ struct DiscoverView: View {
     private func heroCarousel(_ items: [UnifiedMediaItem]) -> some View {
         let idx = min(heroIndex, items.count - 1)
         VStack(alignment: .leading, spacing: 10) {
-            AetherSectionHeader(title: "Featured", subtitle: "Curated from your library")
-                .padding(.horizontal, 24)
+            // No "Featured" header — the hero is the banner. It stretches to the
+            // content edges instead of sitting in a centred 1100-wide card.
             heroSlide(items[idx], progress: heroProgress[items[idx].id], items: items, currentIndex: idx)
             if items.count > 1 {
                 heroPageDots(count: items.count, current: idx)
@@ -276,7 +276,6 @@ struct DiscoverView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .frame(maxWidth: 1100)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .id(item.id)
