@@ -39,7 +39,7 @@ struct RecommendationResultsView: View {
             AetherEmptyState(
                 glyph: "sparkles",
                 title: "Nothing found",
-                message: "Aether couldn't find or suggest anything for “\(result.query)”. Try different words."
+                message: "Aether couldn't find or suggest anything. Try different words."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -61,7 +61,7 @@ struct RecommendationResultsView: View {
     private func pendingHint(_ pending: String) -> some View {
         HStack(spacing: AetherDesign.Spacing.xs) {
             Image(systemName: "return")
-            Text(verbatim: "Press return to ask: “\(pending)”")
+            Text("Press return to ask: “\(pending)”")
                 .lineLimit(1)
         }
         .font(AetherDesign.Typography.caption)
@@ -95,7 +95,7 @@ struct RecommendationResultsView: View {
 
     private var similarSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            AetherSectionHeader(title: result.similarTo.map { "More like \($0)" } ?? "More like this")
+            AetherSectionHeader(title: result.similarTo.map { String(localized: "More like \($0)") } ?? "More like this")
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: AetherDesign.Spacing.l) {
                     ForEach(result.similar) { item in

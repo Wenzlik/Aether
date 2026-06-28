@@ -109,7 +109,7 @@ struct SearchView: View {
     @ViewBuilder
     private var content: some View {
         if isAsking {
-            AetherLoadingDots(caption: "Asking Aether…")
+            AetherLoadingDots(caption: String(localized: "Asking Aether…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let askResult {
             RecommendationResultsView(result: askResult, pendingQuery: pendingAsk)
