@@ -1,48 +1,54 @@
 import SwiftUI
 import AetherCore
 
-/// The **Ask Aether** result surface — shown in `SearchView` after the user
-/// submits a natural-language request ("a scary movie under 2 hours").
-///
-/// It presents the single grounded pick with the model's one-line reason, then
-/// the rest of the engine's shortlist as "More to consider". Every title is a
-/// real `UnifiedMediaItem`, so each row navigates straight into Detail (where
-/// Play / Resume already live) via the host's `mediaNavigationDestinations`.
+/// One **Ask Aether** answer: direct library matches for the words the user
+/// typed, plus a grounded recommendation when the request reads as a vibe/genre
+/// ask. The field both *finds* titles and *recommends* — one screen, no mode
+/// switch. A pure title lookup ("Inception") shows only the matches; a vibe
+/// request ("a scary movie under 2 hours") shows the suggestion.
+struct AskResult: Equatable {
+    /// Titles whose name matches the query (diacritic- and case-insensitive).
+    var libraryMatches: [UnifiedMediaItem]
+    /// The recommendation, when the request had a vibe/genre/runtime intent (or
+    /// nothing matched by title). `nil` for a plain title lookup.
+    var recommendation: RecommendationResult?
+    /// The request this answer was produced for.
+    var query: String
+}
+
+/// The Ask Aether result surface, shown in `SearchView` after submit. Every row
+/// is a real `UnifiedMediaItem`, so it navigates into Detail (Play / Resume) via
+/// the host's `mediaNavigationDestinations`.
 struct RecommendationResultsView: View {
-    let result: RecommendationResult
-    /// The request the recommendation was produced for — echoed in the empty state.
-    let query: String
-    /// Set when the user has edited the field since this recommendation was made;
+    let result: AskResult
+    /// Set when the user has edited the field since this answer was produced;
     /// shows a "press Return to ask again" hint so editing doesn't feel stuck.
     var pendingQuery: String?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
+    private var matches: [UnifiedMediaItem] { result.libraryMatches }
+    private var pick: UnifiedMediaItem? { result.recommendation?.pick }
+
     var body: some View {
-        if let pick = result.pick {
+        if matches.isEmpty && pick == nil {
+            AetherEmptyState(
+                glyph: "sparkles",
+                title: "Nothing found",
+                message: "Aether couldn't find or suggest anything for “\(result.query)”. Try different words."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
                     if let pendingQuery { pendingHint(pendingQuery) }
-                    heroPick(pick)
-                    if !more.isEmpty { moreRail }
+                    if !matches.isEmpty { librarySection }
+                    if let pick { recommendationSection(pick) }
                 }
                 .padding(.vertical, AetherDesign.Spacing.l)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            AetherEmptyState(
-                glyph: "sparkles",
-                title: "No match found",
-                message: "Aether couldn't find something for “\(query)”. Try different words."
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    /// The shortlist minus the hero pick.
-    private var more: [UnifiedMediaItem] {
-        guard let pick = result.pick else { return [] }
-        return result.shortlist.filter { $0.id != pick.id }
     }
 
     // MARK: - Pending-edit hint
@@ -58,13 +64,44 @@ struct RecommendationResultsView: View {
         .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
-    // MARK: - Hero pick
+    // MARK: - Library matches
+
+    private var librarySection: some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+            AetherSectionHeader(title: "In your library")
+            LazyVGrid(columns: columns, spacing: AetherDesign.Spacing.l) {
+                ForEach(matches) { item in
+                    NavigationLink(value: item) {
+                        AetherCard.poster(
+                            title: item.title,
+                            posterURL: item.posterURL,
+                            isWatched: item.isFullyWatched,
+                            netflixLogoURL: availability?.netflixLogoURL(for: item)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, AetherDesign.Spacing.l)
+        }
+    }
+
+    // MARK: - Recommendation
+
+    private func recommendationSection(_ pick: UnifiedMediaItem) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+            heroPick(pick)
+            let more = (result.recommendation?.shortlist ?? []).filter { $0.id != pick.id }
+            if !more.isEmpty { moreRail(more) }
+        }
+    }
 
     private func heroPick(_ pick: UnifiedMediaItem) -> some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+        let usedAI = result.recommendation?.usedAI ?? false
+        return VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             HStack(spacing: AetherDesign.Spacing.xs) {
-                Image(systemName: result.usedAI ? "sparkles" : "star.fill")
-                if result.usedAI {
+                Image(systemName: usedAI ? "sparkles" : "star.fill")
+                if usedAI {
                     Text("Suggested by Aether")
                 } else {
                     Text("Top match")
@@ -94,7 +131,7 @@ struct RecommendationResultsView: View {
                                 .font(AetherDesign.Typography.metadata)
                                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                         }
-                        if let reason = result.reason {
+                        if let reason = result.recommendation?.reason {
                             Text(verbatim: "“\(reason)”")
                                 .font(AetherDesign.Typography.body)
                                 .foregroundStyle(AetherDesign.Palette.textPrimary)
@@ -113,9 +150,7 @@ struct RecommendationResultsView: View {
         }
     }
 
-    // MARK: - More rail
-
-    private var moreRail: some View {
+    private func moreRail(_ more: [UnifiedMediaItem]) -> some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             AetherSectionHeader(title: "More to consider")
             ScrollView(.horizontal, showsIndicators: false) {
@@ -144,6 +179,14 @@ struct RecommendationResultsView: View {
         if let year = pick.year { parts.append(String(year)) }
         if !pick.genres.isEmpty { parts.append(pick.genres.prefix(2).joined(separator: " · ")) }
         return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
+    private var columns: [GridItem] {
+        #if os(tvOS)
+        [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: AetherDesign.Spacing.l)]
+        #else
+        [GridItem(.adaptive(minimum: 120, maximum: 180), spacing: AetherDesign.Spacing.m)]
+        #endif
     }
 
     private var heroPosterWidth: CGFloat {

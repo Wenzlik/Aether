@@ -41,12 +41,11 @@ struct SearchView: View {
     /// Recent submitted queries, shown as tappable chips before typing.
     @State private var recentSearches = RecentSearchesStore()
 
-    /// The latest "Ask Aether" recommendation, shown after the user submits a
-    /// natural-language request. Cleared the moment they edit the field again, so
-    /// typing returns to live title search.
-    @State private var recommendation: RecommendationResult?
-    /// The request the recommendation was produced for (echoed in its UI).
-    @State private var askedQuery = ""
+    /// The latest "Ask Aether" answer — library matches plus an optional
+    /// recommendation. Sticky while the user refines (press Return to re-ask);
+    /// dropped when the field is cleared. Live title search applies only to fresh
+    /// typing before the first ask.
+    @State private var askResult: AskResult?
     /// On-device inference in flight.
     @State private var isAsking = false
 
@@ -74,7 +73,7 @@ struct SearchView: View {
             // typing before an ask — not for editing an existing recommendation.
             .onChange(of: query) { _, newValue in
                 if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    recommendation = nil
+                    askResult = nil
                 }
             }
             .mediaNavigationDestinations(
@@ -111,12 +110,8 @@ struct SearchView: View {
         if isAsking {
             AetherLoadingDots(caption: "Asking Aether…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let recommendation {
-            RecommendationResultsView(
-                result: recommendation,
-                query: askedQuery,
-                pendingQuery: pendingAsk
-            )
+        } else if let askResult {
+            RecommendationResultsView(result: askResult, pendingQuery: pendingAsk)
         } else if isSearching {
             MediaSearchResults(sources: connectedSources, query: query)
         } else {
@@ -130,9 +125,9 @@ struct SearchView: View {
     private var discoveryContent: some View {
         if connectedSources.isEmpty {
             AetherEmptyState(
-                glyph: "magnifyingglass",
-                title: "Search your library",
-                message: "Connect a source, then find a movie or show across all of them."
+                glyph: "sparkles",
+                title: "Ask Aether",
+                message: "Connect a source, then ask for something to watch — or find a title by name."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if discoveryIsEmpty && (isLoadingDiscovery || !hasLoadedDiscovery) {
@@ -152,9 +147,9 @@ struct SearchView: View {
                     }
                     if recentSearches.recent.isEmpty && discoveryIsEmpty {
                         AetherEmptyState(
-                            glyph: "magnifyingglass",
-                            title: "Search your library",
-                            message: "Find a movie or show across every connected source — start typing above."
+                            glyph: "sparkles",
+                            title: "Ask Aether",
+                            message: "Ask for something to watch — “a scary movie under 2 hours” — or find a title by name."
                         )
                         .frame(maxWidth: .infinity)
                         .padding(.top, AetherDesign.Spacing.xl)
@@ -171,7 +166,7 @@ struct SearchView: View {
     private var recentSearchesSection: some View {
         VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
             HStack {
-                AetherSectionHeader(title: "Recent Searches")
+                AetherSectionHeader(title: "Recent")
                 Spacer(minLength: AetherDesign.Spacing.s)
                 Button("Clear") { recentSearches.clear() }
                     .font(AetherDesign.Typography.metadata)
@@ -241,8 +236,9 @@ struct SearchView: View {
     /// The edited-but-not-yet-submitted request, when the field no longer matches
     /// the shown recommendation — drives the "press Return to ask again" hint.
     private var pendingAsk: String? {
+        guard let askResult else { return nil }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (!trimmed.isEmpty && trimmed != askedQuery) ? trimmed : nil
+        return (!trimmed.isEmpty && trimmed != askResult.query) ? trimmed : nil
     }
 
     private var discoveryIsEmpty: Bool {
@@ -260,19 +256,15 @@ struct SearchView: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !connectedSources.isEmpty, !isAsking else { return }
         searchFocused = false
-        askedQuery = trimmed
         isAsking = true
         defer { isAsking = false }
 
-        let library = UnifiedLibrary(sources: connectedSources, downloads: nil)
-        let movies = await library.unifiedItems(kind: .movie)
-        let shows = await library.unifiedItems(kind: .show)
-        let result = await RecommendationConcierge().recommend(query: trimmed, in: movies + shows)
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources)
 
-        // The user may have edited the field while inference ran — only show the
-        // result if it still matches what's in the box.
+        // The user may have edited the field while inference ran — only keep the
+        // answer if it still matches what's in the box.
         guard query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
-        recommendation = result
+        askResult = answer
     }
 
     private func loadDiscovery() async {
