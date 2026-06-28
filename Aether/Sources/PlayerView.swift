@@ -336,8 +336,14 @@ struct PlayerView: View {
 
     /// Bottom-trailing "Up Next" card with a live countdown — shown while inside
     /// the credits segment when Auto-Play-Next is on and a next episode exists.
+    ///
+    /// tvOS shows nothing here: the next-episode prompt is the focusable native
+    /// "Play Next Episode" contextual action (`contextualPlayerPrompt`). Drawing
+    /// this card too produced two competing menus (#529 follow-up); the countdown
+    /// still runs and auto-advances behind the native prompt.
     @ViewBuilder
     private var nextEpisodeOverlay: some View {
+        #if !os(tvOS)
         if let remaining = countdownRemaining, let next = nextItem {
             VStack {
                 Spacer()
@@ -354,11 +360,6 @@ struct PlayerView: View {
                         Text("Starting in \(remaining)s")
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
-                        // tvOS: the card is display-only — "Play Next Episode" is a
-                        // focusable native contextual action (`contextualPlayerPrompt`),
-                        // since a SwiftUI button can't take focus over the player VC
-                        // (#529). iOS / visionOS keep the in-card buttons.
-                        #if !os(tvOS)
                         HStack(spacing: AetherDesign.Spacing.s) {
                             AetherButton("Play Now", systemImage: "play.fill", role: .primary) {
                                 Task { await playNext() }
@@ -368,7 +369,6 @@ struct PlayerView: View {
                             }
                         }
                         .padding(.top, AetherDesign.Spacing.xs)
-                        #endif
                     }
                     .padding(AetherDesign.Spacing.l)
                     .frame(maxWidth: 380, alignment: .leading)
@@ -380,6 +380,7 @@ struct PlayerView: View {
             }
             .padding(AetherDesign.Spacing.xl)
         }
+        #endif
     }
 
     /// Resolve the episode after whatever is currently playing.
