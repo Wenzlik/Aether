@@ -41,6 +41,15 @@ struct SearchView: View {
     /// Recent submitted queries, shown as tappable chips before typing.
     @State private var recentSearches = RecentSearchesStore()
 
+    /// The latest "Ask Aether" recommendation, shown after the user submits a
+    /// natural-language request. Cleared the moment they edit the field again, so
+    /// typing returns to live title search.
+    @State private var recommendation: RecommendationResult?
+    /// The request the recommendation was produced for (echoed in its UI).
+    @State private var askedQuery = ""
+    /// On-device inference in flight.
+    @State private var isAsking = false
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
@@ -59,6 +68,11 @@ struct SearchView: View {
             }
             .aetherScreenBackground()
             .task(id: sourcesKey) { await loadDiscovery() }
+            // Any edit to the field drops the last recommendation, so typing
+            // returns to live title search (and clearing returns to discovery).
+            .onChange(of: query) { _, _ in
+                if recommendation != nil { recommendation = nil }
+            }
             .mediaNavigationDestinations(
                 source: source,
                 connectedSources: connectedSources,
@@ -77,8 +91,11 @@ struct SearchView: View {
     private var header: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
             AetherWordmark(.small)
-            AetherSearchField(text: $query, prompt: "Search your library", focus: $searchFocused)
-                .onSubmit { recentSearches.record(query) }
+            AetherSearchField(text: $query, prompt: "Ask Aether…", focus: $searchFocused)
+                .onSubmit {
+                    recentSearches.record(query)
+                    Task { await ask() }
+                }
         }
         .padding(.horizontal, AetherDesign.Spacing.l)
         .padding(.top, AetherDesign.Spacing.l)
@@ -87,7 +104,12 @@ struct SearchView: View {
 
     @ViewBuilder
     private var content: some View {
-        if isSearching {
+        if isAsking {
+            AetherLoadingDots(caption: "Asking Aether…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let recommendation {
+            RecommendationResultsView(result: recommendation, query: askedQuery)
+        } else if isSearching {
             MediaSearchResults(sources: connectedSources, query: query)
         } else {
             discoveryContent
@@ -212,6 +234,28 @@ struct SearchView: View {
 
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
+    }
+
+    /// Run an "Ask Aether" request: fetch the unified catalogue and hand it to
+    /// the concierge (on-device model where available, deterministic fallback
+    /// otherwise). Guards against a stale result if the user keeps typing.
+    private func ask() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !connectedSources.isEmpty, !isAsking else { return }
+        searchFocused = false
+        askedQuery = trimmed
+        isAsking = true
+        defer { isAsking = false }
+
+        let library = UnifiedLibrary(sources: connectedSources, downloads: nil)
+        let movies = await library.unifiedItems(kind: .movie)
+        let shows = await library.unifiedItems(kind: .show)
+        let result = await RecommendationConcierge().recommend(query: trimmed, in: movies + shows)
+
+        // The user may have edited the field while inference ran — only show the
+        // result if it still matches what's in the box.
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
+        recommendation = result
     }
 
     private func loadDiscovery() async {
