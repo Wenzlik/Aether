@@ -269,18 +269,60 @@ public extension MediaSource {
     /// client-side. Plex overrides.
     func items(in libraryID: Library.ID, audioLanguage code: String) async throws -> [MediaItem]? { nil }
 
-    /// Generic next-episode resolver: hydrate the item, fetch its season's
-    /// episodes, return the one after it. Works for any source that fills in
-    /// `parentID` and implements `children(of:)`. Same-season only (v1);
-    /// returns `nil` at a season boundary.
+    /// Generic next-episode resolver. Returns the next episode in the same
+    /// season; at a season boundary it rolls over to the **first episode of the
+    /// next season** (and skips empty seasons). Works for any source that fills
+    /// in `parentID` (episode → season → show) and implements `children(of:)`.
+    ///
+    /// Ordering is by `seasonNumber` / `episodeNumber`, **not** the server's
+    /// child order — Jellyfin sorts children by `SortName`, which would put
+    /// "Season 10" before "Season 2" and pick the wrong first episode. Plex and
+    /// Jellyfin both populate those numbers (and the season's own `parentID` →
+    /// show), so this is connector-agnostic. The cross-season lookups (fetching
+    /// the season, the show's seasons, the next season's episodes) only run when
+    /// the current episode is the last in its season — mid-season advance keeps a
+    /// single `children(of:)` call.
     func nextEpisode(after id: MediaID) async -> MediaItem? {
         guard let current = try? await item(for: id),
               current.kind == .episode,
-              let parent = current.parentID else { return nil }
-        let siblings = (try? await children(of: parent)) ?? []
-        guard let index = siblings.firstIndex(where: { $0.id == id }),
-              index + 1 < siblings.count else { return nil }
-        return siblings[index + 1]
+              let seasonID = current.parentID else { return nil }
+
+        // Same season: the episode after this one, by episode number.
+        let episodes = Self.orderedEpisodes((try? await children(of: seasonID)) ?? [])
+        if let index = episodes.firstIndex(where: { $0.id == id }),
+           index + 1 < episodes.count {
+            return episodes[index + 1]
+        }
+
+        // Season boundary → first episode of the next season. Climb to the show
+        // (the season's own parent), order its seasons, and take the first later
+        // season that actually has episodes.
+        guard let season = try? await item(for: seasonID),
+              let showID = season.parentID else { return nil }
+        let currentSeasonNumber = season.seasonNumber ?? current.seasonNumber
+        let seasons = ((try? await children(of: showID)) ?? [])
+            .filter { $0.kind == .season }
+            .sorted { ($0.seasonNumber ?? .max) < ($1.seasonNumber ?? .max) }
+
+        let laterSeasons: ArraySlice<MediaItem>
+        if let currentSeasonNumber {
+            laterSeasons = seasons.drop { ($0.seasonNumber ?? .max) <= currentSeasonNumber }
+        } else if let sIdx = seasons.firstIndex(where: { $0.id == seasonID }) {
+            laterSeasons = seasons[(sIdx + 1)...]
+        } else {
+            return nil
+        }
+        for nextSeason in laterSeasons {
+            let eps = Self.orderedEpisodes((try? await children(of: nextSeason.id)) ?? [])
+            if let first = eps.first { return first }
+        }
+        return nil
+    }
+
+    /// Episodes only, ordered by episode number (unnumbered specials sort last).
+    private static func orderedEpisodes(_ items: [MediaItem]) -> [MediaItem] {
+        items.filter { $0.kind == .episode }
+             .sorted { ($0.episodeNumber ?? .max) < ($1.episodeNumber ?? .max) }
     }
 
     /// Default: no hierarchy. Plex overrides this to expose seasons + episodes.
