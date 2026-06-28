@@ -4,10 +4,11 @@ import AetherCore
 import os
 #endif
 
-/// The app's root. A native `TabView` renders as the tvOS 26 top tab bar (and
-/// the bottom bar / ornament on iOS / iPadOS / visionOS) — one structure, no
-/// per-platform layouts, no sidebar. Replaces the old single-`HomeView`
-/// surface-switcher and the Settings `.sheet`.
+/// The app's root. A native `TabView` — one structure, no per-platform layouts.
+/// Its presentation adapts per platform via `.sidebarAdaptable`: a collapsible
+/// **leading sidebar** on tvOS (the Apple TV app pattern, #527) and iPad (#391),
+/// the **bottom bar** on iPhone, and the default **ornament** on visionOS.
+/// Replaces the old single-`HomeView` surface-switcher and the Settings `.sheet`.
 ///
 /// Tabs: **Home / Library / Search / Settings**. Each content tab owns its own
 /// `NavigationStack` so drilling into a title and switching tabs don't fight
@@ -170,11 +171,16 @@ struct RootTabView: View {
                 )
             }
         }
-        // iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
-        // native pattern (#391). iPhone (compact) keeps its bottom tab bar; tvOS
-        // / visionOS keep their own default top bar (no sidebar), so this is
-        // scoped to iOS only.
-        #if os(iOS)
+        // Collapsible sidebar navigation (#391 iPad, #527 tvOS):
+        // - iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
+        //   native pattern. iPhone (compact) keeps its bottom tab bar.
+        // - tvOS: the Apple TV app pattern — a sidebar collapsed to a leading-edge
+        //   pill that expands when focus moves to it and collapses back into a pill
+        //   once a tab is selected. Same `Tab` structure; the icons + localized
+        //   labels the tabs already carry drive the sidebar.
+        // visionOS keeps its default ornament navigation (the sidebar renders
+        // differently there), so it stays excluded.
+        #if os(iOS) || os(tvOS)
         .tabViewStyle(.sidebarAdaptable)
         #endif
         .sheet(isPresented: $session.isSignInPresented) {
