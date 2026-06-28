@@ -4,6 +4,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-Play Next no longer fails on tvOS (#523)** — when the Up Next countdown
+  reached zero, advancing to the next episode aborted with a cancelled-request
+  error ("Couldn't resolve a playback URL … cancelled"). The countdown was
+  cancelling the very task it used to start the next episode, so the resolve ran
+  under a cancelled task. The next episode now plays cleanly.
+
 ## [0.8.5] — 2026-06-28
 
 ### What's New

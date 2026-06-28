@@ -386,7 +386,14 @@ struct PlayerView: View {
     /// the one after it.
     private func playNext() async {
         guard let next = nextItem else { return }
-        cancelCountdown()
+        // Clear the countdown UI, but do NOT cancel `countdownTask` — `playNext`
+        // runs *inside* it (see `startCountdown`). `cancelCountdown()` would call
+        // `countdownTask?.cancel()`, cancelling the very task we're executing in;
+        // every `await` below then runs under a cancelled task, so the next
+        // episode's resolve aborts with NSURLErrorCancelled (-999) on Plex's
+        // `/transcode/universal/decision` request (#523).
+        countdownTask = nil
+        countdownRemaining = nil
         let finished = viewModel.state.item ?? item
         await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
