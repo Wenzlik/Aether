@@ -1,21 +1,57 @@
 import Foundation
-import AetherCore
 
-/// Shared **Ask Aether** query logic, used by Search, Home, and Library so the
-/// behaviour is identical everywhere: find titles **and people** by name,
+/// One **Ask Aether** answer — shared by iOS (Search/Home/Library) and macOS.
+///
+/// Carries direct library matches for the words typed, an optional grounded
+/// recommendation, and optional "more like this" titles. The hosting view
+/// decides how to render it.
+public struct AskResult: Equatable, Sendable {
+    /// Titles whose name (or cast/director) matches the query.
+    public var libraryMatches: [UnifiedMediaItem]
+    /// The recommendation, when the request had a vibe/genre/runtime intent (or
+    /// nothing else surfaced). `nil` for a plain lookup.
+    public var recommendation: RecommendationResult?
+    /// Owned titles TMDb considers similar to the title the request points at.
+    public var similar: [UnifiedMediaItem]
+    /// The anchor title for `similar`, for the section header ("More like …").
+    public var similarTo: String?
+    /// The request this answer was produced for.
+    public var query: String
+
+    public init(
+        libraryMatches: [UnifiedMediaItem],
+        recommendation: RecommendationResult?,
+        similar: [UnifiedMediaItem] = [],
+        similarTo: String? = nil,
+        query: String
+    ) {
+        self.libraryMatches = libraryMatches
+        self.recommendation = recommendation
+        self.similar = similar
+        self.similarTo = similarTo
+        self.query = query
+    }
+
+    /// `true` when there's nothing to show at all.
+    public var isEmpty: Bool {
+        libraryMatches.isEmpty && similar.isEmpty && (recommendation?.pick == nil)
+    }
+}
+
+/// Shared **Ask Aether** query logic. Find titles **and people** by name,
 /// recommend when the request reads as a vibe/genre/runtime ask, and surface
 /// **"more like this"** owned titles via TMDb.
 ///
-/// Pure orchestration over `AetherCore` — the deterministic `RecommendationEngine`
-/// + `RecommendationQueryParser`, the on-device `RecommendationConcierge`, and
-/// (optionally) `TMDbClient` for richer grounding. The model never sees the whole
-/// catalogue; it only re-ranks the engine's shortlist.
-enum AskAether {
+/// Pure orchestration over the deterministic `RecommendationEngine` +
+/// `RecommendationQueryParser`, the on-device `RecommendationConcierge`, and
+/// (optionally) `TMDbClient`. The model never sees the whole catalogue; it only
+/// re-ranks the engine's shortlist.
+public enum AskAether {
 
     /// Answer a free-text request against the connected sources.
     /// - Parameter tmdb: a configured TMDb client for "more like this" + keyword
     ///   grounding; pass `nil` to skip those (still fully functional).
-    static func answer(
+    public static func answer(
         query: String,
         sources: [any MediaSource],
         tmdb: TMDbClient? = nil
@@ -39,8 +75,7 @@ enum AskAether {
         var seen = Set(titleMatches.map(\.id))
         let matches = titleMatches + peopleMatches.filter { seen.insert($0.id).inserted }
 
-        // "More like this" — when the request points at an owned title (a plain
-        // lookup, or "more like X"), surface owned TMDb recommendations.
+        // "More like this" — when the request points at an owned title.
         let (similar, similarTo) = await similarTitles(query: trimmed, in: all, tmdb: tmdb)
 
         // Recommend only when the request reads as a vibe/genre/runtime ask, or
@@ -74,7 +109,7 @@ enum AskAether {
     /// the person's name contains the query ("hanks" → Tom Hanks), or the query
     /// contains the full name ("a movie with tom hanks" → Tom Hanks). Bounded to a
     /// handful of people so a request never fans out into unbounded fetches.
-    private static func peopleTitles(matching query: String, sources: [any MediaSource]) async -> [UnifiedMediaItem] {
+    static func peopleTitles(matching query: String, sources: [any MediaSource]) async -> [UnifiedMediaItem] {
         let q = query.lowercased()
         guard q.count >= 3 else { return [] }
 
@@ -101,8 +136,7 @@ enum AskAether {
     // MARK: - More like this (TMDb)
 
     /// Owned titles TMDb considers similar to the title the request points at.
-    /// Returns the matches plus the anchor's display title for the section header.
-    private static func similarTitles(
+    static func similarTitles(
         query: String,
         in all: [UnifiedMediaItem],
         tmdb: TMDbClient?
@@ -114,7 +148,6 @@ enum AskAether {
         let ids = await tmdb.recommendations(tmdbID: tmdbID, type: anchor.isShow ? .tv : .movie)
         guard !ids.isEmpty else { return ([], nil) }
 
-        // Index the library by TMDb id, then keep only owned recommendations.
         let ownedByTMDb = Dictionary(
             all.compactMap { item in item.tmdbID.flatMap(Int.init).map { ($0, item) } },
             uniquingKeysWith: { first, _ in first }
@@ -126,7 +159,7 @@ enum AskAether {
     /// The owned title a "more like this" request points at: an explicit
     /// "(more) like X" / "similar to X" phrase, otherwise a plain title lookup.
     /// `nil` for vibe/genre requests (no title in the query).
-    private static func similarAnchor(query: String, in all: [UnifiedMediaItem]) -> UnifiedMediaItem? {
+    static func similarAnchor(query: String, in all: [UnifiedMediaItem]) -> UnifiedMediaItem? {
         let lowered = query.lowercased()
         var phrase = query
         for prefix in ["more like ", "something like ", "similar to ", "like "] where lowered.hasPrefix(prefix) {
@@ -145,7 +178,7 @@ enum AskAether {
 
     /// Build the concierge `enrich` hook: TMDb keyword tags for the shortlist,
     /// cached per title. `nil` when no TMDb client is configured.
-    private static func keywordEnricher(
+    static func keywordEnricher(
         _ tmdb: TMDbClient?
     ) -> (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? {
         guard let tmdb, tmdb.isConfigured else { return nil }

@@ -232,6 +232,10 @@ final class MacSession {
         return key.isEmpty ? nil : TMDbClient(apiKey: key, api: api)
     }
 
+    /// A configured TMDb client for Ask Aether's "more like this" + keyword
+    /// grounding; `nil` when no key is set.
+    var tmdbClient: TMDbClient? { makeTMDbClient() }
+
     /// Verify a TMDb key against the API (`/authentication`) before saving it, so
     /// Settings can confirm it's valid and only then store + hide it.
     func validateTMDbKey(_ key: String) async -> TMDbClient.ValidationResult {
