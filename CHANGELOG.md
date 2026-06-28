@@ -40,6 +40,9 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **tvOS: a single Up Next prompt (#534)** — the "play next episode" prompt
   appeared twice (a card plus the native action); only the native, focusable
   prompt shows now.
+- **Auto-Play Next no longer double-counts (#537)** — the Up Next countdown
+  restarted once when it hit zero (a second countdown flashed before the next
+  episode loaded). It now advances after a single countdown.
 
 ## [0.8.5] — 2026-06-28
 
