@@ -54,6 +54,10 @@ struct PlayerView: View {
     /// Seconds left on the "Next Episode" countdown; `nil` when not counting.
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
+    /// The in-flight advance to the next episode. Non-nil while advancing, which
+    /// makes `triggerAdvance()` idempotent — a manual tap during the countdown
+    /// (or vice-versa) can't start a second advance (#543).
+    @State private var advanceTask: Task<Void, Never>?
 
     #if os(iOS)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -321,8 +325,7 @@ struct PlayerView: View {
                     { Task { await viewModel.skip(toContentSeconds: intro.end) } })
         }
         if countdownRemaining != nil, nextItem != nil {
-            return (String(localized: "Play Next Episode"),
-                    { Task { await playNext() } })
+            return (String(localized: "Play Next Episode"), { triggerAdvance() })
         }
         if creditsMode == .button, let credits = activeCredits {
             return (String(localized: "Skip Credits"),
@@ -362,7 +365,7 @@ struct PlayerView: View {
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                         HStack(spacing: AetherDesign.Spacing.s) {
                             AetherButton("Play Now", systemImage: "play.fill", role: .primary) {
-                                Task { await playNext() }
+                                triggerAdvance()
                             }
                             AetherButton("Dismiss", role: .secondary) {
                                 cancelCountdown()
@@ -411,7 +414,11 @@ struct PlayerView: View {
                 remaining -= 1
                 countdownRemaining = remaining
             }
-            await playNext()
+            // Hand off to the shared, idempotent advance — NOT `playNext()`
+            // directly. Running the advance on its own task (not inside
+            // `countdownTask`) lets `triggerAdvance` cancel the countdown without
+            // self-cancelling the resolve (the -999 trap, #523).
+            triggerAdvance()
         }
     }
 
@@ -421,33 +428,46 @@ struct PlayerView: View {
         countdownRemaining = nil
     }
 
+    /// Advance to the next episode exactly once. Shared by the auto countdown,
+    /// the tvOS native "Play Next Episode" action, and the iOS Play Now button.
+    /// The `advanceTask` guard makes it idempotent: a manual tap while the
+    /// countdown is still running (or the countdown firing after a manual tap)
+    /// can't trigger a second advance — the bug where one tap skipped two
+    /// episodes and the second carried the wrong audio track (#543). Cancelling
+    /// the countdown is safe here because the advance runs on `advanceTask`, not
+    /// inside `countdownTask`.
+    private func triggerAdvance() {
+        guard advanceTask == nil, nextItem != nil else { return }
+        cancelCountdown()
+        advanceTask = Task { @MainActor in
+            await playNext()
+            advanceTask = nil
+        }
+    }
+
     /// Advance to the next episode in place — reuse the same player/session.
     /// Marks the finished episode watched, then opens the next and pre-resolves
-    /// the one after it.
+    /// the one after it. Always go through `triggerAdvance()`, never call this
+    /// directly, so the idempotency guard holds.
     private func playNext() async {
         guard let next = nextItem else { return }
-        // Clear the countdown UI, but do NOT cancel `countdownTask` — `playNext`
-        // runs *inside* it (see `startCountdown`). `cancelCountdown()` would call
-        // `countdownTask?.cancel()`, cancelling the very task we're executing in;
-        // every `await` below then runs under a cancelled task, so the next
-        // episode's resolve aborts with NSURLErrorCancelled (-999) on Plex's
-        // `/transcode/universal/decision` request (#523).
-        countdownTask = nil
-        countdownRemaining = nil
-        // Clear `nextItem` BEFORE the awaits below. Otherwise a time-tick during
-        // `markWatchedEverywhere` / `open` sees (nextItem != nil, countdownRemaining
-        // == nil) while the old item is still at its credits position, and
-        // `updateNextEpisodePrompt` restarts a second countdown that only clears
-        // once the next episode finally loads — the "countdown shows again, then
-        // switches" flicker (#537). `next` is already captured above.
+        // Clear `nextItem` before the awaits so a stray time-tick can't see a
+        // pending next episode mid-advance (#537).
         nextItem = nil
         let finished = viewModel.state.item ?? item
         await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
+        // Hydrate the next episode first. Items from `nextEpisode(after:)` come
+        // from the library `children` list, which omits the per-Part stream list,
+        // so the language match in `appliedToNextEpisode` has no audio/subtitle
+        // tracks to match against and silently falls back to the source default
+        // (English instead of the Czech the user chose on Detail). `item(for:)`
+        // returns the full shape with tracks. (#546)
+        let base = (try? await source?.item(for: next.id)).flatMap { $0 } ?? next
         // Carry the session's audio/subtitle/quality choices onto the next
         // episode (language-matched), with the app defaults as the base —
         // episode 2 used to revert to the container's default track (#68).
-        let configured = playbackPreferences?.appliedToNextEpisode(next, continuing: finished) ?? next
+        let configured = playbackPreferences?.appliedToNextEpisode(base, continuing: finished) ?? base
         // Tell the host Detail we've moved on, so dismissing later lands on the
         // episode that was actually playing, not the one Play was pressed on (#315).
         onAdvance(configured)
@@ -497,7 +517,7 @@ struct PlayerView: View {
     /// mark the finished episode watched and dismiss. (#314)
     private func finishPlayback() {
         if autoPlayNext, nextItem != nil {
-            Task { await playNext() }
+            triggerAdvance()
         } else {
             let finished = viewModel.state.item ?? item
             Task { await appSession.markWatchedEverywhere(finished) }

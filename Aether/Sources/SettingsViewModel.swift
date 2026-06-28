@@ -279,7 +279,6 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "On Apple TV, a new side menu — like the Apple TV app. Navigation tucks to the left edge, opens when you move to it, and slides away while you browse.",
         "Connect more than one server — add several Jellyfin or Emby servers, and a second Plex account. Everything merges into one library; manage each in Settings → Accounts & Sources.",
         "Identify on Jellyfin — fix a mis-matched or unrecognized title (movie, episode, or whole series) right from the Detail screen. Search the server's providers, pick the match, and Aether applies it on the server — no web dashboard.",
         "Sign in to Jellyfin with a username and password, alongside Quick Connect.",
