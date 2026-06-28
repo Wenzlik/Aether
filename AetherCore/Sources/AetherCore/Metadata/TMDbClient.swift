@@ -200,6 +200,41 @@ public struct TMDbClient: Sendable {
         )
     }
 
+    // MARK: - Recommendations + keywords (Ask Aether richer grounding)
+
+    /// TMDb "recommendations" for a title — the basis for Ask Aether's "More like
+    /// this". Returns related TMDb ids (most-relevant first); intersect these with
+    /// the user's library to surface owned similar titles. Empty on any failure.
+    public func recommendations(tmdbID: Int, type: MediaType, limit: Int = 30) async -> [Int] {
+        guard isConfigured,
+              let request = simpleRequest(path: "/\(type.path)/\(tmdbID)/recommendations") else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? await api.decode(SearchResponse.self, from: request, decoder: decoder) else {
+            return []
+        }
+        return Array(response.results.map(\.id).prefix(limit))
+    }
+
+    /// TMDb keyword tags for a title (e.g. "heist", "time travel") — fed into the
+    /// recommendation candidate context so the on-device model can reason
+    /// thematically. Movies expose them under `keywords`, TV under `results`.
+    /// Empty on any failure.
+    public func keywords(tmdbID: Int, type: MediaType) async -> [String] {
+        guard isConfigured,
+              let request = simpleRequest(path: "/\(type.path)/\(tmdbID)/keywords") else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? await api.decode(KeywordsResponse.self, from: request, decoder: decoder) else {
+            return []
+        }
+        return (response.keywords ?? response.results ?? []).map(\.name)
+    }
+
     // MARK: - Watch providers + discovery (#360)
 
     /// Whether a title is a movie or a TV show, for the path segment TMDb uses.
@@ -309,6 +344,13 @@ public struct TMDbClient: Sendable {
 
     private struct SearchResponse: Decodable, Sendable {
         let results: [Result]
+    }
+    private struct KeywordsResponse: Decodable, Sendable {
+        let keywords: [Keyword]?   // movies
+        let results: [Keyword]?    // TV
+    }
+    private struct Keyword: Decodable, Sendable {
+        let name: String
     }
 
     private struct Result: Decodable, Sendable {

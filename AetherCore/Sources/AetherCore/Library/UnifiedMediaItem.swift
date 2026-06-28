@@ -203,6 +203,14 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         sources.lazy.compactMap { $0.item.guids.tmdb }.first
     }
 
+    /// Runtime from whichever source reports one (the title is the same across
+    /// sources, so the first non-nil wins). `nil` when no source carries it —
+    /// common for shows, where runtime is per-episode. Used by recommendation
+    /// filtering ("under 2 hours").
+    public var runtime: Duration? {
+        sources.lazy.compactMap { $0.item.runtime }.first
+    }
+
     /// Whether this title is a series (picks the TMDb media type for lookups).
     public var isShow: Bool { type == .show }
 

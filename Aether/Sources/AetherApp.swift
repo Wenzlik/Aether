@@ -1254,6 +1254,12 @@ final class AppSession {
         isTMDbConfigured ? TMDbClient(apiKey: tmdbAPIKey, api: api) : nil
     }
 
+    /// A configured TMDb client for metadata-rich features (Ask Aether's "More
+    /// like this" + keyword grounding). `nil` when no key is set.
+    var tmdbClient: TMDbClient? {
+        isTMDbConfigured ? TMDbClient(apiKey: tmdbAPIKey, api: api) : nil
+    }
+
     private func restoreSMB() async {
         let store = SMBConnectionStore(keychain: keychain)
         smbConnectionStore = store
