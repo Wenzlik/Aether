@@ -4,6 +4,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **Clearer "Active" source (#525)** — a source's account sheet now explains that
+  the active source only sets what **Library** and **Search** browse; titles that
+  exist on more than one server always play from a fixed preferred copy, which you
+  switch per title on its page. The note shows for the active source too, so the
+  badge is no longer mistaken for a playback switch.
+
 ### Fixed
 
 - **Auto-Play Next no longer fails on tvOS (#523)** — when the Up Next countdown
