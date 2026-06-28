@@ -5,10 +5,12 @@ import os
 #endif
 
 /// The app's root. A native `TabView` — one structure, no per-platform layouts.
-/// Its presentation adapts per platform via `.sidebarAdaptable`: a collapsible
-/// **leading sidebar** on tvOS (the Apple TV app pattern, #527) and iPad (#391),
-/// the **bottom bar** on iPhone, and the default **ornament** on visionOS.
-/// Replaces the old single-`HomeView` surface-switcher and the Settings `.sheet`.
+/// Its presentation adapts per platform: a collapsible **leading sidebar** on
+/// iPad (`.sidebarAdaptable`, #391), the **top tab bar** on tvOS, the **bottom
+/// bar** on iPhone, and the default **ornament** on visionOS. (A tvOS sidebar
+/// was tried in #527 but reverted — `.sidebarAdaptable` breaks Menu-button
+/// pop-back inside a `NavigationStack` on tvOS.) Replaces the old single-
+/// `HomeView` surface-switcher and the Settings `.sheet`.
 ///
 /// Tabs: **Home / Library / Search / Settings**. Each content tab owns its own
 /// `NavigationStack` so drilling into a title and switching tabs don't fight
@@ -171,16 +173,16 @@ struct RootTabView: View {
                 )
             }
         }
-        // Collapsible sidebar navigation (#391 iPad, #527 tvOS):
-        // - iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
-        //   native pattern. iPhone (compact) keeps its bottom tab bar.
-        // - tvOS: the Apple TV app pattern — a sidebar collapsed to a leading-edge
-        //   pill that expands when focus moves to it and collapses back into a pill
-        //   once a tab is selected. Same `Tab` structure; the icons + localized
-        //   labels the tabs already carry drive the sidebar.
-        // visionOS keeps its default ornament navigation (the sidebar renders
-        // differently there), so it stays excluded.
-        #if os(iOS) || os(tvOS)
+        // iPad (regular width): the top tab bar adapts to a sidebar — the iOS 26
+        // native pattern (#391). iPhone (compact) keeps its bottom tab bar.
+        //
+        // tvOS is deliberately NOT included: `.sidebarAdaptable` triggers a known
+        // SwiftUI tvOS bug where a `NavigationStack` inside a sidebar-adaptable
+        // `TabView` doesn't pop on the Menu button — it exits the app instead —
+        // which broke Settings and every drill-down. tvOS stays on the top tab
+        // bar (where NavigationStack pops correctly); revisit a tvOS sidebar via
+        // `NavigationSplitView` later, verified on-device (#527 reverted).
+        #if os(iOS)
         .tabViewStyle(.sidebarAdaptable)
         #endif
         .sheet(isPresented: $session.isSignInPresented) {

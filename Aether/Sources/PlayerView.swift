@@ -457,10 +457,17 @@ struct PlayerView: View {
         let finished = viewModel.state.item ?? item
         await appSession.markWatchedEverywhere(finished)
         autoSkipped = []
+        // Hydrate the next episode first. Items from `nextEpisode(after:)` come
+        // from the library `children` list, which omits the per-Part stream list,
+        // so the language match in `appliedToNextEpisode` has no audio/subtitle
+        // tracks to match against and silently falls back to the source default
+        // (English instead of the Czech the user chose on Detail). `item(for:)`
+        // returns the full shape with tracks. (#546)
+        let base = (try? await source?.item(for: next.id)).flatMap { $0 } ?? next
         // Carry the session's audio/subtitle/quality choices onto the next
         // episode (language-matched), with the app defaults as the base —
         // episode 2 used to revert to the container's default track (#68).
-        let configured = playbackPreferences?.appliedToNextEpisode(next, continuing: finished) ?? next
+        let configured = playbackPreferences?.appliedToNextEpisode(base, continuing: finished) ?? base
         // Tell the host Detail we've moved on, so dismissing later lands on the
         // episode that was actually playing, not the one Play was pressed on (#315).
         onAdvance(configured)

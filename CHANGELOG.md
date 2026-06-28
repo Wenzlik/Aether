@@ -13,13 +13,6 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Changed
 
-- **tvOS: collapsible side menu (#527)** — Apple TV's primary navigation moves
-  from the top tab bar to a leading **sidebar**, matching the Apple TV app:
-  collapsed to a pill on the left edge, it expands when focus moves to it and
-  collapses back once you pick a tab and move into content. Same tabs (Home /
-  Library / Discover / Search / Settings); native `.sidebarAdaptable`, so the
-  focus engine drives it. iPhone (bottom bar) and visionOS (ornament) are
-  unchanged.
 - **Clearer "Active" source (#525)** — a source's account sheet now explains that
   the active source only sets what **Library** and **Search** browse; titles that
   exist on more than one server always play from a fixed preferred copy, which you
@@ -28,6 +21,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- **Auto-Play Next keeps your audio/subtitle language (#546)** — advancing to the
+  next episode reverted to the source's default track (e.g. English) instead of
+  the language you'd chosen. The next episode is now hydrated before the
+  selection carries over, so the language match has tracks to match against.
 - **Auto-Play Next no longer fails on tvOS (#523)** — when the Up Next countdown
   reached zero, advancing to the next episode aborted with a cancelled-request
   error ("Couldn't resolve a playback URL … cancelled"). The countdown was
