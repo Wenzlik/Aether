@@ -39,12 +39,19 @@ struct LibraryBrowseView: View {
     let playbackPreferences: PlaybackPreferencesStore?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
+    @Environment(AppSession.self) private var appSession
 
     /// When non-empty, the library swaps its grid for unified `MediaSearchResults`.
     @State private var searchQuery = ""
     /// iOS / visionOS: header shows a search *button* by default; the field only
     /// appears once tapped — no permanent search bar (matches Home).
     @State private var isSearchActive = false
+    /// Ask Aether answer (library matches + optional recommendation), shown after
+    /// the user submits a request. Sticky while refining; dropped when cleared.
+    /// Same behaviour as the Search tab (see `AskAether`).
+    @State private var askResult: AskResult?
+    /// On-device inference in flight.
+    @State private var isAsking = false
     /// Owns keyboard focus so tapping outside / scrolling / selecting a result
     /// dismisses the keyboard.
     @FocusState private var searchFocused: Bool
@@ -85,6 +92,12 @@ struct LibraryBrowseView: View {
             .scrollDismissesKeyboard(.immediately)
             #endif
             .aetherScreenBackground()
+            // Return in any search field submits an Ask Aether request; clearing
+            // the field drops the answer (back to the grid).
+            .onSubmit { Task { await ask() } }
+            .onChange(of: searchQuery) { _, newValue in
+                if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { askResult = nil }
+            }
             // Pull-to-refresh + reload now live in the grid itself; the shell no
             // longer fetches rails of its own.
             // iPad: brand (leading, flush) + Filter + Search (trailing) on the
@@ -171,12 +184,12 @@ struct LibraryBrowseView: View {
             #if os(tvOS)
             AetherWordmark(.medium)
             Spacer(minLength: AetherDesign.Spacing.l)
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
                 .frame(maxWidth: AetherDesign.headerSearchWidth)
             // Reload moved into the grid's bar (it owns loading now).
             #else
             if isSearchActive {
-                AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+                AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
                 Button("Cancel") {
                     searchQuery = ""
                     searchFocused = false
@@ -252,7 +265,7 @@ struct LibraryBrowseView: View {
     /// Filter + search button live in the tab-bar toolbar).
     private var iPadSearchRow: some View {
         HStack(spacing: AetherDesign.Spacing.m) {
-            AetherSearchField(text: $searchQuery, prompt: "Search your library", focus: $searchFocused)
+            AetherSearchField(text: $searchQuery, prompt: "Ask Aether…", focus: $searchFocused)
             Button("Cancel") {
                 searchQuery = ""
                 searchFocused = false
@@ -273,10 +286,34 @@ struct LibraryBrowseView: View {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Ask Aether from Library — find titles + recommend. Mirrors the Search tab.
+    private func ask() async {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !connectedSources.isEmpty, !isAsking else { return }
+        searchFocused = false
+        isAsking = true
+        defer { isAsking = false }
+        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
+        askResult = answer
+    }
+
+    /// Edited-but-not-resubmitted request → "press Return to ask" hint.
+    private var askPending: String? {
+        guard let askResult else { return nil }
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (!trimmed.isEmpty && trimmed != askResult.query) ? trimmed : nil
+    }
+
     @ViewBuilder
     private var content: some View {
-        if isSearching {
-            // Unified search across every connected source (same as Home / Search).
+        if isAsking {
+            AetherLoadingDots(caption: String(localized: "Asking Aether…"))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let askResult {
+            RecommendationResultsView(result: askResult, pendingQuery: askPending)
+        } else if isSearching {
+            // Live title search while typing, before an ask.
             MediaSearchResults(sources: connectedSources, query: searchQuery)
         } else if !connectedSources.isEmpty {
             // Unified Library landing: one combined grid (Movies + TV Shows) with
