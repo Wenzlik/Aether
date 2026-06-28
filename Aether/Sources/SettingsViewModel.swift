@@ -279,16 +279,18 @@ final class SettingsViewModel {
     /// the full per-version log lives in `CHANGELOG.md`. Update when the version
     /// bumps.
     let whatsNewBullets: [String] = [
-        "Plex Home profiles — after you sign in, choose who's watching. Each profile keeps its own watch history, libraries and ratings, and is remembered across launches. Switch profiles anytime in Settings.",
-        "Rate what you watch — set a personal star rating on the Detail screen; it syncs to Plex and every other client.",
-        "Three new languages — Aether now speaks German, French and Spanish, joining English, Čeština and Ukrainian. Pick one in Settings → Language.",
-        "Fixed: your preferred audio and subtitle language now applies reliably — tracks the server labels with three-letter codes (Czech, German, …) are matched correctly, both on the Detail screen and in playback.",
-        "Downloaded movies with Dolby Digital (AC-3) or Dolby Digital Plus (E-AC-3) soundtracks now play through the native player instead of falling back to VLCKit."
+        "Connect more than one server — add several Jellyfin or Emby servers, and a second Plex account. Everything merges into one library; manage each in Settings → Accounts & Sources.",
+        "Identify on Jellyfin — fix a mis-matched or unrecognized title (movie, episode, or whole series) right from the Detail screen. Search the server's providers, pick the match, and Aether applies it on the server — no web dashboard.",
+        "Sign in to Jellyfin with a username and password, alongside Quick Connect.",
+        "A bolder, cinematic Discover — the featured banner fills the width and fades into the background, with logo art and Dolby Vision badges.",
+        "Fixed: resuming a transcoded Jellyfin title no longer fails — it picks up right where you left off."
     ]
 
     /// Past releases, newest first — shown under "Release History" in What's New.
     /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.8.4", codename: "Eridanus",
+                    summary: "Plex Home profiles (choose who's watching), personal star ratings synced to Plex, German / French / Spanish, a preferred audio & subtitle language fix, and native playback of downloaded Dolby Digital (AC-3 / E-AC-3) soundtracks."),
         ReleaseNote(version: "0.8.3", codename: "Eridanus",
                     summary: "A combined Library grid with a persistent Movies/Series toggle and a Watched filter, community-rating poster badges, a full-bleed Discover hero on iPad and Vision Pro, reliable offline playback, swipe-to-close player, and a batch of macOS fixes (light/dark, Downloads panel, TMDb matching, multi-server)."),
         ReleaseNote(version: "0.7.8", codename: "Draco",

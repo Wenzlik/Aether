@@ -5,8 +5,8 @@ AI-facing snapshot of the current working focus. Update this whenever staging pr
 ## Current Release Train
 
 - Branch baseline: `staging`
-- Marketing version: `0.8.0` *(shipping as "Eridanus" → main 2026-06-17)*
-- Recent shipped scope (0.8.0): Library combined grid + Watched filter + browse pills removed, tvOS source/Settings tile redesign (#441–443), Discover overlay hero, player dismiss swipe-down (#431), offline download playback fix (#428), macOS Search-in-sidebar (#440) + View menu ⌘1…⌘5 (#432), background battery fixes, SettingsView split (#415)
+- Marketing version: `0.8.5` *(codename "Eridanus" → main 2026-06-28)*
+- Recent shipped scope (0.8.5): multi-server — several Jellyfin/Emby servers + a 2nd Plex account, iOS + macOS (#518/#519/#520); Jellyfin Identify / RemoteSearch+Apply incl. shows (#511/#515); Jellyfin username+password sign-in (#509); Jellyfin resume via PlaybackInfo, fixes -1008 (#512); cinematic Discover hero (#517); detail hero dark-logo→text legibility (#516); library no-blank-on-empty-refresh (#510); Settings wordmark under tab bar (#514); server-side audio-language filter (#513)
 
 ## Sprint Goal
 
