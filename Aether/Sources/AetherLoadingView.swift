@@ -22,6 +22,13 @@ struct AetherCenteredScrollState<Content: View>: View {
             // Always bounce so pull-to-refresh fires even when the content fits.
             .scrollBounceBehavior(.always)
             #endif
+            // tvOS: a loading screen has no focusable view, which leaves the focus
+            // engine with no anchor — the Siri Remote then can't navigate back to
+            // the sidebar, so the menu becomes unreachable while the library loads.
+            // Making the scroll content focusable restores a focus target, so Left
+            // / Menu always returns to the sidebar (the menu must always be
+            // reachable). No-op off tvOS. (#531)
+            .tvOSScrollFocusable()
         }
     }
 }

@@ -31,6 +31,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   the Siri Remote (they were SwiftUI overlays the player view controller wouldn't
   give focus to). They're now native, focusable on-screen actions. iOS and
   visionOS are unchanged.
+- **tvOS: the menu stays reachable while the library loads (#531)** — during
+  "Loading your library…" the side menu couldn't be focused (the loading screen
+  had no focus target, so the Siri Remote had nothing to navigate from). The menu
+  is now always reachable.
 
 ## [0.8.5] — 2026-06-28
 
