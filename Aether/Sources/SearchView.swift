@@ -68,10 +68,14 @@ struct SearchView: View {
             }
             .aetherScreenBackground()
             .task(id: sourcesKey) { await loadDiscovery() }
-            // Any edit to the field drops the last recommendation, so typing
-            // returns to live title search (and clearing returns to discovery).
-            .onChange(of: query) { _, _ in
-                if recommendation != nil { recommendation = nil }
+            // Keep the recommendation visible while the user refines the request
+            // (they press Return to re-ask); only drop it when the field is
+            // cleared, which returns to discovery. Live title search is for fresh
+            // typing before an ask — not for editing an existing recommendation.
+            .onChange(of: query) { _, newValue in
+                if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    recommendation = nil
+                }
             }
             .mediaNavigationDestinations(
                 source: source,
@@ -108,7 +112,11 @@ struct SearchView: View {
             AetherLoadingDots(caption: "Asking Aether…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let recommendation {
-            RecommendationResultsView(result: recommendation, query: askedQuery)
+            RecommendationResultsView(
+                result: recommendation,
+                query: askedQuery,
+                pendingQuery: pendingAsk
+            )
         } else if isSearching {
             MediaSearchResults(sources: connectedSources, query: query)
         } else {
@@ -226,6 +234,13 @@ struct SearchView: View {
 
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The edited-but-not-yet-submitted request, when the field no longer matches
+    /// the shown recommendation — drives the "press Return to ask again" hint.
+    private var pendingAsk: String? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (!trimmed.isEmpty && trimmed != askedQuery) ? trimmed : nil
     }
 
     private var discoveryIsEmpty: Bool {

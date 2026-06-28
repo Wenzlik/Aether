@@ -10,8 +10,11 @@ import AetherCore
 /// Play / Resume already live) via the host's `mediaNavigationDestinations`.
 struct RecommendationResultsView: View {
     let result: RecommendationResult
-    /// The request the user typed — echoed in the empty state.
+    /// The request the recommendation was produced for — echoed in the empty state.
     let query: String
+    /// Set when the user has edited the field since this recommendation was made;
+    /// shows a "press Return to ask again" hint so editing doesn't feel stuck.
+    var pendingQuery: String?
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
@@ -19,6 +22,7 @@ struct RecommendationResultsView: View {
         if let pick = result.pick {
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.xl) {
+                    if let pendingQuery { pendingHint(pendingQuery) }
                     heroPick(pick)
                     if !more.isEmpty { moreRail }
                 }
@@ -39,6 +43,19 @@ struct RecommendationResultsView: View {
     private var more: [UnifiedMediaItem] {
         guard let pick = result.pick else { return [] }
         return result.shortlist.filter { $0.id != pick.id }
+    }
+
+    // MARK: - Pending-edit hint
+
+    private func pendingHint(_ pending: String) -> some View {
+        HStack(spacing: AetherDesign.Spacing.xs) {
+            Image(systemName: "return")
+            Text(verbatim: "Press return to ask: “\(pending)”")
+                .lineLimit(1)
+        }
+        .font(AetherDesign.Typography.caption)
+        .foregroundStyle(AetherDesign.Palette.textSecondary)
+        .padding(.horizontal, AetherDesign.Spacing.l)
     }
 
     // MARK: - Hero pick
