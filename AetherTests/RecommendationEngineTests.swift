@@ -224,7 +224,8 @@ struct TasteProfileTests {
         genres: [String],
         watched: Bool = false,
         tmdb: Double? = nil,
-        type: MediaItem.Kind = .movie
+        type: MediaItem.Kind = .movie,
+        lastWatched: Date? = nil
     ) -> UnifiedMediaItem {
         let media = MediaItem(
             id: .init(source: .plex(serverID: "s"), rawValue: title),
@@ -232,6 +233,7 @@ struct TasteProfileTests {
             kind: type,
             runtime: nil,
             isWatched: watched,
+            lastWatched: lastWatched,
             genres: genres
         )
         return UnifiedMediaItem(
@@ -298,5 +300,24 @@ struct TasteProfileTests {
             from: library, profile: .from(library: library), limit: 1
         )
         #expect(picks.first?.title == "Unseen High")
+    }
+
+    @Test("Reason names a recently-watched title sharing a genre")
+    func reasonBecauseYouWatched() {
+        let watched = item("Alien", genres: ["Horror", "Sci-Fi"], watched: true,
+                           lastWatched: Date(timeIntervalSince1970: 1000))
+        let pick = item("The Thing", genres: ["Horror"])
+        let profile = TasteProfile.from(library: [watched, pick])
+        let reason = RecommendationReason.make(for: pick, recentlyWatched: [watched], profile: profile)
+        #expect(reason == .becauseYouWatched("Alien"))
+    }
+
+    @Test("Reason falls back to taste genres when no watched anchor")
+    func reasonMatchesTaste() {
+        let seen = item("Airplane", genres: ["Comedy"], watched: true)
+        let pick = item("Spaceballs", genres: ["Comedy"])
+        let profile = TasteProfile.from(library: [seen, pick])
+        let reason = RecommendationReason.make(for: pick, recentlyWatched: [], profile: profile)
+        #expect(reason == .matchesTaste(["Comedy"]))
     }
 }
