@@ -1,6 +1,74 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Mac: open and play local files right in the window." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac: otevři a přehraj lokální soubory přímo v okně."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac: lokale Dateien direkt im Fenster öffnen und abspielen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac: abre y reproduce archivos locales en la propia ventana."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac : ouvrez et lisez des fichiers locaux directement dans la fenêtre."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac: відкривайте та відтворюйте локальні файли прямо у вікні."
+          }
+        }
+      }
+    },
+    "A Local section remembers recents and where you left off." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekce Lokální si pamatuje nedávné a kde jsi skončil."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Bereich „Lokal“ merkt sich Zuletzt und wo du aufgehört hast."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una sección Local recuerda los recientes y dónde lo dejaste."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une section Local retient les récents et où vous en étiez."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Розділ «Локальні» запам’ятовує нещодавні та де ви зупинилися."
+          }
+        }
+      }
+    },
     "Downloaded titles now play offline." : {
       "localizations" : {
         "cs" : {

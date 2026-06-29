@@ -285,6 +285,8 @@ final class SettingsViewModel {
                         "Ask Aether — find something to watch in plain language.",
                         "It only suggests titles you already own.",
                         "On-device with Apple Intelligence where available.",
+                        "Mac: open and play local files right in the window.",
+                        "A Local section remembers recents and where you left off.",
                     ],
                     fixed: [
                         "Downloaded titles now play offline.",
