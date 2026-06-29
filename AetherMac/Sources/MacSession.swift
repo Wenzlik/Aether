@@ -948,8 +948,11 @@ final class MacSession {
         if let url = await beginPlayback(for: item) { playbackURL = url }
     }
 
-    /// Play a local file inline (no resume context).
+    /// Play a local file inline (no resume context). Idempotent — re-opening the
+    /// file that's already playing is a no-op (guards against a duplicate open
+    /// event re-triggering playback).
     func playLocal(_ url: URL) {
+        guard playbackURL != url else { return }
         playbackContext[url] = nil
         playbackURL = url
     }
