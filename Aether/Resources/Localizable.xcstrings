@@ -1,6 +1,186 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Building your library…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stavíme vaši knihovnu…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir bauen deine Bibliothek…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Construyendo tu biblioteca…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Construction de votre bibliothèque…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Будуємо вашу бібліотеку…"
+          }
+        }
+      }
+    },
+    "Now filming a new movie…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Točíme nový film…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir drehen einen neuen Film…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rodando una nueva película…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On tourne un nouveau film…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Знімаємо новий фільм…"
+          }
+        }
+      }
+    },
+    "Rolling out the red carpet…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rozvíjíme červený koberec…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir rollen den roten Teppich aus…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desplegando la alfombra roja…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On déroule le tapis rouge…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Розгортаємо червону доріжку…"
+          }
+        }
+      }
+    },
+    "Cueing the projector…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spouštíme promítačku…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir starten den Projektor…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encendiendo el proyector…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On lance le projecteur…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запускаємо проєктор…"
+          }
+        }
+      }
+    },
+    "Buttering the popcorn…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mažeme popcorn máslem…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir buttern das Popcorn…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untando las palomitas con mantequilla…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On beurre le pop-corn…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Намащуємо попкорн маслом…"
+          }
+        }
+      }
+    },
     "Aether couldn't prepare this file for playback. Check that the source is reachable, then try again." : {
       "comment" : "Detail playback-unavailable copy for file sources (SMB/DLNA/Local); no Plex/transcode wording.",
       "extractionState" : "manual",

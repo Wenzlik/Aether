@@ -42,6 +42,17 @@ struct LibraryView: View {
     /// small enough that a slow connection still feels responsive.
     private static let pageSize = 100
 
+    /// Playful rotating loader lines (movie-set themed) shown while the first
+    /// page loads — see `AetherLoadingState(captions:)`. English source strings;
+    /// localized via the catalog.
+    private static let loadingCaptions = [
+        "Building your library…",
+        "Now filming a new movie…",
+        "Rolling out the red carpet…",
+        "Cueing the projector…",
+        "Buttering the popcorn…",
+    ]
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
@@ -96,7 +107,10 @@ struct LibraryView: View {
                 retry: .init { Task { await loadFirstPage() } }
             )
         } else if isLoadingPage && items.isEmpty {
-            AetherLoadingState(.rails(count: 1))
+            // Witty rotating copy over the skeleton — a slow source (e.g. an SMB
+            // share walk) can take a while, so the loader should read as "still
+            // working", not a frozen placeholder.
+            AetherLoadingState(.rails(count: 1), captions: Self.loadingCaptions)
         } else if items.isEmpty {
             AetherEmptyState(
                 glyph: "tray",

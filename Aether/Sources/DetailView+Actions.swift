@@ -92,9 +92,19 @@ extension DetailView {
     /// source) returns to the navigated item.
     // MARK: - Action row (Resume / Play From Beginning / Play, or unavailable)
 
+    /// A completed download makes the title playable offline regardless of
+    /// whether a server stream URL resolved — `presentPlayer` prefers the local
+    /// file (VLCKit for mkv/DTS, AVPlayer/remux otherwise). Without this, an SMB
+    /// title whose `streamURL` is nil offline showed "Playback unavailable" and
+    /// hid Play, stranding a file already on disk.
+    private var hasCompletedDownload: Bool {
+        if case .completed = downloadStatus { return true }
+        return false
+    }
+
     @ViewBuilder
     var actionRow: some View {
-        if current.streamURL != nil {
+        if current.streamURL != nil || hasCompletedDownload {
             // Compact iPhone can't fit the whole cluster (Resume pill + Restart +
             // up to ~4 tertiary icons) on one line, and the old two-row layout is
             // gone — so let it scroll horizontally there instead of clipping. iPad
