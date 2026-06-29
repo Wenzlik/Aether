@@ -285,6 +285,17 @@ final class SettingsViewModel {
                         "Ask Aether — find something to watch in plain language.",
                         "It only suggests titles you already own.",
                         "On-device with Apple Intelligence where available.",
+                        "macOS: Open and play local files right in the window.",
+                        "macOS: A Local section remembers recents and where you left off.",
+                    ],
+                    fixed: [
+                        "visionOS: Cinema only offers formats it can play.",
+                        "visionOS: Technical Details can now be closed.",
+                        "iOS: Close buttons work across the Settings panels.",
+                        "All: Downloaded titles now play offline.",
+                        "All: Adding a second Plex account works.",
+                        "All: Clearer message when a title can't be played yet.",
+                        "All: The Library loading screen no longer looks stuck.",
                     ]),
         ReleaseNote(version: "0.8.5", codename: "Eridanus",
                     new: [

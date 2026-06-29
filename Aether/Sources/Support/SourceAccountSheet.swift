@@ -36,6 +36,10 @@ struct SourceAccountSheet: View {
     let onSignOut: () -> Void
     let onClose: () -> Void
 
+    // Robust close: binding dismissal via `onClose` is unreliable on iOS with
+    // many stacked `.sheet`s (SettingsView) — `dismiss()` always closes.
+    @Environment(\.dismiss) private var dismiss
+
     struct ConnectedServer: Identifiable, Equatable {
         let id: String
         let name: String
@@ -142,7 +146,7 @@ struct SourceAccountSheet: View {
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
+            Button { dismiss(); onClose() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)

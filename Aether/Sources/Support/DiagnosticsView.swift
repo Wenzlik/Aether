@@ -8,6 +8,9 @@ struct DiagnosticsView: View {
     let gather: () async -> DiagnosticsSnapshot
     let onClose: () -> Void
 
+    // Robust close: binding-based dismissal via `onClose` is unreliable on iOS
+    // with many stacked `.sheet` modifiers (SettingsView) — use `dismiss()`.
+    @Environment(\.dismiss) private var dismiss
     @State private var snapshot: DiagnosticsSnapshot?
 
     var body: some View {
@@ -47,7 +50,7 @@ struct DiagnosticsView: View {
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
+            Button { dismiss(); onClose() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
