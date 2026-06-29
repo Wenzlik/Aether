@@ -506,3 +506,20 @@ Issues that don't meet this bar should be triaged: clarified, merged into anothe
 ## When in doubt
 
 Read [`README.md`](README.md) and [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) again. If your change does not make Aether feel more like a premium Apple-platform media player, it probably belongs in a different repo.
+
+---
+
+## Cursor Cloud specific instructions
+
+**Cursor Cloud Agent VMs are Linux (Ubuntu); this repo cannot be built, tested, or run on them.** Aether is a macOS/Xcode-only Apple project, so a Linux cloud agent can edit source, docs, `project.yml`, and `Localizable.xcstrings`, but it cannot produce build/test evidence. Treat any build/test/run verification as **must happen on a macOS host with Xcode** (mirroring the `macos-15` CI runners) — don't burn cycles trying to make a Linux VM compile this.
+
+Why it's impossible on Linux (verified, not assumed):
+
+- **No Swift toolchain** is installed on the VM, and even installing Swift-for-Linux wouldn't help.
+- **`AetherCore/Package.swift` declares only Apple platforms** (`.iOS(.v26) .tvOS(.v26) .visionOS(.v26) .macOS(.v15)`), and its sources pervasively `import SwiftUI / AVFoundation / AVKit / UIKit / AppKit / Security / FoundationModels / Observation` — none of which exist in Swift-for-Linux. So `swift build` / `swift test` on `AetherCore` fails immediately on missing modules; it is *not* a portable SwiftPM library.
+- The **app targets** (`Aether`, `AetherMac`) and **`AetherTests`** require Xcode + iOS/tvOS/visionOS/macOS **26** SDKs + simulators (`xcodeVersion: 16.0`), which are macOS-only.
+- **All CI jobs run on `macos-15`** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); there is no Linux job, by design.
+
+The real local-dev bootstrap (macOS only, mirrors [`ci_scripts/ci_post_clone.sh`](ci_scripts/ci_post_clone.sh)): `brew install xcodegen` → `./scripts/fetch_vlckit.sh` → `xcodegen generate` → open `Aether.xcodeproj` (and `./scripts/fetch_mpv.sh` for the Mac target). See the "Xcode project gotcha" section above — `Aether.xcodeproj` is generated, so re-run `xcodegen generate` after every pull that touches `Aether/Sources/`.
+
+Because of this, there is **no meaningful update script** for the Linux cloud VM — nothing in this repo is installable/runnable there.
