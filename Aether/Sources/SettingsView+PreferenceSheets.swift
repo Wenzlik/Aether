@@ -311,13 +311,18 @@ struct PreferencePickerSheet<Content: View>: View {
 struct WhatsNewSheet: View {
     let version: String
     let codename: String
-    let bullets: [String]
     var history: [ReleaseNote] = []
     let onClose: () -> Void
 
-    /// Previous releases (everything but the current version).
+    /// The current release — matched by version, falling back to the newest entry.
+    private var current: ReleaseNote? {
+        history.first { $0.version == version } ?? history.first
+    }
+
+    /// Everything below the current release.
     private var pastReleases: [ReleaseNote] {
-        history.filter { $0.version != version }
+        guard let current else { return history }
+        return history.filter { $0.id != current.id }
     }
 
     var body: some View {
@@ -334,32 +339,21 @@ struct WhatsNewSheet: View {
             .padding(.top, AetherDesign.Spacing.l)
 
             ScrollView {
-              VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                    ForEach(bullets, id: \.self) { bullet in
-                        HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(AetherDesign.Typography.body)
-                                .foregroundStyle(AetherDesign.Palette.success)
-                            Text(bullet)
-                                .font(AetherDesign.Typography.body)
-                                .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
+              VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                if let current {
+                    card {
+                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
+                            changeGroup("New", symbol: "checkmark.circle.fill",
+                                        tint: AetherDesign.Palette.success, items: current.new)
+                            changeGroup("Fixed", symbol: "wrench.adjustable.fill",
+                                        tint: AetherDesign.Palette.accent, items: current.fixed)
                         }
                     }
+                    // tvOS scrolls by MOVING focus between items — so each card is a
+                    // focus stop. A single focusable scroll body (the old approach)
+                    // left focus stuck on Done and the release notes unreachable.
+                    .tvOSScrollFocusable()
                 }
-                .padding(AetherDesign.Spacing.l)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                        .fill(AetherDesign.Materials.card)
-                )
-                .padding(.horizontal, AetherDesign.Spacing.l)
-                // tvOS scrolls by MOVING focus between items — so each card is a
-                // focus stop. A single focusable scroll body (the old approach)
-                // left focus stuck on Done and the release notes unreachable.
-                .tvOSScrollFocusable()
 
                 if !pastReleases.isEmpty {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
@@ -367,29 +361,12 @@ struct WhatsNewSheet: View {
                             .font(AetherDesign.Typography.caption)
                             .foregroundStyle(AetherDesign.Palette.textTertiary)
                             .tracking(0.6)
-                        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-                            ForEach(pastReleases) { release in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(release.codename.map { "\(release.version) · \($0)" } ?? release.version)
-                                        .font(AetherDesign.Typography.cardTitle)
-                                        .foregroundStyle(AetherDesign.Palette.textPrimary)
-                                    Text(release.summary)
-                                        .font(AetherDesign.Typography.metadata)
-                                        .foregroundStyle(AetherDesign.Palette.textSecondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AetherDesign.Spacing.l)
+                        ForEach(pastReleases) { release in
+                            card { releaseBody(release) }
                                 .tvOSScrollFocusable()   // a focus stop per release so the remote scrolls through history
-                            }
                         }
-                        .padding(AetherDesign.Spacing.l)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                                .fill(AetherDesign.Materials.card)
-                        )
                     }
-                    .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.s)
                 }
                 #if os(tvOS)
@@ -412,5 +389,66 @@ struct WhatsNewSheet: View {
         .aetherScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// A past release: codename header, then either its one-line summary
+    /// (grouped major release) or its New / Fixed lines (detailed build).
+    @ViewBuilder
+    private func releaseBody(_ release: ReleaseNote) -> some View {
+        VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+            Text(release.codename.map { "\(release.version) · \($0)" } ?? release.version)
+                .font(AetherDesign.Typography.cardTitle)
+                .foregroundStyle(AetherDesign.Palette.textPrimary)
+            if let summary = release.summary {
+                Text(summary)
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                changeGroup("New", symbol: "checkmark.circle.fill",
+                            tint: AetherDesign.Palette.success, items: release.new)
+                changeGroup("Fixed", symbol: "wrench.adjustable.fill",
+                            tint: AetherDesign.Palette.accent, items: release.fixed)
+            }
+        }
+    }
+
+    /// A labelled list of change lines (New or Fixed). Renders nothing when empty.
+    @ViewBuilder
+    private func changeGroup(_ title: LocalizedStringKey, symbol: String,
+                             tint: Color, items: [LocalizedStringResource]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: AetherDesign.Spacing.s) {
+                Text(title)
+                    .font(AetherDesign.Typography.caption)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .tracking(0.6)
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: AetherDesign.Spacing.s) {
+                        Image(systemName: symbol)
+                            .font(AetherDesign.Typography.metadata)
+                            .foregroundStyle(tint)
+                        Text(item)
+                            .font(AetherDesign.Typography.body)
+                            .foregroundStyle(AetherDesign.Palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The shared card container used for the current release and each history row.
+    @ViewBuilder
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(AetherDesign.Spacing.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
+                    .fill(AetherDesign.Materials.card)
+            )
+            .padding(.horizontal, AetherDesign.Spacing.l)
     }
 }

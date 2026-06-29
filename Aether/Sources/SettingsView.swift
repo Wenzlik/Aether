@@ -205,7 +205,6 @@ struct SettingsView: View {
             WhatsNewSheet(
                 version: viewModel.versionString,
                 codename: viewModel.releaseCodename,
-                bullets: viewModel.whatsNewBullets,
                 history: viewModel.releaseHistory
             ) { isWhatsNewPresented = false }
         }
