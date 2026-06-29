@@ -1,6 +1,1094 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "New" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novinky"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novedades"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouveautés"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нове"
+          }
+        }
+      }
+    },
+    "Fixed" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opraveno"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behoben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Correcciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrections"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виправлено"
+          }
+        }
+      }
+    },
+    "Ask Aether — find something to watch in plain language." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask Aether — najděte si co sledovat běžnou řečí."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask Aether — finde etwas zum Anschauen in normaler Sprache."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask Aether — encuentra algo que ver con lenguaje natural."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask Aether — trouvez quoi regarder en langage naturel."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask Aether — знайдіть, що подивитися, звичайною мовою."
+          }
+        }
+      }
+    },
+    "It only suggests titles you already own." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navrhuje jen tituly, které už vlastníte."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlägt nur Titel vor, die du bereits besitzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo sugiere títulos que ya tienes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne suggère que des titres que vous possédez déjà."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пропонує лише ті фільми, які у вас уже є."
+          }
+        }
+      }
+    },
+    "On-device with Apple Intelligence where available." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přímo v zařízení s Apple Intelligence, kde je k dispozici."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem Gerät mit Apple Intelligence, wo verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En el dispositivo con Apple Intelligence, donde esté disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur l'appareil avec Apple Intelligence, là où c'est disponible."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "На пристрої з Apple Intelligence, де доступно."
+          }
+        }
+      }
+    },
+    "Connect several servers into one library." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spojte více serverů do jedné knihovny."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde mehrere Server zu einer Bibliothek."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conecta varios servidores en una sola biblioteca."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réunissez plusieurs serveurs en une seule bibliothèque."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Об'єднайте кілька серверів в одну бібліотеку."
+          }
+        }
+      }
+    },
+    "Identify mis-matched Jellyfin titles from Detail." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opravte chybně spárované tituly Jellyfin přímo z Detailu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falsch zugeordnete Jellyfin-Titel direkt aus Detail korrigieren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrige títulos de Jellyfin mal emparejados desde Detail."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrigez les titres Jellyfin mal associés depuis Detail."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виправте неправильно зіставлені тайтли Jellyfin із Detail."
+          }
+        }
+      }
+    },
+    "Sign in to Jellyfin with username and password." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přihlaste se k Jellyfin uživatelským jménem a heslem."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Jellyfin mit Benutzername und Passwort anmelden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia sesión en Jellyfin con usuario y contraseña."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connectez-vous à Jellyfin avec identifiant et mot de passe."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Увійдіть до Jellyfin за іменем користувача та паролем."
+          }
+        }
+      }
+    },
+    "A bolder, full-width Discover banner." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Výraznější banner Discover přes celou šířku."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein markanteres Discover-Banner über die volle Breite."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un banner de Discover más llamativo y a todo lo ancho."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une bannière Discover plus marquante, pleine largeur."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Помітніший банер Discover на всю ширину."
+          }
+        }
+      }
+    },
+    "Auto-Play Next rolls over between seasons." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next plynule přejde mezi sériemi."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next wechselt nahtlos zwischen Staffeln."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next pasa de una temporada a otra."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next enchaîne d'une saison à l'autre."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next переходить між сезонами."
+          }
+        }
+      }
+    },
+    "Resuming a transcoded Jellyfin title works again." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokračování v překódovaném titulu Jellyfin opět funguje."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Fortsetzen eines transkodierten Jellyfin-Titels funktioniert wieder."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reanudar un título de Jellyfin transcodificado vuelve a funcionar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La reprise d'un titre Jellyfin transcodé fonctionne à nouveau."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відновлення перекодованого тайтлу Jellyfin знову працює."
+          }
+        }
+      }
+    },
+    "The library no longer flashes empty on refresh." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knihovna už při obnovení neprobliká prázdná."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Bibliothek blitzt beim Aktualisieren nicht mehr leer auf."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La biblioteca ya no parpadea vacía al actualizar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bibliothèque ne clignote plus vide lors de l'actualisation."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бібліотека більше не блимає порожньою під час оновлення."
+          }
+        }
+      }
+    },
+    "Dark title logos fall back to readable text." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tmavá loga titulů se nahradí čitelným textem."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dunkle Titellogos weichen auf lesbaren Text aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los logos de título oscuros se sustituyen por texto legible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les logos de titres sombres laissent place à un texte lisible."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Темні лого тайтлів замінюються читабельним текстом."
+          }
+        }
+      }
+    },
+    "Settings no longer hides under the iPad tab bar." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings se už neschovává pod lištou karet na iPad."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings verschwindet nicht mehr unter der Tab-Leiste auf dem iPad."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings ya no queda oculto bajo la barra de pestañas del iPad."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings ne se cache plus sous la barre d'onglets de l'iPad."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings більше не ховається під панеллю вкладок на iPad."
+          }
+        }
+      }
+    },
+    "Auto-Play Next keeps your audio and subtitle language." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next zachová jazyk zvuku a titulků."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next behält deine Audio- und Untertitelsprache bei."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next mantiene tu idioma de audio y subtítulos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next conserve votre langue audio et de sous-titres."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next зберігає мову звуку та субтитрів."
+          }
+        }
+      }
+    },
+    "Auto-Play Next and player prompts now work on tvOS." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next a výzvy přehrávače teď fungují na tvOS."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next und Player-Hinweise funktionieren jetzt auf tvOS."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next y los avisos del reproductor ya funcionan en tvOS."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next et les invites du lecteur fonctionnent désormais sur tvOS."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Play Next і підказки плеєра тепер працюють на tvOS."
+          }
+        }
+      }
+    },
+    "Plex Home profiles — pick who's watching." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profily Plex Home — vyberte, kdo se dívá."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex Home-Profile — wähle, wer zusieht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfiles de Plex Home — elige quién está viendo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profils Plex Home — choisissez qui regarde."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профілі Plex Home — оберіть, хто дивиться."
+          }
+        }
+      }
+    },
+    "Personal star ratings, synced to Plex." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osobní hodnocení hvězdičkami, synchronizované s Plex."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persönliche Sternebewertungen, mit Plex synchronisiert."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valoraciones con estrellas, sincronizadas con Plex."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vos notes en étoiles, synchronisées avec Plex."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Особисті оцінки зірками, синхронізовані з Plex."
+          }
+        }
+      }
+    },
+    "German, French and Spanish." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Němčina, francouzština a španělština."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deutsch, Französisch und Spanisch."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alemán, francés y español."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allemand, français et espagnol."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Німецька, французька та іспанська."
+          }
+        }
+      }
+    },
+    "Native playback of downloaded Dolby Digital." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nativní přehrávání stažených stop Dolby Digital."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native Wiedergabe von heruntergeladenem Dolby Digital."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reproducción nativa de Dolby Digital descargado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lecture native du Dolby Digital téléchargé."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нативне відтворення завантаженого Dolby Digital."
+          }
+        }
+      }
+    },
+    "Your preferred audio and subtitle language now applies." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preferovaný jazyk zvuku a titulků se teď použije."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine bevorzugte Audio- und Untertitelsprache wird jetzt angewendet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ahora se aplica tu idioma de audio y subtítulos preferido."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre langue audio et de sous-titres préférée s'applique désormais."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бажана мова звуку та субтитрів тепер застосовується."
+          }
+        }
+      }
+    },
+    "Downloaded MKVs play through AVPlayer, with seeking." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stažené soubory MKV se přehrají přes AVPlayer včetně přetáčení."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heruntergeladene MKVs laufen über AVPlayer, inklusive Spulen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los MKV descargados se reproducen con AVPlayer, con avance y retroceso."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les MKV téléchargés se lisent via AVPlayer, avec navigation."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завантажені файли MKV відтворюються через AVPlayer із перемотуванням."
+          }
+        }
+      }
+    },
+    "SMB: match a title to TMDb, confirm-first." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: spárujte titul s TMDb s potvrzením předem."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: einen Titel mit TMDb abgleichen, mit Bestätigung vorab."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: empareja un título con TMDb, con confirmación previa."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB : associez un titre à TMDb, avec confirmation préalable."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: зіставте тайтл із TMDb з підтвердженням наперед."
+          }
+        }
+      }
+    },
+    "SMB: smarter TV show detection." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: chytřejší rozpoznávání seriálů."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: intelligentere Erkennung von Serien."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: detección más inteligente de series."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB : détection plus intelligente des séries."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SMB: розумніше визначення серіалів."
+          }
+        }
+      }
+    },
+    "Fixed a playback crash on local and SMB files." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opraven pád při přehrávání místních a SMB souborů."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Absturz bei der Wiedergabe lokaler und SMB-Dateien behoben."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corregido un fallo de reproducción en archivos locales y SMB."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Correction d'un plantage à la lecture des fichiers locaux et SMB."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виправлено збій відтворення локальних і SMB-файлів."
+          }
+        }
+      }
+    },
+    "Player controls now auto-hide during playback." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ovládací prvky přehrávače se teď během přehrávání samy skryjí."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Player-Steuerung blendet sich während der Wiedergabe automatisch aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los controles del reproductor ahora se ocultan solos durante la reproducción."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les commandes du lecteur se masquent automatiquement pendant la lecture."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Елементи керування плеєром тепер автоматично ховаються під час відтворення."
+          }
+        }
+      }
+    },
+    "A calmer Library loading screen." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klidnější načítací obrazovka Library."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein ruhigerer Ladebildschirm für Library."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una pantalla de carga de Library más sosegada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un écran de chargement de Library plus apaisé."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спокійніший екран завантаження Library."
+          }
+        }
+      }
+    },
+    "A native Mac app, native SMB, multiple servers in one library, and a broad UX polish pass." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nativní aplikace pro Mac, nativní SMB, více serverů v jedné knihovně a rozsáhlé doladění UX."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine native Mac-App, natives SMB, mehrere Server in einer Bibliothek und ein umfassender UX-Feinschliff."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una app nativa para Mac, SMB nativo, varios servidores en una biblioteca y un amplio pulido de la UX."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une app Mac native, le SMB natif, plusieurs serveurs dans une bibliothèque et un large peaufinage de l'UX."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нативний застосунок для Mac, нативний SMB, кілька серверів в одній бібліотеці та широке доопрацювання UX."
+          }
+        }
+      }
+    },
+    "The on-device Local Library, an Infuse-style Detail screen, a cinematic UI refresh, and a tvOS polish pass." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Místní knihovna v zařízení, obrazovka Detail ve stylu Infuse, filmové vylepšení UI a doladění tvOS."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die lokale Bibliothek auf dem Gerät, ein Detail-Bildschirm im Infuse-Stil, eine cineastische UI-Auffrischung und ein tvOS-Feinschliff."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La biblioteca local en el dispositivo, una pantalla Detail al estilo de Infuse, una renovación cinematográfica de la UI y un pulido de tvOS."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bibliothèque locale sur l'appareil, un écran Detail façon Infuse, un rafraîchissement cinématographique de l'UI et un peaufinage tvOS."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Локальна бібліотека на пристрої, екран Detail у стилі Infuse, кінематографічне оновлення UI та доопрацювання tvOS."
+          }
+        }
+      }
+    },
+    "Cinema Mode on Apple Vision Pro — a dark, immersive screening room." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema Mode na Apple Vision Pro — temný, pohlcující projekční sál."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema Mode auf der Apple Vision Pro — ein dunkler, immersiver Kinosaal."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema Mode en Apple Vision Pro — una sala de proyección oscura e inmersiva."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema Mode sur Apple Vision Pro — une salle de projection sombre et immersive."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema Mode на Apple Vision Pro — темна, занурювальна кінозала."
+          }
+        }
+      }
+    },
+    "The Unified Library — Plex and Jellyfin titles merged into one collection." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sjednocená knihovna — tituly Plex a Jellyfin v jedné sbírce."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die vereinte Bibliothek — Plex- und Jellyfin-Titel in einer Sammlung."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La biblioteca unificada — los títulos de Plex y Jellyfin reunidos en una sola colección."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bibliothèque unifiée — les titres Plex et Jellyfin réunis en une seule collection."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Об'єднана бібліотека — тайтли Plex і Jellyfin в одній колекції."
+          }
+        }
+      }
+    },
+    "Offline downloads with background transfers and resume." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline stahování s přenosy na pozadí a pokračováním."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline-Downloads mit Übertragungen im Hintergrund und Fortsetzen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descargas sin conexión con transferencias en segundo plano y reanudación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements hors ligne avec transferts en arrière-plan et reprise."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Офлайн-завантаження з перенесенням у фоні та відновленням."
+          }
+        }
+      }
+    },
     "Clear Rating" : {
       "localizations" : {
         "cs" : {
@@ -1686,7 +2774,7 @@
       }
     },
     "Audio & Subtitles" : {
-      "comment" : "Navigation title for the track picker sheet",
+      "comment" : "Button that opens the audio/subtitle track picker during playback\nNavigation title for the track picker sheet",
       "localizations" : {
         "cs" : {
           "stringUnit" : {
@@ -2444,6 +3532,7 @@
     },
     "Choose Folders" : {
       "comment" : "The title of a screen that lets the user choose folders.",
+      "extractionState" : "stale",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "cs" : {
@@ -3268,6 +4357,10 @@
           }
         }
       }
+    },
+    "Contains" : {
+      "comment" : "A label for the segmented control that lets the user choose whether to include movies and TV shows.",
+      "isCommentAutoGenerated" : true
     },
     "Continue" : {
       "comment" : "Show action pill suffix — plays the on-deck episode when it's already in progress (e.g. \"S2E4 · Continue\").",
@@ -6065,6 +7158,10 @@
         }
       }
     },
+    "Finding the best match…" : {
+      "comment" : "A loading message displayed when the SMB metadata edit",
+      "isCommentAutoGenerated" : true
+    },
     "Finding your servers" : {
       "comment" : "A heading for the Plex discovery screen.",
       "isCommentAutoGenerated" : true,
@@ -6168,6 +7265,10 @@
           }
         }
       }
+    },
+    "Fix the match" : {
+      "comment" : "The title of the sheet that appears when the user",
+      "isCommentAutoGenerated" : true
     },
     "Folders" : {
       "localizations" : {
@@ -7086,6 +8187,10 @@
         }
       }
     },
+    "Is this the right match?" : {
+      "comment" : "A title for the sheet that appears after the SMB",
+      "isCommentAutoGenerated" : true
+    },
     "Items" : {
       "localizations" : {
         "cs" : {
@@ -7309,6 +8414,9 @@
         }
       }
     },
+    "Leave the selection empty to scan every share on this server." : {
+
+    },
     "Less" : {
       "comment" : "UI label (cs localization, #320).",
       "extractionState" : "manual",
@@ -7406,6 +8514,10 @@
           }
         }
       }
+    },
+    "Library Folders" : {
+      "comment" : "The title of the SMB folder picker.",
+      "isCommentAutoGenerated" : true
     },
     "Library is empty" : {
       "localizations" : {
@@ -8023,6 +9135,10 @@
         }
       }
     },
+    "MORE MATCHES" : {
+      "comment" : "A heading for a list of alternative TMDb matches.",
+      "isCommentAutoGenerated" : true
+    },
     "Movies" : {
       "localizations" : {
         "cs" : {
@@ -8056,6 +9172,10 @@
           }
         }
       }
+    },
+    "Movies & TV" : {
+      "comment" : "The name of the \"Contains\" option for a SMB folder.",
+      "isCommentAutoGenerated" : true
     },
     "Music" : {
       "comment" : "Genre name shown in Library/Discover; localized for display (#343).",
@@ -8512,6 +9632,10 @@
           }
         }
       }
+    },
+    "No matches. Adjust the title or year and try again." : {
+      "comment" : "A message displayed when TMDb search returns no",
+      "isCommentAutoGenerated" : true
     },
     "No servers found" : {
       "comment" : "A title displayed when a user has no Plex servers.",
@@ -11026,6 +12150,10 @@
         }
       }
     },
+    "Remove" : {
+      "comment" : "A button that removes a selected SMB folder.",
+      "isCommentAutoGenerated" : true
+    },
     "Remove %@ filter" : {
       "comment" : "Library: accessibility label for a removable active-filter chip; %@ is the facet value (#367).",
       "localizations" : {
@@ -12866,6 +13994,7 @@
       }
     },
     "SMB files have no metadata. Correct the title and year to match a poster on TMDb." : {
+      "extractionState" : "stale",
       "localizations" : {
         "cs" : {
           "stringUnit" : {
@@ -12898,6 +14027,10 @@
           }
         }
       }
+    },
+    "SMB files have no metadata. Correct the title and year, then re-match — or search TMDb and pick the right result." : {
+      "comment" : "A description of the SMB metadata edit sheet.",
+      "isCommentAutoGenerated" : true
     },
     "Soap" : {
       "comment" : "Genre name shown in Library/Discover; localized for display (#343).",

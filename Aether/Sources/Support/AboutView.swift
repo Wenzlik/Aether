@@ -17,9 +17,7 @@ struct AboutView: View {
     @Environment(\.openURL) private var openURL
     #endif
 
-    private let githubURL = URL(string: "https://github.com/Wenzlik/Aether")
     private let websiteURL = URL(string: "https://aetherplayer.com")
-    private let roadmapURL = URL(string: "https://github.com/Wenzlik/Aether/blob/main/ROADMAP.md")
 
     private static let unlockTapTarget = 7
 
@@ -177,19 +175,9 @@ struct AboutView: View {
 
     private var linksSection: some View {
         AetherSettingsSection("Links") {
-            if let githubURL {
-                AetherSettingsRow(label: "GitHub", systemImage: "chevron.left.forwardslash.chevron.right", value: nil) {
-                    openURL(githubURL)
-                }
-            }
             if let websiteURL {
                 AetherSettingsRow(label: "Website", systemImage: "globe", value: nil) {
                     openURL(websiteURL)
-                }
-            }
-            if let roadmapURL {
-                AetherSettingsRow(label: "Roadmap", systemImage: "map.fill", value: nil) {
-                    openURL(roadmapURL)
                 }
             }
         }

@@ -274,57 +274,65 @@ final class SettingsViewModel {
     /// process). Update this when `MARKETING_VERSION` bumps to a new version.
     let releaseCodename = "Eridanus"
 
-    /// Headline highlights for the **current** release, surfaced in What's New.
-    /// Previous releases appear below under "Release History" (`releaseHistory`);
-    /// the full per-version log lives in `CHANGELOG.md`. Update when the version
-    /// bumps.
-    let whatsNewBullets: [String] = [
-        "Connect more than one server — add several Jellyfin or Emby servers, and a second Plex account. Everything merges into one library; manage each in Settings → Accounts & Sources.",
-        "Identify on Jellyfin — fix a mis-matched or unrecognized title (movie, episode, or whole series) right from the Detail screen. Search the server's providers, pick the match, and Aether applies it on the server — no web dashboard.",
-        "Sign in to Jellyfin with a username and password, alongside Quick Connect.",
-        "A bolder, cinematic Discover — the featured banner fills the width and fades into the background, with logo art and Dolby Vision badges.",
-        "Fixed: resuming a transcoded Jellyfin title no longer fails — it picks up right where you left off."
-    ]
-
-    /// Past releases, newest first — shown under "Release History" in What's New.
-    /// Curated highlights; the full per-version log lives in `CHANGELOG.md`.
+    /// Release notes, newest first. Recent builds (`new` / `fixed`) are detailed
+    /// in short one-line sentences; pre-0.8 releases are grouped under their major
+    /// version with a one-line `summary`. The current release is the first entry
+    /// (matched by `versionString`) and shown as the headline in What's New.
+    /// Keep lines short (no compound sentences). Full log: `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.8.6", codename: "Eridanus",
+                    new: [
+                        "Ask Aether — find something to watch in plain language.",
+                        "It only suggests titles you already own.",
+                        "On-device with Apple Intelligence where available.",
+                    ]),
+        ReleaseNote(version: "0.8.5", codename: "Eridanus",
+                    new: [
+                        "Connect several servers into one library.",
+                        "Identify mis-matched Jellyfin titles from Detail.",
+                        "Sign in to Jellyfin with username and password.",
+                        "A bolder, full-width Discover banner.",
+                        "Auto-Play Next rolls over between seasons.",
+                    ],
+                    fixed: [
+                        "Resuming a transcoded Jellyfin title works again.",
+                        "The library no longer flashes empty on refresh.",
+                        "Dark title logos fall back to readable text.",
+                        "Settings no longer hides under the iPad tab bar.",
+                        "Auto-Play Next keeps your audio and subtitle language.",
+                        "Auto-Play Next and player prompts now work on tvOS.",
+                    ]),
         ReleaseNote(version: "0.8.4", codename: "Eridanus",
-                    summary: "Plex Home profiles (choose who's watching), personal star ratings synced to Plex, German / French / Spanish, a preferred audio & subtitle language fix, and native playback of downloaded Dolby Digital (AC-3 / E-AC-3) soundtracks."),
+                    new: [
+                        "Plex Home profiles — pick who's watching.",
+                        "Personal star ratings, synced to Plex.",
+                        "German, French and Spanish.",
+                        "Native playback of downloaded Dolby Digital.",
+                    ],
+                    fixed: [
+                        "Your preferred audio and subtitle language now applies.",
+                    ]),
         ReleaseNote(version: "0.8.3", codename: "Eridanus",
-                    summary: "A combined Library grid with a persistent Movies/Series toggle and a Watched filter, community-rating poster badges, a full-bleed Discover hero on iPad and Vision Pro, reliable offline playback, swipe-to-close player, and a batch of macOS fixes (light/dark, Downloads panel, TMDb matching, multi-server)."),
-        ReleaseNote(version: "0.7.8", codename: "Draco",
-                    summary: "Emby connector via Quick Connect, a refreshed app icon across every platform, and background performance fixes (VLC/AVPlayer idle, image prefetch, resume loop)."),
-        ReleaseNote(version: "0.7.7", codename: "Draco",
-                    summary: "A UX polish pass — unified Detail action cluster, rotating Discover carousel, compact Library browse pills, compact source switcher, iPad native sidebar, and a batch of tvOS and iPadOS bug fixes."),
-        ReleaseNote(version: "0.7.3", codename: "Draco",
-                    summary: "Aether for macOS — a native Mac app (Apple Silicon) sharing the whole AetherCore stack, playing through libmpv, distributed as a notarized DMG. Watched marking now syncs across every connected source."),
-        ReleaseNote(version: "0.7.0", codename: "Draco",
-                    summary: "Native SMB (browse, downloads, a real player with track selection), audio-language Library filter, search by actor, rating sort, and a unified Settings."),
-        ReleaseNote(version: "0.6.8", codename: "Cassiopeia",
-                    summary: "The SMB source debut (browse + play a NAS over VLCKit), episode → Season / Show navigation, and tunable watched posters."),
-        ReleaseNote(version: "0.6.7", codename: "Cassiopeia",
-                    summary: "Title logo art on the Detail hero, Library browsing by Collections / Actors / Directors, a richer Season Detail (episode preview, season cast, Next Up), and a localized-season-title fix."),
-        ReleaseNote(version: "0.6.6", codename: "Cassiopeia",
-                    summary: "A tvOS-led polish pass — Infuse-style Detail hero with dense metadata, Library browsing by Genre and Year, season previews, reliable focus navigation, scrollable What's New, and an iPhone Settings fix."),
-        ReleaseNote(version: "0.6.5", codename: "Cassiopeia",
-                    summary: "Local Library metadata & artwork editing, richer TV seasons with named Season Details, smarter Continue Watching (in-progress episodes + true On Deck), and a more reliable Library and Discover."),
-        ReleaseNote(version: "0.6.4", codename: "Cassiopeia",
-                    summary: "The Local Library arrives — play media straight from the device with TMDb posters and metadata, TV episodes grouped into shows, mkv support via VLCKit, and a tidier Settings with accurate storage figures."),
-        ReleaseNote(version: "0.6.3", codename: "Cassiopeia",
-                    summary: "A Detail-screen layout pass with a platform-aware iPhone banner hero, calmer Settings, plus server Favorites, Cast & Crew, and an instant library on launch."),
-        ReleaseNote(version: "0.6.2", codename: "Cassiopeia",
-                    summary: "A denser, Infuse-inspired Detail screen — a clear action hierarchy, content ratings, genres everywhere, and richer technical details on both Plex and Jellyfin."),
-        ReleaseNote(version: "0.6.1", codename: "Cassiopeia",
-                    summary: "Settings & product-experience polish — a Support hub, Cinema preferences, diagnostics, and About."),
-        ReleaseNote(version: "0.6.0", codename: "Cassiopeia",
-                    summary: "A cinematic UX refresh across every platform — premium blue identity, layered backgrounds, calmer focus."),
-        ReleaseNote(version: "0.5.0", codename: "Cinema",
-                    summary: "Cinema Mode on Apple Vision Pro — a premium dark screening room with the screen docked in an immersive space."),
-        ReleaseNote(version: "0.4.5", codename: nil,
-                    summary: "Unified Library — Plex and Jellyfin titles deduplicated into one collection."),
-        ReleaseNote(version: "0.3.0", codename: nil,
-                    summary: "Offline downloads with background transfers and resume recovery."),
+                    new: [
+                        "Downloaded MKVs play through AVPlayer, with seeking.",
+                        "SMB: match a title to TMDb, confirm-first.",
+                        "SMB: smarter TV show detection.",
+                    ],
+                    fixed: [
+                        "Fixed a playback crash on local and SMB files.",
+                        "Player controls now auto-hide during playback.",
+                        "A calmer Library loading screen.",
+                    ]),
+        ReleaseNote(version: "0.7", codename: "Draco",
+                    summary: "A native Mac app, native SMB, multiple servers in one library, and a broad UX polish pass."),
+        ReleaseNote(version: "0.6", codename: "Cassiopeia",
+                    summary: "The on-device Local Library, an Infuse-style Detail screen, a cinematic UI refresh, and a tvOS polish pass."),
+        ReleaseNote(version: "0.5", codename: "Boötes",
+                    summary: "Cinema Mode on Apple Vision Pro — a dark, immersive screening room."),
+        ReleaseNote(version: "0.4", codename: "Andromeda",
+                    summary: "The Unified Library — Plex and Jellyfin titles merged into one collection."),
+        ReleaseNote(version: "0.3", codename: nil,
+                    summary: "Offline downloads with background transfers and resume."),
     ]
 
     private func infoString(_ key: String) -> String? {
@@ -486,5 +494,12 @@ struct ReleaseNote: Identifiable, Sendable {
     var id: String { version }
     let version: String
     let codename: String?
-    let summary: String
+    /// Short "what's new" lines for a detailed (recent) build. Empty for a
+    /// grouped major-release entry.
+    var new: [LocalizedStringResource] = []
+    /// Short "what was fixed" lines for a detailed (recent) build.
+    var fixed: [LocalizedStringResource] = []
+    /// One-line overview for a grouped major release (pre-0.8). `nil` for a
+    /// detailed build (which uses `new` / `fixed` instead).
+    var summary: LocalizedStringResource? = nil
 }
