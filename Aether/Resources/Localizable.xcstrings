@@ -1,6 +1,210 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Downloaded titles now play offline." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stažené tituly teď hrají offline."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heruntergeladene Titel spielen jetzt offline."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los títulos descargados ahora se reproducen sin conexión."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les titres téléchargés se lisent désormais hors ligne."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завантажені записи тепер відтворюються офлайн."
+          }
+        }
+      }
+    },
+    "Adding a second Plex account works." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přidání druhého účtu Plex funguje."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Hinzufügen eines zweiten Plex-Kontos funktioniert."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir una segunda cuenta de Plex funciona."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'ajout d'un second compte Plex fonctionne."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Додавання другого облікового запису Plex працює."
+          }
+        }
+      }
+    },
+    "Cinema only offers formats it can play." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kino nabízí jen formáty, které umí přehrát."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema bietet nur abspielbare Formate an."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cinema solo ofrece formatos que puede reproducir."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mode Cinéma ne propose que des formats lisibles."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кіно пропонує лише формати, які може відтворити."
+          }
+        }
+      }
+    },
+    "Close buttons work across Settings and Technical Details." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Křížky pro zavření fungují v Nastavení i Technických detailech."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen-Schaltflächen funktionieren in Einstellungen und Technischen Details."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los botones de cerrar funcionan en Ajustes y Detalles técnicos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les boutons de fermeture fonctionnent dans Réglages et Détails techniques."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кнопки закриття працюють у Налаштуваннях і Технічних деталях."
+          }
+        }
+      }
+    },
+    "Clearer message when a title can't be played yet." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jasnější hláška, když titul zatím nejde přehrát."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klarere Meldung, wenn ein Titel noch nicht abspielbar ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensaje más claro cuando un título aún no se puede reproducir."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message plus clair quand un titre n'est pas encore lisible."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зрозуміліше повідомлення, коли запис ще не можна відтворити."
+          }
+        }
+      }
+    },
+    "The Library loading screen no longer looks stuck." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Načítání knihovny už nevypadá zaseknutě."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Ladebildschirm der Bibliothek wirkt nicht mehr eingefroren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pantalla de carga de la biblioteca ya no parece bloqueada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'écran de chargement de la bibliothèque ne semble plus figé."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Екран завантаження бібліотеки більше не виглядає завислим."
+          }
+        }
+      }
+    },
     "Sign-in unavailable" : {
       "comment" : "Plex onboarding fallback (defensive: shown only if auth clients aren't ready).",
       "extractionState" : "manual",
