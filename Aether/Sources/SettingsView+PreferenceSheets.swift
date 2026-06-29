@@ -314,6 +314,10 @@ struct WhatsNewSheet: View {
     var history: [ReleaseNote] = []
     let onClose: () -> Void
 
+    // Robust close: binding dismissal via `onClose` is unreliable on iOS with
+    // many stacked `.sheet`s (SettingsView) — `dismiss()` always closes.
+    @Environment(\.dismiss) private var dismiss
+
     /// The current release — matched by version, falling back to the newest entry.
     private var current: ReleaseNote? {
         history.first { $0.version == version } ?? history.first
@@ -373,7 +377,7 @@ struct WhatsNewSheet: View {
                 // On tvOS, Done sits at the END of the scroll so the remote
                 // reaches it by moving Down past the notes — a sibling below the
                 // ScrollView is unreachable once focus is inside it (#266).
-                AetherButton("Done", role: .secondary, action: onClose)
+                AetherButton("Done", role: .secondary) { dismiss(); onClose() }
                     .padding(.horizontal, AetherDesign.Spacing.l)
                     .padding(.top, AetherDesign.Spacing.l)
                 #endif
@@ -381,7 +385,7 @@ struct WhatsNewSheet: View {
             }
 
             #if !os(tvOS)
-            AetherButton("Done", role: .secondary, action: onClose)
+            AetherButton("Done", role: .secondary) { dismiss(); onClose() }
                 .padding(.horizontal, AetherDesign.Spacing.l)
                 .padding(.bottom, AetherDesign.Spacing.l)
             #endif

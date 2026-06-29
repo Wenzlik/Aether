@@ -13,6 +13,12 @@ struct AboutView: View {
     @AppStorage("developer.unlocked") private var developerUnlocked = false
     @State private var tapCount = 0
     @State private var justUnlocked = false
+    // Dismiss the presentation directly. Binding-based dismissal (the parent
+    // setting its `infoSheet`/`supportSheet` state to nil via `onClose`) is
+    // unreliable on iOS when several `.sheet` modifiers are stacked on one view
+    // (as in SettingsView) — the close button looked dead. `dismiss()` always
+    // closes the current sheet; `onClose()` is kept for any parent-side cleanup.
+    @Environment(\.dismiss) private var dismiss
     #if !os(tvOS)
     @Environment(\.openURL) private var openURL
     #endif
@@ -138,7 +144,7 @@ struct AboutView: View {
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
+            Button { dismiss(); onClose() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)

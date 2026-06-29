@@ -171,6 +171,9 @@ struct SendDiagnosticsSheet: View {
     @State private var report: String?
     @State private var showingMail = false
     @Environment(\.openURL) private var openURL
+    // Robust close: binding dismissal via `onClose` is unreliable on iOS with
+    // many stacked `.sheet`s (SettingsView) — `dismiss()` always closes.
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -211,7 +214,7 @@ struct SendDiagnosticsSheet: View {
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
+            Button { dismiss(); onClose() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
@@ -265,6 +268,9 @@ private struct SupportFormScaffold<Content: View>: View {
     let onSubmit: () -> Void
     let onClose: () -> Void
     @ViewBuilder let content: () -> Content
+    // Robust close (see other support sheets): binding dismissal is unreliable
+    // on iOS with stacked `.sheet`s, so dismiss the presentation directly.
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -286,7 +292,7 @@ private struct SupportFormScaffold<Content: View>: View {
         }
         .aetherScreenBackground()
         .overlay(alignment: .topTrailing) {
-            Button { onClose() } label: {
+            Button { dismiss(); onClose() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
