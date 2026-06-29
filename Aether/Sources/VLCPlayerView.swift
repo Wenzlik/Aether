@@ -388,6 +388,16 @@ final class VLCPlaybackController: UIViewController {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback)
         try? session.setActive(true)
+        #if os(iOS) || os(tvOS)
+        // Request the full multichannel output the route supports so VLCKit sends
+        // native 5.1 PCM instead of downmixing surround tracks to stereo (quiet
+        // dialogue). Must follow setActive(true). visionOS manages its own spatial
+        // audio session, so it's left alone.
+        let maxChannels = session.maximumOutputNumberOfChannels
+        if maxChannels > 2 {
+            try? session.setPreferredOutputNumberOfChannels(maxChannels)
+        }
+        #endif
 
         let cc = MPRemoteCommandCenter.shared()
 
