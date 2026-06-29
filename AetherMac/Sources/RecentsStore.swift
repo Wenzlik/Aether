@@ -18,6 +18,22 @@ final class RecentsStore {
         urls.removeAll { $0 == url }
         urls.insert(url, at: 0)
         if urls.count > 12 { urls = Array(urls.prefix(12)) }
+        persist()
+    }
+
+    /// Remove one entry from Recently Opened.
+    func remove(_ url: URL) {
+        urls.removeAll { $0 == url }
+        persist()
+    }
+
+    /// Clear the whole Recently Opened list.
+    func clear() {
+        urls.removeAll()
+        persist()
+    }
+
+    private func persist() {
         UserDefaults.standard.set(urls.map(\.path), forKey: key)
     }
 }

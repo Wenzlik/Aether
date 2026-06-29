@@ -227,6 +227,7 @@ struct HomeView: View {
                     case .home:     DiscoverView(session: session, mode: .home)
                     case .discover: DiscoverView(session: session, mode: .discover)
                     case .library:  LibraryGridView(session: session)
+                    case .local:    LocalView(session: session, recents: recents)
                     }
                 }
             }
