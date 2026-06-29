@@ -457,7 +457,8 @@ public enum JellyfinAPI {
                 isHDR: video?.isHDR ?? false,
                 isDolbyVision: video?.isDolbyVision ?? false,
                 container: source.container?.nonEmptyTrimmed,
-                fileSizeBytes: source.size
+                fileSizeBytes: source.size,
+                filePath: source.path?.nonEmptyTrimmed
             )
         }
 
@@ -528,6 +529,10 @@ public enum JellyfinAPI {
         /// Overall source bitrate in **bits per second** (`Bitrate`). Used as a
         /// fallback when the video stream itself doesn't carry a bitrate.
         public let bitrate: Int?
+        /// Absolute server filesystem path of the source file (`Path`). Only
+        /// returned to users the server lets see it (typically admins); `nil`
+        /// otherwise. Surfaced in Technical Details.
+        public let path: String?
 
         enum CodingKeys: String, CodingKey {
             case id = "Id"
@@ -535,6 +540,7 @@ public enum JellyfinAPI {
             case mediaStreams = "MediaStreams"
             case size = "Size"
             case bitrate = "Bitrate"
+            case path = "Path"
         }
     }
 
