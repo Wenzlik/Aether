@@ -213,3 +213,90 @@ struct RecommendationEngineTests {
         #expect(genres == ["Comedy", "Horror", "Sci-Fi", "Thriller"])
     }
 }
+
+@Suite("TasteProfile + recommended (Discover hero)")
+struct TasteProfileTests {
+
+    private let engine = RecommendationEngine()
+
+    private func item(
+        _ title: String,
+        genres: [String],
+        watched: Bool = false,
+        tmdb: Double? = nil,
+        type: MediaItem.Kind = .movie
+    ) -> UnifiedMediaItem {
+        let media = MediaItem(
+            id: .init(source: .plex(serverID: "s"), rawValue: title),
+            title: title,
+            kind: type,
+            runtime: nil,
+            isWatched: watched,
+            genres: genres
+        )
+        return UnifiedMediaItem(
+            id: title,
+            title: title,
+            year: 2020,
+            overview: nil,
+            posterURL: nil,
+            backdropURL: nil,
+            type: type,
+            sources: [UnifiedSource(kind: .plex, item: media)],
+            genres: genres,
+            communityRating: nil,
+            tmdbRating: tmdb
+        )
+    }
+
+    @Test("Profile weights genres of watched titles; ignores unwatched")
+    func profileFromWatched() {
+        let library = [
+            item("Seen A", genres: ["Horror"], watched: true),
+            item("Seen B", genres: ["Horror", "Thriller"], watched: true),
+            item("Unseen", genres: ["Comedy"]),
+        ]
+        let profile = TasteProfile.from(library: library)
+        #expect(!profile.isEmpty)
+        #expect((profile.genreWeights["Horror"] ?? 0) > (profile.genreWeights["Thriller"] ?? 0))
+        #expect(profile.genreWeights["Comedy"] == nil)
+    }
+
+    @Test("Recommended ranks unwatched by taste overlap and excludes watched")
+    func recommendedRanksByTaste() {
+        let library = [
+            item("Watched Horror", genres: ["Horror"], watched: true),
+            item("Unseen Horror", genres: ["Horror"], tmdb: 6),
+            item("Unseen Comedy", genres: ["Comedy"], tmdb: 9),
+        ]
+        let picks = engine.recommended(
+            from: library, profile: .from(library: library), limit: 10
+        )
+        #expect(picks.map(\.title) == ["Unseen Horror"])
+    }
+
+    @Test("Empty profile falls back to best-rated unwatched")
+    func emptyProfileFallsBackToRating() {
+        let library = [
+            item("Low", genres: ["Drama"], tmdb: 5),
+            item("High", genres: ["Drama"], tmdb: 9),
+        ]
+        let profile = TasteProfile.from(library: library)
+        #expect(profile.isEmpty)
+        let picks = engine.recommended(from: library, profile: profile, limit: 1)
+        #expect(picks.first?.title == "High")
+    }
+
+    @Test("No genre overlap falls back to best-rated")
+    func noOverlapFallsBackToRating() {
+        let library = [
+            item("Seen", genres: ["Horror"], watched: true),
+            item("Unseen Low", genres: ["Comedy"], tmdb: 4),
+            item("Unseen High", genres: ["Drama"], tmdb: 8),
+        ]
+        let picks = engine.recommended(
+            from: library, profile: .from(library: library), limit: 1
+        )
+        #expect(picks.first?.title == "Unseen High")
+    }
+}
