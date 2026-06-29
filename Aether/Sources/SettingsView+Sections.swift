@@ -349,9 +349,15 @@ extension SettingsView {
             )
             .sheet(isPresented: $isPickingPlexServer) { plexServerPicker }
             .sheet(isPresented: $isSwitchingPlexProfile) {
+                // `presentationDetents` / `presentationDragIndicator` are
+                // unavailable on tvOS; the sheet presents full-screen there.
+                #if os(tvOS)
+                PlexProfileSwitchSheet(viewModel: viewModel) { isSwitchingPlexProfile = false }
+                #else
                 PlexProfileSwitchSheet(viewModel: viewModel) { isSwitchingPlexProfile = false }
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+                #endif
             }
         case .jellyfin:
             SourceAccountSheet(
