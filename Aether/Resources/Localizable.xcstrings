@@ -1,6 +1,78 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Sign-in unavailable" : {
+      "comment" : "Plex onboarding fallback (defensive: shown only if auth clients aren't ready).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přihlášení není dostupné"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung nicht verfügbar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicio de sesión no disponible"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion indisponible"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вхід недоступний"
+          }
+        }
+      }
+    },
+    "Plex sign-in couldn't start. Close and try again." : {
+      "comment" : "Plex onboarding fallback (defensive: shown only if auth clients aren't ready).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přihlášení k Plexu se nepodařilo spustit. Zavři a zkus to znovu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Plex-Anmeldung konnte nicht gestartet werden. Schließe und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo iniciar el inicio de sesión de Plex. Cierra e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion à Plex n'a pas pu démarrer. Fermez et réessayez."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не вдалося розпочати вхід у Plex. Закрийте та повторіть спробу."
+          }
+        }
+      }
+    },
     "Building your library…" : {
       "comment" : "Library first-page loading rotating caption (movie-set themed).",
       "extractionState" : "manual",
