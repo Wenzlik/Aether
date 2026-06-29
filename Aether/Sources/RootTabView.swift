@@ -230,7 +230,10 @@ struct PlexOnboardingView: View {
     @Bindable var session: AppSession
 
     var body: some View {
-        if session.isPlexSignedIn {
+        // Already signed in → show discovery, UNLESS the user explicitly chose
+        // "Add Plex Account" (then force the PIN sign-in so a second account can
+        // authenticate — #4).
+        if session.isPlexSignedIn && !session.signInForcesPlexAccountAdd {
             PlexDiscoveryView(
                 state: session.discoveryState,
                 onRetry: { Task { await session.discoverPlexServers() } },
@@ -244,6 +247,16 @@ struct PlexOnboardingView: View {
                     Task { await session.completePlexSignIn(result: result) }
                 },
                 onCancel: { session.isSignInPresented = false }
+            )
+        } else {
+            // Defensive: a sheet must always have an exit. If this somehow opens
+            // before the Plex auth clients are ready (or their setup failed),
+            // show a dismissable fallback instead of a blank, un-closable sheet.
+            AetherErrorState(
+                glyph: "person.crop.circle.badge.exclamationmark",
+                title: "Sign-in unavailable",
+                message: "Plex sign-in couldn't start. Close and try again.",
+                retry: .init(label: "Close") { session.isSignInPresented = false }
             )
         }
     }

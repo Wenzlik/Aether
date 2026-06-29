@@ -411,7 +411,9 @@ final class SettingsViewModel {
 
     /// Open the Plex sign-in / discovery flow.
     func connect() {
-        session.presentSignIn(.plex)
+        // Already signed in → the user picked "Add Plex Account", so force the
+        // sign-in flow instead of the discovery view (which dead-ended #4).
+        session.presentSignIn(.plex, addingAccount: session.isPlexSignedIn)
     }
 
     /// Open the Jellyfin sign-in flow (server URL + Quick Connect).

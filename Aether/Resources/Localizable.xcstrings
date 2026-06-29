@@ -1,6 +1,330 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Sign-in unavailable" : {
+      "comment" : "Plex onboarding fallback (defensive: shown only if auth clients aren't ready).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přihlášení není dostupné"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung nicht verfügbar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicio de sesión no disponible"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion indisponible"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вхід недоступний"
+          }
+        }
+      }
+    },
+    "Plex sign-in couldn't start. Close and try again." : {
+      "comment" : "Plex onboarding fallback (defensive: shown only if auth clients aren't ready).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přihlášení k Plexu se nepodařilo spustit. Zavři a zkus to znovu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Plex-Anmeldung konnte nicht gestartet werden. Schließe und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo iniciar el inicio de sesión de Plex. Cierra e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion à Plex n'a pas pu démarrer. Fermez et réessayez."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не вдалося розпочати вхід у Plex. Закрийте та повторіть спробу."
+          }
+        }
+      }
+    },
+    "Building your library…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stavíme vaši knihovnu…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir bauen deine Bibliothek…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Construyendo tu biblioteca…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Construction de votre bibliothèque…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Будуємо вашу бібліотеку…"
+          }
+        }
+      }
+    },
+    "Now filming a new movie…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Točíme nový film…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir drehen einen neuen Film…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rodando una nueva película…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On tourne un nouveau film…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Знімаємо новий фільм…"
+          }
+        }
+      }
+    },
+    "Rolling out the red carpet…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rozvíjíme červený koberec…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir rollen den roten Teppich aus…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desplegando la alfombra roja…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On déroule le tapis rouge…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Розгортаємо червону доріжку…"
+          }
+        }
+      }
+    },
+    "Cueing the projector…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spouštíme promítačku…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir starten den Projektor…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encendiendo el proyector…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On lance le projecteur…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запускаємо проєктор…"
+          }
+        }
+      }
+    },
+    "Buttering the popcorn…" : {
+      "comment" : "Library first-page loading rotating caption (movie-set themed).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mažeme popcorn máslem…"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir buttern das Popcorn…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untando las palomitas con mantequilla…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On beurre le pop-corn…"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Намащуємо попкорн маслом…"
+          }
+        }
+      }
+    },
+    "Aether couldn't prepare this file for playback. Check that the source is reachable, then try again." : {
+      "comment" : "Detail playback-unavailable copy for file sources (SMB/DLNA/Local); no Plex/transcode wording.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether nedokázal připravit tento soubor k přehrání. Zkontroluj, že je zdroj dostupný, a zkus to znovu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether konnte diese Datei nicht für die Wiedergabe vorbereiten. Prüfe, ob die Quelle erreichbar ist, und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether no pudo preparar este archivo para la reproducción. Comprueba que la fuente esté accesible e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether n'a pas pu préparer ce fichier pour la lecture. Vérifie que la source est accessible, puis réessaie."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether не зміг підготувати цей файл до відтворення. Переконайтеся, що джерело доступне, і повторіть спробу."
+          }
+        }
+      }
+    },
+    "This title isn't in a directly playable format yet. Transcode support is coming in a future update." : {
+      "comment" : "Detail playback-unavailable copy for server sources (Plex/Jellyfin/Emby) needing transcode.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tento titul zatím není v přímo přehratelném formátu. Podpora překódování přijde v příští aktualizaci."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Titel liegt noch nicht in einem direkt abspielbaren Format vor. Transcoding-Unterstützung folgt in einem zukünftigen Update."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este título todavía no está en un formato reproducible directamente. La compatibilidad con transcodificación llegará en una futura actualización."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce titre n'est pas encore dans un format lisible directement. La prise en charge du transcodage arrivera dans une future mise à jour."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цей запис ще не у форматі для прямого відтворення. Підтримка перекодування з'явиться в майбутньому оновленні."
+          }
+        }
+      }
+    },
     "Because you watched %@" : {
       "localizations" : {
         "cs" : {

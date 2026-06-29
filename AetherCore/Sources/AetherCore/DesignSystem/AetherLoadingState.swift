@@ -13,19 +13,62 @@ public struct AetherLoadingState: View {
     }
 
     public let style: Style
+    /// Optional rotating one-liners shown above the skeleton — a playful, clearly
+    /// *alive* loading cue for slow loads (e.g. an SMB share walk) so the wait
+    /// reads as "still working", not a frozen placeholder. Caller-supplied so
+    /// `AetherCore` stays generic; localized via the catalog. Empty ⇒ the calm
+    /// skeleton-only behaviour. Rendered as `LocalizedStringKey`.
+    public let captions: [String]
 
-    public init(_ style: Style = .rails(count: 2)) {
+    @State private var captionIndex = 0
+
+    public init(_ style: Style = .rails(count: 2), captions: [String] = []) {
         self.style = style
+        self.captions = captions
     }
 
     public var body: some View {
-        content
+        Group {
+            if captions.isEmpty {
+                content
+            } else {
+                VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
+                    caption
+                    content
+                }
+                .task { await rotateCaptions() }
+            }
+        }
         #if os(tvOS)
         // A pushed screen stuck on a loading state has nothing focusable, so the
         // Menu button would exit the app instead of popping. Make the loading
         // state focusable on tvOS so Back works even mid-load (#311).
         .focusable()
         #endif
+    }
+
+    /// The current rotating one-liner, cross-fading as it changes.
+    private var caption: some View {
+        Text(LocalizedStringKey(captions[min(captionIndex, captions.count - 1)]))
+            .font(AetherDesign.Typography.cardTitle)
+            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+            .id(captionIndex)
+            .transition(.opacity)
+    }
+
+    /// Advance the caption every couple of seconds while the loader is on screen.
+    /// No-op for 0/1 captions. Cancelled automatically when the view goes away.
+    @MainActor
+    private func rotateCaptions() async {
+        guard captions.count > 1 else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2.6))
+            if Task.isCancelled { break }
+            withAnimation(.easeInOut(duration: 0.45)) {
+                captionIndex = (captionIndex + 1) % captions.count
+            }
+        }
     }
 
     @ViewBuilder

@@ -6,6 +6,7 @@ import CoreGraphics
 import AVFoundation
 import Combine
 import os
+import simd
 import AetherCore
 
 /// The Dark Theater immersive **environment** — and only the environment.
@@ -42,6 +43,10 @@ struct DarkTheaterView: View {
     /// seat without rebuilding it. A reference type → mutating it never trips a
     /// SwiftUI update (no re-render loop).
     @State private var refs = CinemaSceneRefs()
+    /// Reads the head pose once at entry so the screen docks along the user's
+    /// real gaze (see `placeScreenAlongGaze`). Held for the space's lifetime so
+    /// the ARKit session is torn down on exit.
+    @State private var headPose = CinemaHeadPose()
 
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "cinema")
 
@@ -70,7 +75,20 @@ struct DarkTheaterView: View {
             content.add(root)
             refs.root = root
             refs.dock = root.findEntity(named: Self.dockEntityName)
+            // Lay out immediately at the authored placement so the room is sized
+            // without waiting on ARKit, then read the head pose (a beat while world
+            // tracking warms up) and re-lay-out along the real gaze — overhead when
+            // reclined — instead of the gravity-aligned -Z.
             applyLayout()
+            if let head = await headPose.firstHeadTransform() {
+                refs.headTransform = head
+                applyLayout()
+                // The pose can arrive *after* the player has already expanded
+                // (docked) at the authored -Z, so re-dock to re-read the gaze-
+                // aligned region. If the expand hasn't happened yet this is a
+                // harmless no-op — that later expand reads the updated region.
+                cinema.requestRedock()
+            }
         }
         // Live: re-apply the region/room when the in-cinema control changes
         // size or seat, then ask the player to re-dock so the system re-fits the
@@ -90,7 +108,10 @@ struct DarkTheaterView: View {
             Self.log.debug("DarkTheater appeared (space open)")
             withAnimation(.easeInOut(duration: 1.4)) { dimmed = true }
         }
-        .onDisappear { Self.log.debug("DarkTheater disappeared (space closed)") }
+        .onDisappear {
+            Self.log.debug("DarkTheater disappeared (space closed)")
+            headPose.stop()
+        }
         // Authoritative exit: this view lives for as long as the immersive space
         // is open (it *is* the space's scene), so its end-of-playback observer
         // fires reliably even when the docked player detaches the window's view
@@ -137,20 +158,63 @@ struct DarkTheaterView: View {
                 screenHeight = cinema.screenPreset.heightMetres
             }
 
-            // Anchor the *bottom edge* a fixed clearance above the theater floor
-            // in **world space** (#357 revisited). The theater floor sits at world
-            // Y = seat.yOffsetMetres (the root has just been placed above). Using
-            // `setPosition(relativeTo: nil)` is essential: the authored `Video_Dock`
-            // parent entity sits ~2.5 m above the root in the USDA, so assigning
-            // `dock.position.y` in local space silently adds that offset and pushes
-            // the screen ~2.5 m too high (#357 regression).
-            let floorWorldY = cinema.seat.yOffsetMetres
-            let targetWorldY = floorWorldY + Self.screenBottomClearance + screenHeight / 2
-            let worldPos = dock.position(relativeTo: nil)
-            dock.setPosition(SIMD3<Float>(worldPos.x, targetWorldY, worldPos.z), relativeTo: nil)
+            // Placement. Prefer the user's real gaze (head pose) so the screen
+            // lands where they're looking — overhead when reclined — like the
+            // system Home menu. Fall back to the gravity-aligned authored
+            // placement when no head pose is available.
+            if let headTransform = refs.headTransform {
+                placeScreenAlongGaze(dock: dock, headTransform: headTransform)
+            } else {
+                // Anchor the *bottom edge* a fixed clearance above the theater floor
+                // in **world space** (#357 revisited). The theater floor sits at world
+                // Y = seat.yOffsetMetres (the root has just been placed above). Using
+                // `setPosition(relativeTo: nil)` is essential: the authored `Video_Dock`
+                // parent entity sits ~2.5 m above the root in the USDA, so assigning
+                // `dock.position.y` in local space silently adds that offset and pushes
+                // the screen ~2.5 m too high (#357 regression).
+                let floorWorldY = cinema.seat.yOffsetMetres
+                let targetWorldY = floorWorldY + Self.screenBottomClearance + screenHeight / 2
+                let worldPos = dock.position(relativeTo: nil)
+                dock.setPosition(SIMD3<Float>(worldPos.x, targetWorldY, worldPos.z), relativeTo: nil)
+            }
         }
 
-        Self.log.debug("cinema layout: size=\(cinema.screenPreset.rawValue, privacy: .public) (×\(cinema.screenPreset.relativeScale, privacy: .public)) seat=\(cinema.seat.rawValue, privacy: .public)")
+        Self.log.debug("cinema layout: size=\(cinema.screenPreset.rawValue, privacy: .public) (×\(cinema.screenPreset.relativeScale, privacy: .public)) seat=\(cinema.seat.rawValue, privacy: .public) gaze=\(refs.headTransform != nil, privacy: .public)")
+    }
+
+    /// Place the docked screen along the user's **actual gaze** at entry, so it
+    /// lands where they're looking — the way the system Home menu appears — rather
+    /// than at the gravity-aligned authored `-Z` (which left a reclined viewer's
+    /// screen horizontally "in front" instead of overhead). The dark room stays
+    /// gravity-aligned as a backdrop; only the screen follows the head.
+    ///
+    /// `headTransform` is the device pose in world space: column 3 is the head
+    /// position, its `-Z` axis is gaze-forward, its `+Y` axis the head's up. We
+    /// sit the screen a comfortable distance down that ray and billboard it to
+    /// face the viewer (head orientation spun 180° about its own up), so it stays
+    /// upright relative to the head even when reclined. Idempotent — `applyLayout`
+    /// re-runs it on every size/seat change using the entry pose stored in `refs`.
+    @MainActor
+    private func placeScreenAlongGaze(dock: Entity, headTransform: simd_float4x4) {
+        let headRotation = simd_quatf(headTransform)
+        let headPos = SIMD3<Float>(headTransform.columns.3.x, headTransform.columns.3.y, headTransform.columns.3.z)
+        let gazeForward = simd_normalize(headRotation.act(SIMD3<Float>(0, 0, -1)))
+
+        // Distance down the gaze ray: the authored screen distance, captured once
+        // *before* we first move the dock, nudged by the Seat control (front =
+        // closer, back = farther — `+Z` seat offset slides the screen toward us).
+        if refs.baselineDockDistance == nil {
+            refs.baselineDockDistance = simd_length(dock.position(relativeTo: nil))
+        }
+        let distance = max(2.0, (refs.baselineDockDistance ?? 8.0) - cinema.seat.zOffsetMetres)
+
+        dock.setPosition(headPos + gazeForward * distance, relativeTo: nil)
+        // Face the viewer: the head's own orientation turned 180° about its up, so
+        // the screen's front looks back along the gaze and is upright relative to
+        // the head. (If the docked video reads back-to-front on device, drop this
+        // 180° spin — TUNE ON DEVICE; docking-region orientation isn't testable in
+        // the Simulator.)
+        dock.setOrientation(headRotation * simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 1, 0)), relativeTo: nil)
     }
 
     /// Show/hide the theater's *room* (everything except the video-dock subtree)
@@ -439,6 +503,16 @@ private final class CinemaSceneRefs {
     /// Authored `DockingRegion` width, captured once so size changes are
     /// absolute (`baseline × relativeScale`) rather than compounding.
     var baselineDockWidth: Float?
+    /// Authored screen distance (metres from origin to the dock), captured once
+    /// before gaze placement first moves the dock, so the gaze-aligned distance
+    /// stays absolute rather than compounding across size/seat changes.
+    var baselineDockDistance: Float?
+    /// The head pose captured at cinema entry (world space), or `nil` if ARKit
+    /// gave none — then placement falls back to the gravity-aligned authored
+    /// position. Held so `applyLayout` can re-apply gaze placement on size/seat
+    /// changes without re-reading the head (the screen stays where it was placed,
+    /// matching the Home-menu metaphor).
+    var headTransform: simd_float4x4?
 }
 
 // The in-cinema Screen-size + Seat controls used to live here as a floating

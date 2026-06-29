@@ -88,9 +88,19 @@ extension DetailView {
         case .technicalDetails:
             ScrollView {
                 VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                    Text("Technical Details")
-                        .font(AetherDesign.Typography.sectionTitle)
-                        .foregroundStyle(AetherDesign.Palette.textPrimary)
+                    HStack {
+                        Text("Technical Details")
+                            .font(AetherDesign.Typography.sectionTitle)
+                            .foregroundStyle(AetherDesign.Palette.textPrimary)
+                        Spacer(minLength: AetherDesign.Spacing.l)
+                        // This is a read-only sheet with no rows to tap shut, and
+                        // visionOS sheets have no swipe-to-dismiss, so an explicit
+                        // Close is the only exit (was a dead-end there). Harmless
+                        // on the other platforms.
+                        AetherIconButton(systemImage: "xmark", accessibilityLabel: "Close") {
+                            presentedSelector = nil
+                        }
+                    }
                     mediaSection
                 }
                 .padding(AetherDesign.Spacing.l)

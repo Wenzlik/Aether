@@ -61,16 +61,6 @@ def Xform "AetherDarkTheater"
             uniform token subdivisionScheme = "none"
         }
 
-        def Mesh "AetherFloorGlow"
-        {
-            int[] faceVertexCounts = [4]
-            int[] faceVertexIndices = [0, 1, 2, 3]
-            rel material:binding = </AetherDarkTheater/Materials/WarmAisleGlow>
-            normal3f[] normals = [(0, 1, 0)]
-            point3f[] points = [(-7.5, 0.012, -7.65), (7.5, 0.012, -7.65), (7.5, 0.012, -7.95), (-7.5, 0.012, -7.95)]
-            uniform token subdivisionScheme = "none"
-        }
-
         def Mesh "ReflectionPad"
         {
             int[] faceVertexCounts = [4]
@@ -247,22 +237,6 @@ def Xform "AetherDarkTheater"
                 float inputs:metallic = 0
                 float inputs:opacity = 0.72
                 float inputs:roughness = 0.18
-                token outputs:surface
-            }
-        }
-
-        def Material "WarmAisleGlow"
-        {
-            token outputs:surface.connect = </AetherDarkTheater/Materials/WarmAisleGlow/PreviewSurface.outputs:surface>
-
-            def Shader "PreviewSurface"
-            {
-                uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.9, 0.5, 0.22)
-                color3f inputs:emissiveColor = (0.6, 0.3, 0.1)
-                float inputs:metallic = 0
-                float inputs:opacity = 0.38
-                float inputs:roughness = 0.4
                 token outputs:surface
             }
         }
