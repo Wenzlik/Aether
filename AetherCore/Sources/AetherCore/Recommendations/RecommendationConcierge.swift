@@ -1,6 +1,6 @@
 import Foundation
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && !os(tvOS)
 import FoundationModels
 #endif
 
@@ -50,7 +50,7 @@ public struct RecommendationConcierge: Sendable {
     /// Whether an on-device model is available right now (compile-time framework
     /// presence + runtime eligibility / enablement / readiness).
     public static var isAvailable: Bool {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && !os(tvOS)
         if #available(iOS 26, macOS 26, visionOS 26, *) {
             if case .available = SystemLanguageModel.default.availability { return true }
         }
@@ -74,7 +74,7 @@ public struct RecommendationConcierge: Sendable {
         parser: RecommendationQueryParser = RecommendationQueryParser(),
         enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? = nil
     ) async -> RecommendationResult {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && !os(tvOS)
         if #available(iOS 26, macOS 26, visionOS 26, *), Self.isAvailable {
             do {
                 return try await aiRecommend(query: query, in: library, engine: engine, enrich: enrich)
@@ -117,7 +117,7 @@ public struct RecommendationConcierge: Sendable {
 
     // MARK: - On-device model path
 
-    #if canImport(FoundationModels)
+    #if canImport(FoundationModels) && !os(tvOS)
     @available(iOS 26, macOS 26, visionOS 26, *)
     private func aiRecommend(
         query: String,
@@ -186,7 +186,7 @@ public struct RecommendationConcierge: Sendable {
     #endif
 }
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && !os(tvOS)
 @available(iOS 26, macOS 26, visionOS 26, *)
 @Generable
 private struct ParsedQuery {
