@@ -91,6 +91,13 @@ targets:
         buildPhase: resources
         excludes:
           - ".gitkeep"
+      # App privacy manifest — Apple requires PrivacyInfo.xcprivacy in the app
+      # bundle (App Store processing, since spring 2024). Added as a single
+      # explicit resource so the rest of SupportingFiles (Info.plist,
+      # entitlements) isn't swept into the bundle; it lands at the bundle root,
+      # where App Store processing looks for it.
+      - path: Aether/SupportingFiles/PrivacyInfo.xcprivacy
+        buildPhase: resources
       # Reality Composer Pro cinema environments, bundled as an app resource
       # (NOT linked as a Swift package). realitytool compiles it at the app's own
       # deployment target — tvOS 26 satisfies its ≥19 requirement, which a
