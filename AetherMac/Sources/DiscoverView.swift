@@ -175,13 +175,44 @@ struct DiscoverView: View {
 
     // MARK: - Rotating carousel (#381 macOS parity)
 
-    /// Eyebrow above the hero — labels the carousel as Aether's taste-based picks.
+    /// Eyebrow above the hero — labels the carousel as Aether's taste-based
+    /// picks and shows the current slide's "because…" reason.
     private var recommendedEyebrow: some View {
-        Label("Recommended by Aether", systemImage: "sparkles")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .padding(.horizontal, 24)
+        VStack(alignment: .leading, spacing: 2) {
+            Label("Recommended by Aether", systemImage: "sparkles")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            if let reason = currentHeroReason {
+                Text(reasonText(reason))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    /// The "because…" reason for the currently visible hero slide.
+    private var currentHeroReason: RecommendationReason? {
+        let items = heroItems
+        guard heroIndex < items.count else { return nil }
+        let all = rails.movies + rails.shows
+        let recentlyWatched = all
+            .filter { $0.lastWatched != nil }
+            .sorted { ($0.lastWatched ?? .distantPast) > ($1.lastWatched ?? .distantPast) }
+        return RecommendationReason.make(
+            for: items[heroIndex], recentlyWatched: recentlyWatched, profile: .from(library: all)
+        )
+    }
+
+    private func reasonText(_ reason: RecommendationReason) -> String {
+        switch reason {
+        case .becauseYouWatched(let title):
+            return String(localized: "Because you watched \(title)")
+        case .matchesTaste(let genres):
+            return String(localized: "Matches your taste for \(genres.joined(separator: " & "))")
+        }
     }
 
     @ViewBuilder

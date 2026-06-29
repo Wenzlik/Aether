@@ -12,7 +12,6 @@ struct HomeView: View {
     var recents: RecentsStore
     var appDelegate: MacAppDelegate
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismiss) private var dismissWindow
     @State private var searchText = ""
     /// Ask Aether answer (library matches + optional recommendation), shown after
     /// the user submits a request. Sticky while refining; dropped when cleared.
@@ -126,13 +125,14 @@ struct HomeView: View {
         .environment(\.posterRatingSource, session.playbackPrefs.posterRatingSource)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
-        // On a *launch* open (app was closed), drop this auto-created library
-        // window so only the player window remains; it reopens on the next Dock
-        // activation. Opening a file while browsing keeps the library.
-        .onOpenURL { url in
-            openLocal(url)
-            if appDelegate.isColdLaunch { dismissWindow() }
-        }
+        // An external open should show **only** the player window — drop this
+        // (library) window so opening a random file never swaps your library out.
+        // It reopens normally on the next Dock activation. (Drag-drop below is an
+        // in-app gesture while browsing, so it keeps the library window.)
+        // Finder "Open With ▸ Aether" / double-click: play the file inline in
+        // this window (the player swaps in for the library — same as a server
+        // title), so opening a file never spawns a second window.
+        .onOpenURL { url in openLocal(url) }
         // Drag a video file onto the window to play it.
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
@@ -227,6 +227,7 @@ struct HomeView: View {
                     case .home:     DiscoverView(session: session, mode: .home)
                     case .discover: DiscoverView(session: session, mode: .discover)
                     case .library:  LibraryGridView(session: session)
+                    case .local:    LocalView(session: session, recents: recents)
                     }
                 }
             }
@@ -288,9 +289,10 @@ struct HomeView: View {
     private func openLocal(_ url: URL) {
         _ = url.startAccessingSecurityScopedResource()
         recents.add(url)
-        // Ad-hoc disk files play in their own window (not inline over the
-        // library) — see AetherMacApp's local-player WindowGroup (#232 follow-up).
-        openWindow(id: AetherMacApp.localPlayerWindowID, value: url)
+        // Play inline in the main window (the same surface server titles use) so
+        // an opened file never spawns a second window — the player swaps in for
+        // the library and closing it returns here.
+        session.playLocal(url)
     }
 
     private func playServerItem(_ item: MediaItem) {

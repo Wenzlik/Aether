@@ -798,6 +798,7 @@ public actor JellyfinMediaSource: MediaSource {
             guids: dto.guids,
             isWatched: dto.isWatched,
             isFavorite: dto.isFavorite,
+            lastWatched: JellyfinAPI.BaseItemDto.parseDate(dto.userData?.lastPlayedDate),
             parentID: dto.parentId.map { MediaID(source: id, rawValue: $0) },
             genres: dto.genreList,
             cast: cast,

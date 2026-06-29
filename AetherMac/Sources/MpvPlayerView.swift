@@ -46,7 +46,12 @@ struct MpvPlayerScreen: View {
             // Auto-Play-Next swaps the window's playback URL; finishing with no
             // next (or Auto-Play-Next off) closes the player.
             model.onAdvance = { next in Task { await session?.play(next) } }
-            model.onFinished = { onClose?() }
+            // Natural end: play the next queued local file if there is one, else
+            // close back to the library.
+            model.onFinished = {
+                if session?.advanceLocalQueueIfPossible() == true { return }
+                onClose?()
+            }
             model.load(url, session: session, item: item)
             scheduleHide()
         }

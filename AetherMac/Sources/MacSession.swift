@@ -177,7 +177,7 @@ final class MacSession {
     enum Section: String, CaseIterable, Identifiable, Hashable {
         // Search is intentionally NOT a section — it's a field at the top of the
         // sidebar (Infuse-style); typing surfaces results over the current pane.
-        case home, discover, library
+        case home, discover, library, local
         var id: Self { self }
 
         var title: String {
@@ -185,6 +185,7 @@ final class MacSession {
             case .home:     "Home"
             case .discover: "Discover"
             case .library:  "Library"
+            case .local:    "Local"
             }
         }
 
@@ -193,6 +194,7 @@ final class MacSession {
             case .home:     "house"
             case .discover: "sparkles"
             case .library:  "square.grid.2x2"
+            case .local:    "play.square.stack"
             }
         }
     }
@@ -936,6 +938,13 @@ final class MacSession {
     /// `nil` resumes from where the user left off.
     func play(_ item: MediaItem, startAt: Double? = nil) async {
         startOverride = startAt
+        // A local file (e.g. a Continue Watching entry for an opened file) plays
+        // its own URL inline — there's no server source to resolve it through.
+        if item.id.source == .local, let url = item.streamURL ?? item.originalFileURL {
+            playbackContext[url] = item
+            playbackURL = url
+            return
+        }
         // Downloaded files take absolute priority — play from disk even when
         // online, so the user always gets the fastest start and offline works.
         if let status = downloadObserver?.status(for: item.id),
@@ -948,14 +957,68 @@ final class MacSession {
         if let url = await beginPlayback(for: item) { playbackURL = url }
     }
 
-    /// Play a local file inline (no resume context).
+    /// Play a local file inline. Gives the file a lightweight `.local` identity
+    /// (keyed by its path) so playback **resumes where you left off** on reopen
+    /// and the title can surface in Continue Watching — the local resume point
+    /// stays device-only (never synced to iCloud; see `ResumeStore`). Idempotent:
+    /// re-opening the file that's already playing is a no-op.
     func playLocal(_ url: URL) {
-        playbackContext[url] = nil
+        guard playbackURL != url else { return }
+        playbackContext[url] = Self.localItem(for: url)
         playbackURL = url
+    }
+
+    /// A minimal `MediaItem` for an ad-hoc local file — enough to carry a stable
+    /// `.local` id (the file path) for resume + Continue Watching, plus the file
+    /// URL for playback. No server source, so resume/watched calls stay local.
+    static func localItem(for url: URL) -> MediaItem {
+        MediaItem(
+            id: MediaID(source: .local, rawValue: url.path),
+            title: url.deletingPathExtension().lastPathComponent,
+            kind: .movie,
+            streamURL: url,
+            originalFileURL: url
+        )
     }
 
     /// Close the inline player.
     func stopPlayback() { playbackURL = nil }
+
+    // MARK: - Local play queue (the "Local" sidebar section)
+
+    /// Files queued to play after the current one, in order. Drag-drop onto the
+    /// Local tab appends; finishing a local file auto-advances to the head.
+    /// Persisted across launches (plain paths, dev slice — see `RecentsStore`).
+    var playQueue: [URL] = (UserDefaults.standard.stringArray(forKey: "mac.playQueue") ?? [])
+        .map { URL(fileURLWithPath: $0) } {
+        didSet { UserDefaults.standard.set(playQueue.map(\.path), forKey: "mac.playQueue") }
+    }
+
+    func enqueue(_ urls: [URL]) {
+        for url in urls where !playQueue.contains(url) { playQueue.append(url) }
+    }
+    func removeFromQueue(_ url: URL) { playQueue.removeAll { $0 == url } }
+    func clearQueue() { playQueue.removeAll() }
+    func moveQueue(fromOffsets: IndexSet, toOffset: Int) {
+        playQueue.move(fromOffsets: fromOffsets, toOffset: toOffset)
+    }
+
+    /// Start playing a queued file now, removing it from the queue.
+    func playFromQueue(_ url: URL) {
+        playQueue.removeAll { $0 == url }
+        playLocal(url)
+    }
+
+    /// When a **local** file finishes, play the next queued file. Returns `true`
+    /// when it advanced (so the player stays open on the new file); `false` when
+    /// the queue is empty or the finished item wasn't local (caller then closes).
+    func advanceLocalQueueIfPossible() -> Bool {
+        guard let url = playbackURL,
+              item(forPlaybackURL: url)?.id.source == .local,
+              !playQueue.isEmpty else { return false }
+        playLocal(playQueue.removeFirst())
+        return true
+    }
 
     /// Shared Home/Discover rails, cached on the session. The sidebar's detail
     /// pane recreates its view on every tab switch (NavigationSplitView), so a
@@ -1072,7 +1135,7 @@ final class MacSession {
     /// Continue Watching and never offers "resume" a second before the end.
     func clearResume(for item: MediaItem) async {
         await resumeStore.clear(for: item.id)
-        resumeRevision &+= 1
+        if item.id.source != .local { resumeRevision &+= 1 }
     }
 
     /// Remove a title from Continue Watching across **every** connected source
@@ -1111,7 +1174,10 @@ final class MacSession {
             ResumePoint(mediaID: item.id, position: .seconds(seconds)),
             committing: committing
         )
-        resumeRevision &+= 1
+        // Local files don't feed the library rails, so don't trigger a
+        // Home/Discover rebuild for them — that was the lag returning to the menu
+        // after closing a local file. Server resumes still refresh Continue Watching.
+        if item.id.source != .local { resumeRevision &+= 1 }
         let duration = durationSeconds.map { Duration.seconds($0) }
         await source(for: item)?.recordProgress(
             item.id, position: .seconds(seconds), duration: duration, paused: paused
