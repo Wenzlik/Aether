@@ -77,29 +77,32 @@ struct DiscoverView: View {
 
     // MARK: - Hero items (#381)
 
-    /// Rotating carousel: in-progress titles first (≤3, most recently active),
-    /// then top-rated (≤3), then random fills to ≤7 — matching the iOS logic.
+    /// "Recommended by Aether": taste-based picks, ≤7, no in-progress titles
+    /// (those live in Continue Watching) — matching the iOS hero. Taste is learned
+    /// from the full library (watched / favourited / highly-rated); the picks are
+    /// unwatched and not started. Falls back to best-rated so it's never empty.
     private var heroItems: [UnifiedMediaItem] {
         guard mode == .discover else { return [] }
-        var built: [UnifiedMediaItem] = []
-        var seen = Set<String>()
-        func add(_ item: UnifiedMediaItem) {
-            guard built.count < 7, seen.insert(item.id).inserted else { return }
-            built.append(item)
+        let all = rails.movies + rails.shows
+        let started = inProgressIDs
+        let candidates = all.filter { item in
+            !item.isFullyWatched && !item.sources.contains { started.contains($0.item.id) }
         }
-        // In-progress titles first — resolve each Continue Watching entry (a bare
-        // `MediaItem`) to its unified title via a shared source id, so the hero
-        // carousel renders it like any other `UnifiedMediaItem` (matches iOS).
-        for entry in rails.continueWatching.prefix(3) {
-            if let unified = unified(matching: entry.item) { add(unified) }
+        var built = RecommendationEngine().recommended(
+            from: candidates, profile: .from(library: all), limit: 7
+        )
+        // Pad thin taste picks (small / uniform library) so the carousel breathes.
+        if built.count < 5 {
+            var seen = Set(built.map(\.id))
+            for item in candidates.shuffled() where built.count < 5 {
+                if seen.insert(item.id).inserted { built.append(item) }
+            }
         }
-        for item in topRated where !seen.contains(item.id) {
-            guard built.count < 6 else { break }
-            add(item)
-        }
-        for item in (rails.movies + rails.shows).shuffled() {
-            guard built.count < 7 else { break }
-            add(item)
+        // Last resort: no unwatched candidates at all — best-rated, never empty.
+        if built.isEmpty {
+            built = Array(all.sorted {
+                ($0.tmdbRating ?? $0.communityRating ?? 0) > ($1.tmdbRating ?? $1.communityRating ?? 0)
+            }.prefix(7))
         }
         return built
     }
@@ -172,12 +175,21 @@ struct DiscoverView: View {
 
     // MARK: - Rotating carousel (#381 macOS parity)
 
+    /// Eyebrow above the hero — labels the carousel as Aether's taste-based picks.
+    private var recommendedEyebrow: some View {
+        Label("Recommended by Aether", systemImage: "sparkles")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .padding(.horizontal, 24)
+    }
+
     @ViewBuilder
     private func heroCarousel(_ items: [UnifiedMediaItem]) -> some View {
         let idx = min(heroIndex, items.count - 1)
         VStack(alignment: .leading, spacing: 10) {
-            // No "Featured" header — the hero is the banner. It stretches to the
-            // content edges instead of sitting in a centred 1100-wide card.
+            // Marks the hero as Aether's own taste-based recommendations.
+            recommendedEyebrow
             heroSlide(items[idx], progress: heroProgress[items[idx].id], items: items, currentIndex: idx)
             if items.count > 1 {
                 heroPageDots(count: items.count, current: idx)

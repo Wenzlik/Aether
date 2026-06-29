@@ -233,7 +233,10 @@ struct DiscoverView: View {
                 // removed (#350) — Library already has genre browse; Discover is
                 // for "what should I watch", so it leads with curated rails.
                 if !heroItems.isEmpty {
-                    heroCarousel
+                    VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
+                        recommendedEyebrow
+                        heroCarousel
+                    }
                 }
                 if !newReleases.isEmpty {
                     rail(title: "New Releases", items: newReleases)
@@ -260,9 +263,19 @@ struct DiscoverView: View {
 
     // MARK: - Featured carousel (#381)
 
-    /// Rotating featured carousel: in-progress titles first (most-recently
-    /// active), then top-rated, then random picks — a "what should I watch next?"
-    /// hero instead of one static random pick. Auto-advances every 6 s, pauses on
+    /// Eyebrow above the hero — marks the carousel as Aether's own taste-based
+    /// recommendations (learned from the user's watch state).
+    private var recommendedEyebrow: some View {
+        Label("Recommended by Aether", systemImage: "sparkles")
+            .font(AetherDesign.Typography.caption)
+            .foregroundStyle(AetherDesign.Palette.textSecondary)
+            .textCase(.uppercase)
+            .tracking(0.6)
+            .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    /// Rotating featured carousel: taste-based "Recommended by Aether" picks —
+    /// unwatched titles ranked by the user's genre preferences. Auto-advances every 6 s, pauses on
     /// interaction (touch) / focus (tvOS), resumes after a 3 s idle, and stops
     /// auto-advancing entirely under Reduce Motion. Pagination dots underneath.
     @ViewBuilder
@@ -761,48 +774,35 @@ struct DiscoverView: View {
             if staleMovies || staleShows { Task { await load(forceRefresh: true) } }
         }
 
-        // --- Featured carousel (#381): in-progress titles first (most-recently
-        // active), then top-rated, then random — capped at 7. In-progress titles
-        // were filtered out of `all` (counted as "started"), so pull them from
-        // the unfiltered union and intersect against the resume points.
-        let resumePoints = await resumeStore.allPoints()
-        let resumeByID = Dictionary(resumePoints.map { ($0.mediaID, $0) },
-                                    uniquingKeysWith: { $0.updatedAt >= $1.updatedAt ? $0 : $1 })
-        func resumePoint(for item: UnifiedMediaItem) -> ResumePoint? {
-            item.sources.compactMap { resumeByID[$0.item.id] }.max { $0.updatedAt < $1.updatedAt }
-        }
-        let inProgressHeroes = (allMovies + allShows)
-            .compactMap { item -> (UnifiedMediaItem, ResumePoint)? in
-                guard !item.isFullyWatched, let point = resumePoint(for: item) else { return nil }
-                return (item, point)
-            }
-            .sorted { $0.1.updatedAt > $1.1.updatedAt }
-            .prefix(3)
-
-        var heroBuilt: [UnifiedMediaItem] = []
-        var heroSeen = Set<String>()
-        var heroProgressBuilt: [String: Double] = [:]
-        func addHero(_ item: UnifiedMediaItem, resume: ResumePoint?) {
-            guard heroBuilt.count < 7, heroSeen.insert(item.id).inserted else { return }
-            heroBuilt.append(item)
-            if let resume, let fraction = progressFraction(item: item, resume: resume) {
-                heroProgressBuilt[item.id] = fraction
+        // --- Featured carousel: "Recommended by Aether" — taste-based picks,
+        // capped at 7. No in-progress titles (those live in Continue Watching);
+        // Discover surfaces what's *ahead*. Taste is learned from the full
+        // library (watched / favourited / highly-rated), the picks are unwatched
+        // and not started. Falls back to top-rated when there's no taste yet.
+        let profile = TasteProfile.from(library: allMovies + allShows)
+        let recCandidates = (allMovies + allShows).filter { !$0.isFullyWatched && !isStarted($0) }
+        var heroBuilt = RecommendationEngine().recommended(from: recCandidates, profile: profile, limit: 7)
+        // Pad if the taste picks are thin (small or very uniform library) so the
+        // carousel still has a few slides.
+        if heroBuilt.count < 5 {
+            var seen = Set(heroBuilt.map(\.id))
+            for item in recCandidates.shuffled() where heroBuilt.count < 5 {
+                if seen.insert(item.id).inserted { heroBuilt.append(item) }
             }
         }
-        for (item, point) in inProgressHeroes { addHero(item, resume: point) }
-        for item in all.filter({ ($0.communityRating ?? 0) > 0 })
-            .sorted(by: { ($0.communityRating ?? 0) > ($1.communityRating ?? 0) })
-            .prefix(3) {
-            addHero(item, resume: nil)
-        }
-        for item in all.shuffled() where heroBuilt.count < 7 {
-            addHero(item, resume: nil)
+        // Last resort: no unwatched candidates at all (everything watched with
+        // hide-watched off) — show the best-rated titles so the hero is never
+        // empty while the library has content.
+        if heroBuilt.isEmpty {
+            heroBuilt = Array(all.sorted {
+                ($0.tmdbRating ?? $0.communityRating ?? 0) > ($1.tmdbRating ?? $1.communityRating ?? 0)
+            }.prefix(7))
         }
         heroItems = heroBuilt
-        heroProgress = heroProgressBuilt
+        heroProgress = [:]   // recommendations carry no resume progress
         heroIndex = min(heroIndex, max(0, heroBuilt.count - 1))
         advanceCountdown = Self.autoAdvanceInterval
-        let heroIDs = heroSeen
+        let heroIDs = Set(heroBuilt.map(\.id))
 
         // Random Picks: shuffled, carousel slides excluded.
         randomPicks = Array(all.filter { !heroIDs.contains($0.id) }.shuffled().prefix(12))
