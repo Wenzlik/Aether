@@ -128,7 +128,7 @@ extension DetailView {
             if resume != nil { resumeButton } else { playButton }
             if resume != nil { restartIconButton }
             #if os(visionOS)
-            watchInCinemaButton
+            if canWatchInCinema { watchInCinemaButton }
             #endif
             compactActionButtons
         }
@@ -392,6 +392,16 @@ extension DetailView {
     /// Enters Cinema Mode. When a resume point exists, first asks whether to
     /// continue or start over (the immersive entry has no Resume/Restart pair of
     /// its own); otherwise starts from the top.
+    /// visionOS: Cinema docks the system `AVPlayer`, which can't demux the
+    /// containers VLCKit handles (mkv, …). For those, hide "Watch in Cinema"
+    /// entirely rather than letting it dock and fail with `AVFoundationErrorDomain
+    /// -11828`. Mirrors `forcesTranscodeDownload`; `nil` mediaInfo ⇒ allow (the
+    /// engine resolver defaults non-VLC), so we don't over-restrict before
+    /// metadata loads.
+    private var canWatchInCinema: Bool {
+        VideoEngineResolver.standard.engine(forContainer: current.mediaInfo?.container) != .vlc
+    }
+
     private var watchInCinemaButton: some View {
         AetherButton(
             "Watch in Cinema",
