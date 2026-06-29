@@ -126,12 +126,13 @@ struct HomeView: View {
         .environment(\.posterRatingSource, session.playbackPrefs.posterRatingSource)
         .task { await session.restore() }
         // Finder "Open With ▸ Aether" / double-click on a registered video type.
-        // On a *launch* open (app was closed), drop this auto-created library
-        // window so only the player window remains; it reopens on the next Dock
-        // activation. Opening a file while browsing keeps the library.
+        // An external open should show **only** the player window — drop this
+        // (library) window so opening a random file never swaps your library out.
+        // It reopens normally on the next Dock activation. (Drag-drop below is an
+        // in-app gesture while browsing, so it keeps the library window.)
         .onOpenURL { url in
             openLocal(url)
-            if appDelegate.isColdLaunch { dismissWindow() }
+            dismissWindow()
         }
         // Drag a video file onto the window to play it.
         .dropDestination(for: URL.self) { urls, _ in

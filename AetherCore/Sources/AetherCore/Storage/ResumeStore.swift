@@ -169,7 +169,13 @@ public actor ResumeStore {
     private func writeICloudIfPossible() {
         guard let icloudStore else { return }
         do {
-            let data = try encoder.encode(points.values.map(WirePoint.init(point:)))
+            // Local resume points never leave the device: a local file's
+            // Continue-Watching position is meaningless on another device, and
+            // we don't put on-device file identities in iCloud KVS. They still
+            // persist in-memory + on disk (writeDiskIfPossible). Server sources
+            // (Plex/Jellyfin/SMB/…) sync as before.
+            let syncable = points.values.filter { $0.mediaID.source != .local }
+            let data = try encoder.encode(syncable.map(WirePoint.init(point:)))
             icloudStore.set(data, forKey: Self.icloudKey)
             icloudStore.synchronize()
         } catch {
@@ -187,6 +193,9 @@ public actor ResumeStore {
             var changed = false
             for wire in wires {
                 guard let point = wire.toResumePoint() else { continue }
+                // Defensive: ignore any local point that reached iCloud before
+                // the write-side filter existed — local stays device-only.
+                if point.mediaID.source == .local { continue }
                 let before = points[point.mediaID]
                 merge(point)
                 if points[point.mediaID] != before {
