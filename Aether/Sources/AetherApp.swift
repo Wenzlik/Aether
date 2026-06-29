@@ -467,6 +467,13 @@ final class AppSession {
         case smb
     }
     var signInTarget: SignInTarget = .plex
+    /// When the sheet is opened to add *another* Plex account while one is
+    /// already signed in, force the PIN sign-in flow instead of the already-
+    /// signed-in discovery view — otherwise "Add Plex Account" dead-ended on the
+    /// existing servers and the second account could never authenticate. Multi-
+    /// account is supported downstream (`completePlexSignIn` merges extra tokens).
+    /// Set fresh on every `presentSignIn`, so it never leaks across opens.
+    var signInForcesPlexAccountAdd = false
 
     // MARK: - Init
 
@@ -788,6 +795,7 @@ final class AppSession {
         // A fresh Plex sign-in becomes the active source.
         if plexSource != nil { setActiveSource(.plex) }
         isSignInPresented = false
+        signInForcesPlexAccountAdd = false
     }
 
     // MARK: - Plex accounts (multi-account, additive over the primary)
@@ -1141,8 +1149,9 @@ final class AppSession {
         libraryRevision &+= 1
     }
 
-    func presentSignIn(_ target: SignInTarget = .plex) {
+    func presentSignIn(_ target: SignInTarget = .plex, addingAccount: Bool = false) {
         signInTarget = target
+        signInForcesPlexAccountAdd = addingAccount
         isSignInPresented = true
     }
 

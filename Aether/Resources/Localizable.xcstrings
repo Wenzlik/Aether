@@ -1,6 +1,78 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Aether couldn't prepare this file for playback. Check that the source is reachable, then try again." : {
+      "comment" : "Detail playback-unavailable copy for file sources (SMB/DLNA/Local); no Plex/transcode wording.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether nedokázal připravit tento soubor k přehrání. Zkontroluj, že je zdroj dostupný, a zkus to znovu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether konnte diese Datei nicht für die Wiedergabe vorbereiten. Prüfe, ob die Quelle erreichbar ist, und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether no pudo preparar este archivo para la reproducción. Comprueba que la fuente esté accesible e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether n'a pas pu préparer ce fichier pour la lecture. Vérifie que la source est accessible, puis réessaie."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aether не зміг підготувати цей файл до відтворення. Переконайтеся, що джерело доступне, і повторіть спробу."
+          }
+        }
+      }
+    },
+    "This title isn't in a directly playable format yet. Transcode support is coming in a future update." : {
+      "comment" : "Detail playback-unavailable copy for server sources (Plex/Jellyfin/Emby) needing transcode.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tento titul zatím není v přímo přehratelném formátu. Podpora překódování přijde v příští aktualizaci."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Titel liegt noch nicht in einem direkt abspielbaren Format vor. Transcoding-Unterstützung folgt in einem zukünftigen Update."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este título todavía no está en un formato reproducible directamente. La compatibilidad con transcodificación llegará en una futura actualización."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce titre n'est pas encore dans un format lisible directement. La prise en charge du transcodage arrivera dans une future mise à jour."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цей запис ще не у форматі для прямого відтворення. Підтримка перекодування з'явиться в майбутньому оновленні."
+          }
+        }
+      }
+    },
     "Because you watched %@" : {
       "localizations" : {
         "cs" : {

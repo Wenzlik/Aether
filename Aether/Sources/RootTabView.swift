@@ -230,7 +230,10 @@ struct PlexOnboardingView: View {
     @Bindable var session: AppSession
 
     var body: some View {
-        if session.isPlexSignedIn {
+        // Already signed in → show discovery, UNLESS the user explicitly chose
+        // "Add Plex Account" (then force the PIN sign-in so a second account can
+        // authenticate — #4).
+        if session.isPlexSignedIn && !session.signInForcesPlexAccountAdd {
             PlexDiscoveryView(
                 state: session.discoveryState,
                 onRetry: { Task { await session.discoverPlexServers() } },

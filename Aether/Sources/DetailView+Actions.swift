@@ -128,7 +128,7 @@ extension DetailView {
             if resume != nil { resumeButton } else { playButton }
             if resume != nil { restartIconButton }
             #if os(visionOS)
-            watchInCinemaButton
+            if canWatchInCinema { watchInCinemaButton }
             #endif
             compactActionButtons
         }
@@ -392,6 +392,16 @@ extension DetailView {
     /// Enters Cinema Mode. When a resume point exists, first asks whether to
     /// continue or start over (the immersive entry has no Resume/Restart pair of
     /// its own); otherwise starts from the top.
+    /// visionOS: Cinema docks the system `AVPlayer`, which can't demux the
+    /// containers VLCKit handles (mkv, …). For those, hide "Watch in Cinema"
+    /// entirely rather than letting it dock and fail with `AVFoundationErrorDomain
+    /// -11828`. Mirrors `forcesTranscodeDownload`; `nil` mediaInfo ⇒ allow (the
+    /// engine resolver defaults non-VLC), so we don't over-restrict before
+    /// metadata loads.
+    private var canWatchInCinema: Bool {
+        VideoEngineResolver.standard.engine(forContainer: current.mediaInfo?.container) != .vlc
+    }
+
     private var watchInCinemaButton: some View {
         AetherButton(
             "Watch in Cinema",
@@ -455,9 +465,24 @@ extension DetailView {
         AetherErrorState(
             glyph: "play.slash",
             title: "Playback unavailable",
-            message: "This title isn't streamable yet. If it's a format Plex can't direct-play, transcode support lands in a future update."
+            message: unavailableMessage
         )
         .padding(.top, -AetherDesign.Spacing.xxl)
+    }
+
+    /// Source-aware copy for the no-stream state. SMB / DLNA / Local are files
+    /// Aether plays directly (no Plex involved), so the old "format Plex can't
+    /// direct-play" line was nonsense there — and misleading, since the real
+    /// cause is the file/share not being reachable or prepared (e.g. the SMB
+    /// range proxy on visionOS). Server sources (Plex / Jellyfin / Emby) do land
+    /// here when a title needs transcoding, which isn't supported yet.
+    private var unavailableMessage: String {
+        switch item.id.source {
+        case .smb, .dlna, .local:
+            return "Aether couldn't prepare this file for playback. Check that the source is reachable, then try again."
+        default:
+            return "This title isn't in a directly playable format yet. Transcode support is coming in a future update."
+        }
     }
 
     // MARK: - Netflix availability (#360)
