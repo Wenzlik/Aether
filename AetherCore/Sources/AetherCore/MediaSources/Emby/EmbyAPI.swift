@@ -174,12 +174,16 @@ public enum EmbyAPI {
         public let container: String?
         public let videoType: String?
         public let mediaStreams: [MediaStream]?
+        /// Absolute server filesystem path of the source file (`Path`); `nil`
+        /// unless the server exposes it. Surfaced in Technical Details.
+        public let path: String?
 
         private enum CodingKeys: String, CodingKey {
             case id = "Id"
             case container = "Container"
             case videoType = "VideoType"
             case mediaStreams = "MediaStreams"
+            case path = "Path"
         }
     }
 
@@ -282,7 +286,8 @@ extension EmbyAPI.BaseItemDto {
             audioCodec: audioStream?.codec?.lowercased(),
             videoResolution: resolution,
             bitrateKbps: kbps,
-            container: containerStr
+            container: containerStr,
+            filePath: mediaSources?.first?.path
         )
     }
 

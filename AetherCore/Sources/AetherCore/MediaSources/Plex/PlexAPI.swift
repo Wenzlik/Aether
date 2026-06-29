@@ -675,7 +675,8 @@ public enum PlexAPI {
                     || video?.dovi == true,
                 isDolbyVision: video?.dovi == true,
                 container: media.container,
-                fileSizeBytes: part?.size
+                fileSizeBytes: part?.size,
+                filePath: part?.file
             )
         }
 
@@ -751,17 +752,21 @@ public enum PlexAPI {
             public let key: String?
             /// Source file size in **bytes** (Plex `size`). `nil` when absent.
             public let size: Int64?
+            /// Absolute filesystem path of the original file on the server, e.g.
+            /// `/data/Movies/Foo (2020)/Foo.mkv` (Plex `file`). `nil` when absent.
+            public let file: String?
             public let stream: [Stream]?
 
-            public init(id: String? = nil, key: String?, size: Int64? = nil, stream: [Stream]? = nil) {
+            public init(id: String? = nil, key: String?, size: Int64? = nil, file: String? = nil, stream: [Stream]? = nil) {
                 self.id = id
                 self.key = key
                 self.size = size
+                self.file = file
                 self.stream = stream
             }
 
             enum CodingKeys: String, CodingKey {
-                case id, key, size
+                case id, key, size, file
                 case stream = "Stream"
             }
 
@@ -776,6 +781,7 @@ public enum PlexAPI {
                 }
                 key = try container.decodeIfPresent(String.self, forKey: .key)
                 size = try container.decodeIfPresent(Int64.self, forKey: .size)
+                file = try container.decodeIfPresent(String.self, forKey: .file)
                 stream = try container.decodeIfPresent([Stream].self, forKey: .stream)
             }
 

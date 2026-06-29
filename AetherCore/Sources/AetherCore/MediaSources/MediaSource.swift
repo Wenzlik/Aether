@@ -482,6 +482,12 @@ public struct MediaInfo: Sendable, Hashable, Codable {
     /// `MediaSourceInfo.Size`). Rendered human-readable ("12.4 GB") in the
     /// Technical Details section. `nil` when the source didn't report it.
     public let fileSizeBytes: Int64?
+    /// Absolute path to the source file on the server (Plex `Part.file`,
+    /// Jellyfin / Emby `MediaSourceInfo.Path`), e.g.
+    /// `/data/Movies/Foo (2020)/Foo.mkv`. Surfaced in Technical Details as the
+    /// File name + Path rows. `nil` when the source doesn't report it (e.g. a
+    /// non-admin Jellyfin user, or sources without a server file path).
+    public let filePath: String?
 
     public init(
         videoCodec: String? = nil,
@@ -492,7 +498,8 @@ public struct MediaInfo: Sendable, Hashable, Codable {
         isHDR: Bool = false,
         isDolbyVision: Bool = false,
         container: String? = nil,
-        fileSizeBytes: Int64? = nil
+        fileSizeBytes: Int64? = nil,
+        filePath: String? = nil
     ) {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
@@ -503,6 +510,7 @@ public struct MediaInfo: Sendable, Hashable, Codable {
         self.isDolbyVision = isDolbyVision
         self.container = container
         self.fileSizeBytes = fileSizeBytes
+        self.filePath = filePath
     }
 }
 

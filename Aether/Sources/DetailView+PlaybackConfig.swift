@@ -284,6 +284,10 @@ extension DetailView {
         if let size = info?.fileSizeBytes, size > 0 {
             AetherSettingsRow(label: "File Size", value: DetailFormatting.fileSize(size))
         }
+        if let path = info?.filePath, !path.isEmpty {
+            AetherSettingsRow(label: "File", value: (path as NSString).lastPathComponent)
+            AetherSettingsRow(label: "Path", value: path)
+        }
         AetherSettingsRow(label: "Playback", status: playbackModeStatus)
         if let source {
             AetherSettingsRow(label: "Source", value: source.displayName)
