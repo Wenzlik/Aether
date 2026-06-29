@@ -455,9 +455,24 @@ extension DetailView {
         AetherErrorState(
             glyph: "play.slash",
             title: "Playback unavailable",
-            message: "This title isn't streamable yet. If it's a format Plex can't direct-play, transcode support lands in a future update."
+            message: unavailableMessage
         )
         .padding(.top, -AetherDesign.Spacing.xxl)
+    }
+
+    /// Source-aware copy for the no-stream state. SMB / DLNA / Local are files
+    /// Aether plays directly (no Plex involved), so the old "format Plex can't
+    /// direct-play" line was nonsense there — and misleading, since the real
+    /// cause is the file/share not being reachable or prepared (e.g. the SMB
+    /// range proxy on visionOS). Server sources (Plex / Jellyfin / Emby) do land
+    /// here when a title needs transcoding, which isn't supported yet.
+    private var unavailableMessage: String {
+        switch item.id.source {
+        case .smb, .dlna, .local:
+            return "Aether couldn't prepare this file for playback. Check that the source is reachable, then try again."
+        default:
+            return "This title isn't in a directly playable format yet. Transcode support is coming in a future update."
+        }
     }
 
     // MARK: - Netflix availability (#360)
