@@ -540,8 +540,12 @@ public actor JellyfinMediaSource: MediaSource {
                  "VideoCodec": "h264,hevc", "AudioCodec": "aac,mp3,ac3,eac3"]
             ],
             "TranscodingProfiles": [
+                // ac3/eac3 let the server keep a 5.1 surround track (copy or
+                // transcode to Dolby Digital) instead of downmixing to stereo
+                // AAC. Apple devices decode AC-3 / E-AC-3 in HLS natively, so
+                // dialogue/loudness survive the MKV→HLS transcode.
                 ["Container": "ts", "Type": "Video", "Protocol": "hls",
-                 "VideoCodec": "h264", "AudioCodec": "aac,mp3",
+                 "VideoCodec": "h264", "AudioCodec": "aac,mp3,ac3,eac3",
                  "Context": "Streaming", "MinSegments": 1]
             ]
         ]
@@ -724,7 +728,9 @@ public actor JellyfinMediaSource: MediaSource {
             URLQueryItem(name: "DeviceId", value: configuration.deviceID),
             URLQueryItem(name: "PlaySessionId", value: playSessionID),
             URLQueryItem(name: "VideoCodec", value: "h264"),
-            URLQueryItem(name: "AudioCodec", value: "aac,mp3"),
+            // ac3/eac3 keep multichannel surround through the HLS transcode
+            // (see DeviceProfile note) instead of a stereo-AAC downmix.
+            URLQueryItem(name: "AudioCodec", value: "aac,mp3,ac3,eac3"),
             URLQueryItem(name: "TranscodingProtocol", value: "hls"),
             URLQueryItem(name: "TranscodingContainer", value: "ts")
         ]

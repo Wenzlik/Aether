@@ -148,6 +148,15 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback)
         try? session.setActive(true)
+        // Ask for the full channel count the current output route supports (e.g.
+        // 5.1 over HDMI on Apple TV). Without this the session stays at 2 channels
+        // and the system downmixes multichannel tracks to stereo — quiet,
+        // attenuated dialogue. `maximumOutputNumberOfChannels` is only meaningful
+        // once the session is active, so this must follow `setActive(true)`.
+        let maxChannels = session.maximumOutputNumberOfChannels
+        if maxChannels > 2 {
+            try? session.setPreferredOutputNumberOfChannels(maxChannels)
+        }
         #endif
     }
 
