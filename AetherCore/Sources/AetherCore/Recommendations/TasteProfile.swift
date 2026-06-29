@@ -45,6 +45,38 @@ public struct TasteProfile: Sendable, Equatable {
     }
 }
 
+/// Why a Discover pick was recommended — the "because…" shown under the hero.
+/// Structured (not a localised string) so the app layer renders it in the
+/// user's language; AetherCore stays UI-agnostic.
+public enum RecommendationReason: Sendable, Equatable {
+    /// A recently-watched title that shares a genre with the pick.
+    case becauseYouWatched(String)
+    /// The pick's genres the user's taste favours (up to two, strongest first).
+    case matchesTaste([String])
+
+    /// Build the best reason for `pick`. Prefers the most recently watched title
+    /// that shares a genre (the strongest "more of this" signal); otherwise names
+    /// the pick's genres the profile likes. `nil` when nothing connects.
+    /// - Parameter recentlyWatched: watched titles, newest-watched first.
+    public static func make(
+        for pick: UnifiedMediaItem,
+        recentlyWatched: [UnifiedMediaItem],
+        profile: TasteProfile
+    ) -> RecommendationReason? {
+        let pickGenres = Set(pick.genres)
+        if let anchor = recentlyWatched.first(where: {
+            $0.id != pick.id && !Set($0.genres).isDisjoint(with: pickGenres)
+        }) {
+            return .becauseYouWatched(anchor.title)
+        }
+        let liked = pick.genres
+            .filter { (profile.genreWeights[$0] ?? 0) > 0 }
+            .sorted { (profile.genreWeights[$0] ?? 0) > (profile.genreWeights[$1] ?? 0) }
+            .prefix(2)
+        return liked.isEmpty ? nil : .matchesTaste(Array(liked))
+    }
+}
+
 public extension RecommendationEngine {
     /// Unprompted, taste-based recommendations for the Discover hero. Ranks
     /// **unwatched** titles by `profile` genre overlap, then by rating, then by

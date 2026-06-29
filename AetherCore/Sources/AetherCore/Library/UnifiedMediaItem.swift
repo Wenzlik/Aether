@@ -197,6 +197,13 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         sources.contains { $0.item.isFullyWatched }
     }
 
+    /// When the user most recently played this title across all its sources (the
+    /// freshest source `lastWatched`). `nil` when never played. Feeds taste
+    /// recency and "Because you watched …" recommendation reasons.
+    public var lastWatched: Date? {
+        sources.compactMap { $0.item.lastWatched }.max()
+    }
+
     /// The title's TMDb id, from whichever source carries one — the key for
     /// availability lookups (#360).
     public var tmdbID: String? {

@@ -46,6 +46,9 @@ struct DiscoverView: View {
     /// Fractional progress (0…1) per hero slide that has a resume point — drives
     /// the thin Continue-Watching strip on that slide. Keyed by item id.
     @State private var heroProgress: [String: Double] = [:]
+    /// Per-hero "because…" reason (keyed by `UnifiedMediaItem.id`), shown under
+    /// the Recommended by Aether eyebrow for the current slide.
+    @State private var heroReasons: [String: RecommendationReason] = [:]
     /// The visible carousel page.
     @State private var heroIndex = 0
     /// Seconds until the carousel auto-advances (counts down each tick). Reset to
@@ -266,12 +269,31 @@ struct DiscoverView: View {
     /// Eyebrow above the hero — marks the carousel as Aether's own taste-based
     /// recommendations (learned from the user's watch state).
     private var recommendedEyebrow: some View {
-        Label("Recommended by Aether", systemImage: "sparkles")
-            .font(AetherDesign.Typography.caption)
-            .foregroundStyle(AetherDesign.Palette.textSecondary)
-            .textCase(.uppercase)
-            .tracking(0.6)
-            .padding(.horizontal, AetherDesign.Spacing.l)
+        VStack(alignment: .leading, spacing: 2) {
+            Label("Recommended by Aether", systemImage: "sparkles")
+                .font(AetherDesign.Typography.caption)
+                .foregroundStyle(AetherDesign.Palette.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.6)
+            if heroIndex < heroItems.count,
+               let reason = heroReasons[heroItems[heroIndex].id] {
+                Text(reasonText(reason))
+                    .font(AetherDesign.Typography.metadata)
+                    .foregroundStyle(AetherDesign.Palette.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, AetherDesign.Spacing.l)
+    }
+
+    /// Localised "because…" line for the current hero pick.
+    private func reasonText(_ reason: RecommendationReason) -> String {
+        switch reason {
+        case .becauseYouWatched(let title):
+            return String(localized: "Because you watched \(title)")
+        case .matchesTaste(let genres):
+            return String(localized: "Matches your taste for \(genres.joined(separator: " & "))")
+        }
     }
 
     /// Rotating featured carousel: taste-based "Recommended by Aether" picks —
@@ -798,6 +820,18 @@ struct DiscoverView: View {
                 ($0.tmdbRating ?? $0.communityRating ?? 0) > ($1.tmdbRating ?? $1.communityRating ?? 0)
             }.prefix(7))
         }
+        // "Because you watched …" reasons per pick — deterministic, instant,
+        // from the most recently watched title sharing a genre (else taste).
+        let recentlyWatched = (allMovies + allShows)
+            .filter { $0.lastWatched != nil }
+            .sorted { ($0.lastWatched ?? .distantPast) > ($1.lastWatched ?? .distantPast) }
+        var reasons: [String: RecommendationReason] = [:]
+        for item in heroBuilt {
+            reasons[item.id] = RecommendationReason.make(
+                for: item, recentlyWatched: recentlyWatched, profile: profile
+            )
+        }
+        heroReasons = reasons
         heroItems = heroBuilt
         heroProgress = [:]   // recommendations carry no resume progress
         heroIndex = min(heroIndex, max(0, heroBuilt.count - 1))

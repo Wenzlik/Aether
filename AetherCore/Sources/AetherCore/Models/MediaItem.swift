@@ -86,6 +86,11 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// sources without a favorite concept (Plex has none). Drives the Detail
     /// favorite star.
     public let isFavorite: Bool
+    /// When the user last played this title, from the source's own play state
+    /// (Plex `lastViewedAt`, Jellyfin / Emby `LastPlayedDate`). Powers
+    /// "Because you watched …" recommendation reasons. `nil` when never played
+    /// or the source doesn't report it.
+    public let lastWatched: Date?
     /// For episodes: the parent **season**'s id (Plex `parentRatingKey`,
     /// Jellyfin `ParentId`). Lets Auto-Play-Next fetch the season's episodes and
     /// pick the next one. `nil` for movies / when the source didn't provide it.
@@ -163,6 +168,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         guids: MediaGuids = MediaGuids(),
         isWatched: Bool = false,
         isFavorite: Bool = false,
+        lastWatched: Date? = nil,
         parentID: MediaID? = nil,
         genres: [String] = [],
         cast: [CastMember] = [],
@@ -203,6 +209,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.guids = guids
         self.isWatched = isWatched
         self.isFavorite = isFavorite
+        self.lastWatched = lastWatched
         self.parentID = parentID
         self.genres = genres
         self.cast = cast
