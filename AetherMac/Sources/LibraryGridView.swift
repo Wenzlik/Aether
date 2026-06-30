@@ -71,8 +71,15 @@ struct LibraryBrowseView: View {
     @State private var selectedYears: Set<Int> = []
     /// Minimum community rating (#342 parity) — `nil` = any.
     @State private var minRating: Double? = nil
-    /// Client-side title search within the grid (#369) — no reload.
+    /// The Library's search / Ask Aether field text. Typing surfaces unified
+    /// search results; pressing Return runs an Ask Aether request — parity with
+    /// the iOS Library, which dropped the classic in-grid substring filter.
     @State private var query = ""
+    /// Ask Aether answer (library matches + optional recommendation), shown after
+    /// the user submits. Sticky while refining; cleared when the field is emptied.
+    @State private var askResult: AskResult?
+    /// On-device inference in flight.
+    @State private var isAsking = false
 
     // MARK: Audio language (#295/#445 parity)
     /// Selected audio language code — `nil` = All. Applied client-side from
@@ -152,8 +159,6 @@ struct LibraryBrowseView: View {
                 unified.sources.contains { completedIDs.contains($0.item.id) }
             }
         }
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !q.isEmpty { filtered = filtered.filter { $0.title.localizedStandardContains(q) } }
         return sort.sorted(filtered)
     }
 
@@ -287,7 +292,66 @@ struct LibraryBrowseView: View {
         return "No \(noun) found across your connected sources."
     }
 
+    /// Whether the user has typed something into the search field (before an ask).
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Run an Ask Aether request from the Library field. Mirrors the Search tab
+    /// and the macOS sidebar — find titles you own + recommend.
+    private func ask() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, session.hasAnySource, !isAsking else { return }
+        isAsking = true
+        defer { isAsking = false }
+        let answer = await AskAether.answer(
+            query: trimmed, sources: session.connectedSources, tmdb: session.tmdbClient
+        )
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
+        askResult = answer
+    }
+
+    /// Edited-but-not-resubmitted request → "press Return to ask" hint.
+    private var askPending: String? {
+        guard let askResult else { return nil }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (!trimmed.isEmpty && trimmed != askResult.query) ? trimmed : nil
+    }
+
     var body: some View {
+        Group {
+            if isAsking {
+                AetherLoadingDots(caption: String(localized: "Asking Aether…"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let askResult {
+                MacAskResults(session: session, result: askResult, pendingQuery: askPending)
+            } else if isSearching {
+                // Typing surfaces unified results over the catalog; Return asks.
+                MacSearchResults(session: session, query: query)
+            } else {
+                libraryGrid
+            }
+        }
+        .cinematicBackground()
+        // Root landing (kind == nil): sidebar/tabbar shows where you are, no title needed.
+        // Drill-down (Movies / TV Shows): keep the title for the back-button label.
+        .navigationTitle(kind == nil ? "" : LocalizedStringKey(title))
+        // The Library search is Ask Aether now (iOS parity): typing shows unified
+        // search results, Return runs an on-device recommendation request. The old
+        // classic in-grid substring filter ("Search your library") was removed.
+        .searchable(text: $query, prompt: Text("Ask Aether…"))
+        .onSubmit(of: .search) { Task { await ask() } }
+        .onChange(of: query) { _, value in
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { askResult = nil }
+        }
+        .task(id: session.libraryToken) { await load() }
+        .task(id: session.libraryToken) { await loadAudioLanguageOptions() }
+        .task(id: netflixKey) { await loadNetflix() }
+    }
+
+    /// The Library grid + its sticky type-toggle chips and Sort/Filter/Reload
+    /// toolbar. Shown when not running a search / Ask Aether request.
+    private var libraryGrid: some View {
         ScrollView {
             if isLoading && sourceItems.isEmpty {
                 AetherLoadingState(.rails(count: 2)).padding(.vertical, 24)
@@ -321,11 +385,6 @@ struct LibraryBrowseView: View {
             }
             .background(.ultraThinMaterial)
         }
-        .cinematicBackground()
-        // Root landing (kind == nil): sidebar/tabbar shows where you are, no title needed.
-        // Drill-down (Movies / TV Shows): keep the title for the back-button label.
-        .navigationTitle(kind == nil ? "" : LocalizedStringKey(title))
-        .searchable(text: $query, prompt: Text("Search your library"))
         .toolbar {
             // Sort + Filter share one glass capsule — both shape what's in the
             // grid. Reload is a data action, split off into its own pill by a
@@ -432,9 +491,6 @@ struct LibraryBrowseView: View {
                 }
             }
         }
-        .task(id: session.libraryToken) { await load() }
-        .task(id: session.libraryToken) { await loadAudioLanguageOptions() }
-        .task(id: netflixKey) { await loadNetflix() }
     }
 
     // MARK: - Loading

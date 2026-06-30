@@ -4,6 +4,24 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **macOS — What's New in About** — Settings ▸ About now has a **What's New**
+  sheet: the current release's New / Fixed highlights plus the full version
+  history, matching the iOS app. (Release notes are mirrored in the macOS target
+  for now — `ReleaseNote`/`releaseHistory` live in the iOS target and `AetherCore`
+  has no String Catalog yet; a single shared source of truth is a follow-up.)
+
+### Changed
+
+- **macOS — Ask Aether in the Library** — the Library search field is now Ask
+  Aether, the same as the Search tab and iOS: typing surfaces instant unified
+  matches, pressing Return runs an on-device recommendation. The separate classic
+  "Search your library" field (and its in-grid substring filter) was removed.
+- **macOS — a more compact Discover banner** — the featured hero is capped
+  (`heroMaxWidth`) and centered instead of stretching the full window width, so
+  it stays cinematic without dominating a maximized window.
+
 ## [0.8.6] — 2026-06-28
 
 ### Added
