@@ -235,7 +235,7 @@ final class AppSession {
             UserDefaults.standard.set(userTMDbToken, forKey: Self.userTMDbTokenKey)
         }
         if let connection = smbConnection {
-            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb, rangeProxy: smbRangeProxy)
             await SMBMetadataStore.shared.clearMisses()
         }
     }
@@ -417,6 +417,9 @@ final class AppSession {
     private(set) var smbConnectionStore: SMBConnectionStore?
     var smbConnection: SMBConnection?
     private(set) var smbSource: SMBMediaSource?
+    /// One range-proxy per app process, owned by the session and injected into
+    /// `SMBMediaSource` — not a `static let shared`.
+    private let smbRangeProxy = SMBRangeProxy()
     var isSMBConnected: Bool = false
     /// Whether the connected SMB host is reachable right now. SMB is LAN-only, so
     /// off-network this flips false and `connectedSources` drops the source —
@@ -611,9 +614,7 @@ final class AppSession {
             }
             // Restore the active Home profile (working token was already
             // persisted, so playback just resumes as that profile).
-            if let json = try await keychain.string(for: Self.plexHomeUserKey),
-               let data = json.data(using: .utf8),
-               let ref = try? JSONDecoder().decode(PlexHomeUserRef.self, from: data) {
+            if let ref = await keychain.codable(PlexHomeUserRef.self, for: Self.plexHomeUserKey) {
                 activePlexUser = ref
             }
         } catch {
@@ -809,10 +810,7 @@ final class AppSession {
 
     /// Additional account tokens (beyond the primary).
     private func plexExtraAccountTokens() async -> [String] {
-        guard let json = (try? await keychain.string(for: Self.plexExtraAccountTokensKey)) ?? nil,
-              let data = json.data(using: .utf8),
-              let tokens = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        return tokens
+        await keychain.codable([String].self, for: Self.plexExtraAccountTokensKey) ?? []
     }
 
     private func setPlexExtraAccountTokens(_ tokens: [String]) async {
@@ -820,10 +818,7 @@ final class AppSession {
             try? await keychain.removeValue(for: Self.plexExtraAccountTokensKey)
             return
         }
-        if let data = try? JSONEncoder().encode(tokens),
-           let json = String(data: data, encoding: .utf8) {
-            try? await keychain.setString(json, for: Self.plexExtraAccountTokensKey)
-        }
+        try? await keychain.setCodable(tokens, for: Self.plexExtraAccountTokensKey)
     }
 
     /// Every Plex account token to discover servers from: primary first, then extras.
@@ -839,10 +834,8 @@ final class AppSession {
     private func persistActivePlexUser(_ user: PlexAPI.HomeUser?) async {
         activePlexUser = user.map(PlexHomeUserRef.init)
         do {
-            if let ref = activePlexUser,
-               let data = try? JSONEncoder().encode(ref),
-               let json = String(data: data, encoding: .utf8) {
-                try await keychain.setString(json, for: Self.plexHomeUserKey)
+            if let ref = activePlexUser {
+                try await keychain.setCodable(ref, for: Self.plexHomeUserKey)
             } else {
                 try await keychain.removeValue(for: Self.plexHomeUserKey)
             }
@@ -1275,7 +1268,7 @@ final class AppSession {
         do {
             guard let connection = try await store.read() else { return }
             smbConnection = connection
-            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+            smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb, rangeProxy: smbRangeProxy)
             isSMBConnected = true
             startSMBReachabilityMonitoring()
             await refreshSMBReachability()
@@ -1289,7 +1282,7 @@ final class AppSession {
         if smbConnectionStore == nil { smbConnectionStore = SMBConnectionStore(keychain: keychain) }
         do { try await smbConnectionStore?.write(connection) } catch { }
         smbConnection = connection
-        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb, rangeProxy: smbRangeProxy)
         isSMBConnected = true
         isSMBReachable = true   // just validated, so it's reachable now
         isSignInPresented = false
@@ -1371,7 +1364,7 @@ final class AppSession {
         connection.rootContent = pruned.isEmpty ? nil : pruned
         do { try await smbConnectionStore?.write(connection) } catch { }
         smbConnection = connection
-        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb)
+        smbSource = SMBMediaSource(connection: connection, tmdb: smbTMDb, rangeProxy: smbRangeProxy)
         await UnifiedLibrarySnapshotStore.shared.clearAll()
     }
 

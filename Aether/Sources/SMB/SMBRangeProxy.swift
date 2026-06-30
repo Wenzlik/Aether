@@ -29,8 +29,9 @@ import SMBClient
 /// **Security:** localhost-only listener + 32-char random hex token per URL;
 /// no credentials appear in the HTTP URL.
 actor SMBRangeProxy {
-    static let shared = SMBRangeProxy()
-    private init() {}
+    /// One instance per app process — owned by `AppSession` and injected into
+    /// `SMBMediaSource`'s initializer (not a `static let shared`).
+    init() {}
 
     // MARK: - Types
 

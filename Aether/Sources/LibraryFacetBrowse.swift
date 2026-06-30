@@ -8,61 +8,12 @@ import AetherCore
 /// dedupe by name; the grids aggregate `items(inCollection:)` /
 /// `items(withPerson:)` from every contributing source.
 
-// MARK: - Facet entries (cross-source merge)
-
-/// One display row backed by every source's matching facet value — e.g. the
-/// "Marvel" collection on both Plex and Jellyfin collapses to one row whose
-/// grid queries both.
-struct CollectionEntry: Identifiable, Hashable, Sendable {
-    var id: String { title.lowercased() }
-    let title: String
-    let childCount: Int?
-    let members: [MediaCollection]
-}
-
-struct PersonEntry: Identifiable, Hashable, Sendable {
-    var id: String { name.lowercased() }
-    let name: String
-    let kind: PersonKind
-    let members: [MediaPerson]
-    /// First available headshot across the deduped source variants (#297).
-    var photoURL: URL? {
-        members.lazy.compactMap { $0.artwork?.posterURL(.thumbnail) }.first
-    }
-}
-
-/// Process-shared cache for the deduped facet lists. Collections / Actors /
-/// Directors fan out to every server on each visit, which read as a long blank
-/// load; cache the result (keyed by the source set + kind) so re-visits are
-/// instant within a session. Long-ish TTL — facets change rarely.
-actor FacetCache {
-    static let shared = FacetCache()
-
-    private struct Entry<Value> { let value: Value; let at: ContinuousClock.Instant }
-    private var collectionStore: [String: Entry<[CollectionEntry]>] = [:]
-    private var peopleStore: [String: Entry<[PersonEntry]>] = [:]
-    private let ttl: Duration = .seconds(10 * 60)
-    private let clock = ContinuousClock()
-
-    func collections(for key: String) -> [CollectionEntry]? {
-        guard let e = collectionStore[key], e.at.duration(to: clock.now) < ttl else { return nil }
-        return e.value
-    }
-    func setCollections(_ value: [CollectionEntry], for key: String) {
-        guard !value.isEmpty else { return }
-        collectionStore[key] = Entry(value: value, at: clock.now)
-    }
-    func people(for key: String) -> [PersonEntry]? {
-        guard let e = peopleStore[key], e.at.duration(to: clock.now) < ttl else { return nil }
-        return e.value
-    }
-    func setPeople(_ value: [PersonEntry], for key: String) {
-        guard !value.isEmpty else { return }
-        peopleStore[key] = Entry(value: value, at: clock.now)
-    }
-}
-
 // MARK: - Collections
+//
+// `CollectionEntry`, `PersonEntry`, and `FacetCache` now live in AetherCore
+// (`Library/FacetCache.swift`) — this is cross-source aggregation state, the
+// same shape as `UnifiedLibraryCache` / `AudioLanguageMembershipCache`, not
+// app-target view glue.
 
 /// Every collection across the connected sources, deduped by title.
 struct CollectionListView: View {
