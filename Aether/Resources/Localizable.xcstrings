@@ -19034,6 +19034,142 @@
           }
         }
       }
+    },
+    "All: Ask Aether explains its picks in your language." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vše: Ask Aether vysvětluje své tipy ve tvém jazyce."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle: Ask Aether erklärt seine Vorschläge in deiner Sprache."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo: Ask Aether explica sus elecciones en tu idioma."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout : Ask Aether explique ses choix dans votre langue."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Усе: Ask Aether пояснює свої добірки вашою мовою."
+          }
+        }
+      }
+    },
+    "All: New recommendation controls in Settings." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vše: Nové ovládání doporučení v Nastavení."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle: Neue Steuerungen für Empfehlungen in den Einstellungen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo: Nuevos controles de recomendaciones en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout : De nouveaux réglages pour les recommandations."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Усе: Нові налаштування рекомендацій у Налаштуваннях."
+          }
+        }
+      }
+    },
+    "iOS: The audio & subtitle button now hides with the other controls." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Tlačítko zvuku a titulků se teď skrývá spolu s ostatním ovládáním."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Die Audio- und Untertitel-Taste wird jetzt mit den übrigen Steuerelementen ausgeblendet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: El botón de audio y subtítulos ahora se oculta junto con los demás controles."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS : Le bouton audio et sous-titres se masque désormais avec les autres commandes."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Кнопка звуку й субтитрів тепер ховається разом з іншими елементами керування."
+          }
+        }
+      }
+    },
+    "iOS: Episodes no longer flash a subtitle for a moment when they start." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Epizody už na začátku na okamžik neproblesknou titulkem."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Episoden blenden beim Start nicht mehr kurz einen Untertitel ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Los episodios ya no muestran un subtítulo por un instante al empezar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS : Les épisodes n’affichent plus brièvement un sous-titre au démarrage."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Епізоди більше не блимають субтитром на початку."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

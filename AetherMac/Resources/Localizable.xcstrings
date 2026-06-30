@@ -9749,6 +9749,74 @@
           }
         }
       }
+    },
+    "All: Ask Aether explains its picks in your language.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vše: Ask Aether vysvětluje své tipy ve tvém jazyce."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle: Ask Aether erklärt seine Vorschläge in deiner Sprache."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo: Ask Aether explica sus elecciones en tu idioma."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout : Ask Aether explique ses choix dans votre langue."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Усе: Ask Aether пояснює свої добірки вашою мовою."
+          }
+        }
+      }
+    },
+    "All: New recommendation controls in Settings.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vše: Nové ovládání doporučení v Nastavení."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle: Neue Steuerungen für Empfehlungen in den Einstellungen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo: Nuevos controles de recomendaciones en Ajustes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout : De nouveaux réglages pour les recommandations."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Усе: Нові налаштування рекомендацій у Налаштуваннях."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

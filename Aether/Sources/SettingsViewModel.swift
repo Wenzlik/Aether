@@ -282,9 +282,13 @@ final class SettingsViewModel {
     let releaseHistory: [ReleaseNote] = [
         ReleaseNote(version: "0.8.7", codename: "Eridanus",
                     new: [
+                        "All: Ask Aether explains its picks in your language.",
+                        "All: New recommendation controls in Settings.",
                         "All: Discover keeps your picks steady, refreshing them once a day.",
                     ],
                     fixed: [
+                        "iOS: The audio & subtitle button now hides with the other controls.",
+                        "iOS: Episodes no longer flash a subtitle for a moment when they start.",
                         "All: The Discover banner no longer scrolls on its own — swipe to browse.",
                         "macOS: Discover no longer reshuffles its rows every second.",
                         "All: Loading screens show a clear indicator instead of a skeleton.",
