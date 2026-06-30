@@ -15,7 +15,8 @@ import AetherCore
 /// Data comes from `UnifiedLibrary` (the same aggregator Home / Search use), so
 /// a title on both Plex and Jellyfin appears once and each card navigates a
 /// `UnifiedMediaItem` (Detail shows its Available Sources). The shuffle is
-/// re-rolled per build so returning users see different picks.
+/// **day-stable** (`DailyShuffle`): it rotates once a calendar day, so picks
+/// stay put within a session instead of churning on every render / foreground.
 struct DiscoverView: View {
     /// Lifted from `RootTabView` so re-selecting the Discover tab can pop to root.
     @Binding var navigationPath: NavigationPath
@@ -51,16 +52,6 @@ struct DiscoverView: View {
     @State private var heroReasons: [String: RecommendationReason] = [:]
     /// The visible carousel page.
     @State private var heroIndex = 0
-    /// Seconds until the carousel auto-advances (counts down each tick). Reset to
-    /// the full interval after any manual interaction.
-    @State private var advanceCountdown = 6
-    /// While > 0 the carousel is paused after an interaction; it counts down to 0
-    /// over the idle window, then auto-advance resumes (#381: resume after 3 s).
-    @State private var pauseCountdown = 0
-    /// Set while `advanceHero` is moving the page programmatically, so the
-    /// `heroIndex` `onChange` can tell an auto-advance apart from a real user
-    /// swipe (only the latter should pause auto-advance).
-    @State private var programmaticAdvance = false
     #if !os(tvOS)
     /// Measured width of the touch/spatial hero carousel, used to size the
     /// cinematic full-width banner on iPad / visionOS (see `resolvedHeroHeight`).
@@ -103,14 +94,6 @@ struct DiscoverView: View {
         false
         #endif
     }
-
-    /// Carousel auto-advance interval (seconds) and the idle window before
-    /// auto-advance resumes after a manual interaction (#381).
-    private static let autoAdvanceInterval = 6
-    private static let resumeIdleSeconds = 3
-    /// 1 Hz tick driving the countdown-based auto-advance (gives precise
-    /// pause-on-interaction / resume-after-idle without re-arming timers).
-    private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -296,10 +279,9 @@ struct DiscoverView: View {
         }
     }
 
-    /// Rotating featured carousel: taste-based "Recommended by Aether" picks —
-    /// unwatched titles ranked by the user's genre preferences. Auto-advances every 6 s, pauses on
-    /// interaction (touch) / focus (tvOS), resumes after a 3 s idle, and stops
-    /// auto-advancing entirely under Reduce Motion. Pagination dots underneath.
+    /// Featured carousel: taste-based "Recommended by Aether" picks — unwatched
+    /// titles ranked by the user's genre preferences. Manually swipeable (no
+    /// auto-advance); pagination dots underneath.
     @ViewBuilder
     private var heroCarousel: some View {
         Group {
@@ -320,7 +302,6 @@ struct DiscoverView: View {
             compactHeroStack
             #endif
         }
-        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
     }
 
     /// iPhone / tvOS: a labelled "Featured" section with the carousel and the
@@ -396,10 +377,6 @@ struct DiscoverView: View {
         .frame(height: h)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { heroContentWidth = $0 }
         .padding(.horizontal, AetherDesign.Spacing.l)
-        .onChange(of: heroIndex) { _, _ in
-            if programmaticAdvance { programmaticAdvance = false }
-            else { pauseCountdown = Self.resumeIdleSeconds }
-        }
     }
 
     /// Full-bleed overlay hero for iPad / visionOS: backdrop image fills the frame,
@@ -666,38 +643,6 @@ struct DiscoverView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    // MARK: - Carousel auto-advance
-
-    /// One 1 Hz tick: count down to the next auto-advance, honouring the pause
-    /// window after an interaction and (tvOS) hero focus, and Reduce Motion.
-    private func autoAdvanceTick() {
-        // The 1 Hz ticker keeps publishing while the app is alive behind a
-        // playing audio session; don't wake the CPU to advance an off-screen
-        // carousel. It resumes when the app returns to the foreground.
-        guard scenePhase == .active else { return }
-        guard heroItems.count > 1, !reduceMotion else { return }
-        #if os(tvOS)
-        if heroFocused { return }   // pause while the hero has focus (#381)
-        #endif
-        if pauseCountdown > 0 { pauseCountdown -= 1; return }
-        advanceCountdown -= 1
-        if advanceCountdown <= 0 {
-            advanceHero(by: 1, interaction: false)
-        }
-    }
-
-    /// Move the carousel by `delta` slides (wrapping). `interaction` marks a
-    /// manual move so auto-advance pauses for the idle window afterwards.
-    private func advanceHero(by delta: Int, interaction: Bool) {
-        guard !heroItems.isEmpty else { return }
-        programmaticAdvance = !interaction
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
-            heroIndex = (heroIndex + delta + heroItems.count) % heroItems.count
-        }
-        advanceCountdown = Self.autoAdvanceInterval
-        if interaction { pauseCountdown = Self.resumeIdleSeconds }
-    }
-
     private var heroHeight: CGFloat {
         #if os(tvOS)
         480
@@ -808,7 +753,7 @@ struct DiscoverView: View {
         // carousel still has a few slides.
         if heroBuilt.count < 5 {
             var seen = Set(heroBuilt.map(\.id))
-            for item in recCandidates.shuffled() where heroBuilt.count < 5 {
+            for item in DailyShuffle.shuffled(recCandidates) where heroBuilt.count < 5 {
                 if seen.insert(item.id).inserted { heroBuilt.append(item) }
             }
         }
@@ -835,11 +780,11 @@ struct DiscoverView: View {
         heroItems = heroBuilt
         heroProgress = [:]   // recommendations carry no resume progress
         heroIndex = min(heroIndex, max(0, heroBuilt.count - 1))
-        advanceCountdown = Self.autoAdvanceInterval
         let heroIDs = Set(heroBuilt.map(\.id))
 
-        // Random Picks: shuffled, carousel slides excluded.
-        randomPicks = Array(all.filter { !heroIDs.contains($0.id) }.shuffled().prefix(12))
+        // Picked for You: day-stable shuffle (rotates once a day, never on every
+        // render / foreground), carousel slides excluded.
+        randomPicks = Array(DailyShuffle.shuffled(all.filter { !heroIDs.contains($0.id) }).prefix(12))
 
         // New Releases: each list is already newest-first (source sort survives
         // the merge's first-seen ordering); interleave movies + shows so neither
