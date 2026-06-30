@@ -293,7 +293,14 @@ struct LibraryBrowseView: View {
         searchFocused = false
         isAsking = true
         defer { isAsking = false }
-        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
+        let answer = await AskAether.answer(
+            query: trimmed,
+            sources: connectedSources,
+            tmdb: appSession.tmdbClient,
+            useAI: playbackPreferences?.useAppleIntelligence ?? true,
+            excludeWatched: playbackPreferences?.excludeWatchedFromRecommendations ?? true,
+            reasonLanguage: Bundle.main.preferredLocalizations.first
+        )
         guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
         askResult = answer
     }
@@ -311,7 +318,8 @@ struct LibraryBrowseView: View {
             AetherLoadingDots(caption: String(localized: "Asking Aether…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let askResult {
-            RecommendationResultsView(result: askResult, pendingQuery: askPending)
+            RecommendationResultsView(result: askResult, pendingQuery: askPending,
+                                      showReasons: playbackPreferences?.showRecommendationReasons ?? true)
         } else if isSearching {
             // Live title search while typing, before an ask.
             MediaSearchResults(sources: connectedSources, query: searchQuery)

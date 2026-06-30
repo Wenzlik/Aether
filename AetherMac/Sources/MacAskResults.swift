@@ -74,9 +74,14 @@ struct MacAskResults: View {
                         if let meta = metaLine(pick) {
                             Text(verbatim: meta).font(.subheadline).foregroundStyle(.secondary)
                         }
-                        if let reason = result.recommendation?.reason {
+                        if session.playbackPrefs.showRecommendationReasons,
+                           let reason = result.recommendation?.reason {
                             Text(verbatim: "“\(reason)”")
                                 .font(.body).foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("Picked from titles you already own.")
+                                .font(.body).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }

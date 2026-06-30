@@ -210,6 +210,12 @@ struct PlayerView: View {
         .task {
             await viewModel.open(item, source: source, startAt: startAt)
             await loadNextItem()
+            #if !os(tvOS)
+            // Arm the auto-hide timer the moment playback is ready so the
+            // waveform (Audio & Subtitles) button fades with AVKit's transport
+            // chrome instead of sitting on screen until the first tap.
+            if viewModel.player != nil { flashControls() }
+            #endif
             #if os(iOS)
             presentSwipeHintIfNeeded()
             #endif

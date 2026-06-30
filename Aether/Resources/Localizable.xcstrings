@@ -9486,9 +9486,7 @@
         }
       }
     },
-    "Leave the selection empty to scan every share on this server." : {
-
-    },
+    "Leave the selection empty to scan every share on this server." : {},
     "Less" : {
       "comment" : "UI label (cs localization, #320).",
       "extractionState" : "manual",
@@ -18693,6 +18691,482 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pide algo para ver — «una de terror de menos de 2 horas» — o busca un título por su nombre."
+          }
+        }
+      }
+    },
+    "Recommendations" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doporučení"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empfehlungen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recomendaciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommandations"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рекомендації"
+          }
+        }
+      }
+    },
+    "Use Apple Intelligence" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použít Apple Intelligence"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar Apple Intelligence"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser Apple Intelligence"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використовувати Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Understand plain-language requests and explain picks on-device, where your device supports it. Off keeps a simple keyword match." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rozumí běžným dotazům a vysvětluje tipy přímo v zařízení, kde to zařízení podporuje. Vypnuto ponechá jednoduché hledání podle klíčových slov."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versteht Anfragen in natürlicher Sprache und erklärt Vorschläge direkt auf dem Gerät, sofern unterstützt. Aus: einfacher Stichwortabgleich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entiende peticiones en lenguaje natural y explica las elecciones en el dispositivo, donde sea compatible. Desactivado: coincidencia simple por palabras clave."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprend les demandes en langage naturel et explique les choix sur l’appareil, lorsque c’est pris en charge. Désactivé : simple correspondance par mots-clés."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Розуміє запити звичайною мовою й пояснює добірки безпосередньо на пристрої, де це підтримується. Вимкнено — простий пошук за ключовими словами."
+          }
+        }
+      }
+    },
+    "Show Reasons" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazovat důvody"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begründungen anzeigen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar motivos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher les raisons"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показувати причини"
+          }
+        }
+      }
+    },
+    "Show the one-line “why this fits” note on a recommendation." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazí u doporučení jednořádkové vysvětlení „proč sedí“."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt bei einer Empfehlung eine einzeilige Begründung „Warum es passt“ an."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra en la recomendación una nota de una línea sobre «por qué encaja»."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche sur une recommandation une note d’une ligne « pourquoi c’est un bon choix »."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показує в рекомендації однорядкове пояснення «чому підходить»."
+          }
+        }
+      }
+    },
+    "Exclude Watched" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vynechat zhlédnuté"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesehene ausschließen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Excluir lo visto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exclure les titres vus"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виключати переглянуте"
+          }
+        }
+      }
+    },
+    "Leave titles you’ve already finished out of recommendations." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nezahrnovat do doporučení tituly, které jsi už dokoukal(a)."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereits fertig gesehene Titel aus Empfehlungen herauslassen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deja fuera de las recomendaciones los títulos que ya terminaste."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exclut des recommandations les titres déjà terminés."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не включати до рекомендацій те, що ви вже передивилися."
+          }
+        }
+      }
+    },
+    "Recommended by Aether in Discover" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doporučeno Aetherem v sekci Objevit"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von Aether empfohlen im Bereich Entdecken"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recomendado por Aether en Descubrir"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommandé par Aether dans Découvrir"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рекомендовано Aether в Огляді"
+          }
+        }
+      }
+    },
+    "Show the taste-based featured row at the top of Discover." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazí nahoře v sekci Objevit řadu vybranou podle tvého vkusu."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt oben im Bereich Entdecken eine auf deinen Geschmack abgestimmte Reihe an."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra en la parte superior de Descubrir una fila destacada según tus gustos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche en haut de Découvrir une rangée mise en avant selon vos goûts."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показує вгорі в Огляді добірку за вашими смаками."
+          }
+        }
+      }
+    },
+    "Picked from titles you already own." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vybráno z titulů, které už vlastníš."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Titeln ausgewählt, die du bereits besitzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegido entre títulos que ya tienes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisi parmi des titres que vous possédez déjà."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вибрано з того, що ви вже маєте."
+          }
+        }
+      }
+    },
+    "All: Ask Aether explains its picks in your language." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vše: Ask Aether vysvětluje své tipy ve tvém jazyce."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle: Ask Aether erklärt seine Vorschläge in deiner Sprache."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo: Ask Aether explica sus elecciones en tu idioma."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout : Ask Aether explique ses choix dans votre langue."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Усе: Ask Aether пояснює свої добірки вашою мовою."
+          }
+        }
+      }
+    },
+    "All: New recommendation controls in Settings." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vše: Nové ovládání doporučení v Nastavení."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle: Neue Steuerungen für Empfehlungen in den Einstellungen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo: Nuevos controles de recomendaciones en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout : De nouveaux réglages pour les recommandations."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Усе: Нові налаштування рекомендацій у Налаштуваннях."
+          }
+        }
+      }
+    },
+    "iOS: The audio & subtitle button now hides with the other controls." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Tlačítko zvuku a titulků se teď skrývá spolu s ostatním ovládáním."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Die Audio- und Untertitel-Taste wird jetzt mit den übrigen Steuerelementen ausgeblendet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: El botón de audio y subtítulos ahora se oculta junto con los demás controles."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS : Le bouton audio et sous-titres se masque désormais avec les autres commandes."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Кнопка звуку й субтитрів тепер ховається разом з іншими елементами керування."
+          }
+        }
+      }
+    },
+    "iOS: Episodes no longer flash a subtitle for a moment when they start." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Epizody už na začátku na okamžik neproblesknou titulkem."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Episoden blenden beim Start nicht mehr kurz einen Untertitel ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Los episodios ya no muestran un subtítulo por un instante al empezar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS : Les épisodes n’affichent plus brièvement un sous-titre au démarrage."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS: Епізоди більше не блимають субтитром на початку."
           }
         }
       }

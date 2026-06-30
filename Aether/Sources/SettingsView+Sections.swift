@@ -543,6 +543,48 @@ extension SettingsView {
         }
     }
 
+    // MARK: - Recommendations (Ask Aether / Apple Intelligence, 0.9 P4)
+
+    /// Controls for Ask Aether and the taste-based Discover hero. All four are
+    /// on by default; the Apple Intelligence toggle is a no-op where the
+    /// on-device model isn't available (tvOS / older devices).
+    var recommendationsSection: some View {
+        AetherSettingsSection("Recommendations") {
+            settingsToggle(
+                "Use Apple Intelligence",
+                description: "Understand plain-language requests and explain picks on-device, where your device supports it. Off keeps a simple keyword match.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.useAppleIntelligence },
+                    set: { viewModel.playbackPreferences.useAppleIntelligence = $0 }
+                )
+            )
+            settingsToggle(
+                "Show Reasons",
+                description: "Show the one-line “why this fits” note on a recommendation.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.showRecommendationReasons },
+                    set: { viewModel.playbackPreferences.showRecommendationReasons = $0 }
+                )
+            )
+            settingsToggle(
+                "Exclude Watched",
+                description: "Leave titles you’ve already finished out of recommendations.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.excludeWatchedFromRecommendations },
+                    set: { viewModel.playbackPreferences.excludeWatchedFromRecommendations = $0 }
+                )
+            )
+            settingsToggle(
+                "Recommended by Aether in Discover",
+                description: "Show the taste-based featured row at the top of Discover.",
+                isOn: Binding(
+                    get: { viewModel.playbackPreferences.showRecommendedByAetherHero },
+                    set: { viewModel.playbackPreferences.showRecommendedByAetherHero = $0 }
+                )
+            )
+        }
+    }
+
     // MARK: - Watched (Interface)
 
     /// How finished titles are presented — these are display/interface settings,

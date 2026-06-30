@@ -460,6 +460,14 @@ private struct AppearanceSettings: View {
                 Text("Recently Added, Recently Released, and Top Rated show what's still ahead. Your Library always shows everything.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Recommendations") {
+                Toggle("Use Apple Intelligence", isOn: $prefs.useAppleIntelligence)
+                Text("Understand plain-language requests and explain picks on-device, where your Mac supports it. Off keeps a simple keyword match.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Show reasons", isOn: $prefs.showRecommendationReasons)
+                Toggle("Exclude watched", isOn: $prefs.excludeWatchedFromRecommendations)
+                Toggle("Recommended by Aether in Discover", isOn: $prefs.showRecommendedByAetherHero)
+            }
             Section("Poster Cards") {
                 Picker("Rating Badge", selection: $prefs.posterRatingSource) {
                     ForEach(PosterRatingSource.allCases, id: \.self) { Text($0.displayName).tag($0) }
@@ -486,6 +494,7 @@ private struct AppearanceSettings: View {
 private struct AboutSettings: View {
     @EnvironmentObject private var updater: AppUpdater
     @State private var cacheBytes: Int = AetherImageCache.shared.diskUsageBytes()
+    @State private var showWhatsNew = false
 
     private static let repoURL = URL(string: "https://github.com/Wenzlik/Aether")!
     private static let websiteURL = URL(string: "https://aetherplayer.com")!
@@ -551,9 +560,10 @@ private struct AboutSettings: View {
                     .padding(.vertical, 12)
             }
             Section("Version") {
-                LabeledContent("Version", value: shortVersion)
+                LabeledContent("Version", value: "\(shortVersion) · “\(macReleaseCodename)”")
                 LabeledContent("Build", value: buildIdentifier)
                 LabeledContent("Platform", value: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
+                Button("What's New…") { showWhatsNew = true }
             }
             Section("Software Update") {
                 Button("Check for Updates…") { updater.checkForUpdates() }
@@ -590,5 +600,8 @@ private struct AboutSettings: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showWhatsNew) {
+            MacWhatsNewView(currentVersion: shortVersion, codename: macReleaseCodename)
+        }
     }
 }
