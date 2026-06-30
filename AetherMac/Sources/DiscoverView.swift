@@ -237,6 +237,12 @@ struct DiscoverView: View {
         }
     }
 
+    /// Upper bound on the hero's width. A full-width 16:9 banner is enormous on a
+    /// maximized Mac window (~700 pt tall); capping the column keeps it cinematic
+    /// but proportionate, and the whole block (eyebrow + slide + dots) is centered
+    /// together so nothing drifts out of alignment.
+    private let heroMaxWidth: CGFloat = 820
+
     @ViewBuilder
     private func heroCarousel(_ items: [UnifiedMediaItem]) -> some View {
         let idx = min(heroIndex, items.count - 1)
@@ -249,6 +255,8 @@ struct DiscoverView: View {
                     .padding(.horizontal, 24)
             }
         }
+        .frame(maxWidth: heroMaxWidth)
+        .frame(maxWidth: .infinity)   // center the capped column within the pane
     }
 
     @ViewBuilder

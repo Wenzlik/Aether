@@ -494,6 +494,7 @@ private struct AppearanceSettings: View {
 private struct AboutSettings: View {
     @EnvironmentObject private var updater: AppUpdater
     @State private var cacheBytes: Int = AetherImageCache.shared.diskUsageBytes()
+    @State private var showWhatsNew = false
 
     private static let repoURL = URL(string: "https://github.com/Wenzlik/Aether")!
     private static let websiteURL = URL(string: "https://aetherplayer.com")!
@@ -559,9 +560,10 @@ private struct AboutSettings: View {
                     .padding(.vertical, 12)
             }
             Section("Version") {
-                LabeledContent("Version", value: shortVersion)
+                LabeledContent("Version", value: "\(shortVersion) · “\(macReleaseCodename)”")
                 LabeledContent("Build", value: buildIdentifier)
                 LabeledContent("Platform", value: "macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)")
+                Button("What's New…") { showWhatsNew = true }
             }
             Section("Software Update") {
                 Button("Check for Updates…") { updater.checkForUpdates() }
@@ -598,5 +600,8 @@ private struct AboutSettings: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showWhatsNew) {
+            MacWhatsNewView(currentVersion: shortVersion, codename: macReleaseCodename)
+        }
     }
 }
