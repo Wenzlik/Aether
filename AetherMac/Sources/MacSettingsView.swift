@@ -460,6 +460,14 @@ private struct AppearanceSettings: View {
                 Text("Recently Added, Recently Released, and Top Rated show what's still ahead. Your Library always shows everything.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Recommendations") {
+                Toggle("Use Apple Intelligence", isOn: $prefs.useAppleIntelligence)
+                Text("Understand plain-language requests and explain picks on-device, where your Mac supports it. Off keeps a simple keyword match.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Show reasons", isOn: $prefs.showRecommendationReasons)
+                Toggle("Exclude watched", isOn: $prefs.excludeWatchedFromRecommendations)
+                Toggle("Recommended by Aether in Discover", isOn: $prefs.showRecommendedByAetherHero)
+            }
             Section("Poster Cards") {
                 Picker("Rating Badge", selection: $prefs.posterRatingSource) {
                     ForEach(PosterRatingSource.allCases, id: \.self) { Text($0.displayName).tag($0) }

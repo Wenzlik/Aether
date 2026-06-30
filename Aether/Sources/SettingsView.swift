@@ -456,6 +456,7 @@ struct SettingsView: View {
             imageCacheCard
         case .appearance:
             appearanceSection
+            recommendationsSection
             watchedDisplaySection
         case .supportAbout:
             #if !os(tvOS)

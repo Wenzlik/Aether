@@ -136,6 +136,11 @@ struct DiscoverView: View {
         heroItems.isEmpty && randomPicks.isEmpty && newReleases.isEmpty
     }
 
+    /// Honour the "Recommended by Aether" Settings toggle (taste-based hero).
+    private var showRecommendedHero: Bool {
+        playbackPreferences?.showRecommendedByAetherHero ?? true
+    }
+
     @ViewBuilder
     private var content: some View {
         if !isEmpty {
@@ -218,7 +223,7 @@ struct DiscoverView: View {
                 // best-rated, and serendipitous picks at the tail. Genre lanes were
                 // removed (#350) — Library already has genre browse; Discover is
                 // for "what should I watch", so it leads with curated rails.
-                if !heroItems.isEmpty {
+                if showRecommendedHero, !heroItems.isEmpty {
                     VStack(alignment: .leading, spacing: AetherDesign.Spacing.xs) {
                         recommendedEyebrow
                         heroCarousel

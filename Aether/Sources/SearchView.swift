@@ -112,7 +112,8 @@ struct SearchView: View {
             AetherLoadingDots(caption: String(localized: "Asking Aether…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let askResult {
-            RecommendationResultsView(result: askResult, pendingQuery: pendingAsk)
+            RecommendationResultsView(result: askResult, pendingQuery: pendingAsk,
+                                      showReasons: playbackPreferences?.showRecommendationReasons ?? true)
         } else if isSearching {
             MediaSearchResults(sources: connectedSources, query: query)
         } else {
@@ -260,7 +261,14 @@ struct SearchView: View {
         isAsking = true
         defer { isAsking = false }
 
-        let answer = await AskAether.answer(query: trimmed, sources: connectedSources, tmdb: appSession.tmdbClient)
+        let answer = await AskAether.answer(
+            query: trimmed,
+            sources: connectedSources,
+            tmdb: appSession.tmdbClient,
+            useAI: playbackPreferences?.useAppleIntelligence ?? true,
+            excludeWatched: playbackPreferences?.excludeWatchedFromRecommendations ?? true,
+            reasonLanguage: Bundle.main.preferredLocalizations.first
+        )
 
         // The user may have edited the field while inference ran — only keep the
         // answer if it still matches what's in the box.

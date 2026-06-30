@@ -172,7 +172,7 @@ struct DiscoverView: View {
                 rail("Top Rated", filtered(topRated))
             case .discover:
                 let items = heroPicks
-                if !items.isEmpty {
+                if session.playbackPrefs.showRecommendedByAetherHero, !items.isEmpty {
                     heroCarousel(items)
                 }
                 rail("New Releases", newReleases)
