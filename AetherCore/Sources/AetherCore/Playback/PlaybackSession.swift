@@ -266,8 +266,23 @@ public actor PlaybackSession {
         currentDecision = resolved.decision
         let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
+        // Direct play ships the file as-is and Aether is authoritative about the
+        // track selection (resolved into the item upstream via
+        // `PlaybackPreferencesStore.applied(to:)`). Computed once: it gates both
+        // turning off AVKit's automatic selection below and the client-side
+        // selection further down.
+        let isDirectPlay = resolved.decision == .directPlay
+            || (resolved.decision == nil && !resolved.isServerTranscode)
         let (player, itemID) = await MainActor.run { () -> (AVPlayer, String) in
             let p = AVPlayer(url: url)
+            // Stop AVKit from auto-selecting a legible/audible track by its own
+            // criteria (system language, container default) — on direct play it
+            // would briefly flash an unwanted subtitle (often English) before our
+            // explicit `applyClientSideTrackSelection` runs. Aether already baked
+            // the intended selection into the item, so automatic is never wanted.
+            if isDirectPlay {
+                p.appliesMediaSelectionCriteriaAutomatically = false
+            }
             if let seekTarget {
                 p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             }
@@ -286,14 +301,12 @@ public actor PlaybackSession {
         )
         startResumeLoop()
 
-        // Direct play ships the file as-is — the server can't pick a track, so
-        // the user's audio / subtitle selection must be applied CLIENT-side via
-        // AVMediaSelection (#68: offline `.original` downloads always played
-        // the container default). Transcode/direct-stream paths are handled
-        // server-side and are left alone. A nil decision with no server
-        // transcode (mock / legacy paths) counts as direct play.
-        if resolved.decision == .directPlay
-            || (resolved.decision == nil && !resolved.isServerTranscode) {
+        // The server can't pick a track on direct play, so the user's audio /
+        // subtitle selection must be applied CLIENT-side via AVMediaSelection
+        // (#68: offline `.original` downloads always played the container
+        // default). Transcode/direct-stream paths are handled server-side and
+        // are left alone.
+        if isDirectPlay {
             applyClientSideTrackSelection(item: item, player: player)
         }
     }
