@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// A calm loading state — skeleton rails, no spinners.
+/// A calm loading state — the on-brand `AetherLoadingDots`, never a skeleton.
 ///
-/// `AetherLoadingState.rails(count:)` matches the Home page rhythm (a title row
-/// + a horizontal strip of poster placeholders) and uses `.redacted` so the
-/// shape mirrors real content. `AetherLoadingState.inline()` is a thin
-/// horizontal pulse for footer / hint use, where a full rail would be too much.
+/// Both styles render the same pulsing-dots indicator; they differ only in how
+/// much vertical room they claim. `.rails(count:)` fills a page-sized area (it
+/// used to mock up that many rails), `.inline` is a compact footer / hint loader.
+/// The `count` is retained for source compatibility but no longer drawn.
+///
+/// (Was a `.redacted` skeleton; replaced app-wide so a skeleton never shows —
+/// the first paint is always a clear "loading" cue instead of ghost content.)
 public struct AetherLoadingState: View {
     public enum Style: Sendable {
         case rails(count: Int)
@@ -13,11 +16,10 @@ public struct AetherLoadingState: View {
     }
 
     public let style: Style
-    /// Optional rotating one-liners shown above the skeleton — a playful, clearly
-    /// *alive* loading cue for slow loads (e.g. an SMB share walk) so the wait
-    /// reads as "still working", not a frozen placeholder. Caller-supplied so
-    /// `AetherCore` stays generic; localized via the catalog. Empty ⇒ the calm
-    /// skeleton-only behaviour. Rendered as `LocalizedStringKey`.
+    /// Optional rotating one-liners shown under the loader — a playful, clearly
+    /// *alive* cue for slow loads (e.g. an SMB share walk) so the wait reads as
+    /// "still working". Caller-supplied so `AetherCore` stays generic; localized
+    /// via the catalog. Empty ⇒ a captionless loader. Rendered as `LocalizedStringKey`.
     public let captions: [String]
 
     @State private var captionIndex = 0
@@ -28,33 +30,30 @@ public struct AetherLoadingState: View {
     }
 
     public var body: some View {
-        Group {
-            if captions.isEmpty {
-                content
-            } else {
-                VStack(alignment: .leading, spacing: AetherDesign.Spacing.l) {
-                    caption
-                    content
-                }
-                .task { await rotateCaptions() }
-            }
-        }
-        #if os(tvOS)
-        // A pushed screen stuck on a loading state has nothing focusable, so the
-        // Menu button would exit the app instead of popping. Make the loading
-        // state focusable on tvOS so Back works even mid-load (#311).
-        .focusable()
-        #endif
+        AetherLoadingDots(caption: currentCaption)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, verticalPadding)
+            .task { await rotateCaptions() }
+            #if os(tvOS)
+            // A pushed screen stuck on a loading state has nothing focusable, so
+            // the Menu button would exit the app instead of popping. Make the
+            // loading state focusable on tvOS so Back works mid-load (#311).
+            .focusable()
+            #endif
     }
 
-    /// The current rotating one-liner, cross-fading as it changes.
-    private var caption: some View {
-        Text(LocalizedStringKey(captions[min(captionIndex, captions.count - 1)]))
-            .font(AetherDesign.Typography.cardTitle)
-            .foregroundStyle(AetherDesign.Palette.textSecondary)
-            .padding(.horizontal, AetherDesign.Spacing.l)
-            .id(captionIndex)
-            .transition(.opacity)
+    /// `.rails` fills a page; `.inline` is a slim footer loader.
+    private var verticalPadding: CGFloat {
+        switch style {
+        case .rails: return AetherDesign.Spacing.xxl
+        case .inline: return AetherDesign.Spacing.m
+        }
+    }
+
+    /// The current rotating one-liner, or `nil` when no captions were supplied.
+    private var currentCaption: String? {
+        guard !captions.isEmpty else { return nil }
+        return captions[min(captionIndex, captions.count - 1)]
     }
 
     /// Advance the caption every couple of seconds while the loader is on screen.
@@ -69,64 +68,6 @@ public struct AetherLoadingState: View {
                 captionIndex = (captionIndex + 1) % captions.count
             }
         }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch style {
-        case let .rails(count):
-            railsBody(count: count)
-        case .inline:
-            inlineBody
-        }
-    }
-
-    // MARK: - Rails
-
-    private func railsBody(count: Int) -> some View {
-        VStack(alignment: .leading, spacing: AetherDesign.Spacing.m) {
-            ForEach(0..<max(1, count), id: \.self) { _ in
-                Rectangle()
-                    .fill(AetherDesign.Palette.surface)
-                    .frame(height: 22)
-                    .frame(maxWidth: 220, alignment: .leading)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(.horizontal, AetherDesign.Spacing.l)
-
-                HStack(spacing: AetherDesign.Spacing.m) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: AetherDesign.Radius.card, style: .continuous)
-                            .fill(AetherDesign.Palette.surface)
-                            .frame(width: cardWidth, height: cardHeight)
-                    }
-                }
-                .padding(.horizontal, AetherDesign.Spacing.l)
-            }
-        }
-        .redacted(reason: .placeholder)
-    }
-
-    private var cardWidth: CGFloat {
-        #if os(tvOS)
-        300
-        #else
-        160
-        #endif
-    }
-
-    private var cardHeight: CGFloat {
-        cardWidth * (3.0 / 2.0)
-    }
-
-    // MARK: - Inline
-
-    private var inlineBody: some View {
-        Rectangle()
-            .fill(AetherDesign.Palette.surface)
-            .frame(height: 14)
-            .frame(maxWidth: 220, alignment: .leading)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .redacted(reason: .placeholder)
     }
 }
 

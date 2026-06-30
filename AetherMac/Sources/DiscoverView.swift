@@ -20,16 +20,19 @@ struct DiscoverView: View {
 
     // MARK: - Carousel state (#381 macOS parity)
 
-    /// The visible carousel slide index.
+    /// The visible carousel slide index (manual nav only — no auto-advance).
     @State private var heroIndex = 0
-    /// Counts down seconds until the next auto-advance.
-    @State private var advanceCountdown = Self.autoAdvanceInterval
-    /// While > 0 the carousel is paused after a manual interaction.
-    @State private var pauseCountdown = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let carouselTicker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    private static let autoAdvanceInterval = 6
-    private static let resumeIdleSeconds = 3
+
+    // MARK: - Discover picks (computed once per library load, not per render)
+
+    /// Taste-based hero picks ("Recommended by Aether"). Stored, not computed, so
+    /// they don't re-roll on every render; `DailyShuffle` keeps the padding stable.
+    @State private var heroPicks: [UnifiedMediaItem] = []
+    /// Per-pick "because…" reason, keyed by `UnifiedMediaItem.id`.
+    @State private var heroReasons: [String: RecommendationReason] = [:]
+    /// "Picked for You" rail — day-stable shuffle, recomputed only on library load.
+    @State private var pickedForYou: [UnifiedMediaItem] = []
 
     // MARK: - Netflix discovery
 
@@ -70,19 +73,26 @@ struct DiscoverView: View {
         }
         .task(id: "\(session.libraryToken)-\(session.resumeRevision)") {
             await session.loadHomeRailsIfNeeded()
+            rebuildDiscover()
         }
         .task(id: netflixKey) { await loadNetflixRails() }
-        .onReceive(carouselTicker) { _ in autoAdvanceTick() }
     }
 
     // MARK: - Hero items (#381)
 
-    /// "Recommended by Aether": taste-based picks, ≤7, no in-progress titles
-    /// (those live in Continue Watching) — matching the iOS hero. Taste is learned
-    /// from the full library (watched / favourited / highly-rated); the picks are
-    /// unwatched and not started. Falls back to best-rated so it's never empty.
-    private var heroItems: [UnifiedMediaItem] {
-        guard mode == .discover else { return [] }
+    /// Recompute the hero picks + "Picked for You" rail from the loaded rails —
+    /// once per library load, never per render. The old computed properties called
+    /// `.shuffled()` on every render, and the 1 Hz carousel ticker re-rendered each
+    /// second, so the rail visibly churned. Storing them in `@State` + `DailyShuffle`
+    /// makes them stable (rotating once a day).
+    ///
+    /// "Recommended by Aether": taste-based picks, ≤7, no in-progress titles (those
+    /// live in Continue Watching). Falls back to best-rated so it's never empty.
+    private func rebuildDiscover() {
+        guard mode == .discover else {
+            heroPicks = []; heroReasons = [:]; pickedForYou = []
+            return
+        }
         let all = rails.movies + rails.shows
         let started = inProgressIDs
         let candidates = all.filter { item in
@@ -94,7 +104,7 @@ struct DiscoverView: View {
         // Pad thin taste picks (small / uniform library) so the carousel breathes.
         if built.count < 5 {
             var seen = Set(built.map(\.id))
-            for item in candidates.shuffled() where built.count < 5 {
+            for item in DailyShuffle.shuffled(candidates) where built.count < 5 {
                 if seen.insert(item.id).inserted { built.append(item) }
             }
         }
@@ -104,7 +114,26 @@ struct DiscoverView: View {
                 ($0.tmdbRating ?? $0.communityRating ?? 0) > ($1.tmdbRating ?? $1.communityRating ?? 0)
             }.prefix(7))
         }
-        return built
+        // "Because you watched …" reasons per pick — deterministic, instant.
+        let profile = TasteProfile.from(library: all)
+        let recentlyWatched = all
+            .filter { $0.lastWatched != nil }
+            .sorted { ($0.lastWatched ?? .distantPast) > ($1.lastWatched ?? .distantPast) }
+        var reasons: [String: RecommendationReason] = [:]
+        for item in built {
+            reasons[item.id] = RecommendationReason.make(
+                for: item, recentlyWatched: recentlyWatched, profile: profile
+            )
+        }
+        heroReasons = reasons
+        heroPicks = built
+        heroIndex = min(heroIndex, max(0, built.count - 1))
+
+        // "Picked for You": day-stable shuffle, hero slides excluded.
+        let heroIDs = Set(built.map(\.id))
+        pickedForYou = Array(
+            DailyShuffle.shuffled(filtered(rails.movies + rails.shows).filter { !heroIDs.contains($0.id) }).prefix(20)
+        )
     }
 
     /// Progress fraction (0…1) per in-progress hero slide, keyed by the unified
@@ -142,7 +171,7 @@ struct DiscoverView: View {
                 rail("Recently Released", filtered(rails.recentlyReleased))
                 rail("Top Rated", filtered(topRated))
             case .discover:
-                let items = heroItems
+                let items = heroPicks
                 if !items.isEmpty {
                     heroCarousel(items)
                 }
@@ -193,17 +222,10 @@ struct DiscoverView: View {
         .padding(.horizontal, 24)
     }
 
-    /// The "because…" reason for the currently visible hero slide.
+    /// The "because…" reason for the currently visible hero slide (precomputed).
     private var currentHeroReason: RecommendationReason? {
-        let items = heroItems
-        guard heroIndex < items.count else { return nil }
-        let all = rails.movies + rails.shows
-        let recentlyWatched = all
-            .filter { $0.lastWatched != nil }
-            .sorted { ($0.lastWatched ?? .distantPast) > ($1.lastWatched ?? .distantPast) }
-        return RecommendationReason.make(
-            for: items[heroIndex], recentlyWatched: recentlyWatched, profile: .from(library: all)
-        )
+        guard heroIndex < heroPicks.count else { return nil }
+        return heroReasons[heroPicks[heroIndex].id]
     }
 
     private func reasonText(_ reason: RecommendationReason) -> String {
@@ -347,25 +369,12 @@ struct DiscoverView: View {
         .animation(.easeInOut(duration: 0.2), value: current)
     }
 
-    private func autoAdvanceTick() {
-        let items = heroItems
-        guard items.count > 1, !reduceMotion else { return }
-        if pauseCountdown > 0 { pauseCountdown -= 1; return }
-        advanceCountdown -= 1
-        if advanceCountdown <= 0 {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
-                heroIndex = (heroIndex + 1) % items.count
-            }
-            advanceCountdown = Self.autoAdvanceInterval
-        }
-    }
-
+    /// Manual carousel nav (chevrons) — wraps around. No auto-advance.
     private func advanceHero(by delta: Int, items: [UnifiedMediaItem]) {
-        pauseCountdown = Self.resumeIdleSeconds
+        guard !items.isEmpty else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
             heroIndex = (heroIndex + delta + items.count) % items.count
         }
-        advanceCountdown = Self.autoAdvanceInterval
     }
 
     // MARK: - Continue Watching rail (home mode)
@@ -447,10 +456,6 @@ struct DiscoverView: View {
     private var newReleases: [UnifiedMediaItem] {
         let released = filtered(rails.recentlyReleased)
         return released.isEmpty ? filtered(rails.recentlyAdded) : released
-    }
-
-    private var pickedForYou: [UnifiedMediaItem] {
-        Array(filtered(rails.movies + rails.shows).shuffled().prefix(20))
     }
 
     private var topRated: [UnifiedMediaItem] {
