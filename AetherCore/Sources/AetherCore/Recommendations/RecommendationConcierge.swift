@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 #if canImport(FoundationModels) && !os(tvOS)
 import FoundationModels
@@ -47,6 +48,13 @@ public struct RecommendationResult: Sendable, Equatable {
 public struct RecommendationConcierge: Sendable {
     public init() {}
 
+    /// Quality telemetry — **local only** (os_log), never the network: the
+    /// privacy-first principle means the request text never leaves the device,
+    /// so we log only non-identifying outcome metadata (which path ran, whether
+    /// a pick surfaced, shortlist size, latency). Visible in Console.app /
+    /// `log stream --predicate 'subsystem == "cz.zmrhal.aether"'`.
+    private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "recommendations")
+
     /// Whether an on-device model is available right now (compile-time framework
     /// presence + runtime eligibility / enablement / readiness).
     public static var isAvailable: Bool {
@@ -63,27 +71,56 @@ public struct RecommendationConcierge: Sendable {
     /// Recommend a title for a free-text request. Never throws — it always
     /// returns a result (possibly empty), degrading to the deterministic path
     /// when the model is unavailable or errors.
-    /// - Parameter enrich: optional async hook that, given the engine's shortlist,
-    ///   returns extra per-item context keyed by `UnifiedMediaItem.id` (e.g. TMDb
-    ///   keywords) to fold into the model's candidate descriptions. Lets the app
-    ///   inject network-backed metadata without `AetherCore` depending on TMDb.
+    /// - Parameters:
+    ///   - useAI: when `false`, skip the on-device model and use the
+    ///     deterministic path even where Apple Intelligence is available (the
+    ///     user's "Use Apple Intelligence" Settings toggle).
+    ///   - excludeWatched: leave already-watched titles out of the candidates.
+    ///   - reasonLanguage: BCP-47 code (`"en"`, `"cs"`, `"uk"`, …) the model
+    ///     should write the reason in — usually the app's UI language. `nil`
+    ///     leaves the model to answer in its default (English).
+    ///   - enrich: optional async hook that, given the engine's shortlist,
+    ///     returns extra per-item context keyed by `UnifiedMediaItem.id` (e.g.
+    ///     TMDb keywords) to fold into the model's candidate descriptions. Lets
+    ///     the app inject network-backed metadata without `AetherCore` depending
+    ///     on TMDb.
     public func recommend(
         query: String,
         in library: [UnifiedMediaItem],
+        useAI: Bool = true,
+        excludeWatched: Bool = true,
+        reasonLanguage: String? = nil,
         engine: RecommendationEngine = RecommendationEngine(),
         parser: RecommendationQueryParser = RecommendationQueryParser(),
         enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? = nil
     ) async -> RecommendationResult {
+        let clock = ContinuousClock()
+        let start = clock.now
+
         #if canImport(FoundationModels) && !os(tvOS)
-        if #available(iOS 26, macOS 26, visionOS 26, *), Self.isAvailable {
+        if useAI, #available(iOS 26, macOS 26, visionOS 26, *), Self.isAvailable {
             do {
-                return try await aiRecommend(query: query, in: library, engine: engine, enrich: enrich)
+                let result = try await aiRecommend(
+                    query: query, in: library, engine: engine,
+                    excludeWatched: excludeWatched, reasonLanguage: reasonLanguage, enrich: enrich
+                )
+                Self.logOutcome(result, elapsed: start.duration(to: clock.now))
+                return result
             } catch {
-                // Fall through to the deterministic path on any inference error.
+                Self.log.error("AI recommend failed, falling back to deterministic: \(String(describing: error), privacy: .public)")
             }
         }
         #endif
-        return deterministic(query: query, in: library, engine: engine, parser: parser)
+        let result = deterministic(query: query, in: library, engine: engine, parser: parser, excludeWatched: excludeWatched)
+        Self.logOutcome(result, elapsed: start.duration(to: clock.now))
+        return result
+    }
+
+    /// Log non-identifying outcome metadata for one recommendation (see `log`).
+    private static func logOutcome(_ result: RecommendationResult, elapsed: Duration) {
+        let ms = elapsed.components.seconds * 1000
+            + elapsed.components.attoseconds / 1_000_000_000_000_000
+        log.info("recommend usedAI=\(result.usedAI, privacy: .public) pick=\(result.pick != nil, privacy: .public) shortlist=\(result.shortlist.count, privacy: .public) latency=\(ms, privacy: .public)ms")
     }
 
     // MARK: - Deterministic fallback (all platforms)
@@ -92,9 +129,11 @@ public struct RecommendationConcierge: Sendable {
         query: String,
         in library: [UnifiedMediaItem],
         engine: RecommendationEngine,
-        parser: RecommendationQueryParser
+        parser: RecommendationQueryParser,
+        excludeWatched: Bool
     ) -> RecommendationResult {
-        let request = parser.parse(query, availableGenres: engine.availableGenres(in: library))
+        var request = parser.parse(query, availableGenres: engine.availableGenres(in: library))
+        request.excludeWatched = excludeWatched
         let shortlist = engine.recommend(from: library, request: request)
         return RecommendationResult(pick: shortlist.first, reason: nil, shortlist: shortlist, usedAI: false)
     }
@@ -118,11 +157,26 @@ public struct RecommendationConcierge: Sendable {
     // MARK: - On-device model path
 
     #if canImport(FoundationModels) && !os(tvOS)
+    /// English name of a BCP-47 language code, used to tell the model which
+    /// language to write the reason in. `nil` for nil/empty → model default.
+    static func languageName(for code: String?) -> String? {
+        guard let code, !code.isEmpty else { return nil }
+        let base = String(code.prefix(2)).lowercased()
+        switch base {
+        case "en": return "English"
+        case "cs": return "Czech"
+        case "uk": return "Ukrainian"
+        default:   return Locale(identifier: "en").localizedString(forLanguageCode: base)
+        }
+    }
+
     @available(iOS 26, macOS 26, visionOS 26, *)
     private func aiRecommend(
         query: String,
         in library: [UnifiedMediaItem],
         engine: RecommendationEngine,
+        excludeWatched: Bool,
+        reasonLanguage: String?,
         enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])?
     ) async throws -> RecommendationResult {
         let availableGenres = engine.availableGenres(in: library)
@@ -140,7 +194,7 @@ public struct RecommendationConcierge: Sendable {
             genres: parsed.genres,
             type: Self.mediaKind(from: parsed.kind),
             maxRuntime: parsed.maxMinutes > 0 ? .seconds(parsed.maxMinutes * 60) : nil,
-            excludeWatched: true,
+            excludeWatched: excludeWatched,
             limit: 12
         )
         let shortlist = engine.recommend(from: library, request: request)
@@ -165,16 +219,24 @@ public struct RecommendationConcierge: Sendable {
             return "id=\(item.id) | \(item.title)\(year) | rating \(rating) | \(synopsis)\(themes)"
         }.joined(separator: "\n")
 
+        let reasonLang = Self.languageName(for: reasonLanguage)
         let pickSession = LanguageModelSession {
             "You are a film concierge for the user's personal library."
             "Recommend exactly one title from the candidates that best fits the request."
             "Copy the chosen id EXACTLY from the list — never invent one."
             "Give one short, spoiler-free sentence on why it fits."
+            if let reasonLang { "Write the reason in \(reasonLang)." }
         }
         let pick = try await pickSession.respond(
             to: "Request: \(query)\n\nCandidates:\n\(candidates)",
             generating: Pick.self
         ).content
+
+        if shortlist.first(where: { $0.id == pick.id }) == nil {
+            // Model returned an id outside the shortlist — the resolve() guard
+            // recovers, but it's worth knowing the grounding slipped.
+            Self.log.warning("model returned out-of-shortlist id; using top candidate")
+        }
 
         return RecommendationResult(
             pick: Self.resolve(pickID: pick.id, in: shortlist),

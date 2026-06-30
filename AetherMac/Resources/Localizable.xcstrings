@@ -7915,6 +7915,244 @@
           }
         }
       }
+    },
+    "Recommendations": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doporučení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfehlungen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomendaciones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommandations"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рекомендації"
+          }
+        }
+      }
+    },
+    "Use Apple Intelligence": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Použít Apple Intelligence"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence verwenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar Apple Intelligence"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser Apple Intelligence"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Використовувати Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Understand plain-language requests and explain picks on-device, where your Mac supports it. Off keeps a simple keyword match.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozumí běžným dotazům a vysvětluje tipy přímo v Macu, kde to Mac podporuje. Vypnuto ponechá jednoduché hledání podle klíčových slov."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versteht Anfragen in natürlicher Sprache und erklärt Vorschläge direkt auf dem Mac, sofern unterstützt. Aus: einfacher Stichwortabgleich."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entiende peticiones en lenguaje natural y explica las elecciones en el Mac, donde sea compatible. Desactivado: coincidencia simple por palabras clave."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprend les demandes en langage naturel et explique les choix sur le Mac, lorsque c’est pris en charge. Désactivé : simple correspondance par mots-clés."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Розуміє запити звичайною мовою й пояснює добірки безпосередньо на Mac, де це підтримується. Вимкнено — простий пошук за ключовими словами."
+          }
+        }
+      }
+    },
+    "Show reasons": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazovat důvody"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begründungen anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar motivos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les raisons"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показувати причини"
+          }
+        }
+      }
+    },
+    "Exclude watched": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vynechat zhlédnuté"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesehene ausschließen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluir lo visto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclure les titres vus"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Виключати переглянуте"
+          }
+        }
+      }
+    },
+    "Recommended by Aether in Discover": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doporučeno Aetherem v sekci Objevovat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Aether empfohlen im Bereich Entdecken"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomendado por Aether en Descubrir"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommandé par Aether dans Découvrir"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рекомендовано Aether в Огляді"
+          }
+        }
+      }
+    },
+    "Picked from titles you already own.": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vybráno z titulů, které už vlastníš."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Titeln ausgewählt, die du bereits besitzt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegido entre títulos que ya tienes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisi parmi des titres que vous possédez déjà."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибрано з того, що ви вже маєте."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

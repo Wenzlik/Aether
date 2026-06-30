@@ -49,12 +49,20 @@ public struct AskResult: Equatable, Sendable {
 public enum AskAether {
 
     /// Answer a free-text request against the connected sources.
-    /// - Parameter tmdb: a configured TMDb client for "more like this" + keyword
-    ///   grounding; pass `nil` to skip those (still fully functional).
+    /// - Parameters:
+    ///   - tmdb: a configured TMDb client for "more like this" + keyword
+    ///     grounding; pass `nil` to skip those (still fully functional).
+    ///   - useAI: honour the user's "Use Apple Intelligence" toggle.
+    ///   - excludeWatched: honour the "exclude watched from recommendations" toggle.
+    ///   - reasonLanguage: BCP-47 code the on-device model writes the reason in
+    ///     (the app's UI language).
     public static func answer(
         query: String,
         sources: [any MediaSource],
-        tmdb: TMDbClient? = nil
+        tmdb: TMDbClient? = nil,
+        useAI: Bool = true,
+        excludeWatched: Bool = true,
+        reasonLanguage: String? = nil
     ) async -> AskResult {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !sources.isEmpty else {
@@ -88,7 +96,9 @@ public enum AskAether {
         var recommendation: RecommendationResult?
         if hasRecIntent || (matches.isEmpty && similar.isEmpty) {
             recommendation = await RecommendationConcierge().recommend(
-                query: trimmed, in: all, enrich: keywordEnricher(tmdb)
+                query: trimmed, in: all,
+                useAI: useAI, excludeWatched: excludeWatched, reasonLanguage: reasonLanguage,
+                enrich: keywordEnricher(tmdb)
             )
         }
 

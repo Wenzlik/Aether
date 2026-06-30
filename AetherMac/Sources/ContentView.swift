@@ -271,7 +271,10 @@ struct HomeView: View {
         isAsking = true
         defer { isAsking = false }
         let answer = await AskAether.answer(
-            query: trimmed, sources: session.connectedSources, tmdb: session.tmdbClient
+            query: trimmed, sources: session.connectedSources, tmdb: session.tmdbClient,
+            useAI: session.playbackPrefs.useAppleIntelligence,
+            excludeWatched: session.playbackPrefs.excludeWatchedFromRecommendations,
+            reasonLanguage: Bundle.main.preferredLocalizations.first
         )
         guard searchText.trimmingCharacters(in: .whitespaces) == trimmed else { return }
         askResult = answer

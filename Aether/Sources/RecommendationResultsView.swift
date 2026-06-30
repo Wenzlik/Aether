@@ -12,6 +12,10 @@ struct RecommendationResultsView: View {
     /// Set when the user has edited the field since this answer was produced;
     /// shows a "press Return to ask again" hint so editing doesn't feel stuck.
     var pendingQuery: String?
+    /// Honour the "Show recommendation reasons" Settings toggle. When off (or on
+    /// the deterministic path, which has no prose), a short fallback line stands
+    /// in for the AI reason so the hero never reads as bare.
+    var showReasons: Bool = true
 
     @Environment(WatchAvailabilityStore.self) private var availability: WatchAvailabilityStore?
 
@@ -146,10 +150,15 @@ struct RecommendationResultsView: View {
                                 .font(AetherDesign.Typography.metadata)
                                 .foregroundStyle(AetherDesign.Palette.textSecondary)
                         }
-                        if let reason = result.recommendation?.reason {
+                        if showReasons, let reason = result.recommendation?.reason {
                             Text(verbatim: "“\(reason)”")
                                 .font(AetherDesign.Typography.body)
                                 .foregroundStyle(AetherDesign.Palette.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("Picked from titles you already own.")
+                                .font(AetherDesign.Typography.body)
+                                .foregroundStyle(AetherDesign.Palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Text("View details")

@@ -147,6 +147,33 @@ public final class PlaybackPreferencesStore {
         didSet { defaults.set(posterRatingSource.rawValue, forKey: Keys.posterRatingSource) }
     }
 
+    // MARK: - Recommendations (Ask Aether / Apple Intelligence, 0.9 P4)
+
+    /// Use the on-device Foundation Models for Ask Aether (NL parse + grounded
+    /// reason). Default `true`. When off, Ask Aether stays on the deterministic
+    /// parser even on Apple-Intelligence-capable devices. No effect where the
+    /// model isn't available at all (tvOS / older devices).
+    public var useAppleIntelligence: Bool {
+        didSet { defaults.set(useAppleIntelligence, forKey: Keys.useAppleIntelligence) }
+    }
+
+    /// Show the one-line "why this fits" reason on a recommendation. Default
+    /// `true`. Only the AI path produces a reason; this just hides it when off.
+    public var showRecommendationReasons: Bool {
+        didSet { defaults.set(showRecommendationReasons, forKey: Keys.showRecommendationReasons) }
+    }
+
+    /// Leave already-watched titles out of recommendations. Default `true`.
+    public var excludeWatchedFromRecommendations: Bool {
+        didSet { defaults.set(excludeWatchedFromRecommendations, forKey: Keys.excludeWatchedFromRecommendations) }
+    }
+
+    /// Show the taste-based "Recommended by Aether" hero in Discover. Default
+    /// `true`.
+    public var showRecommendedByAetherHero: Bool {
+        didSet { defaults.set(showRecommendedByAetherHero, forKey: Keys.showRecommendedByAetherHero) }
+    }
+
     /// Bundled into the value injected as `\.watchedDisplay`.
     public var watchedDisplayConfig: WatchedDisplayConfig {
         WatchedDisplayConfig(dimming: watchedDimming, showLabel: watchedShowLabel, labelOpacity: watchedLabelOpacity)
@@ -170,6 +197,10 @@ public final class PlaybackPreferencesStore {
         static let autoPlayNext = "playback.autoPlayNext"
         static let countdown = "playback.nextEpisodeCountdown"
         static let posterRatingSource = "display.posterRatingSource"
+        static let useAppleIntelligence = "recommendations.useAppleIntelligence"
+        static let showRecommendationReasons = "recommendations.showReasons"
+        static let excludeWatchedFromRecommendations = "recommendations.excludeWatched"
+        static let showRecommendedByAetherHero = "recommendations.showHero"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -199,6 +230,11 @@ public final class PlaybackPreferencesStore {
         // value from a prior build) cleanly falls back to the 0.8 default.
         self.watchedLabelOpacity = (defaults.object(forKey: Keys.watchedLabelOpacity) as? Double).map(Self.clampOpacity) ?? 0.8
         self.posterRatingSource = defaults.string(forKey: Keys.posterRatingSource).flatMap(PosterRatingSource.init) ?? .communityRating
+        // `object(forKey:)` so a missing key → default true for each.
+        self.useAppleIntelligence = (defaults.object(forKey: Keys.useAppleIntelligence) as? Bool) ?? true
+        self.showRecommendationReasons = (defaults.object(forKey: Keys.showRecommendationReasons) as? Bool) ?? true
+        self.excludeWatchedFromRecommendations = (defaults.object(forKey: Keys.excludeWatchedFromRecommendations) as? Bool) ?? true
+        self.showRecommendedByAetherHero = (defaults.object(forKey: Keys.showRecommendedByAetherHero) as? Bool) ?? true
     }
 }
 
