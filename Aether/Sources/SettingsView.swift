@@ -155,7 +155,12 @@ struct SettingsView: View {
                         settingsIndex
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.top, AetherDesign.Spacing.l)
+                    // iPad: clear the floating top tab bar. Settings has no
+                    // `.toolbar` to reserve space (unlike Home/Library/Discover),
+                    // and the ScrollView's automatic top inset for the bar drops
+                    // intermittently after a push/pop — so the top row slid under
+                    // the pill. Push the content down explicitly there.
+                    .padding(.top, usesTopBarChrome ? AetherDesign.Spacing.xxl : AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
                     .frame(maxWidth: isWide ? 1100 : .infinity)
                     .frame(maxWidth: .infinity)
@@ -412,7 +417,12 @@ struct SettingsView: View {
                         categorySections(category)
                     }
                     .padding(.horizontal, AetherDesign.Spacing.l)
-                    .padding(.top, AetherDesign.Spacing.l)
+                    // iPad: clear the floating top tab bar. Settings has no
+                    // `.toolbar` to reserve space (unlike Home/Library/Discover),
+                    // and the ScrollView's automatic top inset for the bar drops
+                    // intermittently after a push/pop — so the top row slid under
+                    // the pill. Push the content down explicitly there.
+                    .padding(.top, usesTopBarChrome ? AetherDesign.Spacing.xxl : AetherDesign.Spacing.l)
                     .padding(.bottom, AetherDesign.Spacing.xxl)
                     .frame(maxWidth: isWide ? 1100 : .infinity)
                     .frame(maxWidth: .infinity)

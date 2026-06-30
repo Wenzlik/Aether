@@ -61,6 +61,10 @@ struct PlexServerPickerSheet: View {
                     .font(.title2)
                     .foregroundStyle(AetherDesign.Palette.textTertiary)
                     .padding(AetherDesign.Spacing.m)
+                    // Bigger tap target: `.plain` button hit-tests only the glyph
+                    // without this — the X looked tiny / hard to hit (≥44pt HIG).
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
