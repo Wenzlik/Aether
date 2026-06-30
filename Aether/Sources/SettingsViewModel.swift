@@ -280,6 +280,15 @@ final class SettingsViewModel {
     /// (matched by `versionString`) and shown as the headline in What's New.
     /// Keep lines short (no compound sentences). Full log: `CHANGELOG.md`.
     let releaseHistory: [ReleaseNote] = [
+        ReleaseNote(version: "0.8.7", codename: "Eridanus",
+                    new: [
+                        "All: Discover keeps your picks steady, refreshing them once a day.",
+                    ],
+                    fixed: [
+                        "All: The Discover banner no longer scrolls on its own — swipe to browse.",
+                        "macOS: Discover no longer reshuffles its rows every second.",
+                        "All: Loading screens show a clear indicator instead of a skeleton.",
+                    ]),
         ReleaseNote(version: "0.8.6", codename: "Eridanus",
                     new: [
                         "Ask Aether — find something to watch in plain language.",
