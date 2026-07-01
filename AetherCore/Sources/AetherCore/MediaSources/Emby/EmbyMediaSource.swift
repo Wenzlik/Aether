@@ -286,15 +286,15 @@ public actor EmbyMediaSource: MediaSource {
         case .directPlay:
             if request.hasExplicitTrackSelection {
                 let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
-                if let url = transcodeURL(
+                if let built = transcodeURL(
                     itemID: request.itemID.rawValue,
                     audioStreamID: request.audioStreamID,
                     subtitleStreamID: request.subtitleStreamID,
                     offsetSeconds: offsetSeconds > 0 ? offsetSeconds : nil
                 ) {
                     return ResolvedPlayback(
-                        url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
-                        decision: .transcode
+                        url: built.url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+                        transcodeSessionID: built.playSessionID, decision: .transcode
                     )
                 }
             }
@@ -303,7 +303,7 @@ public actor EmbyMediaSource: MediaSource {
 
         case .transcode:
             let offsetSeconds = request.startTime.map(Self.seconds(_:)).map { max(0, $0) } ?? 0
-            guard let url = transcodeURL(
+            guard let built = transcodeURL(
                 itemID: request.itemID.rawValue,
                 audioStreamID: request.audioStreamID,
                 subtitleStreamID: request.subtitleStreamID,
@@ -311,7 +311,10 @@ public actor EmbyMediaSource: MediaSource {
             ) else {
                 throw PlaybackResolveError.noPlayableStream
             }
-            return ResolvedPlayback(url: url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds)
+            return ResolvedPlayback(
+                url: built.url, isServerTranscode: true, baseOffsetSeconds: offsetSeconds,
+                transcodeSessionID: built.playSessionID, decision: .transcode
+            )
         }
     }
 
@@ -372,7 +375,7 @@ public actor EmbyMediaSource: MediaSource {
         if let container = dto.container?.lowercased(), Self.directPlayContainers.contains(container) {
             return directStreamURL(itemID: dto.id, mediaSourceID: dto.mediaSourceID)
         }
-        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)
+        return transcodeURL(itemID: dto.id, audioStreamID: nil, subtitleStreamID: nil, offsetSeconds: nil)?.url
     }
 
     private func directStreamURL(itemID: String, mediaSourceID: String?) -> URL? {
@@ -388,21 +391,25 @@ public actor EmbyMediaSource: MediaSource {
         return components?.url
     }
 
+    /// Build the HLS transcode URL and return it alongside the `PlaySessionId`
+    /// baked into it, so the caller can advertise it as the
+    /// `ResolvedPlayback.transcodeSessionID` and tear the encoding down later.
     private func transcodeURL(
         itemID: String,
         audioStreamID: String?,
         subtitleStreamID: String?,
         offsetSeconds: Double?
-    ) -> URL? {
+    ) -> (url: URL, playSessionID: String)? {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/Videos/\(itemID)/master.m3u8"),
             resolvingAgainstBaseURL: false
         )
+        let playSessionID = UUID().uuidString
         var queryItems = [
             URLQueryItem(name: "MediaSourceId", value: itemID),
             URLQueryItem(name: "api_key", value: accessToken),
             URLQueryItem(name: "DeviceId", value: configuration.deviceID),
-            URLQueryItem(name: "PlaySessionId", value: UUID().uuidString),
+            URLQueryItem(name: "PlaySessionId", value: playSessionID),
             URLQueryItem(name: "VideoCodec", value: "h264"),
             URLQueryItem(name: "AudioCodec", value: "aac,mp3"),
             URLQueryItem(name: "TranscodingProtocol", value: "hls"),
@@ -419,7 +426,32 @@ public actor EmbyMediaSource: MediaSource {
             queryItems.append(URLQueryItem(name: "startTimeTicks", value: String(Int64(offsetSeconds.rounded()) * 10_000_000)))
         }
         components?.queryItems = queryItems
-        return components?.url
+        guard let url = components?.url else { return nil }
+        return (url, playSessionID)
+    }
+
+    /// Tear down a server-side transcode (`DELETE /Videos/ActiveEncodings`),
+    /// keyed by the `deviceId` + `playSessionId` the encoding was started with
+    /// — parity with Jellyfin (`JellyfinMediaSource.stopTranscode`) and Plex
+    /// (`/transcode/universal/stop`). Without it Emby keeps the ffmpeg process
+    /// alive until its own idle timeout, so a binge / repeated track switches
+    /// pile up encodings and the newest one starves. Best-effort + non-throwing.
+    public func stopTranscode(sessionID: String) async {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/Videos/ActiveEncodings"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "DeviceId", value: configuration.deviceID),
+            URLQueryItem(name: "PlaySessionId", value: sessionID)
+        ]
+        guard let url = components?.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        for (key, value) in configuration.commonHeaders(token: accessToken) {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        _ = try? await api.data(for: request)
     }
 
     // MARK: - Mapping

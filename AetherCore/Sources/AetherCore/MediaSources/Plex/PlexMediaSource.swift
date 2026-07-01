@@ -822,6 +822,11 @@ public actor PlexMediaSource: MediaSource {
     private func warmUpRequest(for url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         for (key, value) in configuration.commonHeaders { request.setValue(value, forHTTPHeaderField: key) }
+        // The warm-up is polled with backoff (a handful of attempts), so each
+        // attempt must be short — a single hung GET must not eat the whole
+        // budget and leave the player parked in `.loading`. Overrides the API
+        // client's default 15 s idle timeout for this retried request only.
+        request.timeoutInterval = 6
         return request
     }
 

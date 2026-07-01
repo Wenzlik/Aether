@@ -32,6 +32,17 @@ public final class PlayerStateViewModel {
         state.status == .paused ? .seconds(5) : refreshInterval
     }
 
+    /// Consecutive refresh ticks where the player has been *stalled* — reports
+    /// `.playing` but `timeControlStatus` is stuck `.waitingToPlayAtSpecifiedRate`
+    /// with no forward progress. Drives the silent-stall watchdog (see `refresh`).
+    private var stalledPolls = 0
+    /// How long (in refresh ticks at `refreshInterval` = 500 ms) a stall must
+    /// persist before we treat it as stuck and ask the session to recover.
+    /// ~10 s: long enough to ride out a legitimate rebuffer, short enough that a
+    /// scrub into an unproduced transcode segment (which never self-resolves)
+    /// doesn't strand the user on a frozen frame.
+    private static let stallTickThreshold = 20
+
     public init(session: PlaybackSession, refreshInterval: Duration = .milliseconds(500)) {
         self.session = session
         self.refreshInterval = refreshInterval
@@ -143,10 +154,33 @@ public final class PlayerStateViewModel {
         // flight (its player may briefly still be the old, failed one).
         if snapshot.status != .failed, snapshot.status != .loading,
            let message = avplayerFailureMessage(player: avPlayer) {
+            stalledPolls = 0
             await session.recoverOrFail(message: message)
             self.state = await session.state
             self.player = await session.currentAVPlayer()
             return
+        }
+
+        // Silent-stall watchdog. A hard `.failed` above is the easy case; a
+        // buffer stall (a scrub into a segment the transcoder hasn't produced, a
+        // reaped session) keeps the item `.readyToPlay` while `timeControlStatus`
+        // sits at `.waitingToPlayAtSpecifiedRate` forever — no `.failed`, so the
+        // check above never fires and the picture freezes with no self-heal.
+        // Detect a *sustained* stall and route it through the same recovery
+        // (which re-resolves a fresh stream at the live playhead).
+        if snapshot.status == .playing, let avPlayer,
+           avPlayer.timeControlStatus == .waitingToPlayAtSpecifiedRate {
+            stalledPolls += 1
+            if stalledPolls >= Self.stallTickThreshold {
+                stalledPolls = 0
+                await session.recoverOrFail(message: "playback stalled (no progress)")
+                self.state = await session.state
+                self.player = await session.currentAVPlayer()
+                self.currentSeconds = await session.currentPositionSeconds()
+                return
+            }
+        } else {
+            stalledPolls = 0
         }
 
         self.state = snapshot
