@@ -448,9 +448,7 @@ final class MacSession {
         }
         // Restore the active Plex Home profile (the working token was already
         // persisted, so playback resumes as that profile).
-        if let json = try? await keychain.string(for: Self.plexHomeUserKey),
-           let data = json.data(using: .utf8),
-           let ref = try? JSONDecoder().decode(PlexHomeUserRef.self, from: data) {
+        if let ref = await keychain.codable(PlexHomeUserRef.self, for: Self.plexHomeUserKey) {
             activePlexUser = ref
         }
         if let records = try? await jellyfinServerStore.readAll(), !records.isEmpty {
@@ -524,10 +522,7 @@ final class MacSession {
     }
 
     private func plexExtraAccountTokens() async -> [String] {
-        guard let json = (try? await keychain.string(for: Self.plexExtraAccountTokensKey)) ?? nil,
-              let data = json.data(using: .utf8),
-              let tokens = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        return tokens
+        await keychain.codable([String].self, for: Self.plexExtraAccountTokensKey) ?? []
     }
 
     private func setPlexExtraAccountTokens(_ tokens: [String]) async {
@@ -535,9 +530,7 @@ final class MacSession {
             try? await keychain.removeValue(for: Self.plexExtraAccountTokensKey)
             return
         }
-        if let data = try? JSONEncoder().encode(tokens), let json = String(data: data, encoding: .utf8) {
-            try? await keychain.setString(json, for: Self.plexExtraAccountTokensKey)
-        }
+        try? await keychain.setCodable(tokens, for: Self.plexExtraAccountTokensKey)
     }
 
     private func allPlexAccountTokens() async -> [String] {
@@ -586,10 +579,8 @@ final class MacSession {
     /// Persist (or clear) the active Home profile ref + update the property.
     private func persistActivePlexUser(_ user: PlexAPI.HomeUser?) async {
         activePlexUser = user.map(PlexHomeUserRef.init)
-        if let ref = activePlexUser,
-           let data = try? JSONEncoder().encode(ref),
-           let json = String(data: data, encoding: .utf8) {
-            try? await keychain.setString(json, for: Self.plexHomeUserKey)
+        if let ref = activePlexUser {
+            try? await keychain.setCodable(ref, for: Self.plexHomeUserKey)
         } else {
             try? await keychain.removeValue(for: Self.plexHomeUserKey)
         }

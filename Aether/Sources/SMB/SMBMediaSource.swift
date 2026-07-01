@@ -38,6 +38,8 @@ actor SMBMediaSource: CustomDownloadSource {
     /// title with a poster / backdrop / overview (same as the Local Library).
     /// `nil` when no TMDb key is built in → titles stay text-only.
     private let tmdb: TMDbClient?
+    /// Injected by `AppSession` — one per app process, not a `static let shared`.
+    private let rangeProxy: SMBRangeProxy
     /// Cached recursive listing — the walk is expensive (network round-trips),
     /// so it's done once per source instance and reused across libraries/items.
     private var cachedFiles: [SMBFile]?
@@ -61,9 +63,10 @@ actor SMBMediaSource: CustomDownloadSource {
     private static let maxFiles = 2000
     private static let log = Logger(subsystem: "cz.zmrhal.aether", category: "smb")
 
-    init(connection: SMBConnection, tmdb: TMDbClient? = nil) {
+    init(connection: SMBConnection, tmdb: TMDbClient? = nil, rangeProxy: SMBRangeProxy) {
         self.connection = connection
         self.tmdb = tmdb
+        self.rangeProxy = rangeProxy
         self.id = connection.sourceID
         self.displayName = connection.displayName
         self.vlcMediaOptions = connection.vlcMediaOptions
@@ -221,7 +224,7 @@ actor SMBMediaSource: CustomDownloadSource {
             throw PlaybackResolveError.noPlayableStream
         }
         guard url.scheme == "smb",
-              let proxyURL = await SMBRangeProxy.shared.register(connection: connection, smbURL: url)
+              let proxyURL = await rangeProxy.register(connection: connection, smbURL: url)
         else {
             return ResolvedPlayback(url: url, isServerTranscode: false)
         }
@@ -292,7 +295,7 @@ actor SMBMediaSource: CustomDownloadSource {
         // the first Play doesn't stall on the ~16s NAS login (#213). Fire-and-forget.
         let sharesToWarm = Set(roots.map(\.share))
         let conn = connection
-        Task { for share in sharesToWarm { await SMBRangeProxy.shared.prewarm(connection: conn, share: share) } }
+        Task { for share in sharesToWarm { await rangeProxy.prewarm(connection: conn, share: share) } }
         // User title/year corrections, keyed by stream URL (#213).
         let overrides = await SMBMetadataStore.shared.allOverrides()
         // Locally-tracked watched state (SMB has no server play state).
@@ -440,7 +443,7 @@ actor SMBMediaSource: CustomDownloadSource {
         cachedFiles = nil
         lastStats = nil
         await SMBMetadataStore.shared.clearMisses()
-        await SMBRangeProxy.shared.unregisterAll(connectionID: connection.id)
+        await rangeProxy.unregisterAll(connectionID: connection.id)
     }
 
     // MARK: - HTTP range proxy (#213/#347)
@@ -452,7 +455,7 @@ actor SMBMediaSource: CustomDownloadSource {
     /// Returns `nil` if the proxy server failed to bind — callers should then
     /// fall back to the raw `smb://` URL + `vlcMediaOptions`.
     func proxyURL(for smbURL: URL) async -> URL? {
-        await SMBRangeProxy.shared.register(connection: connection, smbURL: smbURL)
+        await rangeProxy.register(connection: connection, smbURL: smbURL)
     }
 
     /// The user's current title/year correction for an item (its stream URL),

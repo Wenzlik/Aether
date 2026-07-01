@@ -40,6 +40,24 @@ public actor KeychainStore {
         return String(data: data, encoding: .utf8)
     }
 
+    // MARK: - Codable convenience
+
+    /// Reads a small `Codable` value stored as a JSON string under `key` —
+    /// the shape every "one struct/array in the keychain" record follows
+    /// (active Home profile, extra account tokens, server records, …).
+    /// Swallows decode failures the same way call sites already did
+    /// (missing/garbled state reads as absent, not a thrown error).
+    public func codable<T: Decodable>(_ type: T.Type, for key: String) -> T? {
+        guard let json = (try? string(for: key)) ?? nil, let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Writes a small `Codable` value as a JSON string under `key`.
+    public func setCodable(_ value: some Encodable, for key: String) throws {
+        let data = try JSONEncoder().encode(value)
+        try setString(String(data: data, encoding: .utf8), for: key)
+    }
+
     // MARK: - Data primitives
 
     public func setData(_ value: Data?, for key: String) throws {
