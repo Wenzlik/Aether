@@ -24,6 +24,12 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **Search — playful loading captions** — the discovery-rails loader and the
   Ask-Aether "thinking" state rotate light, on-brand one-liners so a slow load
   reads as alive rather than stuck (`AetherLoadingState(captions:)`).
+- **Ask Aether — taste-aware recommendations (#582)** — the query path now ranks
+  the shortlist with a `TasteProfile` learned from your own watch-state (finished
+  / favourited / highly-rated titles), so recommendations lean toward the genres
+  you actually watch. The stated request still wins — taste only re-orders titles
+  that match it equally well, and becomes the primary signal for a genre-less
+  "recommend me something".
 
 ### Fixed
 

@@ -283,6 +283,7 @@ final class SettingsViewModel {
         ReleaseNote(version: "0.8.7", codename: "Eridanus",
                     new: [
                         "All: Ask Aether explains its picks in your language.",
+                        "All: Ask Aether now leans toward the genres you actually watch.",
                         "All: New recommendation controls in Settings.",
                         "All: Discover keeps your picks steady, refreshing them once a day.",
                     ],
