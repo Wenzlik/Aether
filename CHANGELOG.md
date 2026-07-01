@@ -21,6 +21,41 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
 - **macOS — a more compact Discover banner** — the featured hero is capped
   (`heroMaxWidth`) and centered instead of stretching the full window width, so
   it stays cinematic without dominating a maximized window.
+- **Search — playful loading captions** — the discovery-rails loader and the
+  Ask-Aether "thinking" state rotate light, on-brand one-liners so a slow load
+  reads as alive rather than stuck (`AetherLoadingState(captions:)`).
+
+### Fixed
+
+- **Playback freezes on seek and episode transition (Plex / Jellyfin / Emby)** —
+  several related root causes, found via a playback-core + per-connector audit:
+  - **Request timeouts.** The shared `URLSessionAPIClient` used `URLSession.shared`'s
+    defaults (60 s request / **7-day** resource), so a quiet self-hosted / LAN
+    server hung every `await` — a Plex transcode decision, a Jellyfin
+    `PlaybackInfo`, the Search discovery fetch — as a frozen spinner. (This was
+    also the *"Search stuck on loading until you switch tabs and back"* report:
+    re-entering the screen cancelled and retried the hung request.) Now a bounded
+    session (15 s idle / 60 s resource, `waitsForConnectivity = false`); the Plex
+    transcode warm-up keeps a tighter 6 s per-attempt override.
+  - **Silent-stall watchdog.** Recovery only fired on `AVPlayerItem.status ==
+    .failed`, but a buffer stall (scrubbing into an unproduced HLS segment, a
+    reaped transcode session) stays `.readyToPlay` with `timeControlStatus` at
+    `.waitingToPlayAtSpecifiedRate` forever — no `.failed`, no self-heal. A
+    sustained (~10 s) stall now auto-recovers, re-resolving the stream at the
+    **live** playhead; transcode seeks use a tolerant window instead of an exact
+    `.zero` seek (which itself stalls on HLS).
+  - **Overlapping `prepare` guard** — a track switch fired during an auto-advance
+    could let an older `prepare` overwrite the transcode session id after the
+    newer one set it, orphaning a session on the server (→ its simultaneous-
+    transcode limit → the *next* episode stalls). A generation token makes a
+    superseded `prepare` bail and release the session it resolved.
+  - **Detached teardown stop** — `stopTranscode` on teardown is now
+    fire-and-forget, so a slow stop no longer gates the next episode's resolve.
+  - **Emby transcode teardown** — `EmbyMediaSource` never surfaced a
+    `transcodeSessionID` and had no `stopTranscode`, so its transcodes were never
+    stopped (a binge piled up ffmpeg jobs until the newest starved). It now
+    returns its `PlaySessionId` and implements `stopTranscode` (`DELETE
+    /Videos/ActiveEncodings`), matching Jellyfin.
 
 ## [0.8.6] — 2026-06-28
 

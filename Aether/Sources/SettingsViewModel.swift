@@ -287,6 +287,8 @@ final class SettingsViewModel {
                         "All: Discover keeps your picks steady, refreshing them once a day.",
                     ],
                     fixed: [
+                        "All: Playback no longer freezes when you skip around the timeline or start the next episode.",
+                        "All: A slow or sleeping media server no longer leaves playback or Search stuck on a loading screen.",
                         "iOS: The audio & subtitle button now hides with the other controls.",
                         "iOS: Episodes no longer flash a subtitle for a moment when they start.",
                         "All: The Discover banner no longer scrolls on its own — swipe to browse.",
