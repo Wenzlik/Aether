@@ -830,6 +830,29 @@ struct PlexLibraryDecodingTests {
         #expect(roles[1].thumb == nil)
     }
 
+    @Test("Metadata decodes Director entries (same tag shape as Role)")
+    func decodesDirectors() throws {
+        let json = #"""
+        {
+          "ratingKey":"123","type":"movie","title":"First Man",
+          "Director":[
+            {"tag":"Damien Chazelle","thumb":"/library/metadata/1/director/1"}
+          ]
+        }
+        """#
+        let dto = try JSONDecoder().decode(PlexAPI.Metadata.self, from: Data(json.utf8))
+        let directors = try #require(dto.directors)
+        #expect(directors.count == 1)
+        #expect(directors[0].tag == "Damien Chazelle")
+        #expect(directors[0].role == nil)
+        // Absent Director key stays nil (every existing fixture).
+        let bare = try JSONDecoder().decode(
+            PlexAPI.Metadata.self,
+            from: Data(#"{"ratingKey":"1","type":"movie","title":"X"}"#.utf8)
+        )
+        #expect(bare.directors == nil)
+    }
+
     @Test("Metadata decodes the Image array — the clearLogo source (#273)")
     func decodesImageArray() throws {
         let json = #"""

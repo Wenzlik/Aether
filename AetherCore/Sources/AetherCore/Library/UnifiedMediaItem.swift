@@ -218,6 +218,21 @@ public struct UnifiedMediaItem: Identifiable, Hashable, Sendable, Codable {
         sources.lazy.compactMap { $0.item.runtime }.first
     }
 
+    /// Cast & key crew from the first source (in priority order) that carries
+    /// any — actors first, then crew, as the source billed them. Empty when no
+    /// source reports people on its **list** items (Jellyfin omits `People`
+    /// there for payload size; Ask Aether backfills its shortlist from the
+    /// detail endpoint instead). Feeds the model's candidate context.
+    public var cast: [CastMember] {
+        sources.lazy.map(\.item.cast).first { !$0.isEmpty } ?? []
+    }
+
+    /// Age / content classification ("PG-13", "TV-MA", "15") from whichever
+    /// source labels it — model candidate context ("something for the kids").
+    public var contentRating: String? {
+        sources.lazy.compactMap { $0.item.contentRating }.first
+    }
+
     /// Whether this title is a series (picks the TMDb media type for lookups).
     public var isShow: Bool { type == .show }
 

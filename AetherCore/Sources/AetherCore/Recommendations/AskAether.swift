@@ -98,7 +98,7 @@ public enum AskAether {
             recommendation = await RecommendationConcierge().recommend(
                 query: trimmed, in: all,
                 useAI: useAI, excludeWatched: excludeWatched, reasonLanguage: reasonLanguage,
-                enrich: keywordEnricher(tmdb)
+                enrich: shortlistEnricher(tmdb: tmdb, sources: sources)
             )
         }
 
@@ -184,19 +184,30 @@ public enum AskAether {
         }
     }
 
-    // MARK: - Keyword enrichment
+    // MARK: - Shortlist enrichment
 
-    /// Build the concierge `enrich` hook: TMDb keyword tags for the shortlist,
-    /// cached per title. `nil` when no TMDb client is configured.
-    static func keywordEnricher(
-        _ tmdb: TMDbClient?
-    ) -> (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? {
-        guard let tmdb, tmdb.isConfigured else { return nil }
+    /// Build the concierge `enrich` hook: TMDb keyword tags plus a cast
+    /// backfill for shortlist items whose list payload carried no people
+    /// (Jellyfin omits `People` on list fetches — the detail endpoint keeps
+    /// them). Both cached per session; keywords are skipped when no TMDb
+    /// client is configured, the cast backfill always runs.
+    static func shortlistEnricher(
+        tmdb: TMDbClient?,
+        sources: [any MediaSource]
+    ) -> @Sendable ([UnifiedMediaItem]) async -> [String: CandidateContext] {
+        let keywordsTMDb = (tmdb?.isConfigured == true) ? tmdb : nil
         return { shortlist in
-            var map: [String: [String]] = [:]
+            var map: [String: CandidateContext] = [:]
             for item in shortlist.prefix(8) {
-                let kw = await AskAetherCache.shared.keywords(for: item, tmdb: tmdb)
-                if !kw.isEmpty { map[item.id] = Array(kw.prefix(6)) }
+                var context = CandidateContext()
+                if let keywordsTMDb {
+                    let kw = await AskAetherCache.shared.keywords(for: item, tmdb: keywordsTMDb)
+                    context.keywords = Array(kw.prefix(6))
+                }
+                if item.cast.isEmpty {
+                    context.cast = await AskAetherCache.shared.cast(for: item, sources: sources)
+                }
+                if !context.isEmpty { map[item.id] = context }
             }
             return map
         }
@@ -210,6 +221,7 @@ actor AskAetherCache {
 
     private var peopleBySource: [String: [MediaPerson]] = [:]
     private var keywordsByID: [String: [String]] = [:]
+    private var castByID: [String: [CastMember]] = [:]
 
     /// All people (cast + director) for a source, fetched once per session.
     func people(for source: any MediaSource) async -> [MediaPerson] {
@@ -229,5 +241,21 @@ actor AskAetherCache {
         let kw = await tmdb.keywords(tmdbID: tmdbID, type: item.isShow ? .tv : .movie)
         keywordsByID[key] = kw
         return kw
+    }
+
+    /// Cast for a unified title whose list payload had no people — fetched once
+    /// per session from the preferred source's detail endpoint (which keeps
+    /// `People` where the list fetch omits it). Negative results are cached too,
+    /// so a source without a detail cast isn't re-asked every request.
+    func cast(for item: UnifiedMediaItem, sources: [any MediaSource]) async -> [CastMember] {
+        if let cached = castByID[item.id] { return cached }
+        var cast: [CastMember] = []
+        if let lead = item.preferredSource?.item,
+           let source = sources.first(where: { $0.id == lead.id.source }),
+           let detailed = try? await source.item(for: lead.id) {
+            cast = detailed.cast
+        }
+        castByID[item.id] = cast
+        return cast
     }
 }

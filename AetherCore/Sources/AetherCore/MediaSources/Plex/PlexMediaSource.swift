@@ -960,18 +960,32 @@ public actor PlexMediaSource: MediaSource {
                 $0.type?.caseInsensitiveCompare("clearLogo") == .orderedSame
             }?.url
         )
-        // Cast & Crew (Plex `Role`). Headshots go through the same photo
-        // transcoder as posters via an ArtworkSource pinned to the role thumb.
-        let cast: [CastMember] = (dto.roles ?? []).prefix(20).enumerated().compactMap { index, role in
-            guard let name = role.tag?.nonEmptyTrimmed else { return nil }
-            let photoURL = role.thumb?.nonEmptyTrimmed.flatMap {
+        // Cast & Crew (Plex `Role` + `Director`) — actors first (with their
+        // character), then directors, mirroring the MediaBrowser mapping.
+        // Headshots go through the same photo transcoder as posters via an
+        // ArtworkSource pinned to the tag thumb.
+        let headshotURL: (String?) -> URL? = { [accessToken] thumb in
+            thumb?.nonEmptyTrimmed.flatMap {
                 ArtworkSource(provider: .plex, base: base, token: accessToken,
                               posterPath: $0, backdropPath: nil).posterURL(.thumbnail)
             }
+        }
+        let actors: [CastMember] = (dto.roles ?? []).prefix(20).enumerated().compactMap { index, role in
+            guard let name = role.tag?.nonEmptyTrimmed else { return nil }
             return CastMember(id: "\(index)-\(name)", name: name,
-                              role: role.role?.nonEmptyTrimmed, photoURL: photoURL,
+                              role: role.role?.nonEmptyTrimmed, photoURL: headshotURL(role.thumb),
                               personID: role.id.map(String.init))
         }
+        // Plex fetches a director's titles via `?director=`, not `?actor=`, and
+        // the tappable-cast flow assumes an actor id — so directors stay
+        // non-interactive (`personID: nil`) until `CastMember` carries a kind.
+        let directors: [CastMember] = (dto.directors ?? []).prefix(3).enumerated().compactMap { index, director in
+            guard let name = director.tag?.nonEmptyTrimmed else { return nil }
+            return CastMember(id: "director-\(index)-\(name)", name: name,
+                              role: "Director", photoURL: headshotURL(director.thumb),
+                              personID: nil)
+        }
+        let cast = actors + directors
         return MediaItem(
             id: .init(source: id, rawValue: dto.ratingKey),
             title: dto.title,

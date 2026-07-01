@@ -35,6 +35,24 @@ public struct RecommendationResult: Sendable, Equatable {
     public var isEmpty: Bool { pick == nil }
 }
 
+/// Extra per-candidate context the caller can inject into the model's candidate
+/// descriptions — thematic tags from a network lookup (TMDb keywords) and a
+/// cast backfill for shortlist items whose list payload carried no people
+/// (Jellyfin omits `People` on list fetches for payload size).
+public struct CandidateContext: Sendable, Equatable {
+    /// Thematic tags (e.g. TMDb keywords) — "heist", "time travel".
+    public var keywords: [String]
+    /// Cast & crew backfill, used only when the item itself carries none.
+    public var cast: [CastMember]
+
+    public init(keywords: [String] = [], cast: [CastMember] = []) {
+        self.keywords = keywords
+        self.cast = cast
+    }
+
+    public var isEmpty: Bool { keywords.isEmpty && cast.isEmpty }
+}
+
 /// Natural-language recommendations over the user's own library.
 ///
 /// On Apple-Intelligence platforms (iOS / iPadOS / macOS / visionOS 26+) it uses
@@ -85,10 +103,10 @@ public struct RecommendationConcierge: Sendable {
     ///     should write the reason in — usually the app's UI language. `nil`
     ///     leaves the model to answer in its default (English).
     ///   - enrich: optional async hook that, given the engine's shortlist,
-    ///     returns extra per-item context keyed by `UnifiedMediaItem.id` (e.g.
-    ///     TMDb keywords) to fold into the model's candidate descriptions. Lets
-    ///     the app inject network-backed metadata without `AetherCore` depending
-    ///     on TMDb.
+    ///     returns extra per-item `CandidateContext` keyed by
+    ///     `UnifiedMediaItem.id` — thematic keywords and a cast backfill — to
+    ///     fold into the model's candidate descriptions. Lets the caller inject
+    ///     network-backed metadata without `AetherCore` depending on TMDb.
     public func recommend(
         query: String,
         in library: [UnifiedMediaItem],
@@ -98,7 +116,7 @@ public struct RecommendationConcierge: Sendable {
         reasonLanguage: String? = nil,
         engine: RecommendationEngine = RecommendationEngine(),
         parser: RecommendationQueryParser = RecommendationQueryParser(),
-        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])? = nil
+        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: CandidateContext])? = nil
     ) async -> RecommendationResult {
         let clock = ContinuousClock()
         let start = clock.now
@@ -166,6 +184,28 @@ public struct RecommendationConcierge: Sendable {
         }
     }
 
+    /// One model-facing candidate line — id, title/year, rating, content
+    /// rating, top cast + director, synopsis, themes. The grounding format the
+    /// pick step sees; pure and platform-independent so it's unit-testable
+    /// everywhere (the model call itself isn't). Cast prefers the item's own
+    /// people and falls back to the context's backfill; both are bounded so a
+    /// long cast list can't crowd the prompt out of the context window.
+    static func candidateLine(for item: UnifiedMediaItem, context: CandidateContext? = nil) -> String {
+        let rating = item.tmdbRating ?? item.communityRating ?? 0
+        let year = item.year.map { " (\($0))" } ?? ""
+        let rated = item.contentRating.map { " | rated \($0)" } ?? ""
+        let people = item.cast.isEmpty ? (context?.cast ?? []) : item.cast
+        let actorNames = people.actors.prefix(3).map(\.name)
+        let castPart = actorNames.isEmpty ? "" : " | cast: \(actorNames.joined(separator: ", "))"
+        let directorNames = people.directors.prefix(2).map(\.name)
+        let directorPart = directorNames.isEmpty ? "" : " | director: \(directorNames.joined(separator: ", "))"
+        let synopsis = item.overview.map { String($0.prefix(160)) } ?? ""
+        let themes = (context?.keywords.isEmpty == false)
+            ? " | themes: \(context!.keywords.joined(separator: ", "))"
+            : ""
+        return "id=\(item.id) | \(item.title)\(year) | rating \(rating)\(rated)\(castPart)\(directorPart) | \(synopsis)\(themes)"
+    }
+
     // MARK: - On-device model path
 
     #if canImport(FoundationModels) && !os(tvOS)
@@ -190,7 +230,7 @@ public struct RecommendationConcierge: Sendable {
         excludeWatched: Bool,
         taste: TasteProfile?,
         reasonLanguage: String?,
-        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])?
+        enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: CandidateContext])?
     ) async throws -> RecommendationResult {
         let availableGenres = engine.availableGenres(in: library)
 
@@ -215,22 +255,17 @@ public struct RecommendationConcierge: Sendable {
             return RecommendationResult(pick: nil, reason: nil, shortlist: [], usedAI: true)
         }
 
-        // Optional themed metadata (e.g. TMDb keywords) for the shortlist, so the
+        // Optional per-candidate context — thematic tags (TMDb keywords) so the
         // model can reason thematically ("a heist movie" → favours a heist-tagged
-        // candidate). Injected by the app; empty when unavailable.
+        // candidate) and a cast backfill for items whose list payload had no
+        // people. Injected by the caller; empty when unavailable.
         let topShortlist = Array(shortlist.prefix(10))
-        let keywordMap = await enrich?(topShortlist) ?? [:]
+        let contextMap = await enrich?(topShortlist) ?? [:]
 
         // Step 2 — pick + explain, grounded to the shortlist (by id).
-        let candidates = topShortlist.map { item -> String in
-            let rating = item.tmdbRating ?? item.communityRating ?? 0
-            let year = item.year.map { " (\($0))" } ?? ""
-            let synopsis = item.overview.map { String($0.prefix(160)) } ?? ""
-            let themes = (keywordMap[item.id]?.isEmpty == false)
-                ? " | themes: \(keywordMap[item.id]!.joined(separator: ", "))"
-                : ""
-            return "id=\(item.id) | \(item.title)\(year) | rating \(rating) | \(synopsis)\(themes)"
-        }.joined(separator: "\n")
+        let candidates = topShortlist
+            .map { Self.candidateLine(for: $0, context: contextMap[$0.id]) }
+            .joined(separator: "\n")
 
         let reasonLang = Self.languageName(for: reasonLanguage)
         let pickSession = LanguageModelSession {
