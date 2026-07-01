@@ -110,6 +110,73 @@ struct RecommendationEngineTests {
         #expect(titles(result) == ["Apparition", "Banshee"])
     }
 
+    // MARK: - Taste-aware ranking (Ask Aether personalisation)
+
+    @Test("Within an equal genre match, taste beats a higher rating")
+    func tasteBreaksTieAboveRating() {
+        let library = [
+            item("Seed", genres: ["Thriller"], watched: true),   // taste ⇒ Thriller
+            item("Both", genres: ["Horror", "Thriller"], tmdb: 6),
+            item("HorrorOnly", genres: ["Horror"], tmdb: 8),
+        ]
+        let taste = TasteProfile.from(library: library)
+        let result = engine.recommend(from: library, request: .init(genres: ["Horror"]), taste: taste)
+        // Both matches the user's Thriller taste, so it outranks the higher-rated
+        // HorrorOnly — the two match "Horror" equally, taste breaks the tie.
+        #expect(titles(result) == ["Both", "HorrorOnly"])
+    }
+
+    @Test("A nil taste profile leaves ranking purely request-driven (rating rules)")
+    func nilTasteLeavesRankingUnchanged() {
+        let library = [
+            item("Seed", genres: ["Thriller"], watched: true),
+            item("Both", genres: ["Horror", "Thriller"], tmdb: 6),
+            item("HorrorOnly", genres: ["Horror"], tmdb: 8),
+        ]
+        // Same library as above, but without personalisation the higher rating wins.
+        let result = engine.recommend(from: library, request: .init(genres: ["Horror"]), taste: nil)
+        #expect(titles(result) == ["HorrorOnly", "Both"])
+    }
+
+    @Test("Taste never overrides how many requested genres a title matches")
+    func tasteDoesNotOverrideGenreMatchCount() {
+        let library = [
+            item("Seed", genres: ["Comedy"], watched: true),     // taste ⇒ Comedy
+            item("Broad", genres: ["Horror", "Thriller"], tmdb: 5),
+            item("Narrow", genres: ["Horror", "Comedy"], tmdb: 9),
+        ]
+        let taste = TasteProfile.from(library: library)
+        let result = engine.recommend(
+            from: library, request: .init(genres: ["Horror", "Thriller"]), taste: taste
+        )
+        // Broad matches 2 requested genres, Narrow only 1 — the explicit match
+        // count wins even though Narrow suits the user's Comedy taste.
+        #expect(titles(result) == ["Broad", "Narrow"])
+    }
+
+    @Test("An empty taste profile is a no-op — rating still rules")
+    func emptyTasteIsNoOp() {
+        let library = [item("Low", genres: ["Drama"], tmdb: 5), item("High", genres: ["Drama"], tmdb: 9)]
+        let empty = TasteProfile(genreWeights: [:])
+        #expect(empty.isEmpty)
+        let result = engine.recommend(from: library, request: .init(genres: ["Drama"]), taste: empty)
+        #expect(titles(result) == ["High", "Low"])
+    }
+
+    @Test("With no requested genre, taste is the primary signal")
+    func tastePrimaryWhenNoGenreRequested() {
+        let library = [
+            item("Seed", genres: ["Horror"], watched: true),     // taste ⇒ Horror
+            item("HorrorPick", genres: ["Horror"], tmdb: 5),
+            item("ComedyPick", genres: ["Comedy"], tmdb: 9),
+        ]
+        let taste = TasteProfile.from(library: library)
+        // "recommend me something" — no genre in the request, so the title in the
+        // user's favoured genre beats a higher-rated one they tend not to watch.
+        let result = engine.recommend(from: library, request: .init(), taste: taste)
+        #expect(titles(result) == ["HorrorPick", "ComedyPick"])
+    }
+
     // MARK: - Runtime filter
 
     @Test("maxRuntime excludes titles whose known runtime exceeds the cap")

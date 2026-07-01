@@ -76,6 +76,11 @@ public struct RecommendationConcierge: Sendable {
     ///     deterministic path even where Apple Intelligence is available (the
     ///     user's "Use Apple Intelligence" Settings toggle).
     ///   - excludeWatched: leave already-watched titles out of the candidates.
+    ///   - personalize: when `true` (default), the shortlist is ranked with a
+    ///     `TasteProfile` learned from the library's own watch-state, so titles
+    ///     in genres the user tends to watch, favourite, or rate highly rise
+    ///     within an equally-good match. The explicit request always wins; taste
+    ///     only breaks ties (and drives a genre-less "recommend me something").
     ///   - reasonLanguage: BCP-47 code (`"en"`, `"cs"`, `"uk"`, …) the model
     ///     should write the reason in — usually the app's UI language. `nil`
     ///     leaves the model to answer in its default (English).
@@ -89,6 +94,7 @@ public struct RecommendationConcierge: Sendable {
         in library: [UnifiedMediaItem],
         useAI: Bool = true,
         excludeWatched: Bool = true,
+        personalize: Bool = true,
         reasonLanguage: String? = nil,
         engine: RecommendationEngine = RecommendationEngine(),
         parser: RecommendationQueryParser = RecommendationQueryParser(),
@@ -97,12 +103,17 @@ public struct RecommendationConcierge: Sendable {
         let clock = ContinuousClock()
         let start = clock.now
 
+        // Learn taste from the same library snapshot (watched / favourited /
+        // highly-rated titles). Pure + in-memory — no I/O, works on every path.
+        let taste = personalize ? TasteProfile.from(library: library) : nil
+
         #if canImport(FoundationModels) && !os(tvOS)
         if useAI, #available(iOS 26, macOS 26, visionOS 26, *), Self.isAvailable {
             do {
                 let result = try await aiRecommend(
                     query: query, in: library, engine: engine,
-                    excludeWatched: excludeWatched, reasonLanguage: reasonLanguage, enrich: enrich
+                    excludeWatched: excludeWatched, taste: taste,
+                    reasonLanguage: reasonLanguage, enrich: enrich
                 )
                 Self.logOutcome(result, elapsed: start.duration(to: clock.now))
                 return result
@@ -111,7 +122,7 @@ public struct RecommendationConcierge: Sendable {
             }
         }
         #endif
-        let result = deterministic(query: query, in: library, engine: engine, parser: parser, excludeWatched: excludeWatched)
+        let result = deterministic(query: query, in: library, engine: engine, parser: parser, excludeWatched: excludeWatched, taste: taste)
         Self.logOutcome(result, elapsed: start.duration(to: clock.now))
         return result
     }
@@ -130,11 +141,12 @@ public struct RecommendationConcierge: Sendable {
         in library: [UnifiedMediaItem],
         engine: RecommendationEngine,
         parser: RecommendationQueryParser,
-        excludeWatched: Bool
+        excludeWatched: Bool,
+        taste: TasteProfile?
     ) -> RecommendationResult {
         var request = parser.parse(query, availableGenres: engine.availableGenres(in: library))
         request.excludeWatched = excludeWatched
-        let shortlist = engine.recommend(from: library, request: request)
+        let shortlist = engine.recommend(from: library, request: request, taste: taste)
         return RecommendationResult(pick: shortlist.first, reason: nil, shortlist: shortlist, usedAI: false)
     }
 
@@ -176,6 +188,7 @@ public struct RecommendationConcierge: Sendable {
         in library: [UnifiedMediaItem],
         engine: RecommendationEngine,
         excludeWatched: Bool,
+        taste: TasteProfile?,
         reasonLanguage: String?,
         enrich: (@Sendable ([UnifiedMediaItem]) async -> [String: [String]])?
     ) async throws -> RecommendationResult {
@@ -197,7 +210,7 @@ public struct RecommendationConcierge: Sendable {
             excludeWatched: excludeWatched,
             limit: 12
         )
-        let shortlist = engine.recommend(from: library, request: request)
+        let shortlist = engine.recommend(from: library, request: request, taste: taste)
         guard !shortlist.isEmpty else {
             return RecommendationResult(pick: nil, reason: nil, shortlist: [], usedAI: true)
         }
