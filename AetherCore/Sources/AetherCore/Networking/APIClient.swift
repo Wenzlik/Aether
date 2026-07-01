@@ -14,7 +14,35 @@ public protocol APIClient: Sendable {
 public struct URLSessionAPIClient: APIClient {
     private let session: URLSession
 
-    public init(session: URLSession = .shared) {
+    /// A shared session with **bounded** timeouts for JSON API calls.
+    ///
+    /// `URLSession.shared` defaults to a 60 s request timeout and a **7-day**
+    /// resource timeout. On a self-hosted / LAN media server that goes quiet
+    /// (Wi-Fi↔cellular handoff, a sleeping NAS, a wedged reverse proxy) an
+    /// `await` on a small API call — a Plex transcode decision, a Jellyfin
+    /// `PlaybackInfo`, a library page for the Search discovery rails — then
+    /// hangs far longer than a user will wait, surfacing as a frozen spinner
+    /// that only clears when the screen is re-entered. These are lightweight
+    /// JSON calls, never large media downloads (those ride the DownloadManager's
+    /// own background session), so short caps are safe and fail fast into the
+    /// fallback path. A per-request `timeoutInterval` still overrides
+    /// `timeoutIntervalForRequest` where a call wants a tighter bound (e.g. the
+    /// Plex reachability probe and the transcode warm-up).
+    private static let bounded: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15    // idle wait for the next packet
+        config.timeoutIntervalForResource = 60   // hard ceiling for the whole call
+        config.waitsForConnectivity = false      // fail fast off-network, don't park the request
+        return URLSession(configuration: config)
+    }()
+
+    /// Uses the shared, timeout-bounded session (see `bounded`).
+    public init() {
+        self.session = URLSessionAPIClient.bounded
+    }
+
+    /// Inject a specific session (tests, or a caller that needs different limits).
+    public init(session: URLSession) {
         self.session = session
     }
 
