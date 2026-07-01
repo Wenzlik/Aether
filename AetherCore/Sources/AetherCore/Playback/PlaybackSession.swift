@@ -93,6 +93,16 @@ public actor PlaybackSession {
     private var recoveryAttempts = 0
     private static let maxRecoveryAttempts = 1
 
+    /// Monotonic token identifying the latest `prepare(...)`. Bumped synchronously
+    /// on entry; each `prepare` captures its value and, after every suspension,
+    /// bails if a newer `prepare` has started. Without this, two overlapping
+    /// prepares (e.g. an audio-track switch fired during an auto-advance) can
+    /// interleave at their `await` points and let the older one overwrite
+    /// `activeTranscodeSessionID`/`avPlayer` after the newer one set them —
+    /// orphaning a transcode session on the server (which then hits its
+    /// simultaneous-transcode limit and stalls the *next* episode).
+    private var prepareGeneration = 0
+
     /// djb2 hash of a string — stable within a run, one-way (token-safe).
     nonisolated static func urlHash(_ url: URL?) -> String {
         guard let url else { return "nil" }
@@ -189,6 +199,10 @@ public actor PlaybackSession {
         // A user-initiated open re-arms the recovery budget; a recovery re-prepare
         // must not, or it could loop on a permanently broken stream.
         if !isRecovery { recoveryAttempts = 0 }
+        // Claim this prepare as the latest; a superseded one bails at its guards
+        // below rather than clobbering the winner's player/session.
+        prepareGeneration &+= 1
+        let generation = prepareGeneration
         attempt += 1
         let startLabel = explicitStart.map { String($0) } ?? "resume"
         Self.log.notice("prepare #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) source=\(item.id.source.stableKey, privacy: .public) startAt=\(startLabel, privacy: .public)")
@@ -262,10 +276,17 @@ public actor PlaybackSession {
             }
         }
 
-        activeTranscodeSessionID = resolved.transcodeSessionID
-        currentDecision = resolved.decision
+        // A newer prepare superseded this one while we were resolving — don't
+        // clobber its state. Release the transcode session we just resolved so
+        // the server doesn't leak it (best-effort, detached).
+        guard prepareGeneration == generation else {
+            releaseOrphanedSession(resolved.transcodeSessionID)
+            return
+        }
+
         let seekTarget = seekTarget(for: resolved, position: resumeSeconds)
         let url = resolved.url
+        let isServerTranscode = resolved.isServerTranscode
         // Direct play ships the file as-is and Aether is authoritative about the
         // track selection (resolved into the item upstream via
         // `PlaybackPreferencesStore.applied(to:)`). Computed once: it gates both
@@ -284,10 +305,32 @@ public actor PlaybackSession {
                 p.appliesMediaSelectionCriteriaAutomatically = false
             }
             if let seekTarget {
-                p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                // Exact (`.zero`) seeks on an HLS/transcode stream make AVFoundation
+                // wait for the precise sample to be produced+buffered, which stalls
+                // when the transcoder hasn't reached that offset. Direct-play files
+                // seek cheaply and exactly; transcodes get a small tolerance so the
+                // player lands on the nearest available point instead of hanging.
+                let tolerance = Self.seekTolerance(isServerTranscode: isServerTranscode)
+                p.seek(to: CMTime(seconds: seekTarget, preferredTimescale: 600), toleranceBefore: tolerance, toleranceAfter: tolerance)
             }
             return (p, Self.shortID(p.currentItem))
         }
+
+        // Second guard: the MainActor hop above is a suspension point too, so a
+        // newer prepare could have started while we built the player. If so, drop
+        // this player and session without touching shared state.
+        guard prepareGeneration == generation else {
+            await MainActor.run {
+                player.pause()
+                player.replaceCurrentItem(with: nil)
+            }
+            releaseOrphanedSession(resolved.transcodeSessionID)
+            return
+        }
+
+        // We won — now it's safe to publish this prepare's player/session/state.
+        activeTranscodeSessionID = resolved.transcodeSessionID
+        currentDecision = resolved.decision
 
         let sessionShort: String = resolved.transcodeSessionID.map { String($0.prefix(8)) } ?? "-"
         let createdLog = "player created #\(attempt) player=\(Self.shortID(player)) item=\(itemID) transcode=\(resolved.isServerTranscode) session=\(sessionShort) urlHash=\(Self.urlHash(url))"
@@ -379,8 +422,9 @@ public actor PlaybackSession {
         guard let avPlayer else { return }
         let seconds = Self.durationSeconds(position)
         let cmTime = CMTime(seconds: seconds, preferredTimescale: 600)
+        let tolerance = Self.seekTolerance(isServerTranscode: currentDecision != .directPlay)
         await MainActor.run {
-            avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            avPlayer.seek(to: cmTime, toleranceBefore: tolerance, toleranceAfter: tolerance)
         }
         state.position = position
     }
@@ -393,8 +437,9 @@ public actor PlaybackSession {
         guard let avPlayer else { return }
         let playerSeconds = max(0, target)
         let cmTime = CMTime(seconds: playerSeconds, preferredTimescale: 600)
+        let tolerance = Self.seekTolerance(isServerTranscode: currentDecision != .directPlay)
         await MainActor.run {
-            avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            avPlayer.seek(to: cmTime, toleranceBefore: tolerance, toleranceAfter: tolerance)
         }
         state.position = .seconds(target)
     }
@@ -474,7 +519,12 @@ public actor PlaybackSession {
             return
         }
         recoveryAttempts += 1
-        let position = Self.durationSeconds(state.position)
+        // Recover at the **live** playhead, not `state.position` (which the resume
+        // loop only refreshes every ~5s and which the native scrubber bypasses
+        // entirely). After a scrub-into-unproduced-segments stall, `currentTime()`
+        // already reflects the seek target, so re-resolving here rebuilds the
+        // stream at exactly where the user jumped to.
+        let position = await currentPositionSeconds()
         Self.log.notice("auto-recover #\(self.attempt, privacy: .public) (try \(self.recoveryAttempts, privacy: .public)) at \(position, privacy: .public)s after: \(message, privacy: .public)")
         await prepare(item: item, source: source, startAt: position, isRecovery: true)
         if state.status != .failed {
@@ -583,7 +633,13 @@ public actor PlaybackSession {
 
     private func tickResume() async {
         guard state.status == .playing else { return }
+        let before = state.position
         await writeResumeNow()
+        // Healthy forward progress refreshes the recovery budget, so a *later*
+        // independent stall (another scrub, a second reaped session) can auto-
+        // recover too. A permanently broken stream never advances, so its budget
+        // stays spent and recovery correctly gives up instead of looping.
+        if state.position > before { recoveryAttempts = 0 }
     }
 
     private func writeResumeNow() async {
@@ -653,12 +709,23 @@ public actor PlaybackSession {
         return Self.durationSeconds(point.position)
     }
 
+    /// Fire-and-forget stop of a transcode session this session no longer owns
+    /// (torn-down playback, or a superseded `prepare`). Detached so a slow/hung
+    /// stop never blocks the caller — teardown sits on the critical path right
+    /// before the *next* episode resolves, and a stop that hangs there is itself
+    /// a source of the "next episode won't start" freeze. Best-effort.
+    private func releaseOrphanedSession(_ sessionID: String?) {
+        guard let sessionID, let source else { return }
+        Task { await source.stopTranscode(sessionID: sessionID) }
+    }
+
     private func teardownPlayer() async {
-        // Stop the server transcode session so Plex frees it immediately rather
-        // than reaping it later (and so a stale one can't linger).
+        // Stop the server transcode session so Plex/Jellyfin/Emby free it
+        // immediately rather than reaping it later (and so a stale one can't
+        // linger). Detached — see `releaseOrphanedSession`.
         if let sessionID = activeTranscodeSessionID {
             activeTranscodeSessionID = nil
-            await source?.stopTranscode(sessionID: sessionID)
+            releaseOrphanedSession(sessionID)
         }
         guard let player = avPlayer else { return }
         Self.log.notice("teardown #\(self.attempt, privacy: .public) player=\(Self.shortID(player), privacy: .public)")
@@ -674,6 +741,16 @@ public actor PlaybackSession {
     static func durationSeconds(_ duration: Duration) -> Double {
         let parts = duration.components
         return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
+    /// Seek tolerance by stream type. Direct-play files (local / remuxed) seek
+    /// cheaply and exactly, so `.zero` is precise and fast. Server transcodes are
+    /// HLS produced linearly from the session's start offset — an exact seek
+    /// there makes AVFoundation wait for the precise sample to be encoded and
+    /// buffered, which stalls when the transcoder hasn't reached that point, so
+    /// a small window lets the player settle on the nearest available frame.
+    static func seekTolerance(isServerTranscode: Bool) -> CMTime {
+        isServerTranscode ? CMTime(seconds: 2, preferredTimescale: 600) : .zero
     }
 
     /// Clamp a resume position to a sane range for `runtime`. A non-finite or
