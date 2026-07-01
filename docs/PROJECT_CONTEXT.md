@@ -18,12 +18,15 @@ The product goal is not to be a kitchen-sink media center. Aether should feel ci
 
 ## Supported Sources
 
-- Plex
-- Jellyfin
+- Plex (multiple servers, multiple accounts)
+- Jellyfin (multiple servers)
+- Emby (multiple servers)
 - Local Library
 - SMB
 
-Netflix availability is an optional metadata and discovery integration, not a playback source.
+All sources fan out into one merged `UnifiedLibrary` — source is an implementation
+detail behind a title, not a separate tab or browsing mode. Netflix availability
+is an optional metadata and discovery integration, not a playback source.
 
 ## Technology Stack
 
@@ -62,15 +65,16 @@ For the full visual language, see `/docs/ux/DESIGN_PRINCIPLES.md`.
 
 ## Active Features
 
-- Unified Home / Library / Discover experience
-- Plex multi-server support with primary streaming server selection
-- Jellyfin support
-- Local Library on macOS
+- Unified Home / Library / Discover experience across every connected source
+- Plex multi-server, multi-account support
+- Jellyfin and Emby support, each with multiple servers
+- Local Library (macOS and iOS-family)
 - SMB browsing and playback
 - Native playback with resume, watched sync, and continue watching
 - Cross-device resume via media-server sync
 - Downloads / offline playback
 - visionOS Cinema Mode
+- Ask Aether — on-device natural-language recommendations grounded in the user's own library
 - Localization: English, Czech, Ukrainian
 - Netflix availability badges and discovery integration
 
@@ -84,7 +88,7 @@ For the full visual language, see `/docs/ux/DESIGN_PRINCIPLES.md`.
 
 ## Current Priorities
 
-- Stabilize the 0.7.6 line and the staging branch
+- Stabilize the `staging` branch (currently tracking 0.8.7)
 - Public TestFlight readiness
 - Playback reliability across platforms
 - Unified Library polish

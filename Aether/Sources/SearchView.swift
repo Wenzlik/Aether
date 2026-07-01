@@ -109,7 +109,7 @@ struct SearchView: View {
     @ViewBuilder
     private var content: some View {
         if isAsking {
-            AetherLoadingDots(caption: String(localized: "Asking Aether…"))
+            AetherLoadingState(.rails(count: 1), captions: Self.askingCaptions)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let askResult {
             RecommendationResultsView(result: askResult, pendingQuery: pendingAsk,
@@ -133,7 +133,7 @@ struct SearchView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if discoveryIsEmpty && (isLoadingDiscovery || !hasLoadedDiscovery) {
-            AetherLoadingState(.rails(count: 2))
+            AetherLoadingState(.rails(count: 2), captions: Self.discoveryCaptions)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
@@ -250,6 +250,24 @@ struct SearchView: View {
     private var sourcesKey: String {
         connectedSources.map { $0.id.stableKey }.sorted().joined(separator: ",")
     }
+
+    /// Playful one-liners rotated under the loader so a wait reads as *alive*,
+    /// not stuck. `String(localized:)` so they're catalog-managed (base English)
+    /// rather than shown verbatim — `AetherLoadingDots` renders the caption as a
+    /// plain String, so the localization has to happen here at the call site.
+    private static let discoveryCaptions = [
+        String(localized: "Rummaging through your shelves…"),
+        String(localized: "Dusting off the good stuff…"),
+        String(localized: "Warming up the projector…"),
+        String(localized: "Straightening the movie posters…")
+    ]
+
+    private static let askingCaptions = [
+        String(localized: "Reading your taste leaves…"),
+        String(localized: "Pretending to think really hard…"),
+        String(localized: "Judging your watchlist (kindly)…"),
+        String(localized: "Consulting the on-device oracle…")
+    ]
 
     /// Run an "Ask Aether" request: fetch the unified catalogue and hand it to
     /// the concierge (on-device model where available, deterministic fallback

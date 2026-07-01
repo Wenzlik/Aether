@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CoreMedia
 @testable import AetherCore
 
 @Suite("AetherCore — Foundation")
@@ -55,6 +56,18 @@ struct PlaybackSessionTests {
         #expect(PlaybackSession.sanitizedResume(.nan, runtime: twoHours) == 0)
         // Unknown runtime → keep a positive value (can't bound it).
         #expect(PlaybackSession.sanitizedResume(3600, runtime: nil) == 3600)
+    }
+
+    @Test("seekTolerance is exact for direct play, windowed for a transcode")
+    func seekToleranceByStreamType() {
+        // Direct-play files seek cheaply and exactly.
+        #expect(PlaybackSession.seekTolerance(isServerTranscode: false) == .zero)
+        // A server transcode (HLS produced from the start offset) gets a small
+        // non-zero window so an exact seek doesn't stall waiting for a sample the
+        // transcoder hasn't made — the seek-into-unproduced-segment freeze.
+        let transcode = PlaybackSession.seekTolerance(isServerTranscode: true)
+        #expect(transcode != .zero)
+        #expect(transcode.seconds == 2)
     }
 
     @Test("idle → loading → playing → paused on a valid item")

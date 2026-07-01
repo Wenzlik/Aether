@@ -53,13 +53,25 @@ public struct RecommendationEngine: Sendable {
     ///
     /// Ranking order (all deterministic, locale-independent):
     /// 1. number of requested genres matched (more = better)
-    /// 2. best available rating (`tmdbRating` ?? `communityRating`)
-    /// 3. known runtime within `maxRuntime` ranks above unknown runtime
-    /// 4. newer release year
-    /// 5. title (stable tie-break)
+    /// 2. taste overlap — how well the title's genres match what the user tends
+    ///    to like (`taste`); `0` for everyone when no profile is supplied, so
+    ///    this tier is then a no-op and ranking falls straight through to rating
+    /// 3. best available rating (`tmdbRating` ?? `communityRating`)
+    /// 4. known runtime within `maxRuntime` ranks above unknown runtime
+    /// 5. newer release year
+    /// 6. title (stable tie-break)
+    ///
+    /// Taste sits *below* the explicit genre-match count: a request's stated
+    /// intent always wins, and taste only re-orders titles that satisfy the ask
+    /// equally well (or, for a genre-less "recommend me something", becomes the
+    /// primary signal).
+    /// - Parameter taste: the user's learned genre preferences. `nil` keeps the
+    ///   ranking purely request-driven (the original behaviour), so callers that
+    ///   don't personalise are unaffected.
     public func recommend(
         from items: [UnifiedMediaItem],
-        request: RecommendationRequest
+        request: RecommendationRequest,
+        taste: TasteProfile? = nil
     ) -> [UnifiedMediaItem] {
         guard request.limit > 0 else { return [] }
 
@@ -88,7 +100,12 @@ public struct RecommendationEngine: Sendable {
             // Watched filter.
             if request.excludeWatched && item.isFullyWatched { return nil }
 
-            return Candidate(item: item, matchedGenres: matched, runtimeKnownFit: runtimeFits)
+            return Candidate(
+                item: item,
+                matchedGenres: matched,
+                tasteScore: taste?.score(item) ?? 0,
+                runtimeKnownFit: runtimeFits
+            )
         }
 
         let ranked = candidates.sorted(by: Self.ranksHigher)
@@ -113,6 +130,8 @@ public struct RecommendationEngine: Sendable {
     private struct Candidate {
         let item: UnifiedMediaItem
         let matchedGenres: Int
+        /// Genre overlap with the user's taste profile; 0 when not personalising.
+        let tasteScore: Double
         let runtimeKnownFit: Bool
 
         /// Best available rating, 0 when none is known (sorts such titles last).
@@ -121,6 +140,7 @@ public struct RecommendationEngine: Sendable {
 
     private static func ranksHigher(_ a: Candidate, _ b: Candidate) -> Bool {
         if a.matchedGenres != b.matchedGenres { return a.matchedGenres > b.matchedGenres }
+        if a.tasteScore != b.tasteScore { return a.tasteScore > b.tasteScore }
         if a.rating != b.rating { return a.rating > b.rating }
         if a.runtimeKnownFit != b.runtimeKnownFit { return a.runtimeKnownFit }
         let ay = a.item.year ?? .min, by = b.item.year ?? .min
