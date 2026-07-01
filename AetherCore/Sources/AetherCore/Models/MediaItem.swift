@@ -581,6 +581,26 @@ public struct CastMember: Identifiable, Hashable, Sendable, Codable {
     }
 }
 
+extension Array where Element == CastMember {
+    /// Entries billed as key crew rather than actors. Both Plex and the
+    /// MediaBrowser mapping label crew with the job as the `role` ("Director",
+    /// "Writer"); actors carry a character name or `nil`.
+    private static var crewJobs: Set<String> { ["director", "writer"] }
+
+    /// The top-billed actors — every entry that isn't key crew.
+    public var actors: [CastMember] {
+        filter { member in
+            guard let role = member.role else { return true }
+            return !Self.crewJobs.contains(role.lowercased())
+        }
+    }
+
+    /// The entries billed as directors.
+    public var directors: [CastMember] {
+        filter { $0.role?.caseInsensitiveCompare("Director") == .orderedSame }
+    }
+}
+
 /// Identity of a media item, scoped by its source.
 public struct MediaID: Hashable, Sendable {
     public let source: MediaSourceID

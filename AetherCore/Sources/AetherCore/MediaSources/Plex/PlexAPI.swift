@@ -397,6 +397,9 @@ public enum PlexAPI {
         /// Cast entries (`{"tag": actor, "role": character, "thumb": photo}`),
         /// returned on the detail endpoint. JSON key capital `Role`.
         public let roles: [Role]?
+        /// Director entries (`{"tag": name, "thumb": photo}`) — same tag shape
+        /// as `Role`, without a character. JSON key capital `Director`.
+        public let directors: [Role]?
         /// Alternative artwork entries (`{"type": "clearLogo", "url": path}`) —
         /// the source of title logo art. JSON key capital `Image`.
         public let images: [ImageEntry]?
@@ -540,6 +543,7 @@ public enum PlexAPI {
             contentRating: String? = nil,
             genreTags: [Tag]? = nil,
             roles: [Role]? = nil,
+            directors: [Role]? = nil,
             images: [ImageEntry]? = nil
         ) {
             self.ratingKey = ratingKey
@@ -571,6 +575,7 @@ public enum PlexAPI {
             self.contentRating = contentRating
             self.genreTags = genreTags
             self.roles = roles
+            self.directors = directors
             self.images = images
         }
 
@@ -703,6 +708,7 @@ public enum PlexAPI {
             case markers = "Marker"
             case genreTags = "Genre"
             case roles = "Role"
+            case directors = "Director"
             case images = "Image"
         }
 

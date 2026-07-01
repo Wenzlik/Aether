@@ -11,6 +11,10 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   history, matching the iOS app. (Release notes are mirrored in the macOS target
   for now — `ReleaseNote`/`releaseHistory` live in the iOS target and `AetherCore`
   has no String Catalog yet; a single shared source of truth is a follow-up.)
+- **Plex — directors in Cast & Crew** — the Detail rail now shows a title's
+  director(s) after the cast, like Jellyfin/Emby already did: the Plex `Director`
+  tag is parsed alongside `Role`. (Director cards stay non-tappable on Plex for
+  now — the person-filmography flow assumes an actor id.)
 
 ### Changed
 
@@ -30,6 +34,14 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
   you actually watch. The stated request still wins — taste only re-orders titles
   that match it equally well, and becomes the primary signal for a genre-less
   "recommend me something".
+- **Ask Aether — the model now sees cast, director, and content rating** — each
+  shortlist candidate handed to the on-device model carries its top-billed cast,
+  director, and age rating ("rated PG-13") next to the existing synopsis and TMDb
+  keywords, so asks like "a Nolan-style thriller" or "something for the kids"
+  ground on real metadata. Cast/content-rating are aggregated onto
+  `UnifiedMediaItem` from whichever source carries them; for sources whose list
+  payload omits people (Jellyfin), the shortlist (≤10 titles) is backfilled once
+  per session from the detail endpoint.
 
 ### Fixed
 
