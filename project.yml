@@ -253,6 +253,21 @@ targets:
         # Surfaces "Aether" in Xcode's Identity → Display Name field. Also
         # generated into the per-destination Info.plist by Xcode.
         INFOPLIST_KEY_CFBundleDisplayName: Aether
+        # ITMS-90863: the iOS binary is validated for "iPhone/iPad apps on Apple
+        # Silicon Macs", and macOS's FoundationModels lacks the `Generable`
+        # prompt/instructions symbols (`ParsedQuery`/`Pick` in Ask Aether) → a
+        # warning on every upload even with Mac availability turned off in ASC
+        # (that toggle gates distribution, not this static binary check). The code
+        # already runtime-guards FoundationModels (`#available(iOS 26…)` +
+        # `SystemLanguageModel.default.availability`), so make the framework
+        # *weakly* linked on the iOS device binary — stop autolinking it strongly
+        # (Swift emits a strong `-framework` from `import FoundationModels`) and
+        # weak-link it instead, so the symbols may be absent on a Mac and the app
+        # degrades gracefully. Scoped to the device SDK only: tvOS has no
+        # FoundationModels, the simulator/CI build keeps the normal link, and
+        # visionOS (not Mac-distributed) stays strongly linked.
+        "OTHER_SWIFT_FLAGS[sdk=iphoneos*]": "$(inherited) -Xfrontend -disable-autolink-framework -Xfrontend FoundationModels"
+        "OTHER_LDFLAGS[sdk=iphoneos*]": "$(inherited) -weak_framework FoundationModels"
       configs:
         Debug:
           CODE_SIGN_IDENTITY: Apple Development
