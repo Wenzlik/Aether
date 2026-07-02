@@ -508,6 +508,12 @@ public actor PlexMediaSource: MediaSource {
                 sawEXTM3U=\(outcome.sawPlaylistMarker, privacy: .public)
                 """
             )
+            // The warm-up GETs already *started* this transcode on the server;
+            // throwing without stopping it orphans the ffmpeg job against the
+            // simultaneous-transcode limit — a few retries later every attempt
+            // fails. Best-effort, detached (the user is already looking at an
+            // error; a hung stop must not delay surfacing it).
+            Task { await self.stopTranscode(sessionID: sessionID) }
             throw PlaybackResolveError.notReady(diagnostics: Self.diagnostics(
                 isLocal: isLocal, base: base, sessionID: sessionID, offset: rawOffset,
                 audioStreamID: request.audioStreamID, subtitleStreamID: request.subtitleStreamID,
@@ -555,6 +561,10 @@ public actor PlexMediaSource: MediaSource {
             }
             let outcome = await sessionManager.warmUp(warmUpRequest(for: url), delays: warmUpBackoff)
             guard outcome.ready else {
+                // Same as the decision path above: the warm-up already started
+                // this transcode — stop it (best-effort, detached) or it leaks
+                // against the server's simultaneous-transcode limit.
+                Task { await self.stopTranscode(sessionID: sessionID) }
                 throw PlaybackResolveError.notReady(diagnostics: Self.diagnostics(
                     isLocal: resolvedIsLocal, base: base, sessionID: sessionID, offset: rawOffset,
                     audioStreamID: request.audioStreamID, subtitleStreamID: request.subtitleStreamID,

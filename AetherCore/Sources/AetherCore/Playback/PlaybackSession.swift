@@ -208,11 +208,22 @@ public actor PlaybackSession {
         Self.log.notice("prepare #\(self.attempt, privacy: .public) item=\(item.id.rawValue, privacy: .public) source=\(item.id.source.stableKey, privacy: .public) startAt=\(startLabel, privacy: .public)")
 
         // Tear down previous session before starting a new one (stops its
-        // transcode session too).
+        // transcode session too). Persist the outgoing item's final position
+        // first — an episode transition otherwise drops up to ~5 s of progress
+        // (the resume loop's cadence). The server half of that write is
+        // detached: a wedged server must not delay the next episode's start.
         resumeTask?.cancel()
         resumeTask = nil
+        await writeResumeNow(detachedServerReport: true)
         await teardownPlayer()
-        self.source = source
+
+        // The waits above are suspension points — if a newer prepare (or a
+        // stop) claimed the session meanwhile, ours must not write any state.
+        // NOTE: `self.source` is deliberately NOT set here — it's published at
+        // the win point below, together with the player. Publishing it early
+        // let an interleaved prepare resolve its item through the *other*
+        // prepare's server (and release sessions against the wrong source).
+        guard prepareGeneration == generation else { return }
 
         // Show "loading" up front: resolving warms up the transcode (can take a
         // few seconds), and we'd rather sit in loading than flash a failure.
@@ -265,8 +276,11 @@ public actor PlaybackSession {
             // This is what stops a reaped / not-yet-ready Plex session
             // surfacing as NSURLError -1008.
             do {
-                resolved = try await resolvePlayback(for: item, startSeconds: resumeSeconds)
+                resolved = try await resolvePlayback(for: item, via: source, startSeconds: resumeSeconds)
             } catch {
+                // A newer prepare/stop superseded us while resolving — its
+                // state must not be clobbered with our failure.
+                guard prepareGeneration == generation else { return }
                 state = PlaybackState(
                     status: .failed,
                     item: item,
@@ -278,9 +292,10 @@ public actor PlaybackSession {
 
         // A newer prepare superseded this one while we were resolving — don't
         // clobber its state. Release the transcode session we just resolved so
-        // the server doesn't leak it (best-effort, detached).
+        // the server doesn't leak it (best-effort, detached) — via OUR source,
+        // not `self.source`, which may already belong to the newer prepare.
         guard prepareGeneration == generation else {
-            releaseOrphanedSession(resolved.transcodeSessionID)
+            releaseOrphanedSession(resolved.transcodeSessionID, via: source)
             return
         }
 
@@ -324,11 +339,13 @@ public actor PlaybackSession {
                 player.pause()
                 player.replaceCurrentItem(with: nil)
             }
-            releaseOrphanedSession(resolved.transcodeSessionID)
+            releaseOrphanedSession(resolved.transcodeSessionID, via: source)
             return
         }
 
-        // We won — now it's safe to publish this prepare's player/session/state.
+        // We won — now it's safe to publish this prepare's player/session/
+        // source/state.
+        self.source = source
         activeTranscodeSessionID = resolved.transcodeSessionID
         currentDecision = resolved.decision
 
@@ -483,15 +500,28 @@ public actor PlaybackSession {
 
     /// The live absolute content position in seconds — fresh on demand (the
     /// resume loop only writes every few seconds, too coarse for the skip
-    /// buttons). Falls back to the last recorded `state.position`.
+    /// buttons). Falls back to the last recorded `state.position` — including
+    /// while the current item has not yet reached `.readyToPlay`: a player
+    /// that is still buffering its first frame reports `currentTime() == 0`,
+    /// not the resume offset the stream was resolved at, and a recovery that
+    /// trusted that would restart the title from the beginning (and let the
+    /// resume loop overwrite the saved point with 0).
     public func currentPositionSeconds() async -> Double {
         guard let avPlayer else { return Self.durationSeconds(state.position) }
-        let elapsed = await MainActor.run { avPlayer.currentTime().seconds }
-        guard elapsed.isFinite, !elapsed.isNaN else { return Self.durationSeconds(state.position) }
+        let (elapsed, ready) = await MainActor.run {
+            (avPlayer.currentTime().seconds, avPlayer.currentItem?.status == .readyToPlay)
+        }
+        guard ready, elapsed.isFinite, !elapsed.isNaN else { return Self.durationSeconds(state.position) }
         return elapsed
     }
 
     public func stop() async {
+        // Invalidate any in-flight prepare/recovery. Without this, a recovery
+        // suspended in resolve (seconds of warm-up) can pass its generation
+        // guards *after* the user closed the player and resurrect playback —
+        // a fresh AVPlayer, transcode session, and resume loop with no UI
+        // left to stop them.
+        prepareGeneration &+= 1
         resumeTask?.cancel()
         resumeTask = nil
         await writeResumeNow()
@@ -519,15 +549,29 @@ public actor PlaybackSession {
             return
         }
         recoveryAttempts += 1
+        // A failure while paused (e.g. the server reaped the idle transcode)
+        // must recover *paused* — auto-playing would start sound in a room the
+        // user walked away from.
+        let wasPaused = state.status == .paused
+        let generation = prepareGeneration
         // Recover at the **live** playhead, not `state.position` (which the resume
         // loop only refreshes every ~5s and which the native scrubber bypasses
         // entirely). After a scrub-into-unproduced-segments stall, `currentTime()`
         // already reflects the seek target, so re-resolving here rebuilds the
         // stream at exactly where the user jumped to.
         let position = await currentPositionSeconds()
+        // The playhead read suspends: if the user stopped playback or opened a
+        // different title meanwhile, this recovery is stale — bail rather than
+        // resurrect a closed player or restart the old episode.
+        guard prepareGeneration == generation, state.item?.id == item.id else { return }
         Self.log.notice("auto-recover #\(self.attempt, privacy: .public) (try \(self.recoveryAttempts, privacy: .public)) at \(position, privacy: .public)s after: \(message, privacy: .public)")
         await prepare(item: item, source: source, startAt: position, isRecovery: true)
-        if state.status != .failed {
+        // Only touch the outcome if this recovery's prepare is still the live
+        // one (stop() empties the item; a newer open() swaps it).
+        guard state.status != .failed, state.item?.id == item.id else { return }
+        if wasPaused {
+            state.status = .paused
+        } else {
             await play()
         }
     }
@@ -561,10 +605,15 @@ public actor PlaybackSession {
     // MARK: - Internals
 
     /// Resolve a fresh playback URL for `item` at `startSeconds`. Routes through
-    /// the source's resolver when we have one (Plex mints a new transcode
+    /// the given source's resolver when there is one (Plex mints a new transcode
     /// session); falls back to the item's own `streamURL` otherwise (tests and
-    /// sources without a resolver).
-    private func resolvePlayback(for item: MediaItem, startSeconds: Double) async throws -> ResolvedPlayback {
+    /// sources without a resolver). Takes the source explicitly — reading
+    /// `self.source` here would race an interleaved prepare (see `prepare`).
+    private func resolvePlayback(
+        for item: MediaItem,
+        via source: (any MediaSource)?,
+        startSeconds: Double
+    ) async throws -> ResolvedPlayback {
         let startTime: Duration? = startSeconds > 0 ? .seconds(startSeconds) : nil
         let request = PlaybackRequest(item: item, startTime: startTime)
 
@@ -642,19 +691,32 @@ public actor PlaybackSession {
         if state.position > before { recoveryAttempts = 0 }
     }
 
-    private func writeResumeNow() async {
+    private func writeResumeNow(detachedServerReport: Bool = false) async {
         guard let item = state.item, let player = avPlayer else { return }
-        let (elapsed, durationSeconds) = await MainActor.run {
-            (player.currentTime().seconds, player.currentItem?.duration.seconds ?? .nan)
+        let (elapsed, durationSeconds, ready) = await MainActor.run {
+            (player.currentTime().seconds,
+             player.currentItem?.duration.seconds ?? .nan,
+             player.currentItem?.status == .readyToPlay)
         }
-        guard elapsed.isFinite, !elapsed.isNaN else { return }
         // The player timeline is absolute (see the note by `prepare`), so the
         // content position is `currentTime()` directly. Clamp to the duration so
         // a bad reading can never persist a resume point beyond the runtime —
         // an over-the-end resume is exactly what broke "Resume" before.
-        var seconds = max(0, elapsed)
-        if durationSeconds.isFinite, durationSeconds > 0 {
-            seconds = min(seconds, durationSeconds)
+        //
+        // A not-yet-ready item, though, reports position 0 regardless of the
+        // resume offset its stream was resolved at — persisting that would
+        // clobber a real resume point with "start over" while the stream is
+        // still buffering (a slow remote start takes longer than one resume
+        // tick). Fall back to the session's last known position instead (the
+        // resolve offset, or the last healthy tick).
+        var seconds: Double
+        if ready, elapsed.isFinite, !elapsed.isNaN {
+            seconds = max(0, elapsed)
+            if durationSeconds.isFinite, durationSeconds > 0 {
+                seconds = min(seconds, durationSeconds)
+            }
+        } else {
+            seconds = max(0, Self.durationSeconds(state.position))
         }
         let position = Duration.seconds(seconds)
         state.position = position
@@ -663,12 +725,25 @@ public actor PlaybackSession {
         // Sessions), so resume syncs across clients and devices — not just the
         // local store. Best-effort + non-throwing (no-op for sources without
         // server play state). Rides the same ~5s cadence as the local write.
+        // `detachedServerReport` fires it without awaiting — used on the
+        // episode-transition critical path, where a wedged server must not
+        // delay the next episode's resolve (the local write above is the part
+        // that matters for crash-safety).
         let serverDuration = durationSeconds.isFinite && durationSeconds > 0
             ? Duration.seconds(durationSeconds) : nil
-        await source?.recordProgress(
-            item.id, position: position, duration: serverDuration,
-            paused: state.status != .playing
-        )
+        let paused = state.status != .playing
+        if detachedServerReport {
+            let source = source
+            Task {
+                await source?.recordProgress(
+                    item.id, position: position, duration: serverDuration, paused: paused
+                )
+            }
+        } else {
+            await source?.recordProgress(
+                item.id, position: position, duration: serverDuration, paused: paused
+            )
+        }
     }
 
     /// Return the local file URL for `item` **only if AVPlayer can decode
@@ -713,8 +788,11 @@ public actor PlaybackSession {
     /// (torn-down playback, or a superseded `prepare`). Detached so a slow/hung
     /// stop never blocks the caller — teardown sits on the critical path right
     /// before the *next* episode resolves, and a stop that hangs there is itself
-    /// a source of the "next episode won't start" freeze. Best-effort.
-    private func releaseOrphanedSession(_ sessionID: String?) {
+    /// a source of the "next episode won't start" freeze. Best-effort. The
+    /// source is explicit: a superseded prepare must release against the server
+    /// that minted the session, and `self.source` may already belong to the
+    /// prepare that superseded it (a no-op stop there leaks the real session).
+    private func releaseOrphanedSession(_ sessionID: String?, via source: (any MediaSource)?) {
         guard let sessionID, let source else { return }
         Task { await source.stopTranscode(sessionID: sessionID) }
     }
@@ -725,7 +803,7 @@ public actor PlaybackSession {
         // linger). Detached — see `releaseOrphanedSession`.
         if let sessionID = activeTranscodeSessionID {
             activeTranscodeSessionID = nil
-            releaseOrphanedSession(sessionID)
+            releaseOrphanedSession(sessionID, via: source)
         }
         guard let player = avPlayer else { return }
         Self.log.notice("teardown #\(self.attempt, privacy: .public) player=\(Self.shortID(player), privacy: .public)")

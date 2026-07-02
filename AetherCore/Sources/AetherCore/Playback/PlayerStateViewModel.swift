@@ -42,6 +42,14 @@ public final class PlayerStateViewModel {
     /// scrub into an unproduced transcode segment (which never self-resolves)
     /// doesn't strand the user on a frozen frame.
     private static let stallTickThreshold = 20
+    /// The player instance the stall watchdog is observing, and whether that
+    /// player has ever been seen actually playing. Initial buffering also sits
+    /// in `.waitingToPlayAtSpecifiedRate` — a slow remote start past the stall
+    /// threshold is not a stall, and "recovering" it just restarts the stream
+    /// (and burns the recovery budget) for nothing. The watchdog arms only
+    /// after the current player's first real playback.
+    private var watchdogPlayerID: ObjectIdentifier?
+    private var watchdogSawPlayback = false
 
     public init(session: PlaybackSession, refreshInterval: Duration = .milliseconds(500)) {
         self.session = session
@@ -161,6 +169,21 @@ public final class PlayerStateViewModel {
             return
         }
 
+        // Arm the stall watchdog only once the current player has actually
+        // played — see `watchdogSawPlayback`. Tracked per player instance so
+        // an episode transition / recovery re-arms from scratch.
+        if let avPlayer {
+            let playerID = ObjectIdentifier(avPlayer)
+            if playerID != watchdogPlayerID {
+                watchdogPlayerID = playerID
+                watchdogSawPlayback = false
+            }
+            if avPlayer.timeControlStatus == .playing { watchdogSawPlayback = true }
+        } else {
+            watchdogPlayerID = nil
+            watchdogSawPlayback = false
+        }
+
         // Silent-stall watchdog. A hard `.failed` above is the easy case; a
         // buffer stall (a scrub into a segment the transcoder hasn't produced, a
         // reaped session) keeps the item `.readyToPlay` while `timeControlStatus`
@@ -168,7 +191,7 @@ public final class PlayerStateViewModel {
         // check above never fires and the picture freezes with no self-heal.
         // Detect a *sustained* stall and route it through the same recovery
         // (which re-resolves a fresh stream at the live playhead).
-        if snapshot.status == .playing, let avPlayer,
+        if snapshot.status == .playing, let avPlayer, watchdogSawPlayback,
            avPlayer.timeControlStatus == .waitingToPlayAtSpecifiedRate {
             stalledPolls += 1
             if stalledPolls >= Self.stallTickThreshold {

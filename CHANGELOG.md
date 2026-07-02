@@ -62,6 +62,39 @@ All notable changes to Aether are documented here. The format follows [Keep a Ch
     stopped (a binge piled up ffmpeg jobs until the newest starved). It now
     returns its `PlaySessionId` and implements `stopTranscode` (`DELETE
     /Videos/ActiveEncodings`), matching Jellyfin.
+- **Playback hardening, round 2** — races and edge cases the first round left
+  open, found by a fresh-eyes audit:
+  - **Closing the player now cancels an in-flight recovery.** `stop()` didn't
+    invalidate the prepare generation, so a recovery suspended in resolve could
+    finish *after* the user closed the player and resurrect playback — audio
+    with no UI, a live server transcode, and a resume loop overwriting the
+    saved position. Recovery also re-checks the generation around its own
+    suspension points, so it can no longer restart the previous episode after a
+    user-initiated switch.
+  - **A slow start can no longer destroy the saved resume point.** The stall
+    watchdog counted *initial buffering* as a stall, and a not-yet-ready player
+    reports position `0` — recovery then restarted the title from the beginning
+    and the resume loop persisted `0` over the real position (locally and to
+    the server). The watchdog now arms only after the current player has
+    actually played, and position reads / resume writes fall back to the last
+    known position until the item is ready.
+  - **Recovery keeps your pause.** A failure while paused (a reaped idle
+    transcode) used to auto-play on recovery — sound starting in a room you
+    walked away from. It now recovers into the paused state.
+  - **Failed Plex warm-up no longer leaks a transcode.** The warm-up polls are
+    what start the server's ffmpeg job; throwing "not ready" without stopping
+    it orphaned the session against the simultaneous-transcode limit, so a few
+    retries made *every* subsequent attempt fail. The failure path now stops
+    the session it minted (best-effort, detached).
+  - **A superseded prepare releases its transcode via its own server.** It read
+    the session-wide `source` — by then already the *newer* prepare's — so on a
+    multi-server switch the stop went to the wrong server (a no-op) and the
+    real session leaked. Ownership (`source`, player, session id) is now
+    published only at the prepare's win point.
+  - **Episode transitions persist the outgoing episode's position** — up to
+    ~5 s of progress (one resume-loop tick) was dropped before; the server half
+    of that final write is detached so a wedged server can't delay the next
+    episode's start.
 
 ## [0.8.6] — 2026-06-28
 

@@ -1497,6 +1497,50 @@ struct PlexMediaSourceLibrariesTests {
         #expect(s1 != s2)
     }
 
+    @Test("Failed warm-up stops the transcode session it started (no orphan against the transcode limit)")
+    func failedWarmUpStopsItsSession() async throws {
+        let api = RecordingAPIClient()
+        await enqueueReachable(api)   // /identity probe
+        // The server never produces the playlist (503); empty backoff = one attempt.
+        await api.enqueue(.init(data: Data("busy".utf8), statusCode: 503, headers: [:]))
+
+        let source = PlexMediaSource(
+            serverID: "test-server",
+            displayName: "Test",
+            accessToken: "srv-token",
+            connections: [.init(uri: "https://lan.plex.direct:32400", isLocal: true, isRelay: false)],
+            configuration: Self.config,
+            api: api,
+            probeTimeout: 1,
+            warmUpBackoff: []
+        )
+        let request = PlaybackRequest(
+            itemID: .init(source: .plex(serverID: "test-server"), rawValue: "42"),
+            mode: .transcode,
+            audioStreamID: nil
+        )
+        await #expect(throws: (any Error).self) {
+            _ = try await source.resolvePlayback(request)
+        }
+
+        // The warm-up GETs already started the transcode on the server, so the
+        // failure path must stop the session it minted. The stop is detached
+        // (fire-and-forget) — poll briefly for it to land.
+        var stop: URLRequest?
+        for _ in 0..<200 where stop == nil {
+            stop = await api.requests.first { $0.url?.path == "/video/:/transcode/universal/stop" }
+            if stop == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        }
+        let stopURL = try #require(stop?.url, "no /transcode/universal/stop request after failed warm-up")
+        let comps = try #require(URLComponents(url: stopURL, resolvingAgainstBaseURL: false))
+        // It stops the *same* session the failed start URL carried.
+        let startURL = try #require(await api.requests.first { $0.url?.path.hasSuffix("start.m3u8") == true }?.url)
+        let startSession = URLComponents(url: startURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "session" }?.value
+        #expect(comps.queryItems?.first { $0.name == "session" }?.value == startSession)
+        #expect(startSession != nil)
+    }
+
     @Test("resolvePlayback PUTs stream selection, fetches decision, then builds start.m3u8")
     func resolvePlaybackPutThenDecideThenStart() async throws {
         let api = RecordingAPIClient()
