@@ -431,7 +431,7 @@ public actor PlexMediaSource: MediaSource {
                 """
                 decision FAILED quality=\(request.quality.rawValue, privacy: .public) \
                 ratingKey=\(request.itemID.rawValue, privacy: .public) \
-                error=\(String(describing: error), privacy: .public)
+                error=\(Self.logSafeDescription(of: error), privacy: .public)
                 """
             )
             throw error
@@ -841,6 +841,17 @@ public actor PlexMediaSource: MediaSource {
             URLQueryItem(name: "X-Plex-Token", value: accessToken)
         ]
         return components?.url
+    }
+
+    /// A log-safe, token-free description of a transport/decoding error.
+    /// `String(describing:)` on a thrown `URLError` embeds the full failing URL
+    /// — including the `X-Plex-Token` query item — via
+    /// `NSErrorFailingURLStringKey`, which would put the token in the unified
+    /// log (violating this logger's contract above). Reduce to domain + code:
+    /// `NSURLErrorDomain code=-1001` is all a timeout needs to be debuggable.
+    nonisolated static func logSafeDescription(of error: any Error) -> String {
+        let ns = error as NSError
+        return "\(ns.domain) code=\(ns.code)"
     }
 
     /// Token-free, URL-free diagnostic summary for the player's Details view.

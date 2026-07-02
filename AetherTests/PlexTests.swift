@@ -810,6 +810,19 @@ struct PlexLibraryDecodingTests {
         #expect(info.videoCodec == "hevc")
     }
 
+    @Test("Transport errors are logged token-free (URLError embeds the full URL)")
+    func logSafeErrorDescription() {
+        let failing = URL(string: "https://1-2-3-4.abc.plex.direct:32400/video/:/transcode/universal/decision?X-Plex-Token=SECRET123")!
+        let error = URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: failing])
+        // The naive description leaks the tokenised URL — the reason the helper exists.
+        #expect(String(describing: error).contains("SECRET123"))
+        // The log-safe form carries only domain + code, nothing to harvest.
+        let line = PlexMediaSource.logSafeDescription(of: error)
+        #expect(!line.contains("SECRET123"))
+        #expect(!line.contains("plex.direct"))
+        #expect(line == "NSURLErrorDomain code=-1001")
+    }
+
     @Test("Metadata decodes Role (cast) entries")
     func decodesRoles() throws {
         let json = #"""
