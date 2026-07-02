@@ -1,6 +1,7 @@
 import SwiftUI
 import AetherCore
 import Network
+import os
 
 #if canImport(UIKit)
 import UIKit
@@ -1145,7 +1146,26 @@ final class AppSession {
     func presentSignIn(_ target: SignInTarget = .plex, addingAccount: Bool = false) {
         signInTarget = target
         signInForcesPlexAccountAdd = addingAccount
-        isSignInPresented = true
+        // On iPad the "Add Source" confirmationDialog is a popover, and asking
+        // for the sheet in the same transaction its dismissal animates in gets
+        // the presentation silently DROPPED by SwiftUI — worse, the flag then
+        // wedges `true` with no sheet on screen, so every later attempt is a
+        // true→true no-op and the button "does nothing" until app restart.
+        // Two defenses: present on a later runloop turn (outside the dialog's
+        // dismissal transaction), and bounce a wedged flag through `false` so
+        // SwiftUI always sees a fresh false→true transition.
+        let log = Logger(subsystem: "cz.zmrhal.aether", category: "signin")
+        if isSignInPresented {
+            log.notice("presentSignIn: flag already true (wedged or re-target) — bouncing")
+            isSignInPresented = false
+        }
+        Task { @MainActor in
+            // One turn is not reliably outside the popover-dismissal transaction;
+            // ~2 frames is, without a perceptible delay after the dialog closes.
+            try? await Task.sleep(for: .milliseconds(120))
+            log.notice("presentSignIn: presenting target=\(String(describing: target), privacy: .public)")
+            self.isSignInPresented = true
+        }
     }
 
     // MARK: - Emby setup + lifecycle
