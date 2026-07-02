@@ -91,7 +91,7 @@ struct JellyfinSignInView: View {
                 .font(AetherDesign.Typography.caption)
                 .foregroundStyle(AetherDesign.Palette.textTertiary)
 
-            TextField("http://192.168.1.10:8096", text: $urlText)
+            TextField("Enter your server address", text: $urlText)
                 .textContentType(.URL)
                 .autocorrectionDisabled()
                 #if os(iOS)
